@@ -39,7 +39,7 @@ import {
 
 /**
  * Hits asked of the search by words: more than a result holds, because
- * cards and thread replies among them are dropped after.
+ * cards among them are dropped after.
  */
 const WORD_HITS = 40;
 /** Conversations the search by meaning opens, best first. */
@@ -118,7 +118,7 @@ type Args = z.infer<typeof input>;
 export class SearchMessagesTool implements AgentReadTool<Args> {
   readonly name = 'search_messages';
   readonly description =
-    'Searches messages in the chapter channels the member can open, by words and by meaning. Can be narrowed to one channel, to what one member wrote ("me" for the asker), and to a stretch of days. Returns single messages; read_channel shows the conversation around one.';
+    'Searches messages in the chapter channels the member can open, by words and by meaning. Can be narrowed to one channel, to what one member wrote ("me" for the asker), and to a stretch of days. Returns single messages, thread replies among them (a reply says whose thread it is in); read_channel shows the conversation or the thread around one.';
   readonly reading = 'Searching messages';
   readonly permission = SystemPermissions.MEMBERS_VIEW;
   readonly module = null;
@@ -260,9 +260,10 @@ export class SearchMessagesTool implements AgentReadTool<Args> {
       WORD_HITS,
     );
     // The search was held to the chapter channels this member can open, but
-    // returns every kind of row and thread replies too. Only a member's
-    // words on a channel's timeline go further, and never a row the search
-    // masked as blocked.
+    // returns every kind of row. Only a member's words go further, on a
+    // channel's timeline or in a thread (#5180), and never a row the search
+    // masked as blocked. A reply under a recruitment candidate's card is
+    // dropped by `readableAmong`, as every chat read drops it.
     const rows: (CatchUpMessageRow & { channel_id: string })[] = messages
       .filter(
         (message) =>
@@ -270,7 +271,6 @@ export class SearchMessagesTool implements AgentReadTool<Args> {
           channelOf.has(message.channel_id) &&
           // A row from before kinds existed is plain text.
           WRITTEN_KINDS.includes(message.kind ?? 'text') &&
-          message.thread_root_id == null &&
           message.content.trim() !== '',
       )
       .map((message) => ({
@@ -279,7 +279,7 @@ export class SearchMessagesTool implements AgentReadTool<Args> {
         sender_id: message.sender_id,
         content: message.content,
         created_at: message.created_at,
-        thread_root_id: null,
+        thread_root_id: message.thread_root_id ?? null,
         mentions: message.mentions ?? null,
         kind: message.kind ?? 'text',
       }));

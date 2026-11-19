@@ -26,7 +26,11 @@ import {
   listsInPlay,
 } from '#domain/utils/document-access';
 import { RbacService } from '../rbac.service';
-import type { CorpusSourceAdapter, CorpusSourceRead } from './corpus-source';
+import type {
+  CorpusSourceAdapter,
+  CorpusSourceFacts,
+  CorpusSourceRead,
+} from './corpus-source';
 
 const DOCUMENTS_BUCKET = 'documents';
 
@@ -95,6 +99,35 @@ export class ChapterDocumentCorpusSource implements CorpusSourceAdapter {
         sections: extracted.sections,
       },
     };
+  }
+
+  /**
+   * Each document's type, folder and uploader, as the library shows them
+   * (#5180). An uploader who has left the chapter is not named.
+   */
+  async describe(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceFacts>> {
+    const facts = new Map<string, CorpusSourceFacts>();
+    if (sourceIds.length === 0) return facts;
+    const [documents, people] = await Promise.all([
+      this.documents.findByIds([...sourceIds], chapterId),
+      this.members.findChapterMemberIdentities(chapterId),
+    ]);
+    const nameOf = new Map(
+      people.map((person) => [person.user_id, person.display_name]),
+    );
+    for (const document of documents) {
+      const name = nameOf.get(document.uploaded_by);
+      facts.set(document.id, {
+        type: document.document_type,
+        folder: document.folder,
+        by: name ? { verb: 'uploaded', name } : null,
+        fromDrive: document.drive_file_id !== null,
+      });
+    }
+    return facts;
   }
 
   async readableBy(

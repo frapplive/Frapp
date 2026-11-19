@@ -971,7 +971,7 @@ describe('conversation and record tools', () => {
       ]);
     });
 
-    it('drops a direct message, a card, a thread reply and a blocked member’s row before the consent check', async () => {
+    it('drops a direct message, a card and a blocked member’s row before the consent check, and keeps a thread reply (#5180)', async () => {
       const { tool, catchUp } = build({
         hits: [
           hit({ id: 'dm', channel_id: DM }),
@@ -983,11 +983,18 @@ describe('conversation and record tools', () => {
           hit(),
         ],
       });
-      const result = await tool.run({ ...args, query: 'formal' }, context);
+      await tool.run({ ...args, query: 'formal' }, context);
+      // A reply goes on with its thread named; `readableAmong` drops one
+      // under a recruitment candidate's card, as every chat read does.
       expect(
-        catchUp.readableAmong.mock.calls[0][1].map((row) => row.id),
-      ).toEqual([MESSAGE]);
-      expect(result.sources).toHaveLength(1);
+        catchUp.readableAmong.mock.calls[0][1].map((row) => [
+          row.id,
+          row.thread_root_id,
+        ]),
+      ).toEqual([
+        ['reply', 'root'],
+        [MESSAGE, null],
+      ]);
     });
 
     it('returns the left-out count and no message when consent leaves everything out', async () => {
@@ -1288,6 +1295,7 @@ describe('conversation and record tools', () => {
       pageStart: 4,
       pageEnd: 4,
       sourceAt: '2026-01-01T00:00:00.000Z',
+      facts: null,
       ...over,
     });
     const build = (passages: unknown[], status = 'ok') => {
@@ -1303,7 +1311,16 @@ describe('conversation and record tools', () => {
 
     it('searches documents and minutes only, and gives each passage as a source that opens', async () => {
       const { tool, retrieval } = build([
-        passage(),
+        passage({
+          // What the library shows of it (#5180). A name is written as a
+          // name: it cannot add a fact of its own.
+          facts: {
+            type: 'Bylaws',
+            folder: 'Governance',
+            by: { verb: 'uploaded', name: 'Dana: Reyes' },
+            fromDrive: false,
+          },
+        }),
         passage({
           id: 'chunk-2',
           sourceType: 'meeting_minutes',
@@ -1329,6 +1346,7 @@ describe('conversation and record tools', () => {
           kind: 'document',
           title: 'Bylaws',
           detail: 'Article IV, page 4',
+          about: 'Bylaws, in the Governance folder, uploaded by Dana Reyes',
           date: '2026-01-01T00:00:00.000Z',
           target: { type: 'document', document_id: DOCUMENT, page: 4 },
           text: 'Quorum is two thirds.\nElections need three quarters.',
@@ -1342,6 +1360,7 @@ describe('conversation and record tools', () => {
           kind: 'minutes',
           audience: { type: 'meeting', id: MEETING },
           detail: 'Decisions',
+          about: null,
           target: { type: 'meeting', meeting_id: MEETING },
         }),
       ]);
@@ -1602,6 +1621,16 @@ describe('conversation and record tools', () => {
       expect(result.entities).toEqual([
         { type: 'member', id: ASKER, name: 'Lee Park' },
       ]);
+    });
+
+    it('says who posted the minutes, on every section (#5180)', async () => {
+      const { tool } = build(
+        view({ meeting: meeting({ posted_by: SAM }), content: content() }),
+      );
+      const result = await tool.run({ meeting: MEETING }, context);
+      expect(new Set(result.sources.map((source) => source.about))).toEqual(
+        new Set(['posted by Sam Ortiz']),
+      );
     });
 
     it('keeps an item with a line break and a colon on one line, after the tool’s own words', async () => {

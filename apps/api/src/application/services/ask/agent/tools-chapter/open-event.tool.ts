@@ -25,6 +25,7 @@ import {
 } from './chapter-tool-kit';
 import {
   ambiguityNote,
+  choiceNote,
   ATTENDANCE_WORDS,
   eventHeadline,
   findEvent,
@@ -75,7 +76,8 @@ export class OpenEventAgentTool implements AgentReadTool<Args> {
     if (!event) {
       return nothing(
         context,
-        'No event fits that. The events tool lists the calendar.',
+        choiceNote(foundEvent, context.timeZone) ??
+          'No event fits that. The events tool lists the calendar.',
       );
     }
     const [mine, excuse, member, alumniRoleId] = await Promise.all([
@@ -125,7 +127,7 @@ export class OpenEventAgentTool implements AgentReadTool<Args> {
         lines,
       }),
       null,
-      ambiguityNote(foundEvent),
+      ambiguityNote(foundEvent, context.timeZone),
     );
   }
 }

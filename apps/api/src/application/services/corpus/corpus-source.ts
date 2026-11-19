@@ -89,6 +89,35 @@ export interface CorpusSourceAdapter {
     userId: string,
     candidates: readonly CorpusCandidate[],
   ): Promise<CorpusAdmission>;
+  /**
+   * {@link CorpusSourceFacts} for sources a reader may already open (the
+   * caller checked `readableBy`), by source id. An id it cannot describe is
+   * left out. Optional: chat says what it is in each line instead.
+   */
+  describe?(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceFacts>>;
+}
+
+/**
+ * What a document or minutes is, beside its title (#5180): read live when it
+ * is retrieved, never indexed, so a rename, a refiling or a member's
+ * account deletion reaches it at once (`data-retention.md`). Every field
+ * is a fact a member who opens the source sees on its page.
+ */
+export interface CorpusSourceFacts {
+  /** A document's type, as the chapter named it ("Policy"). Null otherwise. */
+  type: string | null;
+  /** The folder a document is filed in. Null otherwise. */
+  folder: string | null;
+  /**
+   * Who added it: uploaded a document, posted minutes. Null when nobody is
+   * on record, or when they are no longer a member of the chapter.
+   */
+  by: { verb: 'uploaded' | 'posted'; name: string } | null;
+  /** A document copied from the chapter's Google Drive. */
+  fromDrive: boolean;
 }
 
 /** Injection token for the list of adapters, one per source type. */

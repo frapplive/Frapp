@@ -76,6 +76,8 @@ function build(options: {
   channel?: Record<string, unknown>;
   reply?: (prompt: string) => AiObjectResult<CatchUpOutput>;
   thread?: 'missing';
+  /** Thread roots the repository says are recruitment candidate cards. */
+  rushRootIds?: string[];
   unreadStart?: string | null;
   place?: {
     channel_id: string;
@@ -116,6 +118,10 @@ function build(options: {
     ),
   };
   const stretches = {
+    findRushRootIds: jest.fn(
+      async (_rootIds: readonly string[]): Promise<ReadonlySet<string>> =>
+        new Set(options.rushRootIds ?? []),
+    ),
     unreadStart: jest.fn(async () =>
       options.unreadStart === undefined
         ? '2026-11-12T12:00:00.000Z'
@@ -930,6 +936,32 @@ describe('ChatCatchUpService', () => {
         'imported',
         undefined,
       ]);
+    });
+
+    it('drops a reply under a recruitment candidate’s card, and counts it nowhere (#5180)', async () => {
+      const { service, stretches } = build({
+        yes: ['sam'],
+        rushRootIds: ['rush-card'],
+      });
+      const read = await service.readableAmong(
+        { chapterId: CHAPTER, userId: READER },
+        [
+          row('sam', 'He seemed great at the cookout.', {
+            thread_root_id: 'rush-card',
+          }),
+          row('sam', 'Bus leaves at six.', { thread_root_id: 'plan' }),
+          row('sam', 'Formal is Friday.'),
+        ],
+      );
+      expect(stretches.findRushRootIds).toHaveBeenCalledWith([
+        'rush-card',
+        'plan',
+      ]);
+      expect(read.messages.map((message) => message.content)).toEqual([
+        'Bus leaves at six.',
+        'Formal is Friday.',
+      ]);
+      expect(read.leftOut).toBe(0);
     });
 
     it('reads nothing for no rows', async () => {

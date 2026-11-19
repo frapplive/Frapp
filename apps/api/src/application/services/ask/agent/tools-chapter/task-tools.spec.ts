@@ -236,11 +236,11 @@ describe('chapter_tasks', () => {
       'Jordan Lee has 2 unfinished, 1 past due.',
       'Avery Lin has 2 unfinished, 1 past due.',
       'Dana Reyes has 1 unfinished, 0 past due.',
-      '"Order shirts": assigned to Jordan Lee, due Sunday, November 1, 2026. Past due.',
+      '"Order shirts": assigned to Jordan Lee, due Sunday, November 1, 2026. Past due. Assigned by Avery Lin.',
       '"Send invites": assigned to Avery Lin, due Monday, November 9, 2026. Past due.',
       '"Clean the kitchen": assigned to Avery Lin, due Saturday, November 14, 2026. Marked done on Wednesday, November 11, 2026 and waiting for an officer to confirm. Worth 4 points.',
-      '"File the report": assigned to Dana Reyes, due Saturday, November 14, 2026. Marked done and waiting for an officer to confirm.',
-      '"Book the hall": assigned to Jordan Lee, due Saturday, November 14, 2026. Not started.',
+      '"File the report": assigned to Dana Reyes, due Saturday, November 14, 2026. Marked done and waiting for an officer to confirm. Assigned by Avery Lin.',
+      '"Book the hall": assigned to Jordan Lee, due Saturday, November 14, 2026. Not started. Assigned by Avery Lin.',
     ]);
     expect(result.entities.map((entity) => entity.name).sort()).toEqual([
       'Avery Lin',
@@ -301,9 +301,27 @@ describe('chapter_tasks', () => {
     const list = jest.fn(async () => [task({ assignee_id: 'user-gone' })]);
     const result = await tool(list).run(all, manager);
     expect(linesOf(result).at(-1)).toBe(
-      '"Book the hall": assigned to A former member, due Saturday, November 14, 2026. Not started.',
+      '"Book the hall": assigned to A former member, due Saturday, November 14, 2026. Not started. Assigned by Avery Lin.',
     );
-    expect(result.entities).toEqual([]);
+    // Who assigned it is a member and links; the former member never does.
+    expect(result.entities).toEqual([
+      { type: 'member', id: 'user-2', name: 'Avery Lin' },
+    ]);
+  });
+
+  it('says what a task is about and who gave it, as my_tasks does (#5180)', async () => {
+    const list = jest.fn(async () => [
+      task({ description: 'Ask the dean for the hall by Friday' }),
+      task({ id: 'task-own', created_by: 'user-1', assignee_id: 'user-1' }),
+    ]);
+    const lines = linesOf(await tool(list).run(all, manager));
+    expect(lines).toContain(
+      '"Book the hall": assigned to Dana Reyes, due Saturday, November 14, 2026. Not started. Assigned by Avery Lin. About: "Ask the dean for the hall by Friday".',
+    );
+    // A task its owner gave themselves says nothing about who gave it.
+    expect(lines.filter((line) => line.includes('Assigned by'))).toHaveLength(
+      1,
+    );
   });
 
   it('keeps the counts whole when the list is cut', async () => {

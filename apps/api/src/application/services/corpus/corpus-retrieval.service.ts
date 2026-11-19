@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { stripLoneSurrogates } from '#domain/utils/corpus-chunker';
 import type { CorpusCandidate } from '#domain/entities/corpus.entity';
 import {
@@ -11,12 +11,14 @@ import {
   reciprocalRankFusion,
   recencyWeight,
 } from '#domain/utils/corpus-ranking';
+import { reportCaughtFailure } from '../../../infrastructure/observability/report-caught-failure';
 import { AiGatewayService, type AiUnavailable } from '../ai/ai-gateway.service';
 import { CHAT_SOURCE_TYPE } from './chat-message-corpus-source';
 import {
   CORPUS_SOURCE_ADAPTERS,
   corpusAdapterFor,
   type CorpusSourceAdapter,
+  type CorpusSourceFacts,
 } from './corpus-source';
 
 function byScore(a: CorpusPassage, b: CorpusPassage): number {
@@ -106,7 +108,18 @@ export interface CorpusPassage {
   authorIds: string[];
   /** Chat: how many messages it holds. Null elsewhere. */
   messageCount: number | null;
+  /**
+   * What a document or minutes is beside its title: its type, folder and
+   * who added it (`CorpusSourceAdapter.describe`, #5180). Null for chat, and
+   * when the source could not be described.
+   */
+  facts: CorpusSourceFacts | null;
 }
+
+/** {@link CorpusRetrievalService.readSource}'s answer: the chunks, and what the source is. */
+export type CorpusSourceRead = CorpusSourceChunks & {
+  facts: CorpusSourceFacts | null;
+};
 
 export type CorpusRetrievalResult =
   | {
@@ -153,6 +166,8 @@ export type CorpusRetrievalResult =
  */
 @Injectable()
 export class CorpusRetrievalService {
+  private readonly logger = new Logger(CorpusRetrievalService.name);
+
   constructor(
     @Inject(CORPUS_REPOSITORY) private readonly corpus: ICorpusRepository,
     @Inject(CORPUS_SOURCE_ADAPTERS)
@@ -188,7 +203,7 @@ export class CorpusRetrievalService {
    */
   async readSource(
     request: CorpusSourceReadRequest,
-  ): Promise<CorpusSourceChunks | null> {
+  ): Promise<CorpusSourceRead | null> {
     if (request.sourceType === CHAT_SOURCE_TYPE) return null;
     const adapter = corpusAdapterFor(this.adapters, request.sourceType);
     if (!adapter) return null;
@@ -198,14 +213,20 @@ export class CorpusRetrievalService {
       [request.sourceId],
     );
     if (!readable.has(request.sourceId)) return null;
-    return this.corpus.readSourceChunks({
-      chapterId: request.chapterId,
-      userId: request.actingUserId,
-      sourceType: request.sourceType,
-      sourceId: request.sourceId,
-      offset: request.offset,
-      limit: Math.min(Math.max(Math.trunc(request.limit), 1), MAX_LIMIT),
-    });
+    const [chunks, described] = await Promise.all([
+      this.corpus.readSourceChunks({
+        chapterId: request.chapterId,
+        userId: request.actingUserId,
+        sourceType: request.sourceType,
+        sourceId: request.sourceId,
+        offset: request.offset,
+        limit: Math.min(Math.max(Math.trunc(request.limit), 1), MAX_LIMIT),
+      }),
+      this.describe(request.chapterId, request.sourceType, [request.sourceId]),
+    ]);
+    return chunks
+      ? { ...chunks, facts: described.get(request.sourceId) ?? null }
+      : null;
   }
 
   async retrieve(
@@ -259,10 +280,11 @@ export class CorpusRetrievalService {
       readable,
     );
 
-    const passages = admitted
+    const ranked = admitted
       .map((candidate) => this.passage(candidate, now))
       .sort(byScore)
       .slice(0, limit);
+    const passages = await this.withFacts(request.chapterId, ranked);
     return {
       status: 'ok',
       passages,
@@ -365,6 +387,60 @@ export class CorpusRetrievalService {
     );
   }
 
+  /**
+   * Each passage with what its source is (`CorpusSourceAdapter.describe`),
+   * read for the passages kept, after every access check, so nothing is
+   * read about a source the asker cannot open.
+   */
+  private async withFacts(
+    chapterId: string,
+    passages: CorpusPassage[],
+  ): Promise<CorpusPassage[]> {
+    const idsByType = new Map<string, Set<string>>();
+    for (const passage of passages) {
+      const ids = idsByType.get(passage.sourceType) ?? new Set<string>();
+      ids.add(passage.sourceId);
+      idsByType.set(passage.sourceType, ids);
+    }
+    const byType = new Map(
+      await Promise.all(
+        [...idsByType].map(
+          async ([type, ids]) =>
+            [type, await this.describe(chapterId, type, [...ids])] as const,
+        ),
+      ),
+    );
+    return passages.map((passage) => ({
+      ...passage,
+      facts: byType.get(passage.sourceType)?.get(passage.sourceId) ?? null,
+    }));
+  }
+
+  /**
+   * The adapter's description of these sources, or nothing when it has
+   * none to give. It only adds words beside a title, so a failed read costs
+   * those words, never the answer.
+   */
+  private async describe(
+    chapterId: string,
+    sourceType: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceFacts>> {
+    const adapter = corpusAdapterFor(this.adapters, sourceType);
+    if (!adapter?.describe || sourceIds.length === 0) return new Map();
+    try {
+      return await adapter.describe(chapterId, sourceIds);
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'corpus-describe-sources',
+        message: `Corpus: ${sourceType} sources could not be described`,
+        error,
+      });
+      return new Map();
+    }
+  }
+
   private passage(candidate: CorpusCandidate, now: Date): CorpusPassage {
     const fused = reciprocalRankFusion([
       candidate.dense_rank,
@@ -397,6 +473,7 @@ export class CorpusRetrievalService {
       messageId: chat ? candidate.anchor_id : null,
       authorIds: chat ? (candidate.author_ids ?? []) : [],
       messageCount: chat ? candidate.message_count : null,
+      facts: null,
     };
   }
 }

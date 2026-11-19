@@ -11,8 +11,16 @@ import {
   type IMeetingRepository,
 } from '#domain/repositories/meeting.repository.interface';
 import type { CorpusSection } from '#domain/utils/corpus-chunker';
+import {
+  MEMBER_REPOSITORY,
+  type IMemberRepository,
+} from '#domain/repositories/member.repository.interface';
 import { MeetingService } from '../meeting.service';
-import type { CorpusSourceAdapter, CorpusSourceRead } from './corpus-source';
+import type {
+  CorpusSourceAdapter,
+  CorpusSourceFacts,
+  CorpusSourceRead,
+} from './corpus-source';
 
 const SECTION_LABEL = new Map<string, string>(
   MEETING_SECTIONS.map((section) => [section.key, section.label]),
@@ -132,6 +140,7 @@ export class MeetingMinutesCorpusSource implements CorpusSourceAdapter {
   constructor(
     @Inject(MEETING_REPOSITORY) private readonly meetings: IMeetingRepository,
     private readonly meetingService: MeetingService,
+    @Inject(MEMBER_REPOSITORY) private readonly members: IMemberRepository,
   ) {}
 
   async read(chapterId: string, sourceId: string): Promise<CorpusSourceRead> {
@@ -153,6 +162,37 @@ export class MeetingMinutesCorpusSource implements CorpusSourceAdapter {
         sections,
       },
     };
+  }
+
+  /**
+   * Who posted each meeting's minutes (#5180); the meeting's type is in its
+   * title already. A poster who has left the chapter is not named.
+   */
+  async describe(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceFacts>> {
+    const facts = new Map<string, CorpusSourceFacts>();
+    const ids = [...new Set(sourceIds)];
+    if (ids.length === 0) return facts;
+    const [meetings, people] = await Promise.all([
+      Promise.all(ids.map((id) => this.meetings.findById(chapterId, id))),
+      this.members.findChapterMemberIdentities(chapterId),
+    ]);
+    const nameOf = new Map(
+      people.map((person) => [person.user_id, person.display_name]),
+    );
+    for (const meeting of meetings) {
+      if (!meeting) continue;
+      const name = meeting.posted_by ? nameOf.get(meeting.posted_by) : null;
+      facts.set(meeting.id, {
+        type: null,
+        folder: null,
+        by: name ? { verb: 'posted', name } : null,
+        fromDrive: false,
+      });
+    }
+    return facts;
   }
 
   async readableBy(

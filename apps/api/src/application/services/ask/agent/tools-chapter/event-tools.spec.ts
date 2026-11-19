@@ -172,19 +172,27 @@ describe('events', () => {
     expect(result.note).toMatch(/^Showing 60 of 70 events/);
   });
 
-  it('says so when nothing is on the calendar or nothing has the words', async () => {
+  it('says so when nothing is on the calendar', async () => {
     await expect(
       tool(jest.fn(async () => [])).run(none, context),
     ).resolves.toMatchObject({ sources: [], note: 'No events in that range.' });
-    await expect(
-      tool(jest.fn(async () => [event()])).run(
-        { ...none, words: 'retreat' },
-        context,
-      ),
-    ).resolves.toMatchObject({
-      sources: [],
-      note: 'No event in that range has those words.',
-    });
+  });
+
+  it('lists the whole range, and says so, when nothing has the words (#5180)', async () => {
+    // "formals" is not in "Formal": the words are matched as typed, so the
+    // model is shown the range and judges which one was meant.
+    const result = await tool(
+      jest.fn(async () => [event(), event({ id: 'event-2', name: 'Formal' })]),
+    ).run({ ...none, words: 'formals' }, context);
+    expect(result.note).toBe(
+      'No event in that range has all of those words, so every event in the range is listed; judge which one the member meant.',
+    );
+    expect(linesOf(result)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^"Chapter meeting": /),
+        expect.stringMatching(/^"Formal": /),
+      ]),
+    );
   });
 });
 
@@ -238,8 +246,30 @@ describe('open_event', () => {
       detail: 'Chapter meeting',
       date: '2026-11-16T00:00:00.000Z',
     });
-    expect(result.note).toMatch(/^2 events fit that/);
+    // The others are named, with their day and id, so the model can read
+    // the one the member meant or ask (#5180).
+    expect(result.note).toBe(
+      '2 events fit that. This is the nearest one. The others: "Chapter meeting" on Sunday, November 8, 2026 (event:event-0). If the member meant another, read again with its id or day; if it is not clear which they meant, ask them.',
+    );
     expect(JSON.stringify(result)).not.toMatch(/Exam that night|North lot/);
+  });
+
+  it('takes none of several differently named events, and lists them to choose from (#5180)', async () => {
+    const dinner = event({
+      id: 'event-3',
+      name: 'Formal dinner',
+      start_time: '2026-11-20T23:00:00.000Z',
+      end_time: '2026-11-21T02:00:00.000Z',
+    });
+    const { tool, attendance } = services({
+      findByChapter: jest.fn(async () => [formal, dinner]),
+    });
+    const result = await tool.run({ event: 'formal', on: '' }, context);
+    expect(attendance.getMyAttendance).not.toHaveBeenCalled();
+    expect(result.sources).toEqual([]);
+    expect(result.note).toBe(
+      '2 different events fit that: "Formal dinner" on Friday, November 20, 2026 (event:event-3); "Winter formal" on Saturday, December 5, 2026 (event:event-2). Read again with the id of the one the member meant; if it is not clear which, ask them.',
+    );
   });
 
   it('opens the one on the day that was named', async () => {

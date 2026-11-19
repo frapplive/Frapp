@@ -200,8 +200,49 @@ describe('CorpusRetrievalService', () => {
       messageId: null,
       authorIds: [],
       messageCount: null,
+      facts: null,
     });
     expect(result.passages[2].matchedBy).toEqual(['words']);
+  });
+
+  it('says what each kept source is, read only for sources the asker may open (#5180)', async () => {
+    const { retrieve, documents, minutes } = setup([
+      candidate({ chunk_id: 'doc', source_id: 'doc-1', dense_rank: 1 }),
+      candidate({
+        chunk_id: 'exec-1',
+        source_type: 'meeting_minutes',
+        source_id: 'exec',
+        dense_rank: 2,
+      }),
+    ]);
+    const facts = {
+      type: 'Policy',
+      folder: null,
+      by: { verb: 'uploaded' as const, name: 'Dana Reyes' },
+      fromDrive: false,
+    };
+    documents.describe = jest.fn(async () => new Map([['doc-1', facts]]));
+    minutes.describe = jest.fn(async () => new Map());
+    const result = await retrieve();
+    if (result.status !== 'ok') throw new Error('expected passages');
+    expect(result.passages.map((passage) => passage.facts)).toEqual([facts]);
+    expect(documents.describe).toHaveBeenCalledWith(CHAPTER, ['doc-1']);
+    // The Exec minutes the asker cannot open are never described.
+    expect(minutes.describe).not.toHaveBeenCalled();
+  });
+
+  it('keeps the passages when a source cannot be described', async () => {
+    const { retrieve, documents } = setup([
+      candidate({ chunk_id: 'doc', source_id: 'doc-1', dense_rank: 1 }),
+    ]);
+    documents.describe = jest.fn(async () => {
+      throw new Error('database down');
+    });
+    const result = await retrieve();
+    if (result.status !== 'ok') throw new Error('expected passages');
+    expect(result.passages.map((passage) => [passage.id, passage.facts])).toEqual(
+      [['doc', null]],
+    );
   });
 
   it('puts newer minutes above older ones at the same rank, and never ages a standing document', async () => {
@@ -482,7 +523,10 @@ describe('CorpusRetrievalService — chat (#4314)', () => {
 
     it('reads the passages for a member who may open the source, with no model call', async () => {
       const { service, corpus, documents, embed } = withChunks();
-      await expect(service.readSource(request)).resolves.toEqual(chunks);
+      await expect(service.readSource(request)).resolves.toEqual({
+        ...chunks,
+        facts: null,
+      });
       expect(documents.readableBy).toHaveBeenCalledWith(CHAPTER, ASKER, [
         'doc-1',
       ]);

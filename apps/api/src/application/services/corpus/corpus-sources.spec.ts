@@ -101,16 +101,40 @@ describe('MeetingMinutesCorpusSource', () => {
     const meetings = {
       findById: jest.fn().mockResolvedValue(row),
     } as unknown as jest.Mocked<IMeetingRepository>;
+    const members = {
+      findChapterMemberIdentities: jest
+        .fn()
+        .mockResolvedValue([
+          { user_id: 'user-poster', display_name: 'Jordan Lee', role_ids: [] },
+        ]),
+    } as unknown as jest.Mocked<IMemberRepository>;
     const readableAmong = jest
       .fn()
       .mockImplementation((_c: string, _u: string, ids: string[]) =>
         Promise.resolve(new Set(ids)),
       );
-    const source = new MeetingMinutesCorpusSource(meetings, {
-      readableAmong,
-    } as unknown as MeetingService);
-    return { source, meetings, readableAmong };
+    const source = new MeetingMinutesCorpusSource(
+      meetings,
+      { readableAmong } as unknown as MeetingService,
+      members,
+    );
+    return { source, meetings, readableAmong, members };
   }
+
+  it('says who posted the minutes, and names nobody who has left (#5180)', async () => {
+    const { source, meetings } = setup();
+    meetings.findById
+      .mockResolvedValueOnce(meeting({ posted_by: 'user-poster' }))
+      .mockResolvedValueOnce(meeting({ id: 'meeting-2', posted_by: 'gone' }));
+    const facts = await source.describe(CHAPTER, ['meeting-1', 'meeting-2']);
+    expect(facts.get('meeting-1')).toEqual({
+      type: null,
+      folder: null,
+      by: { verb: 'posted', name: 'Jordan Lee' },
+      fromDrive: false,
+    });
+    expect(facts.get('meeting-2')?.by).toBeNull();
+  });
 
   it('reads posted minutes as dated, decaying text', async () => {
     const { source } = setup();
@@ -220,6 +244,11 @@ describe('ChapterDocumentCorpusSource', () => {
     } as unknown as jest.Mocked<IChapterDocumentFolderRepository>;
     const members = {
       findByUserAndChapter: jest.fn().mockResolvedValue(null),
+      findChapterMemberIdentities: jest
+        .fn()
+        .mockResolvedValue([
+          { user_id: 'uploader', display_name: 'Dana Reyes', role_ids: [] },
+        ]),
     } as unknown as jest.Mocked<IMemberRepository>;
     const getChannelAccessHolder = jest.fn().mockResolvedValue({
       entries: new Set<string>(),
@@ -257,6 +286,41 @@ describe('ChapterDocumentCorpusSource', () => {
       getChannelAccessHolder,
     };
   }
+
+  it('says what each document is: its type, folder, Drive copy and uploader (#5180)', async () => {
+    const { source, documents } = setup();
+    documents.findByIds.mockResolvedValueOnce([
+      {
+        ...document,
+        document_type: 'Policy',
+        folder: 'Governance',
+        uploaded_by: 'uploader',
+        drive_file_id: 'drive-1',
+      },
+      {
+        ...document,
+        id: 'doc-2',
+        document_type: null,
+        folder: null,
+        // No longer a member: not named.
+        uploaded_by: 'gone',
+        drive_file_id: null,
+      },
+    ] as never);
+    const facts = await source.describe(CHAPTER, ['doc-1', 'doc-2']);
+    expect(facts.get('doc-1')).toEqual({
+      type: 'Policy',
+      folder: 'Governance',
+      by: { verb: 'uploaded', name: 'Dana Reyes' },
+      fromDrive: true,
+    });
+    expect(facts.get('doc-2')).toEqual({
+      type: null,
+      folder: null,
+      by: null,
+      fromDrive: false,
+    });
+  });
 
   it('reads the file from the documents bucket and dates it by its effective date', async () => {
     const { source, documents, storage, extractor } = setup();
