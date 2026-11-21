@@ -3,6 +3,7 @@
 > **Status: Proposed, pending Paul. Nothing here is built.**
 >
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
+> GitHub hides that account's issues and PRs (#4192 and this doc's first PR, #4264) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 >
 > This is a design Paul has not approved. Until he does, nothing here overrides [`rush.md`](rush.md), [`rbac.md`](rbac.md) or the code, and nothing here is drift to file or a rule to build against. Once he decides, each approved rule moves into the spec that owns it, and this file shrinks to what is still proposed.
 
