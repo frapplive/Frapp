@@ -528,11 +528,6 @@ function taskRow(
   };
 }
 
-/**
- * When an unfinished task is due, as a row says it: `soon` is "Due in 40
- * minutes" within a day, and `due` the clause the detail ends with (that, or
- * "Due Friday"; under a day's heading only its time, if it has one).
- */
 /** When a task is due, or null for one with no due date (#5761). */
 function dueMoment(task: {
   due_at: string | null;
@@ -542,6 +537,11 @@ function dueMoment(task: {
   return raw ? parseInstantOrBareLocalNoon(raw) : null;
 }
 
+/**
+ * When an unfinished task is due, as a row says it: `soon` is "Due in 40
+ * minutes" within a day, and `due` the clause the detail ends with (that, or
+ * "Due Friday"; under a day's heading only its time, if it has one).
+ */
 function taskDue(
   task: { due_at: string | null; due_date: string | null },
   now: Date,

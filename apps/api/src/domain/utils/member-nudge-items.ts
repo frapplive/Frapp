@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   MEMBER_NUDGE_LINE_MAX,
+  TASK_NO_DUE_DATE_LABEL,
   isMemberNudgeTaskKind,
   type MemberNudgeItemKind,
   type MemberNudgeKind,
@@ -613,7 +614,8 @@ export function taskItem(
     headline: task.title.replace(/\s+/g, ' ').trim(),
     meta,
     urgent: kind !== 'task_praise' && dueDays <= 1,
-    chip: TASK_CHIP[kind] ?? (undated ? 'No due date' : `Due ${shortDue}`),
+    chip:
+      TASK_CHIP[kind] ?? (undated ? TASK_NO_DUE_DATE_LABEL : `Due ${shortDue}`),
     action: kind === 'task_praise' ? 'Thanks' : 'See the task',
     target: { type: 'task', id: task.id, channelId: null },
     rank: NUDGE_ITEM_RANK[kind as keyof typeof NUDGE_ITEM_RANK] ?? 99,

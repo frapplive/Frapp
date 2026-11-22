@@ -126,6 +126,11 @@ export interface TaskFormProps {
      * series starts with a new task.
      */
     repeats?: boolean;
+    /**
+     * A copy of a repeating task, live or ended (#5761): it keeps its day,
+     * so its Due can't be emptied.
+     */
+    keepsDay?: boolean;
   };
   /**
    * Opened on a suggested task (#4313) to change it before accepting: Accept
@@ -199,7 +204,7 @@ export function TaskForm({
   const forEveryone = draft.assigneeId === TASK_AUDIENCE_EVERYONE;
   // Whether Due may be left empty for no due date (#5761): not on a copy of
   // a repeating task, which keeps its day.
-  const dueClearable = !editing?.repeats;
+  const dueClearable = !editing?.repeats && !editing?.keepsDay;
   const offersPhotos = !suggestion && !forEveryone;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {

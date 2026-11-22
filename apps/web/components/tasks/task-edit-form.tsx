@@ -254,6 +254,9 @@ export function TaskEditForm({
               </p>
             ) : null,
           repeats: repeats(task),
+          // Any copy of a series keeps its day, ended or not; the API
+          // refuses a null due date on one.
+          keepsDay: !!task.series,
         }}
       />
     </>

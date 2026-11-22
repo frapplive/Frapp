@@ -787,6 +787,18 @@ describe("suggestionEdits", () => {
     expect(suggestionEdits(task as never, form())).toBeUndefined();
   });
 
+  it("sends a cleared due date as null, so the task has none (#5761)", () => {
+    expect(
+      suggestionEdits(task as never, form({ due_date: undefined })),
+    ).toEqual({ due_date: null, due_at: null });
+    expect(
+      suggestionEdits(
+        { ...task, due_date: null } as never,
+        form({ due_date: undefined }),
+      ),
+    ).toBeUndefined();
+  });
+
   it("sends every who-field when the answer to Who? changes, so the edit replaces it", () => {
     expect(
       suggestionEdits(

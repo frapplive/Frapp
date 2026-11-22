@@ -1,4 +1,5 @@
 import { TaskStatus, type TaskView } from '#domain/entities/task.entity';
+import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import { localDateIn } from '#domain/utils/zoned-time';
 import { longDateTime, longDay } from './chapter-tool-kit';
 
@@ -20,9 +21,8 @@ export function dueDay(task: TaskView, timeZone: string): string | null {
  */
 export function dueFirst(timeZone: string) {
   return (a: TaskView, b: TaskView) =>
-    // A task with no due date goes after every dated one (`~` sorts after
-    // any digit).
-    (dueDay(a, timeZone) ?? '~').localeCompare(dueDay(b, timeZone) ?? '~') ||
+    // A task with no due date goes after every dated one (#5761).
+    ascendingNullsLast(dueDay(a, timeZone), dueDay(b, timeZone)) ||
     (a.due_at && b.due_at
       ? Date.parse(a.due_at) - Date.parse(b.due_at)
       : a.due_at

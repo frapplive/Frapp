@@ -443,6 +443,28 @@ describe('buildNudgeFacts', () => {
     expect(built.today).toBe('Friday, November 13, 2026');
   });
 
+  it('thanks a member for a task with no due date without a day to count (#5761)', () => {
+    const built = buildNudgeFacts({
+      candidate: {
+        kind: 'task_praise',
+        task: task({
+          due_date: null,
+          status: TaskStatus.COMPLETED,
+          completed_at: ago(HOUR),
+        }),
+      },
+      firstName: 'Sam',
+      subtasks: [],
+      history: NO_HISTORY,
+      timeZone: 'America/New_York',
+      now: NOW,
+    });
+    expect(built.due).toBe('No due date');
+    expect(built.daysLeft).toBeNull();
+    expect(built.daysOverdue).toBeNull();
+    expect(built.finishedDaysEarly).toBeNull();
+  });
+
   it('counts days past due, and carries the note only for a sent-back task', () => {
     const late = buildNudgeFacts({
       candidate: {

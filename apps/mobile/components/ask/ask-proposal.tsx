@@ -980,8 +980,9 @@ function ActCard({
       if (changed) changes.target_user_ids = targets;
       if (Object.keys(changes).length > 0) edits = { points: changes };
     }
-    if (task && (!task.assignee_id || !task.due_date)) {
-      // A task needs who and when; the form is where the officer says them.
+    if (task && !task.assignee_id) {
+      // A task needs who; the form is where the officer says it. It may
+      // have no due date (#5761).
       setFormOpen(true);
       return;
     }
@@ -1382,14 +1383,14 @@ function ActCard({
                   : ACT_COPY.pick_member}
               </Text>
             </View>
-            <View style={[styles.chipRow, task.due_date ? null : styles.ask]}>
+            <View style={styles.chipRow}>
               <View style={styles.factGlyph}>
                 <AskCardGlyph
                   name="clock"
                   color={tokens.color.text.mutedForeground}
                 />
               </View>
-              <Text style={task.due_date ? styles.factText : styles.missing}>
+              <Text style={styles.factText}>
                 {task.due_date ? dueLine(task) : ACT_COPY.pick_due}
               </Text>
             </View>

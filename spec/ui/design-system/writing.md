@@ -471,9 +471,9 @@ It clears on the officer's next edit, since a stale verdict describing a colour 
 | Loading | — | `Loading chapter tasks...` |
 | Nothing assigned (member) | — | `Nothing on your plate.` then, when an event is ahead and Events is on, `Next up: {event}, {when}.` (one line, in place of the board) |
 | Add row (officer) | — | `Add a task`, at the top of To do |
-| Add row, required field left out | — | `Pick an assignee.` (under the field, on submit only). A due date is optional (#5761); a task up for grabs, which needs one, says `A task up for grabs needs a due date, like Friday or Friday 5pm.` |
+| Add row, required field left out | — | `Pick who it's for.` (under the row, on submit only); the chat Task form says `Pick an assignee.`. A due date is optional (#5761); a task up for grabs, which needs one, says `A task up for grabs needs a due date, like Friday or Friday 5pm.` |
 | Any task form, no due date | — | Due's empty value and its clear choice read `No due date`, as do My tasks' group and the Due filter (`TASK_NO_DUE_DATE_LABEL`); Repeat without a date reads `Add a due date to repeat it` (`TASK_REPEAT_NEEDS_DUE_DATE`) (#5761) |
-| Add row or chat Task form, due date typed but not readable | — | `Try a date like November 14 or Friday, with a time if it has one, like Friday 5pm.` (under the field; it takes the place of `Pick a due date.` once a submit has left the date out and what is typed is still not a date, and goes when it is; #3928) |
+| Add row or chat Task form, due date typed but not readable | — | `Try a date like November 14 or Friday, with a time if it has one, like Friday 5pm.` (under the field, once a submit has left what is typed still not a date, and goes when it is; #3928). A due date may be left empty (#5761), except on a copy of a repeating task, where an empty one reads `Pick a due date.` |
 | Any web task form, a new due time already gone by | — | `That time has already passed. Pick a later time or another day.` (under the due field on submit; goes when the date or time changes; #4512) |
 | Error | `Couldn't load tasks` | the load-failure line (§ copy rules) |
 | Offline | `Tasks unavailable offline` | `Reconnect to load the chapter board and move tasks through it.` |

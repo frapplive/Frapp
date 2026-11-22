@@ -357,10 +357,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
         message: 'Pick who this task is for.',
       });
     }
-    if (!task.due_date) {
+    // A task can have no due date (#5761); one up for grabs still needs
+    // one, since whoever claims it gets it by then.
+    if (!task.due_date && task.audience === TASK_AUDIENCE_SOMEONE) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick a due date.',
+        message: 'A task up for grabs needs a due date.',
       });
     }
   }
@@ -378,11 +380,11 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       return { resultId: existing.id };
     }
     const task = readTaskPayload(input.payload);
-    // `assertAcceptable` ran before the claim; these narrow the types.
-    if (!namesSomeone(task) || !task.due_date) {
+    // `assertAcceptable` ran before the claim; this narrows the type.
+    if (!namesSomeone(task)) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick who this task is for and when it is due.',
+        message: 'Pick who this task is for.',
       });
     }
     // A task from minutes names them by id (#5562), so its screens read the
@@ -391,6 +393,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
     // "Someone in…" posts one task up for grabs (2026-11-18); the result is
     // the posting's id.
     if (task.audience === TASK_AUDIENCE_SOMEONE) {
+      if (!task.due_date) {
+        throw new BadRequestException({
+          code: 'ai.suggestion.incomplete',
+          message: 'A task up for grabs needs a due date.',
+        });
+      }
       const posting = await this.openTasks.create({
         chapter_id: input.chapterId,
         created_by: input.userId,

@@ -185,11 +185,21 @@ function editsFor(
     Object.assign(edits, taskWhoSuggestionFields(values.who));
   }
   if (values.due !== dueEntryOf(item.task)) {
-    const fields = dueEntryFields(values.due);
-    edits.due_date = fields.due_date;
-    edits.due_at = fields.due_at ?? null;
+    // An emptied Due is no due date (#5761).
+    const fields = values.due ? dueEntryFields(values.due) : null;
+    edits.due_date = fields?.due_date ?? null;
+    edits.due_at = fields?.due_at ?? null;
   }
   return Object.keys(edits).length > 0 ? edits : undefined;
+}
+
+/**
+ * Whether a suggestion needs a due date to be accepted: only one up for
+ * grabs, since whoever claims it gets it by then. Any other task may have
+ * none (#5761).
+ */
+function needsDue(who: TaskWho | null): boolean {
+  return who?.kind === "someone";
 }
 
 /** Why an accept or dismiss was refused, in words an officer can act on. */
@@ -300,7 +310,7 @@ export function SuggestedTasks({
   const ready = items.filter((item) => {
     if (item.id === formFor || !similar.known || twinOf(item)) return false;
     const values = saidOf(item);
-    return values.who && values.due;
+    return values.who && (values.due || !needsDue(values.who));
   });
 
   function editRow(id: string, patch: RowEdits) {
@@ -314,7 +324,7 @@ export function SuggestedTasks({
     const values = valuesOf(item);
     if (
       !values.who ||
-      !values.due ||
+      (!values.due && needsDue(values.who)) ||
       // A newly picked time already gone by; the suggestion's own is kept.
       dueEntryPassed(values.due, new Date(), dueEntryOf(item.task))
     ) {
@@ -665,7 +675,7 @@ function SuggestedTaskRow({
   const [formWhoEdit, setFormWhoEdit] = useState<TaskWho | null>();
   const formWho = formWhoEdit !== undefined ? formWhoEdit : values.who;
   const missingWho = flagged && !values.who;
-  const missingDue = flagged && !values.due;
+  const missingDue = flagged && !values.due && needsDue(values.who);
   const passedDue =
     flagged && dueEntryPassed(values.due, new Date(), dueEntryOf(item.task));
   const dueProblem = dueChipProblem({

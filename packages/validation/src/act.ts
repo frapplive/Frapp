@@ -7,6 +7,7 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
 } from "./field-limits";
+import { TASK_NO_DUE_DATE_LABEL } from "./task-due";
 
 /**
  * Asking Frapp to do something (#718, `spec/behavior/ai.md` § Asking Frapp to
@@ -113,7 +114,6 @@ export const ACT_COPY = {
   field_details: "Details",
   no_task_name: "Give the task a name.",
   need_assignee: "Pick who this is for.",
-  need_due: "Pick when it is due.",
   gone: "No longer waiting. Ask again to redo it.",
   cancelled: "Dismissed. Nothing was changed.",
   failed: "That didn't go through. Try again.",
@@ -164,7 +164,8 @@ export const ACT_COPY = {
   remove_member: "Remove",
   add_member: "Add a member",
   pick_member: "Pick a member",
-  pick_due: "Pick a due date",
+  /** A task card with no due date (#5761): it may be confirmed as it is. */
+  pick_due: TASK_NO_DUE_DATE_LABEL,
   pick_event: "Which event?",
   no_recent_events: "There are no recent events to pick from.",
   former_member: "A former member",

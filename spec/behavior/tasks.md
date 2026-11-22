@@ -8,6 +8,7 @@ A lightweight task management system for chapter operations.
 - **A due date is optional** (Shawn, 2026-11-20, #5761: "you can just leave the due date unspecified"; Todoist, Things 3, Asana and Linear all make it optional). A task with **no due date** (`tasks.due_date` null) is never overdue, gets no due-soon or overdue reminders or nudges, sorts after every dated task, stays off the calendar and the calendar feed, and sits under **No due date** in My tasks and **No deadline** in Activity's To do. A time needs a day, so a task with no due date has no time either (`tasks_due_at_needs_due_date`), and taking a due date off takes its time with it. It can't repeat (§ Repeating tasks), and a task up for grabs still needs one, since whoever claims it gets it by then (§ Up for grabs). Both apps call it **No due date** (`TASK_NO_DUE_DATE_LABEL`, `packages/validation/src/task-due.ts`):
   - **Web**: an empty Due on the add row or the Task form makes a task with none, and the task panel's Due row clears to it (its placeholder reads No due date). `/task "<title>" @member` with nothing after the member makes one too.
   - **Mobile**: the Due picker on the New task sheet and the task editor has a **No due date** choice beside the dated ones; a new task still starts on Today.
+  - **Suggested tasks and Ask's task cards** may be accepted with no due date too, on both apps; one up for grabs still needs one.
   - Phone builds shipped before this read a task with no due date without breaking (each read is narrowed first): it shows under Later with no due line, without Edit, and off the calendar (`apps/mobile/store/api-breaking-ignore.txt`).
 - **Setting a due date never needs the year** (Paul, 2026-11-09, #3928). Almost every task is due in the next days or weeks, so a month and a day are enough and the year is filled in as the next time that date comes round, today included. A date further out, an annual chore set a year ahead, is still reachable on purpose, and a date picked outside the current year shows its year in the field so it can't be misread.
   - **Web** types it (`apps/web/components/tasks/due-date-field.tsx`, on the board's Add a task row and the chat composer's Task form): `Nov 14`, `11/14`, `Friday`, `tomorrow`, with a year only when one is meant (`Nov 14 2027`). `parseDateEntry` in `@repo/formatting` owns what is read. The field writes the held date out (#3937), `Today`, `Saturday`, `November 14`, `March 14, 2027`, by the rule of the shared web date field ([`components.md` § Time and date pickers](../ui/design-system/components.md#time-and-date-pickers)), so a click also opens a month to pick from.
@@ -232,7 +233,7 @@ On mobile's task board only the row's checkbox changes a task; a tap elsewhere o
 Tasks are surfaced inline in chat as a [chat integration](integrations.md) (slash command +
 rich renderer + server-originated card).
 
-- **Slash command.** `/task "<title>" @assignee <due date> [points]` (gated on the `tasks`
+- **Slash command.** `/task "<title>" @assignee [due date] [points]` (gated on the `tasks`
   module) creates and assigns a task, mirroring the existing dashboard create. It is a _heavy_
   command: the client posts an optimistic `loading` placeholder, calls `POST /v1/tasks` with the
   active `channel_id` + `client_message_id`, and the server posts the rich card after the row

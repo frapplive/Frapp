@@ -342,7 +342,7 @@ function readTaskDue(
 }
 
 /**
- * Parse `/task "<title>" @assignee <due date> [points]`. The title is quoted
+ * Parse `/task "<title>" @assignee [due date] [points]`. The title is quoted
  * because chapter task titles routinely contain spaces (same rationale as
  * `/poll`). The assignee token (leading `@` stripped) is resolved to a user id
  * at dispatch — the parser is grammar-only and never touches the directory. The

@@ -8,6 +8,7 @@ import { MemberService } from '../member.service';
 import { PointsService } from '../points.service';
 import { RbacService } from '../rbac.service';
 import { TaskService } from '../task.service';
+import { longDay, longRange } from './agent/tools-chapter/chapter-tool-kit';
 import { dueFirst, dueWords } from './agent/tools-chapter/task-lines';
 import { nameInLine, oneLine } from './ask-lines';
 import type { AskTool, AskToolContext, AskToolResult } from './ask-tool';
@@ -36,53 +37,7 @@ const LEADERBOARD_LIMIT = 25;
 const MY_TASKS_READ = 100;
 const MY_TASKS_LIMIT = 40;
 
-/** "Sunday, November 15, 2026 at 7:00 PM", in the asker's zone. Never abbreviated. */
-function longDateTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone,
-  }).format(new Date(iso));
-}
-
-/**
- * "Sunday, November 15, 2026 at 7:00 PM to 8:00 PM": the day is said once
- * when an event starts and ends on the same day in the asker's zone, as a
- * person would say it. Across midnight both ends carry their day.
- */
-function longRange(start: string, end: string, timeZone: string): string {
-  const day = (iso: string) =>
-    new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(iso));
-  if (day(start) !== day(end)) {
-    return `${longDateTime(start, timeZone)} to ${longDateTime(end, timeZone)}`;
-  }
-  const endTime = new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone,
-  }).format(new Date(end));
-  return `${longDateTime(start, timeZone)} to ${endTime}`;
-}
-
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * "Saturday, November 14, 2026". A task's day with its weekday, because
- * "which is due first" and "is it this weekend" are asked by the day.
- */
-function longDay(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: DATE_ONLY.test(iso) ? 'UTC' : timeZone,
-  }).format(new Date(iso));
-}
 
 /**
  * "December 1, 2026". A calendar date with no time (an invoice's due date)

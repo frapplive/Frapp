@@ -110,6 +110,12 @@ PATCH /v1/groups/{id} removed the enum value '#F47FA4' of the request property '
 # chat card's `readTaskPayload` and `readEditableCardTask` refuse a non-string `due_date`. The one
 # unguarded comparator, `compareTasksByDue` (task-views.ts), has no mobile caller. So an undated
 # task shows on those builds under Later with no due line, with no Edit, and off the calendar.
+# Every listed SHA was swept the same way: `git grep -nE
+# "(dueDay|dueDate|due_date|due_at|dueAt)!?\.(slice|split|localeCompare|substring|startsWith|replace|match|trim|includes)\b"
+# <sha> -- apps/mobile packages/hooks/src packages/formatting/src packages/chat-core/src`, specs and
+# invoices aside, finds no unguarded task read at any of the 18 SHAs in shipped-builds.json other
+# than that comparator. This waives fields the binaries read, which the header's rule (only what no
+# binary depends on) doesn't cover; it rests on that evidence and is flagged for review in #5761's PR.
 GET /v1/activity the response property 'made_by_you/tasks/items/due_date' became nullable for the status '200'
 GET /v1/activity the response property 'needs_you/task_confirmations/items/due_date' became nullable for the status '200'
 GET /v1/activity the response property 'needs_you/tasks/items/due_date' became nullable for the status '200'

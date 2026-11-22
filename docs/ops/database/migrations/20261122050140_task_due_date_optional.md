@@ -15,7 +15,9 @@ Makes `tasks.due_date` nullable, so a task can have no due date (#5761), and add
 
 ## Rollback
 
-Worth it only if undated tasks must go away. Restoring `NOT NULL` fails while any undated task exists, so give those a day first (here, the day they were created) or delete them.
+**Rolling the API back** to a commit before #5761 (Deploy production with an older SHA) needs this backfill first once any undated task exists: the older API reads every task's `due_date` as a string, so its calendar feed and due-date edits fail on an undated one. Run the `update` below before deploying the older SHA; the column can stay nullable.
+
+Reverting the migration itself is worth it only if undated tasks must go away. Restoring `NOT NULL` fails while any undated task exists, so give those a day first (here, the day they were created) or delete them.
 
 ```sql
 update public.tasks set due_date = created_at::date where due_date is null;

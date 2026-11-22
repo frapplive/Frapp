@@ -164,11 +164,6 @@ export function AddTaskRow({
       // one, since whoever claims it gets it by then.
       due: !draft.due && request?.endpoint === "/v1/open-tasks",
       passed: dueEntryPassed(draft.due),
-      // A repeat counts from the due day (#5761).
-      repeat:
-        single && !draft.due && draft.repeat.preset !== "NONE"
-          ? TASK_REPEAT_NEEDS_DUE_DATE
-          : undefined,
     };
     setMissing(nextMissing);
     if (nextMissing.who) {
@@ -177,10 +172,6 @@ export function AddTaskRow({
     }
     if (nextMissing.due || nextMissing.passed) {
       dueRef.current?.focus();
-      return;
-    }
-    if (nextMissing.repeat) {
-      setMore(true);
       return;
     }
     const firstDue = taskFirstDue(draft.due, draft.repeat.timeZone);
@@ -481,7 +472,7 @@ export function AddTaskRow({
               {TASK_AUDIENCE_COPY.noRepeat}
             </p>
           )}
-          {missing.repeat && single && draft.due ? (
+          {missing.repeat && single ? (
             <p className="text-caption text-destructive-text">
               {missing.repeat}
             </p>
