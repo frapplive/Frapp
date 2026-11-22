@@ -72,7 +72,7 @@ export function EventPeople({ audience }: { audience: EventAttendanceFields }) {
                   {member.avatar_url ? (
                     <AvatarImage src={member.avatar_url} alt="" />
                   ) : null}
-                  <AvatarFallback className="text-[10px]">
+                  <AvatarFallback className="text-caption">
                     {initials(name)}
                   </AvatarFallback>
                 </Avatar>
