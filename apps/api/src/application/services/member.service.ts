@@ -13,6 +13,9 @@ import type { IChatChannelRepository } from '#domain/repositories/chat.repositor
 import { ChannelCacheService } from './channel-cache.service';
 import {
   baseRoleIds,
+  permissionsNotGivable,
+  ROLE_ASSIGN_OUT_OF_REACH_CODE,
+  ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
   rolesAfterSave,
   tierPositionsOf,
   topRoleColor,
@@ -31,7 +34,6 @@ import {
   canAssignAt,
   canReach,
   holderRank,
-  permissionsNotHeld,
   roleRank,
 } from '#domain/utils/role-rank';
 import type { User, UserSharedBirthday } from '#domain/entities/user.entity';
@@ -538,30 +540,28 @@ export class MemberService {
       (!isSelf && !canAssignAt(reach, holderRank(before, positions)))
     ) {
       throw new ForbiddenException({
-        code: 'role.assign_out_of_reach',
+        code: ROLE_ASSIGN_OUT_OF_REACH_CODE,
         message:
-          'You can only give or take away roles ranked below your own, and only from members ranked below you.',
+          'That role, or this member, ranks too high for your role to change.',
       });
     }
     // Nobody hands out a permission they don't hold, to anyone: a lower role
     // can still carry one (a role outside the tiers, an override), and a
     // second account would otherwise collect it. What the Everyone role
-    // carries is exempt, since every member gets it.
-    const base = new Set(
-      roles.find((role) => role.system_key === SystemRoleKeys.EVERYONE)
-        ?.permissions ?? [],
-    );
-    const missing = permissionsNotHeld(
-      reach,
+    // carries is exempt, since every member gets it (`permissionsNotGivable`,
+    // shared with the clients' "+ Add" list).
+    const missing = permissionsNotGivable(
+      { wildcard: reach.wildcard, held: reach.permissions },
       flattenPermissionSets(
         after
           .filter((role) => !beforeIds.has(role.id))
           .map((role) => role.permissions),
       ),
-    ).filter((permission) => !base.has(permission));
+      roles,
+    );
     if (missing.length > 0) {
       throw new ForbiddenException({
-        code: 'role.assign_permission_not_held',
+        code: ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
         message: `You can only give roles whose permissions you hold: ${missing.join(', ')}.`,
       });
     }

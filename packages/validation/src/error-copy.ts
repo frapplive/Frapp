@@ -12,6 +12,10 @@
 import { askPostRefusalCopy } from "./ask-post";
 import { AUDIT_LOG_READ_ONLY_REFUSAL } from "./chat-audit-log";
 import { moduleRefusalFromServerMessage } from "./module-refusal";
+import {
+  ROLE_ASSIGN_OUT_OF_REACH_CODE,
+  ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
+} from "./role-assignment";
 import { subscriptionRefusalFromServerMessage } from "./subscription";
 import {
   SELF_ASSIGNABLE_REFUSAL_COPY,
@@ -89,10 +93,10 @@ export function copyForErrorCode(code: string | null): string | null {
   }
   // Giving or taking a role the rank rules refuse (#5730,
   // `spec/behavior/rbac.md` § Rank).
-  if (code === "role.assign_out_of_reach") {
-    return "You can only give or take away roles ranked below yours, and only for members ranked below you.";
+  if (code === ROLE_ASSIGN_OUT_OF_REACH_CODE) {
+    return "That role, or this member, ranks too high for your role to change.";
   }
-  if (code === "role.assign_permission_not_held") {
+  if (code === ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE) {
     return "This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.";
   }
   if (code === "service_entry.receipt_required") {

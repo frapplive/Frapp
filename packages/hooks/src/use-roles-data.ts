@@ -74,19 +74,13 @@ export function useRolesDataFrom({
     () => permissionsQuery.data?.permissions ?? [],
     [permissionsQuery.data],
   );
-  const permissionsRead = permissionsQuery.isSuccess;
-  const reach = useMemo(() => {
-    const read = callerReach(
-      myRoleIds,
-      myPermissions,
-      roles,
-      tiers,
-      viewerUserId,
-    );
-    // The rank rules also ask what the caller holds (#5730), so until that
-    // read lands a role refused for a missing permission would be a guess.
-    return permissionsRead ? read : { ...read, known: false };
-  }, [myRoleIds, myPermissions, roles, tiers, viewerUserId, permissionsRead]);
+  // `null` until the permissions read lands (a failed refetch keeps the
+  // cached ones), so the reach stays unknown rather than a guess (#5730).
+  const readPermissions = permissionsQuery.data?.permissions ?? null;
+  const reach = useMemo(
+    () => callerReach(myRoleIds, readPermissions, roles, tiers, viewerUserId),
+    [myRoleIds, readPermissions, roles, tiers, viewerUserId],
+  );
 
   return {
     rolesQuery,

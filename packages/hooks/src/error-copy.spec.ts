@@ -54,7 +54,7 @@ describe("errorCopy", () => {
     ).toMatch(/^This role has a permission your role doesn't/);
     expect(
       errorCopy(nest(403, "whatever", "role.assign_out_of_reach")),
-    ).toMatch(/^You can only give or take away roles ranked below yours/);
+    ).toMatch(/^That role, or this member, ranks too high/);
     // Not the bare 403's guess, which told an officer to ask an officer.
     expect(
       errorCopy(nest(403, "x", "role.assign_permission_not_held")),

@@ -2,6 +2,7 @@ import {
   isEveryoneRole,
   PERMISSION_REGISTRY,
   permissionLabel,
+  permissionsNotGivable,
 } from "@repo/validation";
 
 /*
@@ -141,7 +142,10 @@ function roleRank(role: TieredRole, positions: ReadonlyMap<string, number>) {
 export type Reach = {
   /** Holds `*`: reaches everything. */
   wildcard: boolean;
-  /** Whether the caller's own roles have been read, so `rank` is real. */
+  /**
+   * Whether the caller's own roles and permissions have been read, so
+   * `rank` and `held` are real (#5730).
+   */
   known: boolean;
   /** The caller's own rank; they reach only what ranks strictly below it. */
   rank: number;
@@ -159,7 +163,8 @@ export const ASSIGN_OWN_LEVEL_PERMISSION = "roles:assign_own_level";
 
 export function callerReach(
   myRoleIds: readonly string[] | null,
-  myPermissions: readonly string[],
+  /** `null` until read: the reach is then unknown, as with `myRoleIds`. */
+  myPermissions: readonly string[] | null,
   roles: readonly TieredRole[],
   tiers: readonly TierRow[],
   viewerUserId: string | null = null,
@@ -171,14 +176,15 @@ export function callerReach(
       rank = Math.min(rank, roleRank(role, positions));
     }
   }
-  const wildcard = myPermissions.includes("*");
+  const wildcard = myPermissions?.includes("*") ?? false;
   return {
     wildcard,
     // Until the caller's own roles are read, their rank is unknown, and a
-    // control that looks refused would be a guess.
-    known: wildcard || myRoleIds !== null,
+    // control that looks refused would be a guess; so is what they hold,
+    // which the "hold what you give" rule reads (#5730).
+    known: myPermissions !== null && (wildcard || myRoleIds !== null),
     rank,
-    held: new Set(myPermissions),
+    held: new Set(myPermissions ?? []),
     userId: viewerUserId,
   };
 }
@@ -264,21 +270,15 @@ export function mayGrant(reach: Reach, permission: string): boolean {
 }
 
 /**
- * What giving `role` would hand out that the caller doesn't hold, sorted:
- * the API's "every role added carries only permissions the caller holds"
- * (`assertRolesWithinReach`, `spec/behavior/rbac.md` § Rank, #5730). What
- * the chapter's Everyone role carries is exempt, since every member has it.
+ * What giving `role` would hand out that the caller doesn't hold: the API's
+ * rule (`permissionsNotGivable` in `@repo/validation`, #5730).
  */
 export function permissionsNotHeldFor(
   reach: Reach,
   role: Pick<TieredRole, "permissions">,
   roles: readonly TieredRole[],
 ): string[] {
-  if (reach.wildcard) return [];
-  const everyone = new Set(roles.find(isEveryoneRole)?.permissions ?? []);
-  return [...new Set(role.permissions)]
-    .filter((p) => !reach.held.has(p) && !everyone.has(p))
-    .sort();
+  return permissionsNotGivable(reach, role.permissions, roles);
 }
 
 /**

@@ -13,7 +13,12 @@ import {
   permissionNotHeldCaption,
 } from "./member-assignments";
 import type { ChapterGroup } from "./use-groups";
-import type { Reach, TierRow, TieredRole } from "./role-tiers";
+import {
+  callerReach,
+  type Reach,
+  type TierRow,
+  type TieredRole,
+} from "./role-tiers";
 
 function role(
   id: string,
@@ -140,6 +145,31 @@ describe("base roles (2026-11-21)", () => {
     expect(rest.flatMap((s) => s.rows.map((r) => r.id))).not.toContain(
       "r-actives",
     );
+  });
+
+  it("disables a base role whose pick would take away one ranked at or above the viewer (#5730)", () => {
+    // Picking a base role takes the member's other one away, which the API
+    // rank-checks too. A member holding one at or above the viewer ranks
+    // there themselves, so the member rule already disables every row.
+    // Grads sits in the top tier here, so the VP can't take it away.
+    const highGrads = withBase.map((r) =>
+      r.id === "r-alumni" ? { ...r, tier_id: "t-exec" } : r,
+    );
+    const rows = sections({ roles: highGrads, heldRoleIds: ["r-alumni"] })[0]!
+      .rows;
+    expect(rows.find((r) => r.name === "New Member")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.memberAbove,
+    );
+    // The member's own base role stays as it is.
+    expect(rows.find((r) => r.name === "Grads")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.memberAbove,
+    );
+    // A member holding a reachable base role: the pick is open.
+    const open = sections({ roles: withBase, heldRoleIds: ["r-actives"] })[0]!
+      .rows;
+    expect(
+      open.find((r) => r.name === "New Member")?.disabledReason,
+    ).toBeNull();
   });
 
   it("says when a member holds no base role", () => {
@@ -463,5 +493,21 @@ describe("groupFollowsLabel", () => {
       "Follows graduation year",
       "Follows major",
     ]);
+  });
+});
+
+describe("callerReach: unknown until both reads land (#5730)", () => {
+  it("is unknown before the permissions read, so no row reads as refused", () => {
+    expect(callerReach(["r-vp"], null, ROLES, TIERS).known).toBe(false);
+    expect(callerReach(null, ["roles:manage"], ROLES, TIERS).known).toBe(false);
+    // Even for the President: `*` comes from the permissions read.
+    expect(callerReach(["r-pres"], null, ROLES, TIERS).wildcard).toBe(false);
+  });
+
+  it("is known once both land, holding what was read", () => {
+    const reach = callerReach(["r-vp"], ["roles:manage"], ROLES, TIERS);
+    expect(reach.known).toBe(true);
+    expect(reach.held.has("roles:manage")).toBe(true);
+    expect(callerReach(null, ["*"], ROLES, TIERS).known).toBe(true);
   });
 });

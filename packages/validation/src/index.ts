@@ -124,6 +124,9 @@ export {
   rolesAfterSave,
   withHereMention,
 } from "./everyone-role";
+// Giving a member a role: the "hold what you give" rule and its refusal
+// codes, shared by the API and both apps (#5730).
+export * from "./role-assignment";
 // ── Field limits ─────────────────────────────────────────────────────────────
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
