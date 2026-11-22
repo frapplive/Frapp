@@ -8,7 +8,6 @@ import {
   useCategories,
   useChannelAccessOptions,
   useChapterChatBackground,
-  useCreateChannel,
   useCurrentChapter,
   useGeofences,
   useOrgConfig,
@@ -16,7 +15,6 @@ import {
   usePermissionList,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
-import { errorCopy } from "@repo/hooks/error-copy";
 import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
 import { SignetTokens } from "@repo/theme/signet";
 import {
@@ -49,11 +47,12 @@ import {
   ChannelFormSheet,
   type ChannelFormMode,
 } from "@/components/chat/channel-form-sheet";
-import { NewRoleSheet } from "@/components/roles/new-role-sheet";
 import {
-  CREATE_CHANNEL_FAILED,
-  createChannelBody,
-} from "@/lib/chat/create-channel";
+  NewRoleSheet,
+  type NewRolePlacement,
+} from "@/components/roles/new-role-sheet";
+import { accessOptionsStateOf } from "@/lib/chat/create-channel";
+import { useCreateChannelAndOpen } from "@/lib/chat/use-create-channel-and-open";
 import { selectCategories } from "@/lib/chat/channel-list";
 import { newRolePlacements } from "@/lib/roles/new-role";
 import { useRolesData } from "@/lib/roles/use-roles-data";
@@ -337,19 +336,27 @@ export default function ChapterSettingsScreen() {
                 </Text>
               </SettingAnchor>
             ) : null}
-
-            {access.newChannel ? <ChatSection /> : null}
-
-            {access.roles ? (
-              <PeopleSection canAddRole={access.newRole} />
-            ) : null}
-
-            {/* Where the phone stops (Shawn, 2026-11-22): permissions, channel
-                access, reordering, the chapter profile and the rest are web's
-                Settings, which an officer sets up once, at a desk. One quiet
-                line, as iOS Settings ends a group with its footnote. */}
-            <Text style={styles.footnote}>{MORE_ON_THE_WEB}</Text>
           </>
+        )}
+        {/* Mounted through a search, as the accent and background sheets
+            are, so a New role draft kept on a close survives typing in
+            Search settings; only their rows hide (`searching`). */}
+        {access.newChannel ? (
+          <ChatSection searching={search.searching} />
+        ) : null}
+        {access.roles ? (
+          access.newRole ? (
+            <PeopleSectionWithNewRole searching={search.searching} />
+          ) : (
+            <PeopleSection searching={search.searching} placements={[]} />
+          )
+        ) : null}
+        {/* Where the phone stops (Shawn, 2026-11-22): permissions, channel
+            access, reordering, the chapter profile and the rest are web's
+            Settings, which an officer sets up once, at a desk. One quiet
+            line, as iOS Settings ends a group with its footnote. */}
+        {search.searching ? null : (
+          <Text style={styles.footnote}>{MORE_ON_THE_WEB}</Text>
         )}
       </SettingJumpProvider>
 
@@ -370,13 +377,12 @@ const MORE_ON_THE_WEB = "More settings are on the web dashboard.";
  * Chat → New channel (#5296): the sheet Chat home's "+" opens (#3838), here
  * too, so an officer setting the chapter up finds it where Discord mobile's
  * Server Settings and Slack's Create a channel put it. Name, category,
- * private or not, and who can see and post; then the channel opens, as it
- * does from Chat home.
+ * private or not, and who can see and post; then the channel opens, through
+ * the save Chat home uses (`useCreateChannelAndOpen`).
  */
-function ChatSection() {
-  const router = useRouter();
+function ChatSection({ searching }: { searching: boolean }) {
   const { tokens } = useFrappTheme();
-  const createChannel = useCreateChannel();
+  const createChannelAndOpen = useCreateChannelAndOpen();
   const categoriesQuery = useCategories();
   const categories = useMemo(
     () => selectCategories(categoriesQuery.data),
@@ -394,97 +400,112 @@ function ChatSection() {
   useEffect(() => {
     if (formKey !== null) sheetRef.current?.present?.();
   }, [formKey]);
-  const mode: ChannelFormMode = { kind: "create", categoryId: null };
 
   return (
     <>
-      <SectionHeader>Chat</SectionHeader>
-      <ListSection>
-        <ListRow
-          label="New channel"
-          leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
-          accessibilityHint="Opens the form for a new channel."
-          onPress={() => setFormKey((key) => (key ?? 0) + 1)}
-        />
-      </ListSection>
+      {searching ? null : (
+        <>
+          <SectionHeader>Chat</SectionHeader>
+          <ListSection>
+            <SettingAnchor id="new-channel">
+              <ListRow
+                label="New channel"
+                leading={
+                  <PlusGlyph color={tokens.color.text.mutedForeground} />
+                }
+                accessibilityHint="Opens the form for a new channel."
+                onPress={() => setFormKey((key) => (key ?? 0) + 1)}
+              />
+            </SettingAnchor>
+          </ListSection>
+        </>
+      )}
       {formKey !== null ? (
         <ChannelFormSheet
           key={formKey}
           ref={sheetRef}
-          mode={mode}
+          mode={NEW_CHANNEL_MODE}
           categories={categories}
           accessOptions={accessOptions}
-          accessOptionsState={
-            accessOptionsQuery.isSuccess
-              ? "ready"
-              : accessOptionsQuery.isError
-                ? "error"
-                : "loading"
-          }
-          onSubmit={async (values) => {
-            let created: { id?: unknown } | undefined;
-            try {
-              created = (await createChannel.mutateAsync(
-                createChannelBody(values),
-              )) as { id?: unknown } | undefined;
-            } catch (error) {
-              throw new Error(errorCopy(error, CREATE_CHANNEL_FAILED));
-            }
-            if (typeof created?.id === "string") {
-              router.push({
-                pathname: "/chat-thread",
-                params: { channelId: created.id },
-              });
-            }
-          }}
+          accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
+          onSubmit={createChannelAndOpen}
         />
       ) : null}
     </>
   );
 }
 
+const NEW_CHANNEL_MODE: ChannelFormMode = { kind: "create", categoryId: null };
+
 /**
- * People: Roles and groups, then New role for a `roles:manage` holder
- * (#5296): a name, a tier and a color, then the role's page, where what it
- * can do is switched. Mounted only for whoever sees People, so the roles
- * reads aren't spent on anyone else.
+ * People for a `roles:manage` holder: the roles reads, then Roles and groups
+ * and New role (#5296). Split from {@link PeopleSection} so the reads (the
+ * roles, tiers and member list) are spent only on someone who can add a role.
  */
-function PeopleSection({ canAddRole }: { canAddRole: boolean }) {
+function PeopleSectionWithNewRole({ searching }: { searching: boolean }) {
+  const { tiers, reach, words } = useRolesData();
+  const placements = useMemo(
+    () => newRolePlacements(reach, tiers, `Outside the ${words.plural}`),
+    [reach, tiers, words.plural],
+  );
+  return (
+    <PeopleSection
+      searching={searching}
+      placements={placements}
+      tierLabel={words.Singular}
+    />
+  );
+}
+
+/**
+ * People: Roles and groups, then New role where the officer has somewhere to
+ * put one (#5296): a name, a tier and a color, then the role's page, where
+ * what it can do is switched.
+ */
+function PeopleSection({
+  searching,
+  placements,
+  tierLabel = "Tier",
+}: {
+  searching: boolean;
+  placements: readonly NewRolePlacement[];
+  tierLabel?: string;
+}) {
   const router = useRouter();
   const { tokens } = useFrappTheme();
-  const { tiers, reach, words } = useRolesData();
   const sheetRef = useRef<BottomSheetModal>(null);
-  const placements = useMemo(
-    () =>
-      canAddRole
-        ? newRolePlacements(reach, tiers, `Outside the ${words.plural}`)
-        : [],
-    [canAddRole, reach, tiers, words.plural],
-  );
   const showNewRole = placements.length > 0;
 
   return (
     <>
-      <SectionHeader>People</SectionHeader>
-      <ListSection>
-        <ListRow
-          label="Roles and groups"
-          accessibilityHint="Opens the chapter's tiers, roles and groups."
-          onPress={() => router.push("/chapter-roles")}
-        />
-        {showNewRole ? (
-          <ListRow
-            label="New role"
-            leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
-            accessibilityHint="Opens the form for a new role."
-            onPress={() => sheetRef.current?.present()}
-          />
-        ) : null}
-      </ListSection>
+      {searching ? null : (
+        <>
+          <SectionHeader>People</SectionHeader>
+          <ListSection>
+            <ListRow
+              label="Roles and groups"
+              accessibilityHint="Opens the chapter's tiers, roles and groups."
+              onPress={() => router.push("/chapter-roles")}
+            />
+            {showNewRole ? (
+              <SettingAnchor id="new-role">
+                <ListRow
+                  label="New role"
+                  leading={
+                    <PlusGlyph color={tokens.color.text.mutedForeground} />
+                  }
+                  accessibilityHint="Opens the form for a new role."
+                  onPress={() => sheetRef.current?.present()}
+                />
+              </SettingAnchor>
+            ) : null}
+          </ListSection>
+        </>
+      )}
       {showNewRole ? (
         <NewRoleSheet
           ref={sheetRef}
-          chapterRole={{ placements, tierLabel: words.Singular }}
+          chapterRole={{ placements, tierLabel }}
           onCreated={(roleId) =>
             router.push({ pathname: "/role", params: { roleId } })
           }

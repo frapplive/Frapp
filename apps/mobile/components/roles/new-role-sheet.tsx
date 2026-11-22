@@ -30,6 +30,7 @@ import { OptionSheet, type SheetOption } from "@/components/option-sheet";
 import { CheckGlyph, ForwardGlyph } from "@/components/control-glyphs";
 import { successHaptic } from "@/lib/haptics";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
+import { defaultNewRolePlacement } from "@/lib/roles/new-role";
 
 /** Where a chapter role can go: a tier the officer reaches, or none. */
 export interface NewRolePlacement {
@@ -73,10 +74,11 @@ const NEW_ROLE_COPY = {
  *   name, a tier and a color, then the role's page opens, where what it can
  *   do is switched. It starts with its tier's permissions (`permissions: []`
  *   means "take the tier's", as web's Add role row sends), so naming it is
- *   enough for most. Discord mobile's Create Role asks the same three: name,
- *   color, then the role's page. The tier choices are only those the officer
- *   ranks above (`reachesTier`), the API's rule for a new role
- *   (`spec/behavior/rbac.md` § Rank), so a pick can't be refused for rank.
+ *   enough for most; it starts in the bottom tier on offer
+ *   (`defaultNewRolePlacement`). Discord mobile's Create Role asks the same
+ *   three: name, color, then the role's page. The tier choices are the API's
+ *   for a new role (`newRolePlacements`): tiers ranked below the officer's
+ *   whose permissions they hold, then outside the tiers.
  * - **Roles and groups → Non-chapter business → Add role** (#5736): one name
  *   field, and the role is created outside the tiers, holding nothing, and
  *   already marked for members to pick (`self_assignable: true`), in
@@ -99,9 +101,7 @@ export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
     const tierSheetRef = useRef<BottomSheetModal>(null);
 
     const placements = chapterRole?.placements ?? [];
-    // The bottom place the officer reaches, as Discord puts a new role at the
-    // bottom: least trusted until someone says otherwise.
-    const defaultPlacement = placements.at(-1)?.value ?? null;
+    const defaultPlacement = defaultNewRolePlacement(placements);
     const [name, setName] = useState("");
     const [placement, setPlacement] = useState<string | null>(defaultPlacement);
     const [color, setColor] = useState<string | null>(null);

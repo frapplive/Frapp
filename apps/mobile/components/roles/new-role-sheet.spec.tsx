@@ -138,10 +138,12 @@ describe("New role sheet from Chapter settings (#5296)", () => {
         typeof node.props.onSelect === "function",
     );
 
-  it("starts in the bottom place the officer reaches, with no color", () => {
+  it("starts in the bottom tier on offer, with no color", () => {
     const tree = renderChapter(vi.fn());
     expect(screenText(tree)).toContain("New role");
-    expect(tierSheet(tree).props.selected).toBeNull();
+    // Not outside the tiers, where a role that is only named would hold
+    // nothing: the bottom tier, so it starts with that tier's permissions.
+    expect(tierSheet(tree).props.selected).toBe("t-members");
     expect(swatch(tree, "No color").props.accessibilityState.checked).toBe(
       true,
     );
@@ -166,7 +168,7 @@ describe("New role sheet from Chapter settings (#5296)", () => {
     });
     expect(onCreated).toHaveBeenCalledWith("new-role");
     // Ready for the next one: the default place and no color again.
-    expect(tierSheet(tree).props.selected).toBeNull();
+    expect(tierSheet(tree).props.selected).toBe("t-members");
     act(() => tree.unmount());
   });
 
@@ -180,8 +182,38 @@ describe("New role sheet from Chapter settings (#5296)", () => {
     expect(state.createRole).toHaveBeenCalledWith({
       name: "Scholarship",
       permissions: [],
-      tier_id: null,
+      tier_id: "t-members",
     });
+    act(() => tree.unmount());
+  });
+
+  it("sends the default, not a tier the officer no longer has on offer", async () => {
+    state.createRole.mockResolvedValue({ id: "r" });
+    const tree = renderChapter(vi.fn());
+    act(() => tierSheet(tree).props.onSelect("t-chairs"));
+    // The officer's role changed while the sheet was open: Chairs is gone.
+    act(() =>
+      tree.update(
+        <FrappThemeProvider>
+          <NewRoleSheet
+            onCreated={vi.fn()}
+            chapterRole={{
+              ...chapterRole,
+              placements: chapterRole.placements.filter(
+                (p) => p.value !== "t-chairs",
+              ),
+            }}
+          />
+        </FrappThemeProvider>,
+      ),
+    );
+    act(() => nameField(tree).props.onChangeText("Scholarship"));
+    await act(async () => {
+      addButton(tree).props.onPress();
+    });
+    expect(state.createRole).toHaveBeenCalledWith(
+      expect.objectContaining({ tier_id: "t-members" }),
+    );
     act(() => tree.unmount());
   });
 });

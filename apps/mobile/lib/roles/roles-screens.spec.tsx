@@ -394,6 +394,65 @@ describe("Chapter settings (#4074)", () => {
     });
   });
 
+  it("says a refused New channel in the sheet's words, and opens nothing", async () => {
+    h.permissions = ["channels:create", "channels:manage"];
+    h.channelSheet = null;
+    h.createChannel
+      .mockClear()
+      .mockRejectedValue({ statusCode: 500, message: "boom" });
+    const tree = render(<ChapterSettingsScreen />);
+    act(() => pressable(tree, "New channel").props.onPress());
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    let caught: unknown;
+    await act(async () => {
+      await h
+        .channelSheet!.onSubmit({
+          name: "rush-2027",
+          description: "",
+          categoryId: null,
+          isPrivate: false,
+          access: {},
+        })
+        .catch((error: unknown) => {
+          caught = error;
+        });
+    });
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).not.toBe("boom");
+    expect((caught as Error).message.length).toBeGreaterThan(0);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("keeps the New role sheet, and its draft, mounted through a search", () => {
+    h.permissions = ["roles:manage", "members:view"];
+    h.pickableSheet = null;
+    const tree = render(<ChapterSettingsScreen />);
+    expect(h.pickableSheet).not.toBeNull();
+    const field = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Search settings" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => field.props.onChangeText("role"));
+    // The rows give way to the results; the sheet stays, so a draft kept on
+    // a close survives (`spec/ui/mobile/patterns.md` § Bottom sheets).
+    expect(
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          node.props.accessibilityLabel === "Roles and groups",
+      ),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.chapterRole !== undefined &&
+          typeof node.props.onCreated === "function",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("offers no New channel without both channel permissions", () => {
     h.permissions = ["chapter-config:view", "channels:create"];
     const text = screenText(render(<ChapterSettingsScreen />));

@@ -61,7 +61,6 @@ import {
   errorCopy,
   MANAGE_CHANNELS_PERMISSION,
   useChannelAccessOptions,
-  useCreateChannel,
   useDeleteChannel,
   useUpdateChannel,
   useMarkChannelRead,
@@ -101,9 +100,10 @@ import {
 } from "@/components/chat/channel-form-sheet";
 import { DeleteChannelSheet } from "@/components/chat/delete-channel-sheet";
 import {
-  CREATE_CHANNEL_FAILED,
-  createChannelBody,
+  accessOptionsStateOf,
+  canCreateChannel,
 } from "@/lib/chat/create-channel";
+import { useCreateChannelAndOpen } from "@/lib/chat/use-create-channel-and-open";
 import {
   ChannelFilterButton,
   ChannelFilterMenu,
@@ -306,9 +306,13 @@ export default function ChatHomeScreen() {
   const markRead = useMarkChannelRead();
   const setNotificationLevel = useSetChannelNotificationLevel();
   const deleteChannel = useDeleteChannel();
-  const createChannel = useCreateChannel();
+  const createChannelAndOpen = useCreateChannelAndOpen();
   const updateChannel = useUpdateChannel();
   const canManageChannels = can(MANAGE_CHANNELS_PERMISSION, permissions);
+  // New channel asks for what the create route and the sheet's lists take
+  // (`canCreateChannel`, #5296), not `channels:manage` alone, which offered a
+  // form whose save the server refused without `channels:create`.
+  const canCreateChannels = canCreateChannel(permissions);
   // New channel and Edit channel (#3838): one sheet, mounted fresh for each
   // opening (`formKey`), so a draft never carries to another channel.
   const channelFormRef = useRef<BottomSheetModal>(null);
@@ -342,15 +346,9 @@ export default function ChatHomeScreen() {
     async (values: ChannelFormValues) => {
       const mode = channelForm?.mode;
       if (!mode) return;
+      // Creates it and opens it, as Chapter settings' New channel does.
+      if (mode.kind === "create") return createChannelAndOpen(values);
       try {
-        if (mode.kind === "create") {
-          const created = (await createChannel.mutateAsync(
-            createChannelBody(values),
-          )) as { id?: unknown } | undefined;
-          // Open it, as Discord does, so the first message is one tap away.
-          if (typeof created?.id === "string") openChannel(created.id);
-          return;
-        }
         const channel = mode.channel;
         await updateChannel.mutateAsync({
           id: channel.id,
@@ -371,16 +369,12 @@ export default function ChatHomeScreen() {
         throw new Error(
           errorCopy(
             error,
-            mode.kind === "create"
-              ? CREATE_CHANNEL_FAILED
-              : "Couldn't save the channel. Check your connection and try again.",
+            "Couldn't save the channel. Check your connection and try again.",
           ),
         );
       }
     },
-    // `openChannel` is a plain function of this render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [channelForm, createChannel, updateChannel],
+    [channelForm, createChannelAndOpen, updateChannel],
   );
   // A level pick is a queueless write, so the menu locks it offline the way
   // the thread header's level control does (connection-state.md).
@@ -798,9 +792,9 @@ export default function ChatHomeScreen() {
   }
 
   // Which headings carry New channel (#3838): Channels and each category's,
-  // for `channels:manage`. Never Pinned.
+  // for whoever can make one (`canCreateChannel`). Never Pinned.
   const sectionHasNewChannel = (sectionKey: string) =>
-    canManageChannels &&
+    canCreateChannels &&
     (sectionKey === "channels" || sectionKey.startsWith("category:"));
   const filterButton = (
     <ChannelFilterButton menu={filterMenu} active={filtersOn} />
@@ -976,7 +970,7 @@ export default function ChatHomeScreen() {
         // Chat is for; the one line says what to do (writing.md §4, as
         // amended 2026-11-05): an officer starts one here (#3838), and
         // anyone else asks.
-        canManageChannels ? (
+        canCreateChannels ? (
           <InlineNote
             action={{
               label: "New channel",
@@ -1156,13 +1150,7 @@ export default function ChatHomeScreen() {
           categories={categories}
           onSubmit={submitChannelForm}
           accessOptions={accessOptions}
-          accessOptionsState={
-            accessOptionsQuery.isSuccess
-              ? "ready"
-              : accessOptionsQuery.isError
-                ? "error"
-                : "loading"
-          }
+          accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
           onDelete={
             channelForm.mode.kind === "edit"
               ? () => {
