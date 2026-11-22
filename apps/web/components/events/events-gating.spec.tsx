@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { chapterSubscription } from "@/tests/chapter-subscription";
 
 const { mockCurrentChapter } = vi.hoisted(() => ({
@@ -103,10 +103,10 @@ const closeButton = () =>
   screen.getByRole("button", { name: /^(close|back to events)$/i });
 const autoAbsentButton = () =>
   screen.getByRole("button", { name: /mark no-shows absent/i });
+// One status chip a row, web's value picker (`Select`), since 2026-11-22.
 const rowStatusSelect = () =>
-  screen.getByRole("radiogroup", { name: /attendance for alice adams/i });
-const statusFilter = () =>
-  screen.getByRole("radiogroup", { name: /filter attendance by status/i });
+  screen.getByRole("combobox", { name: /attendance for alice adams/i });
+const statusFilter = () => screen.getByRole("radiogroup", { name: "Show" });
 
 describe("EventEditorDialog subscription gating", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -185,16 +185,16 @@ describe("AttendancePanel subscription gating", () => {
 
   it("leaves every control alone on an active chapter", () => {
     chapter.active();
-    render(<AttendancePanel eventId="evt-1" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     expect(autoAbsentButton()).toBeEnabled();
-    expect(rowStatusSelect()).not.toHaveAttribute("aria-disabled");
+    expect(rowStatusSelect()).toBeEnabled();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("disables auto-absent and names the blocker when incomplete", () => {
     chapter.incomplete();
-    render(<AttendancePanel eventId="evt-1" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     expect(autoAbsentButton()).toBeDisabled();
     expect(screen.getByText(/subscription is not active/i)).toBeInTheDocument();
@@ -205,82 +205,54 @@ describe("AttendancePanel subscription gating", () => {
 
   it("gates the per-row status write too, not just the headline one", () => {
     chapter.incomplete();
-    render(<AttendancePanel eventId="evt-1" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     const describedBy = autoAbsentButton().getAttribute("aria-describedby");
-    // Every answer on the row is off, and the row says why.
-    for (const answer of within(rowStatusSelect()).getAllByRole("radio")) {
-      expect(answer).toBeDisabled();
-    }
+    // The row's status is off, and the row says why.
+    expect(rowStatusSelect()).toBeDisabled();
     expect(rowStatusSelect()).toHaveAttribute("aria-describedby", describedBy);
   });
 
   it("never gates the status filter, which is a read", () => {
     chapter.incomplete();
-    render(<AttendancePanel eventId="evt-1" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     expect(statusFilter()).not.toHaveAttribute("aria-disabled");
   });
 
   it("fails open when the chapter record cannot be read", () => {
     chapter.unreadable();
-    render(<AttendancePanel eventId="evt-1" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     expect(autoAbsentButton()).toBeEnabled();
-    expect(rowStatusSelect()).not.toHaveAttribute("aria-disabled");
+    expect(rowStatusSelect()).toBeEnabled();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
 
-describe("AttendancePanel auto-absent before check-in closes (FRAPP-WEB-7)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Local noon, so check-in's close (15 minutes after an end five minutes
-    // ago) is "Today" whenever the suite runs; at 23:50 it read "Tomorrow".
-    // Only `Date` is faked, so the query and render timers still run.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 10, 13, 12, 0, 0));
-  });
-  afterEach(() => vi.useRealTimers());
+describe("AttendancePanel auto-absent (FRAPP-WEB-7)", () => {
+  // The API refuses auto-absent until check-in closes, which is when the
+  // page turns from live to past (`eventPagePhase`). So the button belongs to
+  // the past page only, and never waits on screen for the close.
+  beforeEach(() => vi.clearAllMocks());
 
-  it("waits for check-in to close, which is when the API accepts it", () => {
+  it("isn't offered while check-in is open", () => {
     chapter.active();
-    // Ended five minutes ago: still inside the 15-minute check-in grace.
-    const end = new Date(Date.now() - 5 * 60_000).toISOString();
-    render(<AttendancePanel eventId="evt-1" eventEnd={end} />);
+    render(<AttendancePanel eventId="evt-1" phase="live" />);
 
-    expect(autoAbsentButton()).toBeDisabled();
-    // Said in visible text, since a disabled button shows no tooltip.
-    const notice = screen.getByText(
-      /available when check-in closes/i,
-    );
-    expect(notice).toHaveTextContent(/\(Today · /);
-    expect(autoAbsentButton()).toHaveAttribute("aria-describedby", notice.id);
-    // The row write is not held: officers correct statuses during check-in.
-    expect(rowStatusSelect()).not.toHaveAttribute("aria-disabled");
-  });
-
-  it("makes no promise about the close when the subscription blocks it", () => {
-    chapter.incomplete();
-    const end = new Date(Date.now() - 5 * 60_000).toISOString();
-    render(<AttendancePanel eventId="evt-1" eventEnd={end} />);
-
-    expect(autoAbsentButton()).toBeDisabled();
     expect(
-      screen.queryByText(/available when check-in closes/i),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText(/subscription is not active/i)).toBeInTheDocument();
+      screen.queryByRole("button", { name: /mark no-shows absent/i }),
+    ).toBeNull();
+    // The row write is not held: officers correct statuses during check-in.
+    expect(rowStatusSelect()).toBeEnabled();
   });
 
   it("offers it once check-in has closed", () => {
     chapter.active();
     const end = new Date(Date.now() - 20 * 60_000).toISOString();
-    render(<AttendancePanel eventId="evt-1" eventEnd={end} />);
+    render(<AttendancePanel eventId="evt-1" eventEnd={end} phase="past" />);
 
     expect(autoAbsentButton()).toBeEnabled();
-    expect(
-      screen.queryByText(/available when check-in closes/i),
-    ).not.toBeInTheDocument();
   });
 });
 

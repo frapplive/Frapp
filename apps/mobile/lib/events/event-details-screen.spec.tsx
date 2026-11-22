@@ -110,9 +110,26 @@ const { eventAttendanceFor } = await vi.hoisted(
 
 const checkIn = vi.fn();
 
+const roster = vi.hoisted(() => ({
+  value: [] as { user_id: string; status: string; check_in_time?: string }[],
+}));
+const markStatus = vi.hoisted(() => vi.fn(async () => undefined));
+const invitees = vi.hoisted(() => ({
+  value: [
+    { user_id: "u-1", display_name: "Ava Brooks", avatar_url: null },
+    { user_id: "u-2", display_name: "Marcus Lee", avatar_url: null },
+  ] as { user_id: string; display_name: string; avatar_url: null }[] | null,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useActiveChapterId: () => chapterId,
+  // Who's coming (Paul 2026-11-22): the invite list, read from the chapter's
+  // members by the event's role rule.
+  useEventInvitees: () => invitees.value,
+  // The officer's roster, once check-in opens.
+  useAttendance: () => ({ data: roster.value }),
+  useUpdateAttendanceStatus: () => ({ mutateAsync: markStatus }),
   usePermissionList: () => permissions,
   useRoles: () => ({ data: [], isPending: false, isError: false }),
   useEventTypes: () => ({ data: [] }),
@@ -379,12 +396,62 @@ describe("Event details layout", () => {
     myAttendancePaused = false;
   });
 
-  it("reads the details before the member's check-in, as web's sheet does (Paul 2026-11-19)", () => {
+  it("leads with check-in while it's open, as web's sheet lifts its row (Paul 2026-11-22)", () => {
     const text = screenText(render());
     const details = text.indexOf("DETAILS");
     const checkIn = text.indexOf("Scan code");
     expect(details).toBeGreaterThan(-1);
-    expect(checkIn).toBeGreaterThan(details);
+    expect(checkIn).toBeGreaterThan(-1);
+    expect(checkIn).toBeLessThan(details);
+  });
+
+  it("reads the details before check-in until it opens (Paul 2026-11-19)", () => {
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() + 30 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() + 30 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    const text = screenText(render());
+    expect(text.indexOf("Check-in opens")).toBeGreaterThan(
+      text.indexOf("DETAILS"),
+    );
+  });
+
+  it("lists who's coming, and keeps a member off the roster (Paul 2026-11-22)", () => {
+    const text = screenText(render());
+    expect(text).toContain("2 people");
+    expect(text).toContain("WHO'S COMING · 2 PEOPLE");
+    expect(text).toContain("Ava Brooks");
+    expect(text).not.toContain("ATTENDANCE ·");
+  });
+
+  it("gives an officer the roster once check-in opens, one status a person", () => {
+    permissions = ["members:view", "events:update"];
+    roster.value = [
+      { user_id: "u-1", status: "PRESENT", check_in_time: START.toISOString() },
+    ];
+    const text = screenText(render());
+    expect(text).toContain("ATTENDANCE · 1 OF 2 CHECKED IN");
+    expect(text).toContain("1 present · 1 not here yet");
+    expect(text).toContain("Not here");
+    expect(text).not.toContain("WHO'S COMING");
+    roster.value = [];
+  });
+
+  it("keeps the roster back for an officer until check-in opens", () => {
+    permissions = ["members:view", "events:update"];
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() + 30 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() + 30 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    const text = screenText(render());
+    expect(text).not.toContain("ATTENDANCE ·");
+    expect(text).toContain("WHO'S COMING · 2 PEOPLE");
   });
 
   it("carries the Now pill while the event is on, then Ended for the rest of the day (#5777)", () => {
@@ -414,7 +481,7 @@ describe("Event details layout", () => {
     expect(screenText(tree)).toMatch(/· .+ · Chapter House — Great Room\n/);
     expect(textNode(tree, "Chapter House — Great Room")).toBeUndefined();
     // The hairline kind, as the list draws it (#4132).
-    expect(flat(textNode(tree, "Mandatory")!).color).toBe(
+    expect(flat(textNode(tree, "Required")!).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
     );
     expect(flat(textNode(tree, "+10 pts")!).color).toBe(ACCENT);

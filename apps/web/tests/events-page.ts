@@ -70,6 +70,8 @@ export function eventTypeHooks(types: unknown[] = EVENT_TYPES) {
 export async function eventsPageHooks(overrides: Record<string, unknown> = {}) {
   return {
     ...(await import("@repo/hooks/use-google-calendar")),
+    // The roster's pure rules run for real (#5853 thread).
+    ...(await import("@repo/hooks/event-roster")),
     // A viewer with no roles: the event's default decides (#4132). The rule
     // itself is the hook's own spec.
     useRequiredOfViewer: () => (fields: { is_mandatory?: boolean | null }) =>

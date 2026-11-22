@@ -568,7 +568,7 @@ describe("Calendar day rows", () => {
     expect(drawnText(row)).toContain(`Chapter · Every ${weekday}`);
   });
 
-  it("draws a later row with no card fill and Mandatory as a hairline", () => {
+  it("draws a later row with no card fill and Required as a hairline", () => {
     events = [make("a", 0), make("b", 2, { is_mandatory: true })];
     const tree = render();
     pickDay(tree, at(2));
@@ -583,7 +583,7 @@ describe("Calendar day rows", () => {
     const chip = row.find(
       (node) =>
         (node.type as unknown) === "Text" &&
-        node.props.children === "Mandatory",
+        node.props.children === "Required",
     );
     expect(StyleSheet.flatten(chip.props.style).color).toBe(
       signetDarkTokens.color.text.mutedForeground,
@@ -611,12 +611,12 @@ describe("Calendar day rows", () => {
     const tiles = row.findAllByType(LeadTile);
     expect(tiles).toHaveLength(1);
     expect(tiles[0]!.props.size).toBe("lead");
-    // The chevron is the row's last thing, after Mandatory.
+    // The chevron is the row's last thing, after Required.
     const trailing = row.findAll(
       (node) =>
         node.type === ForwardGlyph ||
         ((node.type as unknown) === "Text" &&
-          node.props.children === "Mandatory"),
+          node.props.children === "Required"),
     );
     expect(trailing.map((node) => node.type === ForwardGlyph)).toEqual([
       false,

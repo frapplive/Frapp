@@ -1,0 +1,1 @@
+An event's page now follows its clock on web and phone: before check-in opens it shows the details and who's coming, while check-in is open it leads with check-in and the attendance list, and afterwards it opens on who came.

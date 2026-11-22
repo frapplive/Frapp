@@ -1,4 +1,5 @@
 import { CALENDAR_KIND_HUE } from "@repo/hooks/activity-agenda";
+import { eventInvitees } from "@repo/validation";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -71,8 +72,19 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: vi.fn(),
   }),
   useActiveChapterId: () => "chap-1",
+  // The invite list behind Who's coming and its headcount (#5853 thread).
+  useMembers: () => ({ data: membersState.value }),
+  useEventInvitees: (audience: Parameters<typeof eventInvitees>[0]) =>
+    eventInvitees(audience, membersState.value),
   useRequiredOfViewer: () => () => excuseState.required,
   useViewerUserId: () => excuseState.viewerId,
+}));
+
+const membersState = vi.hoisted(() => ({
+  value: [
+    { user_id: "u-1", display_name: "Ava Brooks", role_ids: ["r1"] },
+    { user_id: "u-2", display_name: "Marcus Lee", role_ids: [] },
+  ] as { user_id: string; display_name: string; role_ids: string[] }[],
 }));
 
 // Excuses (#3735): the blocks have their own spec (`event-excuses.spec.tsx`);
@@ -178,6 +190,19 @@ const baseEvent = {
   start_time: "2026-07-01T18:00:00.000Z",
   end_time: "2026-07-01T19:00:00.000Z",
 };
+
+// On now: check-in is open, so the page shows the check-in zone and, for an
+// officer, the roster (`eventPagePhase`). `baseEvent` is long over.
+const liveEvent = {
+  ...baseEvent,
+  start_time: new Date(Date.now() - 10 * 60_000).toISOString(),
+  end_time: new Date(Date.now() + 50 * 60_000).toISOString(),
+};
+
+/** Opens the header's ⋯, where Delete lives (rulebook § Page layout). */
+async function openMore(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /^More for / }));
+}
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
@@ -419,14 +444,16 @@ describe("EventDetailSheet subscription gating", () => {
     );
   }
 
-  it("disables edit and delete and names the blocker on a lapsed chapter", () => {
+  it("disables edit and delete and names the blocker on a lapsed chapter", async () => {
+    const user = userEvent.setup();
     chapter.incomplete();
     renderSheet();
 
     expect(screen.getByRole("button", { name: /edit event/i })).toBeDisabled();
+    await openMore(user);
     expect(
-      screen.getByRole("button", { name: /delete event/i }),
-    ).toBeDisabled();
+      screen.getByRole("menuitem", { name: /delete event/i }),
+    ).toHaveAttribute("data-disabled");
     expect(screen.getByText(/subscription is not active/i)).toBeInTheDocument();
   });
 
@@ -465,7 +492,8 @@ describe("EventDetailSheet subscription gating", () => {
 describe("EventDetailSheet header actions", () => {
   // components.md § Chrome weight: an object's actions are icons in its
   // header beside the close, not worded buttons opening the body.
-  it("draws Edit and Delete as named icons with tooltips", () => {
+  it("draws Edit as a named icon, and Delete behind the ⋯", async () => {
+    const user = userEvent.setup();
     chapter.active();
     render(
       <EventDetailSheet
@@ -478,11 +506,15 @@ describe("EventDetailSheet header actions", () => {
       />,
     );
 
-    for (const name of ["Edit event", "Delete event"]) {
-      const button = screen.getByRole("button", { name });
-      expect(button).toHaveTextContent(/^$/);
-      expect(button).toHaveAttribute("title", name);
-    }
+    const edit = screen.getByRole("button", { name: "Edit event" });
+    expect(edit).toHaveTextContent(/^$/);
+    expect(edit).toHaveAttribute("title", "Edit event");
+    // Destructive, so never on its own in the header.
+    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    await openMore(user);
+    expect(
+      screen.getByRole("menuitem", { name: "Delete event" }),
+    ).toBeInTheDocument();
     // The .ics export was withdrawn until calendar sync ships (#3708).
     expect(
       screen.queryByRole("button", { name: /add to calendar/i }),
@@ -498,7 +530,7 @@ describe("EventDetailSheet check-in zone", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -524,7 +556,7 @@ describe("EventDetailSheet check-in zone", () => {
         open
         onOpenChange={() => {}}
         usingPreviewData
-        event={baseEvent}
+        event={liveEvent}
         onRequestEdit={() => {}}
         onEventDeleted={async () => {}}
       />,
@@ -543,7 +575,7 @@ describe("EventDetailSheet check-in zone", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -570,7 +602,7 @@ describe("EventDetailSheet zone validity mirrors the server", () => {
         onOpenChange={() => {}}
         usingPreviewData
         event={{
-          ...baseEvent,
+          ...liveEvent,
           check_in_zone: [
             { lat: 1, lng: 2 },
             { lat: 3, lng: 4 },
@@ -618,7 +650,7 @@ describe("EventDetailSheet schedule and policy", () => {
     expect(screen.getByText(/· 5:00\s?– 7:00\sPM$/)).toBeInTheDocument();
   });
 
-  it("wears the events kind mark, and Required in its hue when it requires the viewer (#5560)", () => {
+  it("wears the events kind mark, and a Required chip when it requires the viewer (#5560)", () => {
     excuseState.required = true;
     const { unmount } = renderSheet(baseEvent);
     const dialog = screen.getByRole("dialog");
@@ -849,11 +881,11 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
   it("says to scan once the event's read says the code is required, and no zone line contradicts it", () => {
     permissionsState.value = ["members:view"];
     eventQueryState.data = {
-      ...baseEvent,
+      ...liveEvent,
       check_in_zone: null,
       check_in_needs_code: true,
     };
-    renderLive();
+    renderLive(liveEvent);
 
     expect(screen.getByTestId("my-check-in")).toHaveAttribute(
       "data-zone",
@@ -908,7 +940,7 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Delete event" }),
+      screen.getByRole("button", { name: /^More for / }),
     ).toBeInTheDocument();
   });
 
@@ -922,8 +954,41 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Delete event" }),
+      screen.getByRole("button", { name: /^More for / }),
     ).toBeInTheDocument();
+  });
+
+  // Paul 2026-11-22: "why is the attendance fully out to see right off the
+  // bat for an event a month in the future?"
+  it("keeps the roster back until check-in opens, and lists who's coming instead", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    renderLive({
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+    });
+
+    expect(screen.queryByTestId("attendance-roster")).toBeNull();
+    const people = screen.getByRole("region", { name: "Who's coming" });
+    expect(within(people).getByText("Ava Brooks")).toBeInTheDocument();
+    expect(within(people).getByText("Marcus Lee")).toBeInTheDocument();
+  });
+
+  it("counts only the people the event invites", () => {
+    permissionsState.value = ["members:view"];
+    renderLive({
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+      required_role_ids: ["r1"],
+      others_invited: false,
+    });
+
+    // In the Who's coming row and atop the side list.
+    expect(screen.getAllByText("1 person")).toHaveLength(2);
+    const people = screen.getByRole("region", { name: "Who's coming" });
+    expect(within(people).getByText("Ava Brooks")).toBeInTheDocument();
+    expect(within(people).queryByText("Marcus Lee")).toBeNull();
   });
 
   it("reads details, then the agenda, then attendance (Paul 2026-11-19)", () => {
@@ -1059,7 +1124,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("asks which events to delete from a repeating series", async () => {
     const user = userEvent.setup();
     renderLive({ ...upcoming, parent_event_id: "h1" });
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     expect(screen.getByText("Delete a repeating event")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "All upcoming events" }),
@@ -1070,7 +1136,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("deletes only this one when asked", async () => {
     const user = userEvent.setup();
     renderLive({ ...upcoming, recurrence_rule: "WEEKLY" });
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     await user.click(screen.getByRole("button", { name: "This event only" }));
     expect(deleteMutate).toHaveBeenCalledWith({ id: "e1", scope: "instance" });
   });
@@ -1078,7 +1145,8 @@ describe("EventDetailSheet delete (#3667)", () => {
   it("doesn't ask for a one-time event", async () => {
     const user = userEvent.setup();
     renderLive(upcoming);
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    await openMore(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete event" }));
     expect(screen.queryByText("Delete a repeating event")).toBeNull();
     await user.click(
       within(
