@@ -271,7 +271,12 @@ describe("checking items off (Paul 2026-11-19)", () => {
 
   it("counts what is done once it has started", () => {
     render(
-      <EventAgendaSection agenda={agenda} canEdit checkOffOpen onChange={vi.fn()} />,
+      <EventAgendaSection
+        agenda={agenda}
+        canEdit
+        checkOffOpen
+        onChange={vi.fn()}
+      />,
     );
     expect(screen.getByText("1 of 2 done")).toBeInTheDocument();
   });
@@ -504,6 +509,49 @@ describe("EventMeetingLists", () => {
   });
 });
 
+describe("A started meeting's agenda (Paul 2026-11-20)", () => {
+  it("is checked off, and offers no add, move or remove", () => {
+    render(
+      <EventMeetingLists
+        eventId="e1"
+        lists={{ agenda, attachments }}
+        canEdit
+        upcoming
+        checkOffOpen
+        documentsOn
+      />,
+    );
+    expect(screen.getByRole("checkbox", { name: "Rush recap" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /Remove "Rush recap"/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /Move/ })).toBeNull();
+    expect(screen.queryByLabelText("Add an agenda item")).toBeNull();
+    // Attachments still take a link in the room.
+    expect(
+      screen.getByRole("button", { name: 'Remove "Budget"' }),
+    ).toBeEnabled();
+  });
+
+  it("before the start, is edited and not checked off", () => {
+    render(
+      <EventMeetingLists
+        eventId="e1"
+        lists={{ agenda, attachments }}
+        canEdit
+        upcoming
+        checkOffOpen={false}
+        documentsOn
+      />,
+    );
+    expect(screen.getByRole("checkbox", { name: "Rush recap" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: 'Remove "Rush recap"' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Add an agenda item")).toBeInTheDocument();
+  });
+});
+
 describe("Suggested agenda items (#5534)", () => {
   const tabled = {
     id: "s1",
@@ -539,7 +587,7 @@ describe("Suggested agenda items (#5534)", () => {
         lists={{ agenda: [], attachments: [] }}
         canEdit
         upcoming
-        checkOffOpen
+        checkOffOpen={false}
         documentsOn
       />,
     );
@@ -551,6 +599,38 @@ describe("Suggested agenda items (#5534)", () => {
     expect(section).toHaveTextContent("Still open from last week");
   });
 
+  it("labels an action item sent from minutes with those minutes, linking to them (#5790)", () => {
+    state.suggestions = [
+      {
+        id: "s3",
+        kind: "minutes",
+        text: "Plan backup activities for rush",
+        tabled_from: null,
+        from_minutes: {
+          meeting_id: "m-last",
+          start_time: "2026-11-18T23:00:00.000Z",
+        },
+        source_meeting_id: "m-last",
+        reason: null,
+      },
+    ];
+    render(
+      <EventMeetingLists
+        eventId="e1"
+        lists={{ agenda: [], attachments: [] }}
+        canEdit
+        upcoming
+        checkOffOpen={false}
+        documentsOn
+      />,
+    );
+    const section = screen.getByRole("region", { name: "Suggested" });
+    expect(section).toHaveTextContent("Plan backup activities for rush");
+    expect(
+      screen.getByRole("link", { name: /^From the minutes of / }),
+    ).toHaveAttribute("href", "/meetings/m-last");
+  });
+
   it("adds and dismisses", async () => {
     const user = userEvent.setup();
     render(
@@ -559,7 +639,7 @@ describe("Suggested agenda items (#5534)", () => {
         lists={{ agenda: [], attachments: [] }}
         canEdit
         upcoming
-        checkOffOpen
+        checkOffOpen={false}
         documentsOn
       />,
     );
@@ -573,13 +653,13 @@ describe("Suggested agenda items (#5534)", () => {
     expect(state.dismiss).toHaveBeenCalledWith("s2");
   });
 
-  it("shows nothing for a meeting that has ended, or to a member who can't edit", () => {
+  it("shows nothing once the meeting has started, or to a member who can't edit", () => {
     const { rerender } = render(
       <EventMeetingLists
         eventId="e1"
         lists={{ agenda: [], attachments: [] }}
         canEdit
-        upcoming={false}
+        upcoming
         checkOffOpen
         documentsOn
       />,

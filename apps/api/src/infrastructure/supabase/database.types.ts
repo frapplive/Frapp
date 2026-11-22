@@ -81,13 +81,16 @@ import type {
   FinancialInvoice,
   FinancialTransaction,
   FollowedThreadUnread,
+  GifFavorite,
   GoogleCalendarConnection,
   GoogleCalendarOAuthState,
   Invite,
   Meeting,
   MeetingDateReminder,
   MeetingDraft,
+  MeetingLiveRecording,
   MeetingMinutesRequest,
+  MeetingNextAgendaItem,
   MeetingNoMinutes,
   MeetingNote,
   MeetingRecording,
@@ -253,12 +256,15 @@ export interface Database {
       events: TableDefinition<Event>;
       financial_invoices: TableDefinition<FinancialInvoice>;
       financial_transactions: TableDefinition<FinancialTransaction>;
+      gif_favorites: TableDefinition<GifFavorite>;
       google_calendar_connections: TableDefinition<GoogleCalendarConnection>;
       google_calendar_oauth_states: TableDefinition<GoogleCalendarOAuthState>;
       invites: TableDefinition<Invite>;
       meeting_date_reminders: TableDefinition<MeetingDateReminder>;
       meeting_drafts: TableDefinition<MeetingDraft>;
+      meeting_live_recordings: TableDefinition<MeetingLiveRecording>;
       meeting_minutes_requests: TableDefinition<MeetingMinutesRequest>;
+      meeting_next_agenda_items: TableDefinition<MeetingNextAgendaItem>;
       meeting_no_minutes: TableDefinition<MeetingNoMinutes>;
       meeting_notes: TableDefinition<MeetingNote>;
       meeting_recordings: TableDefinition<MeetingRecording>;

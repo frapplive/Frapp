@@ -2,14 +2,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { updateRoles, setMembership, permissions, mockToast } = vi.hoisted(
-  () => ({
+const { updateRoles, setMembership, permissions, mockToast, baseRoles } =
+  vi.hoisted(() => ({
     updateRoles: vi.fn(),
     setMembership: vi.fn(),
     permissions: { current: ["*"] as string[] },
     mockToast: vi.fn(),
-  }),
-);
+    // The chapter's base roles, off unless a test seeds them (#5802).
+    baseRoles: { current: [] as ReturnType<typeof Object>[] },
+  }));
 
 const TIERS = [
   {
@@ -52,16 +53,18 @@ const ROLES = [
   }),
   role("r-social", "Social chair", "t-chairs"),
   role("r-rush", "Rush chair", "t-chairs"),
-  role("r-everyone", "Everyone", "t-chairs", {
-    system_key: "MEMBER",
+  role("r-everyone", "Everyone", null, {
+    system_key: "EVERYONE",
     is_system: true,
   }),
+  role("r-floor", "Floor 2", "t-chairs", { display_order: 2 }),
+  role("r-tree", "Tree", "t-chairs", { display_order: 3 }),
 ];
 
 vi.mock("@/components/roles/use-roles-data", () => ({
   useRolesData: () => ({
-    roles: ROLES,
-    rolesQuery: { data: ROLES, isError: false },
+    roles: [...ROLES, ...baseRoles.current],
+    rolesQuery: { data: [...ROLES, ...baseRoles.current], isError: false },
     tiers: TIERS,
     reach: {
       wildcard: permissions.current.includes("*"),
@@ -80,9 +83,13 @@ vi.mock("@repo/hooks", async () => {
     await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks");
   return {
     ASSIGN_COPY: actual.ASSIGN_COPY,
+    chipToggleName: actual.chipToggleName,
+    cutChips: actual.cutChips,
     memberAssignmentSections: actual.memberAssignmentSections,
     memberGroupChips: actual.memberGroupChips,
     memberRoleChips: actual.memberRoleChips,
+    needsBaseRole: actual.needsBaseRole,
+    NO_BASE_ROLE_LABEL: actual.NO_BASE_ROLE_LABEL,
     useGroups: () => ({
       data: [
         {
@@ -133,6 +140,7 @@ function renderIt(roleIds = ["r-sec", "r-everyone"]) {
 
 beforeEach(() => {
   permissions.current = ["*"];
+  baseRoles.current = [];
   updateRoles.mockReset().mockResolvedValue({});
   setMembership.mockReset().mockResolvedValue({});
   mockToast.mockReset();
@@ -149,6 +157,54 @@ describe("MemberAssignments (Paul, 2026-11-19)", () => {
     expect(groups).toHaveTextContent("Fall 2025");
   });
 
+  it("shows the top three roles by rank, then +N more that opens the rest in place (#5783)", async () => {
+    const user = userEvent.setup();
+    renderIt([
+      "r-tree",
+      "r-rush",
+      "r-floor",
+      "r-sec",
+      "r-social",
+      "r-pres",
+      "r-everyone",
+    ]);
+    const roles = screen.getByRole("region", { name: "Roles" });
+    const chipNames = () =>
+      within(roles)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent?.trim())
+        .filter(
+          (text) =>
+            text &&
+            !text.startsWith("+") &&
+            !["Show less", "Add role"].includes(text),
+        );
+    expect(chipNames()).toEqual([
+      "President",
+      "Corresponding Secretary",
+      "Rush chair",
+    ]);
+    const more = within(roles).getByRole("button", { name: "+3 more roles" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    await user.click(more);
+    expect(chipNames()).toEqual([
+      "President",
+      "Corresponding Secretary",
+      "Rush chair",
+      "Social chair",
+      "Floor 2",
+      "Tree",
+    ]);
+    // Opened, a hidden chip can be taken away too.
+    expect(
+      within(roles).getByRole("button", { name: "Remove Tree" }),
+    ).toBeInTheDocument();
+    const less = within(roles).getByRole("button", { name: "Show less roles" });
+    expect(less).toHaveAttribute("aria-expanded", "true");
+    await user.click(less);
+    expect(chipNames()).toHaveLength(3);
+  });
+
   it("takes a group away from its chip at once, but never a followed one", async () => {
     const user = userEvent.setup();
     renderIt();
@@ -163,21 +219,17 @@ describe("MemberAssignments (Paul, 2026-11-19)", () => {
     });
   });
 
-  it("asks before taking away the last role that lets them open the app", async () => {
+  it("takes away a member's last role at once, leaving them Everyone", async () => {
     const user = userEvent.setup();
-    renderIt(["r-sec"]);
-    await user.click(
-      screen.getByRole("button", { name: "Remove Corresponding Secretary" }),
-    );
-    expect(
-      await screen.findByText("Take away Jimmy Mitchell's access?"),
-    ).toBeInTheDocument();
-    expect(updateRoles).not.toHaveBeenCalled();
+    renderIt(["r-sec", "r-everyone"]);
     await user.click(
       screen.getByRole("button", { name: "Remove Corresponding Secretary" }),
     );
     await waitFor(() =>
-      expect(updateRoles).toHaveBeenCalledWith({ id: "m1", role_ids: [] }),
+      expect(updateRoles).toHaveBeenCalledWith({
+        id: "m1",
+        role_ids: ["r-everyone"],
+      }),
     );
   });
 
@@ -299,14 +351,14 @@ describe("MemberAssignments (Paul, 2026-11-19)", () => {
     expect(updateRoles).toHaveBeenCalledTimes(1);
     expect(updateRoles).toHaveBeenLastCalledWith({
       id: "m1",
-      role_ids: ["r-sec", "r-everyone", "r-social"],
+      role_ids: ["r-sec", "r-social", "r-everyone"],
     });
 
     finish();
     await waitFor(() => expect(updateRoles).toHaveBeenCalledTimes(2));
     expect(updateRoles).toHaveBeenLastCalledWith({
       id: "m1",
-      role_ids: ["r-sec", "r-everyone", "r-social", "r-rush"],
+      role_ids: ["r-sec", "r-social", "r-rush", "r-everyone"],
     });
     expect(list).toBeInTheDocument();
     await waitFor(() =>
@@ -343,12 +395,6 @@ describe("MemberAssignments (Paul, 2026-11-19)", () => {
     renderIt(["r-sec", "r-everyone"]);
     await user.click(
       screen.getByRole("button", { name: "Remove Corresponding Secretary" }),
-    );
-    // The access confirm: this was their last role with access.
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Remove Corresponding Secretary",
-      }),
     );
     await waitFor(() => expect(updateRoles).toHaveBeenCalledTimes(1));
     // The profile prop still holds the old list; the chip is gone anyway.
@@ -390,6 +436,56 @@ describe("MemberAssignments (Paul, 2026-11-19)", () => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ title: "Couldn't take out of that group" }),
       ),
+    );
+  });
+});
+
+describe("base roles (#5802)", () => {
+  beforeEach(() => {
+    baseRoles.current = [
+      role("r-new", "New Member", "t-chairs", {
+        system_key: "NEW_MEMBER",
+        is_system: true,
+      }),
+      role("r-actives", "Actives", "t-chairs", {
+        system_key: "MEMBER",
+        is_system: true,
+      }),
+      role("r-alumni", "Alumni", null, {
+        system_key: "ALUMNI",
+        is_system: true,
+      }),
+    ];
+  });
+
+  it("says a member holds no base role, only to someone who can give one", () => {
+    const { unmount } = renderIt(["r-sec", "r-everyone"]);
+    expect(screen.getByText("No base role")).toBeInTheDocument();
+    unmount();
+    permissions.current = ["members:view"];
+    renderIt(["r-sec", "r-everyone"]);
+    expect(screen.queryByText("No base role")).toBeNull();
+  });
+
+  it("offers the base roles as one pick, and a new one replaces the old", async () => {
+    const user = userEvent.setup();
+    renderIt(["r-sec", "r-actives", "r-everyone"]);
+    expect(screen.queryByText("No base role")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add role" }));
+    const list = screen.getByRole("dialog", {
+      name: "Roles and groups for Jimmy Mitchell",
+    });
+    expect(
+      within(list).getByRole("menuitemradio", { name: /Actives/ }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(
+      within(list).getByRole("menuitemradio", { name: /Alumni/ }),
+    );
+    await waitFor(() =>
+      expect(updateRoles).toHaveBeenCalledWith({
+        id: "m1",
+        role_ids: ["r-sec", "r-alumni", "r-everyone"],
+      }),
     );
   });
 });

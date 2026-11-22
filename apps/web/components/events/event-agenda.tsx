@@ -1,14 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type FormEvent } from "react";
-import {
-  FileText,
-  GripVertical,
-  Link2,
-  Loader2,
-  Plus,
-  X,
-} from "lucide-react";
+import { FileText, GripVertical, Link2, Loader2, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { randomClientId, statusOf } from "@repo/api-sdk";
 import {
@@ -23,6 +16,7 @@ import {
 import {
   AGENDA_CHECK_OFF_LOCKED_COPY,
   AGENDA_SUGGESTION_COPY,
+  agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
   attachmentLinkProblem,
@@ -87,11 +81,14 @@ export function EventMeetingLists({
   /** Holds `events:update`, and the event is there to write to. */
   canEdit: boolean;
   /**
-   * The meeting hasn't ended and the chapter has minutes on: Suggested
-   * shows only then.
+   * The meeting hasn't ended and the chapter has minutes on. Suggested
+   * shows only while this holds and the meeting hasn't started either.
    */
   upcoming: boolean;
-  /** The meeting has started, so its items can be checked off. */
+  /**
+   * The meeting has started: its items can be checked off, and no longer
+   * added, moved or removed.
+   */
   checkOffOpen: boolean;
   documentsOn: DocumentsModule;
 }) {
@@ -110,16 +107,20 @@ export function EventMeetingLists({
   // While an Add is out the agenda's controls wait: the server is writing
   // the list, and an edit now would send the copy without the new item.
   const [adding, setAdding] = useState(false);
-  const showSuggestions = editable && upcoming;
+  // Suggestions add items, so they go once the agenda is locked.
+  const showSuggestions = editable && upcoming && !checkOffOpen;
   return (
     <>
-      {editor.agenda.length > 0 || editable ? (
+      {/* A started meeting's empty agenda can't be started any more, so
+          an editor gets no empty section for it. */}
+      {editor.agenda.length > 0 || (editable && !checkOffOpen) ? (
         // The agenda and what's suggested for it read as one section.
         <div className="grid gap-3">
           <EventAgendaSection
             agenda={editor.agenda}
             canEdit={editable}
             checkOffOpen={checkOffOpen}
+            itemsLocked={checkOffOpen}
             locked={adding}
             onChange={(update) => editor.change("agenda", update)}
           />
@@ -156,6 +157,7 @@ export function EventAgendaSection({
   canEdit,
   checkOffOpen = true,
   checkable = true,
+  itemsLocked = false,
   locked = false,
   bare = false,
   draft: heldDraft,
@@ -174,6 +176,12 @@ export function EventAgendaSection({
   checkOffOpen?: boolean;
   /** Draw checkboxes at all (not on the form's list). */
   checkable?: boolean;
+  /**
+   * The meeting has started: items are checked off but no longer added,
+   * moved or removed (Paul 2026-11-20, "lock agenda edits once the meeting
+   * has started"). The API refuses such a change too.
+   */
+  itemsLocked?: boolean;
   /** The controls show but wait (a suggestion is being added). */
   locked?: boolean;
   /** No heading: the form's row names the list. */
@@ -186,9 +194,11 @@ export function EventAgendaSection({
   const setDraft = onDraftChange ?? setOwnDraft;
   const inputId = useId();
   const lockNoteId = useId();
+  // Who may add, move and remove items: an editor, until the meeting starts.
+  const reshape = canEdit && !itemsLocked;
   const sortable = useSortableList({
     count: agenda.length,
-    disabled: locked || !canEdit,
+    disabled: locked || !reshape,
     // By id, against the list as it stands when the update runs: a save
     // or a suggestion may have landed since this one was drawn.
     onMove: (from, to) => {
@@ -203,7 +213,7 @@ export function EventAgendaSection({
       );
     },
   });
-  if (agenda.length === 0 && !canEdit) return null;
+  if (agenda.length === 0 && !reshape) return null;
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -257,7 +267,7 @@ export function EventAgendaSection({
                   "bg-surface-1 shadow-lg ring-1 ring-border",
               )}
             >
-              {canEdit ? (
+              {reshape ? (
                 <button
                   type="button"
                   {...sortable.handleProps(index, item.text)}
@@ -309,7 +319,7 @@ export function EventAgendaSection({
                   <TabledFromLink from={item.tabled_from} />
                 ) : null}
               </span>
-              {canEdit ? (
+              {reshape ? (
                 <IconButton
                   label={`Remove "${item.text}"`}
                   disabled={locked}
@@ -327,12 +337,12 @@ export function EventAgendaSection({
           ))}
         </ol>
       ) : null}
-      {canEdit ? (
+      {reshape ? (
         <p aria-live="polite" className="sr-only">
           {sortable.announcement}
         </p>
       ) : null}
-      {canEdit && !full ? (
+      {reshape && !full ? (
         <form onSubmit={add} className="flex items-center gap-1.5">
           <label htmlFor={inputId} className="sr-only">
             Add an agenda item
@@ -361,7 +371,7 @@ export function EventAgendaSection({
           />
         </form>
       ) : null}
-      {canEdit && full ? (
+      {reshape && full ? (
         <p className={LABEL}>An agenda holds {EVENT_AGENDA_MAX} items.</p>
       ) : null}
     </section>
@@ -409,9 +419,23 @@ export function AgendaDraftList({
 function TabledFromLink({ from }: { from: EventAgendaTabledFrom }) {
   const label = agendaTabledFromLabel(from);
   if (!label) return null;
+  return <MinutesLink meetingId={from.meeting_id} label={label} />;
+}
+
+/**
+ * A line under an item that opens the minutes it came from: "Tabled from
+ * {day}", or "From the minutes of {day}" for an action item sent on (#5790).
+ */
+function MinutesLink({
+  meetingId,
+  label,
+}: {
+  meetingId: string;
+  label: string;
+}) {
   return (
     <Link
-      href={`/meetings/${from.meeting_id}`}
+      href={`/meetings/${meetingId}`}
       className={cn(
         "block w-fit rounded-sm text-caption text-muted-foreground no-underline hover:underline",
         FOCUS_RING_OFFSET,
@@ -494,6 +518,11 @@ function AgendaSuggestions({
                 {row.text}
                 {row.tabled_from ? (
                   <TabledFromLink from={row.tabled_from} />
+                ) : row.from_minutes ? (
+                  <MinutesLink
+                    meetingId={row.from_minutes.meeting_id}
+                    label={agendaFromMinutesLabel(row.from_minutes)}
+                  />
                 ) : row.reason ? (
                   <span className="block text-caption text-muted-foreground">
                     {row.reason}

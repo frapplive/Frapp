@@ -10,7 +10,7 @@ const roles = [
   {
     id: "everyone",
     name: "Member",
-    system_key: "MEMBER",
+    system_key: "EVERYONE",
     tier_id: "t-all",
     display_order: 0,
   },
@@ -41,6 +41,12 @@ const groups = [
     id: "g-2027",
     name: "Class of 2027",
     kind: "class_year",
+    member_ids: ["u-viewer"],
+  },
+  {
+    id: "g-music",
+    name: "Music",
+    kind: "major",
     member_ids: ["u-viewer"],
   },
 ];

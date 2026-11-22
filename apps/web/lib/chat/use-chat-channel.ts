@@ -92,10 +92,8 @@ import {
   postHours,
   postEvent,
   postPointsAdjustment,
-  postForm,
+  linkTask,
   postPoll,
-  postSignup,
-  postRolePicker,
   postTask,
   retryPointsDispatch,
   trackEventCard,
@@ -109,9 +107,6 @@ import {
 } from "@repo/chat-core/dispatch";
 import type { SlashCommand } from "@repo/chat-core/integrations";
 import type { PollPayload } from "@repo/chat-core/polls";
-import type { SignupPayload } from "@repo/chat-core/signups";
-import type { FormPayload } from "@repo/chat-core/forms";
-import type { RolePickerPayload } from "@repo/chat-core/role-pickers";
 import * as Sentry from "@sentry/nextjs";
 import { createDexieOutboxStore } from "./offline-queue";
 import { useChatOutboundScope } from "./chat-scope";
@@ -212,6 +207,11 @@ export interface UseChatChannelResult {
   typingUsers: readonly string[];
   emitTyping: () => void;
   connection: ConnectionStatus;
+  /**
+   * Realtime refused this channel because the member may not read it any more
+   * (#5765): deleted, or access taken away. Nothing retries it on a timer.
+   */
+  unavailable: boolean;
   retry: (clientMessageId: string) => Promise<void>;
   discard: (clientMessageId: string) => Promise<void>;
   /**
@@ -247,33 +247,6 @@ export interface UseChatChannelResult {
     targetChannelId: string,
     poll: { content: string; payload: PollPayload },
   ) => ReturnType<typeof postPoll>;
-  /**
-   * The + card's Sign-up sheet form (#3926): queues a `kind: "signup"` card in
-   * `targetChannelId` through the outbox, as `sendPoll` does a poll.
-   * `postSignup` in `@repo/chat-core/dispatch`.
-   */
-  sendSignup: (
-    targetChannelId: string,
-    signup: { content: string; payload: SignupPayload },
-  ) => ReturnType<typeof postSignup>;
-  /**
-   * The + card's Form builder (#3926 step 3): queues a `kind: "form"` card in
-   * `targetChannelId` through the outbox, as `sendSignup` does a sign-up.
-   * `postForm` in `@repo/chat-core/dispatch`.
-   */
-  sendForm: (
-    targetChannelId: string,
-    form: { content: string; payload: FormPayload },
-  ) => ReturnType<typeof postForm>;
-  /**
-   * The + card's Role picker form (#4958): queues a `kind: "role_picker"`
-   * card in `targetChannelId` through the outbox, as `sendSignup` does a
-   * sign-up. Never rejects; the outcomes are `postSignup`'s.
-   */
-  sendRolePicker: (
-    targetChannelId: string,
-    picker: { content: string; payload: RolePickerPayload },
-  ) => ReturnType<typeof postSignup>;
   /** The event form's card bookkeeping in a channel (#3773, `trackEventCard`). */
   trackEventCard: (channelId: string, name: string) => EventCardTrack;
   /** The + card's Event form (#3983): the write `/event` makes, into `targetChannelId`. */
@@ -291,6 +264,14 @@ export interface UseChatChannelResult {
   postTask: (
     targetChannelId: string,
     input: TaskInput,
+  ) => Promise<DispatchResult>;
+  /**
+   * The + menu's Task row (#5772): posts an existing task's card into
+   * `targetChannelId`. `linkTask` in `@repo/chat-core/dispatch`.
+   */
+  linkTask: (
+    targetChannelId: string,
+    task: { id: string; title: string },
   ) => Promise<DispatchResult>;
   postHours: (
     targetChannelId: string,
@@ -595,6 +576,25 @@ export function useChatChannel(channelId: string | null): UseChatChannelResult {
   const typingUsers = channelId ? typingUsersState : NO_TYPING_USERS;
 
   /*
+    Realtime refused this channel's join because the member may not read it
+    (#5765): it was deleted, or their access went. The manager has stopped
+    asking for it and the channel list is being read again; the thread shows
+    `CHANNEL_UNAVAILABLE_TITLE` in place of its timeline. Held with the channel
+    it is about, so a switch never carries it to the next one for a render.
+  */
+  const [unavailableFor, setUnavailableFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!channelId) return;
+    const refresh = () =>
+      setUnavailableFor(
+        chatRealtime.isUnavailable(channelId) ? channelId : null,
+      );
+    refresh();
+    return chatRealtime.subscribeStatus(refresh);
+  }, [channelId]);
+  const unavailable = channelId !== null && unavailableFor === channelId;
+
+  /*
     Draft persistence lives in its own hook (#2176).
 
     It was inline here until the composer shell needed it to survive a channel
@@ -843,54 +843,6 @@ export function useChatChannel(channelId: string | null): UseChatChannelResult {
     [ctx],
   );
 
-  const sendSignup = useCallback(
-    (
-      targetChannelId: string,
-      signup: { content: string; payload: SignupPayload },
-    ) =>
-      postSignup(ctx, targetChannelId, signup).then((result) => {
-        if (!result.ok && result.cause !== undefined) {
-          Sentry.captureException(result.cause, {
-            tags: { chat_send: "signup_form" },
-          });
-        }
-        return result;
-      }),
-    [ctx],
-  );
-
-  const sendRolePicker = useCallback(
-    (
-      targetChannelId: string,
-      picker: { content: string; payload: RolePickerPayload },
-    ) =>
-      postRolePicker(ctx, targetChannelId, picker).then((result) => {
-        if (!result.ok && result.cause !== undefined) {
-          Sentry.captureException(result.cause, {
-            tags: { chat_send: "role_picker_form" },
-          });
-        }
-        return result;
-      }),
-    [ctx],
-  );
-
-  const sendForm = useCallback(
-    (
-      targetChannelId: string,
-      form: { content: string; payload: FormPayload },
-    ) =>
-      postForm(ctx, targetChannelId, form).then((result) => {
-        if (!result.ok && result.cause !== undefined) {
-          Sentry.captureException(result.cause, {
-            tags: { chat_send: "form_builder" },
-          });
-        }
-        return result;
-      }),
-    [ctx],
-  );
-
   // The event form's card bookkeeping, for whichever channel the form posts to
   // (#3773). Takes the channel rather than this hook's, since a form can
   // outlive a channel switch.
@@ -912,6 +864,11 @@ export function useChatChannel(channelId: string | null): UseChatChannelResult {
         postTask(ctx, targetChannelId, input),
       ),
     [ctx, queryClient],
+  );
+  const linkTaskCb = useCallback(
+    (targetChannelId: string, task: { id: string; title: string }) =>
+      linkTask(ctx, targetChannelId, task),
+    [ctx],
   );
   const postHoursCb = useCallback(
     (targetChannelId: string, input: HoursInput) =>
@@ -965,17 +922,16 @@ export function useChatChannel(channelId: string | null): UseChatChannelResult {
     typingUsers,
     emitTyping,
     connection,
+    unavailable,
     retry,
     discard,
     retryUnconfirmed,
     dispatchSlash,
     sendPoll,
-    sendSignup,
-    sendRolePicker,
-    sendForm,
     trackEventCard: trackEventCardCb,
     postEvent: postEventCb,
     postTask: postTaskCb,
+    linkTask: linkTaskCb,
     postHours: postHoursCb,
     postPointsAdjustment: postPointsCb,
     act,

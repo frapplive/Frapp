@@ -22,7 +22,6 @@ import { groupKindOpensChannels } from '#domain/entities/chapter-group.entity';
 import { Role, RoleTier } from '#domain/entities/role.entity';
 import { Member } from '#domain/entities/member.entity';
 import {
-  EVERYONE_ROLE_NAME,
   highestRankedRole,
   isEveryoneRole,
   sortRolesByRank,
@@ -110,6 +109,27 @@ export interface RoleChanges {
 /** Refusal when the target ranks at or above the caller (#4071). */
 export const RANK_REFUSAL =
   'You can only change roles and tiers ranked below your own.';
+
+/**
+ * Refuse (400) a role marked self-assignable that isn't safe to pick (#4958):
+ * on a save that marks or keeps it marked, and on a create that marks it.
+ */
+function assertSafeToPick(role: {
+  system_key: string | null;
+  tier_id: string | null;
+  permissions: readonly string[];
+}): void {
+  const refusal = selfAssignableRefusal(role);
+  if (refusal) {
+    throw new BadRequestException({
+      // SELF_ASSIGNABLE_KEYED_CODE, SELF_ASSIGNABLE_TIERED_CODE or
+      // SELF_ASSIGNABLE_PERMISSIONS_CODE, named so the error-code
+      // classification spec sees all three.
+      code: refusal,
+      message: SELF_ASSIGNABLE_REFUSAL_COPY[refusal],
+    });
+  }
+}
 
 /** Refusal when a write would grant what the caller does not hold (#4071). */
 function grantRefusal(missing: readonly string[]): string {
@@ -209,14 +229,22 @@ export class RbacService {
    * `POST /v1/roles` for a member: {@link create} behind the rank rules. The
    * role may only go into a tier ranked below the caller, or outside the
    * tiers (below every tier, so refused to a caller who ranks there too),
-   * and may only hold permissions the caller holds.
+   * and may only hold permissions the caller holds. `self_assignable: true`
+   * creates it already marked (#5736), under the same rule as marking it
+   * after (`assertSelfAssignableSave`): it must be safe to pick, and the
+   * caller already holds what it carries.
    */
   async createAsMember(
     chapterId: string,
     actorUserId: string,
     data: Pick<
       RoleChanges,
-      'name' | 'permissions' | 'display_order' | 'color' | 'mentionable'
+      | 'name'
+      | 'permissions'
+      | 'display_order'
+      | 'color'
+      | 'mentionable'
+      | 'self_assignable'
     > & { tier_id?: string | null },
   ): Promise<Role> {
     const context = await this.getRankContext(chapterId, actorUserId);
@@ -238,6 +266,13 @@ export class RbacService {
     const listed = data.permissions ?? [];
     const holds = listed.length > 0 ? listed : tierPermissions;
     assertPermissionsHeld(context.reach, holds);
+    if (data.self_assignable === true) {
+      assertSafeToPick({
+        system_key: null,
+        tier_id: tierId,
+        permissions: holds,
+      });
+    }
     return this.create(chapterId, actorUserId, { ...data, tier_id: tierId });
   }
 
@@ -365,20 +400,11 @@ export class RbacService {
   ): void {
     const marked = data.self_assignable ?? role.self_assignable === true;
     if (!marked) return;
-    const refusal = selfAssignableRefusal({
+    assertSafeToPick({
       system_key: role.system_key,
       tier_id: tierId,
       permissions: after,
     });
-    if (refusal) {
-      throw new BadRequestException({
-        // SELF_ASSIGNABLE_KEYED_CODE, SELF_ASSIGNABLE_TIERED_CODE or
-        // SELF_ASSIGNABLE_PERMISSIONS_CODE, named so the error-code
-        // classification spec sees all three.
-        code: refusal,
-        message: SELF_ASSIGNABLE_REFUSAL_COPY[refusal],
-      });
-    }
     if (data.self_assignable === true && role.self_assignable !== true) {
       assertPermissionsHeld(context.reach, after);
     }
@@ -529,7 +555,7 @@ export class RbacService {
     return tier;
   }
 
-  /** 400 when `tierId` ranks above the tier holding the Everyone role. */
+  /** 400 when `tierId` ranks above the tier holding the Actives role. */
   private async assertNotAboveEveryone(
     chapterId: string,
     tierId: string,
@@ -538,13 +564,13 @@ export class RbacService {
       this.roleRepo.findByChapter(chapterId),
       this.tierRepo.findByChapter(chapterId),
     ]);
-    const everyone = roles.find((r) => r.system_key === SystemRoleKeys.MEMBER);
-    const floor = tiers.find((t) => t.id === everyone?.tier_id);
+    const actives = roles.find((r) => r.system_key === SystemRoleKeys.MEMBER);
+    const floor = tiers.find((t) => t.id === actives?.tier_id);
     const target = tiers.find((t) => t.id === tierId);
     if (floor && target && target.position < floor.position) {
       throw new BadRequestException({
         code: 'role.below_everyone',
-        message: 'New Member and Alumni stay below the Everyone tier.',
+        message: `New Member and Alumni stay at or below the ${actives?.name ?? 'Actives'} tier.`,
       });
     }
   }
@@ -678,36 +704,42 @@ export class RbacService {
       );
     }
 
-    // The Everyone role (#4191) is the base under every tier: it keeps its
-    // name, which `@everyone` reads, and its tier, which is where plain
-    // members rank and where presidency's claim walk stops. Its permissions
-    // and its `@everyone` switch stay editable. Two moves stay open because
-    // they only bring it to where it belongs: renaming it Everyone (a row
-    // the previous API seeded as Member after the migration ran), and
-    // putting it in a tier when it sits outside them.
-    if (role.system_key === SystemRoleKeys.MEMBER) {
-      if (
-        data.name !== undefined &&
-        data.name !== role.name &&
-        data.name !== EVERYONE_ROLE_NAME
-      ) {
+    // The Everyone role is the floor every member holds: it keeps its name,
+    // which `@everyone` reads, and stays outside the tiers, so no tier lends
+    // every member more than the chapter gave Everyone itself. Its
+    // permissions and its `@everyone` switch stay editable.
+    if (role.system_key === SystemRoleKeys.EVERYONE) {
+      if (data.name !== undefined && data.name !== role.name) {
         throw new BadRequestException({
           code: 'role.everyone_fixed',
           message: 'The Everyone role keeps its name.',
         });
       }
-      if (
-        data.tier_id !== undefined &&
-        data.tier_id !== role.tier_id &&
-        !(role.tier_id === null && data.tier_id !== null)
-      ) {
+      if (data.tier_id !== undefined && data.tier_id !== null) {
         throw new BadRequestException({
           code: 'role.everyone_fixed',
-          message: 'The Everyone role stays in its tier.',
+          message: 'The Everyone role stays outside the tiers.',
         });
       }
     } else if (data.name && data.name !== role.name) {
       assertNotReservedMentionName(data.name);
+    }
+
+    // The Actives role (the seeded Member role) stays in its tier: it is
+    // where actives rank and where presidency's claim walk and the tier
+    // reorder's floor stop, and outside the tiers it would rank below New
+    // members. The one move left open brings it to where it belongs: into a
+    // tier when it sits outside them.
+    if (
+      role.system_key === SystemRoleKeys.MEMBER &&
+      data.tier_id !== undefined &&
+      data.tier_id !== role.tier_id &&
+      !(role.tier_id === null && data.tier_id !== null)
+    ) {
+      throw new BadRequestException({
+        code: 'role.everyone_fixed',
+        message: `The ${role.name} role stays in its tier.`,
+      });
     }
 
     // New Member and Alumni rank at or below Everyone (#4548): neither moves
@@ -785,9 +817,8 @@ export class RbacService {
     if (role.is_system)
       throw new ForbiddenException('Cannot delete system roles');
 
-    // One transaction (#4547): the id leaves every holder's role_ids, and a
-    // holder left with no member-access role gets Everyone, as
-    // `rolesAfterSave` gives it back, so nobody is locked out by a delete.
+    // One transaction (#4547): the id leaves every holder's role_ids. The
+    // Everyone role stays on each row, so nobody is locked out by a delete.
     const deletion = await this.roleRepo.delete(chapterId, roleId);
     if (!deletion) throw new NotFoundException('Role not found');
     await this.chapterAuditLogService.record({
@@ -802,12 +833,6 @@ export class RbacService {
           removed_from_member_ids: {
             from: deletion.strippedMemberIds,
             to: null,
-          },
-        }),
-        ...(deletion.givenEveryoneMemberIds.length > 0 && {
-          given_everyone_member_ids: {
-            from: null,
-            to: deletion.givenEveryoneMemberIds,
           },
         }),
       } satisfies AuditDiff,

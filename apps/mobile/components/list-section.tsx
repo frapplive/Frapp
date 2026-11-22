@@ -11,6 +11,7 @@ import {
   Text,
   View,
   type ViewStyle,
+  type GestureResponderEvent,
 } from "react-native";
 import { SignetTokens } from "@repo/theme/signet";
 import { SkeletonText } from "@/components/state-block";
@@ -186,6 +187,25 @@ export function ListSection({ children }: { children: ReactNode }) {
           {child}
         </View>
       ))}
+    </View>
+  );
+}
+
+/**
+ * A record's section body on the same raised surface as {@link ListSection},
+ * for content that isn't a list of rows: an event's details, agenda,
+ * attachments and notes (Paul 2026-11-20: "use a raised surface for content",
+ * not content sitting on the black page). The eyebrow stays above it, outside.
+ */
+export function ListPanel({ children }: { children: ReactNode }) {
+  const { tokens } = useFrappTheme();
+  const surfaces = useRaisedSurfaces();
+  const styles = createStyles(tokens);
+  return (
+    <View
+      style={[styles.section, styles.panel, { backgroundColor: surfaces.card }]}
+    >
+      {children}
     </View>
   );
 }
@@ -403,7 +423,8 @@ export type ListRowProps = {
   descriptionTone?: "default" | "destructive";
   /** Trailing control (a switch, a swatch) instead of, or beside, `value`. */
   trailing?: ReactNode;
-  onPress?: () => void;
+  /** Gets the press, so a menu it opens can sit beside it. */
+  onPress?: (event?: GestureResponderEvent) => void;
   /**
    * A secondary action behind a long press (Documents' Delete, #3938), as
    * chat's channel rows put theirs. A screen reader reaches it as a named
@@ -639,6 +660,11 @@ function createStyles(tokens: SignetTokens) {
       borderWidth: 1,
       borderColor: tokens.color.border.hairline,
       overflow: "hidden",
+    },
+    panel: {
+      paddingHorizontal: tokens.spacing.lg,
+      paddingVertical: tokens.spacing.md,
+      gap: tokens.spacing.xs,
     },
     divider: {
       height: StyleSheet.hairlineWidth,

@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
+import { SELF_ASSIGNABLE_SECTION_CAPTION } from "@repo/validation";
 
 /**
  * Chapter settings and its Roles screens on the phone (#4074), rendered. They
@@ -17,6 +18,8 @@ import { screenText } from "@/test/screen-text";
  * rank rules let them change Brothers and Brother but not Officers.
  */
 const h = vi.hoisted(() => ({
+  // What the screen hands the Add role sheet (#5736), so a test can finish it.
+  pickableSheet: null as null | { onCreated: (roleId: string) => void },
   permissions: [] as string[],
   roles: [] as unknown[],
   rolesUpdatedAt: 0,
@@ -34,6 +37,9 @@ const h = vi.hoisted(() => ({
   aiSettings: null as Record<string, unknown> | null,
   updateAi: vi.fn(),
   aiSaving: false,
+  // Chapter config (#5801): whether members may rename themselves.
+  config: { members_can_change_name: false } as Record<string, unknown>,
+  patchConfig: vi.fn(),
 }));
 
 vi.mock("react-native", async () => {
@@ -76,6 +82,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useUpdateRoleTier: () => ({ mutateAsync: h.updateTier, isPending: false }),
     useAiChapterSettings: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.aiSettings),
+    useOrgConfig: (options?: { enabled?: boolean }) =>
+      ok(options?.enabled === false ? undefined : h.config),
+    usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
     useUpdateAiChapterSettings: () => ({
       mutate: h.updateAi,
       isPending: h.aiSaving,
@@ -104,6 +113,20 @@ vi.mock("@/components/settings/chat-background-sheet", async () => {
       ref: React.Ref<{ present: () => void }>,
     ) {
       React.useImperativeHandle(ref, () => ({ present: h.backgroundPresent }));
+      return null;
+    }),
+  };
+});
+
+vi.mock("@/components/roles/new-pickable-role-sheet", async () => {
+  const React = await import("react");
+  return {
+    NewPickableRoleSheet: React.forwardRef(function NewPickableRoleSheet(
+      props: { onCreated: (roleId: string) => void },
+      ref: React.Ref<{ present: () => void }>,
+    ) {
+      h.pickableSheet = props;
+      React.useImperativeHandle(ref, () => ({ present: vi.fn() }));
       return null;
     }),
   };
@@ -246,6 +269,38 @@ describe("Chapter settings (#4074)", () => {
     );
     expect(text).toContain("Roles");
     expect(text).not.toContain("Set by an officer");
+  });
+
+  it("lets an officer with chapter-config:manage turn member renames on (#5801)", () => {
+    h.patchConfig.mockClear();
+    h.permissions = ["*"];
+    const tree = render(<ChapterSettingsScreen />);
+    expect(screenText(tree)).toContain(
+      "Members can change their own name\nWhen off, officers who manage roles change names.",
+    );
+    const toggle = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Members can change their own name" &&
+        typeof node.props.onValueChange === "function",
+    );
+    expect(toggle.props.value).toBe(false);
+    act(() => toggle.props.onValueChange(true));
+    expect(h.patchConfig).toHaveBeenCalledWith(
+      { members_can_change_name: true },
+      expect.anything(),
+    );
+  });
+
+  it("shows the member-names switch read-only to a viewer without :manage (#5801)", () => {
+    h.patchConfig.mockClear();
+    h.permissions = ["chapter-config:view"];
+    const tree = render(<ChapterSettingsScreen />);
+    const toggle = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Members can change their own name" &&
+        typeof node.props.onValueChange === "function",
+    );
+    expect(toggle.props.disabled).toBe(true);
   });
 
   it("opens the accent and background sheets for an editor", () => {
@@ -449,10 +504,10 @@ describe("Roles (#4074)", () => {
       role({
         id: "r-all",
         name: "Everyone",
-        tier_id: "t-bro",
+        tier_id: null,
         permissions: ["members:view"],
         is_system: true,
-        system_key: "MEMBER",
+        system_key: "EVERYONE",
       }),
     ];
     const text = screenText(render(<ChapterRolesScreen />));
@@ -487,6 +542,47 @@ describe("Roles (#4074)", () => {
       pathname: "/role",
       params: { roleId: "r-rush" },
     });
+  });
+
+  it("names a class year by its standing, and finds it by that (#5786)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    try {
+      h.groups = [
+        ...h.groups,
+        {
+          id: "g-29",
+          name: "Class of 2029",
+          kind: "class_year",
+          class_year: 2029,
+          color: null,
+          member_ids: ["u2"],
+        },
+      ];
+      h.roles = [
+        ...h.roles,
+        ...Array.from({ length: 10 }, (_, index) =>
+          role({
+            id: `r-x${index}`,
+            name: `Committee ${index}`,
+            tier_id: "t-bro",
+          }),
+        ),
+      ];
+      const tree = render(<ChapterRolesScreen />);
+      expect(screenText(tree)).toContain("Sophomores · Class of 2029");
+      const search = tree.root.find(
+        (node) =>
+          (node.type as unknown) === "TextInput" &&
+          node.props.accessibilityLabel === "Find a role or group",
+      );
+      act(() => search.props.onChangeText("soph"));
+      const text = screenText(tree);
+      expect(text).toContain("Sophomores · Class of 2029");
+      expect(text).not.toContain("In house");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("finds a role or group by name once the list is long", () => {
@@ -736,10 +832,42 @@ describe("Non-chapter business on the phone (#4958)", () => {
     );
   });
 
-  it("tells a roles manager how to fill an empty Non-chapter business", () => {
-    expect(screenText(render(<ChapterRolesScreen />))).toContain(
-      "Turn it on from a role outside the tiers.",
+  it("offers a roles manager Add role in Non-chapter business (#5736)", () => {
+    const text = screenText(render(<ChapterRolesScreen />));
+    const business = text.indexOf("Non-chapter business");
+    expect(text).toContain(SELF_ASSIGNABLE_SECTION_CAPTION);
+    expect(text).not.toContain("Turn it on from");
+    expect(text.indexOf("Add role", business)).toBeGreaterThan(business);
+  });
+
+  it("keeps Add role once Non-chapter business has roles", () => {
+    h.roles = [
+      ...h.roles,
+      role({ id: "r-ims", name: "Intramurals", self_assignable: true }),
+    ];
+    const text = screenText(render(<ChapterRolesScreen />));
+    expect(text.indexOf("Add role")).toBeGreaterThan(
+      text.indexOf("Intramurals"),
     );
+  });
+
+  it("opens the new role's page once the sheet creates it", () => {
+    render(<ChapterRolesScreen />);
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => h.pickableSheet!.onCreated("r-new"));
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/role",
+      params: { roleId: "r-new" },
+    });
+  });
+
+  it("offers no Add role to a roles manager who sits outside the tiers", () => {
+    h.permissions = ["roles:manage", "members:view"];
+    h.members = [{ user_id: "me", role_ids: ["r-rush"] }];
+    const text = screenText(render(<ChapterRolesScreen />));
+    expect(text).toContain("Non-chapter business");
+    expect(text).not.toContain("Add role");
   });
 });
 

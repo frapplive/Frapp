@@ -120,6 +120,38 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-21",
+    title: "New in this update",
+    changes: [
+      "The + in a conversation is down to the things people post most, and its Task option now lets you find any task you can see and post it into the conversation.",
+      "You can @ a major now, like @Mechanical Engineering, to ping everyone in your chapter with it, and the Major field on your profile suggests the majors your chapter already has.",
+      "Start minutes with No meeting when there isn't one on the calendar yet, and link the meeting before you post them. Minutes now read Not started, Drafting, or the name of whoever is recording.",
+      "A suggested task from minutes can go straight onto the next meeting's agenda instead, or wait for that meeting to be scheduled.",
+      "An event that's happening right now shows at the top of Chat and Activity, with when it ends and whether you've checked in.",
+      "Officers can make a new event type right from the Type menu while creating an event, and on your phone that menu no longer covers the whole form.",
+      "A meeting's agenda is set once the meeting starts: items can still be checked off, but not added, moved or removed. On the phone, an event's details, agenda, attachments and notes now sit on raised panels.",
+      "You can @Freshmen, @Sophomores, @Juniors or @Seniors to ping a whole class, worked out from graduation year and moving up each June, so your chapter no longer needs a role per class.",
+      "The GIF picker has a Favorites tab: star a GIF to keep it there, in every chapter you're in.",
+      "Officers can now stop members from changing their own name in Chapter settings, and every name change shows in the chapter's audit log with the old and new name.",
+      "A member's profile now leads with their three highest roles, and +N more opens the rest right where they are.",
+      "The chapter's record of officer changes moved out of chat into Logs in Chapter settings, where officers can filter it by kind, person and time.",
+      "Someone who joins now holds only Everyone, which opens the channels the whole chapter can see, until an officer gives them New Member, Actives or Alumni, and a member holds just one of those three at a time.",
+      "Activity now shows just what you have to do and what you have running, with your week as a small ring beside the title, This semester on your profile, and each channel's sign-up links in its own menu.",
+      "Officers can filter Members to the people with no base role yet, and the join notice says when someone arrives without one.",
+      "When a photo chat background can't be set, you now see why, such as a file that's too large or the wrong type, instead of \"Try again in a moment\".",
+    ],
+    web: [
+      "Right-click a document for its actions.",
+      "Role and group colors can be any hue now: pick a swatch or slide to your own, and each color is adjusted so names stay easy to read, with red and gold kept for alerts and Frapp itself.",
+      "An invite link opened on your phone now takes you straight into the app, so you sign in once instead of twice.",
+    ],
+    phone: [
+      "The app opens straight to your last chat instead of waiting on the logo, then catches up in the background.",
+      "Menus are smaller and open right where you tap, instead of the system sheet that covered the screen.",
+      "Every chat box has a mic: talk, tap the check, and your words land in the box for you to read and send, tidied up in channels.",
+    ],
+  },
+  {
     date: "2026-11-20",
     title: "New in this update",
     changes: [
@@ -142,6 +174,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "The members list beside a channel now runs tier by tier, President first, with each officer's title under their name.",
       "A finished task now says who marked it done and when at the top, with their proof under it, and its history shows it too.",
       "Meetings now read in date order with the next meeting on top, and an officer can mark a past meeting as having no minutes.",
+      "A channel deleted while you have it open now says it's no longer available, instead of trying to reconnect forever.",
+      "Chapter settings → Roles and groups has an Add role button under Non-chapter business, so an officer can make a role members pick themselves, like an intramurals team, in one step.",
+      "A task given to everyone, or to a role or group, still says who it went to and how many have finished it when it shows in your own tasks, and marking it done still finishes only your part.",
     ],
     web: [
       "Rows show more at a glance: an event says when check-in is open, a task says how it repeats and how far along its checklist and photos are, and a study session says which zone it was in.",
@@ -152,6 +187,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Setting up a pledge class is quicker: the member search lists everyone as soon as you click it, and you set the order by dragging names instead of typing numbers.",
       "A member's card in the Directory now opens under their row, fully on screen, and the roles and groups list stays open so you can give several in one go.",
       "Events filters open from one Filter menu, and the filters you've turned on show as chips under the header so you can remove one with a click.",
+      "Tasks now opens on your own tasks, with a My tasks / Everyone's switch and one Filter button beside New task, and the add row shows only once you press New task.",
     ],
     phone: [
       "Documents now say when they take effect, and study sessions show the date and time the same way the web does.",

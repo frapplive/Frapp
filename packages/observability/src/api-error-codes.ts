@@ -48,9 +48,14 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // A config PATCH switching off an always-on module. Chapter settings draws
   // those locked and never sends it (#4073).
   "chapter.config.module_always_on",
-  // Renaming the Everyone role or moving it out of its tier (#4191). Its role
-  // page draws both locked and never sends a change.
+  // Renaming the Everyone role or putting it in a tier, or moving the Actives
+  // role out of its tier (2026-11-21). Their role pages draw both locked and
+  // never send a change.
   "role.everyone_fixed",
+  // A member's roles saved with two base roles (New Member, Actives, Alumni)
+  // and neither newly added. Both apps settle the list with `rolesAfterSave`
+  // first, which keeps one.
+  "role.base_conflict",
   // Changes for one kind of suggestion sent to accept another kind. The
   // review screen sends a suggestion's edits under its own kind (#4309).
   "ai.suggestion.edits_kind",
@@ -148,6 +153,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "ai.suggestion.decided",
   "ai.suggestion.accepting",
   "ai.suggestion.incomplete",
+  // Add to next meeting's agenda (#5790) on a suggestion that isn't a task
+  // from minutes (only an old or hand-made request), or from minutes whose
+  // meeting was deleted since (the menu offers it; the refusal says why).
+  "ai.suggestion.not_handled_here",
   // The acting agent (#718): a member without `ai:act`, a points proposal
   // for more members than the chapter's hourly limit leaves, and one whose
   // members have all left the chapter.
@@ -177,6 +186,13 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "meeting.not_in_audience",
   "meeting.notes_too_long",
   "meeting.event_linked",
+  // Posting minutes started with no meeting before one is linked (Paul,
+  // 2026-11-20). Current clients hold Post until then; an older phone build
+  // that can open such minutes doesn't.
+  "meeting.no_event",
+  // An agenda change other than a check-off once the meeting has started
+  // (Paul, 2026-11-20): a page opened before the start and saved after.
+  "event.agenda_locked",
   // Asking for minutes (#5471): they were posted meanwhile, or the meeting
   // hasn't ended yet. The third is a 503 (the reminder couldn't be sent and
   // nothing was recorded), so its status reports it as a server fault.

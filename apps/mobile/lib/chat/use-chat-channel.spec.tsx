@@ -105,6 +105,7 @@ const mocks = vi.hoisted(() => {
     emitTyping: vi.fn(),
     noTypingUsers: Object.freeze([]) as readonly string[],
     getTypingUsers: vi.fn((): readonly string[] => []),
+    isUnavailable: vi.fn<(channelId: string) => boolean>(() => false),
     // `.from(...).select(...).in(...)` — the reaction-hydration chain in `queryFn`
     // (its `.order().range()` tail is passed through in the module mock below).
     // Deliberately NOT `null`: mocking the client away skips that branch entirely,
@@ -140,16 +141,16 @@ vi.mock("@repo/chat-core/chat-client", () => ({
   setMessagePinned: mocks.setMessagePinned,
 }));
 
-// The + sheet's Task and Service hours posts (#3865): chat-core's own calls,
-// stubbed here so a spec can see what the hook binds and refreshes.
+// The + sheet's Task posts (#3865, #5772): chat-core's own calls, stubbed
+// here so a spec can see what the hook binds and refreshes.
 const dispatchMocks = vi.hoisted(() => ({
   postTask: vi.fn(),
-  postHours: vi.fn(),
+  linkTask: vi.fn(),
 }));
 vi.mock("@repo/chat-core/dispatch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/chat-core/dispatch")>()),
   postTask: dispatchMocks.postTask,
-  postHours: dispatchMocks.postHours,
+  linkTask: dispatchMocks.linkTask,
 }));
 
 vi.mock("@repo/chat-core/realtime-manager", () => ({
@@ -159,6 +160,7 @@ vi.mock("@repo/chat-core/realtime-manager", () => ({
     unsubscribe: mocks.unsubscribe,
     subscribeStatus: mocks.subscribeStatus,
     getTypingUsers: mocks.getTypingUsers,
+    isUnavailable: mocks.isUnavailable,
     emitTyping: mocks.emitTyping,
   },
 }));
@@ -257,6 +259,7 @@ beforeEach(() => {
     };
   });
   mocks.getTypingUsers.mockImplementation(() => mocks.noTypingUsers);
+  mocks.isUnavailable.mockImplementation(() => false);
   mocks.listForChannel.mockImplementation(async () => []);
   mocks.supabaseIn.mockImplementation(async () => ({ data: [] }));
 });
@@ -714,6 +717,43 @@ describe("realtime attach", () => {
 });
 
 describe("status subscription", () => {
+  it("reports a channel Realtime refused once the manager says so (#5765)", async () => {
+    const { result } = renderChannel();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.unavailable).toBe(false);
+
+    mocks.isUnavailable.mockImplementation((id) => id === CHANNEL);
+    act(() => {
+      mocks.statusListeners.forEach((cb) => cb("live"));
+    });
+    expect(result.current.unavailable).toBe(true);
+  });
+
+  it("never carries a refused channel's state to the next one, not even for a render (#5765)", async () => {
+    const renders: { id: string; unavailable: boolean }[] = [];
+    const view = renderHook(
+      ({ id }: { id: string }) => {
+        const result = useChatChannel(id);
+        renders.push({ id, unavailable: result.unavailable });
+        return result;
+      },
+      {
+        wrapper: createWrapper(createClient(), newQueryClient()),
+        initialProps: { id: CHANNEL },
+      },
+    );
+    mocks.isUnavailable.mockImplementation((id) => id === CHANNEL);
+    act(() => {
+      mocks.statusListeners.forEach((cb) => cb("live"));
+    });
+    expect(view.result.current.unavailable).toBe(true);
+
+    view.rerender({ id: "another-channel" });
+    const next = renders.filter((r) => r.id === "another-channel");
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.every((r) => !r.unavailable)).toBe(true);
+  });
+
   it("hands on the manager's own typing array, re-read on each status ping", async () => {
     // The manager keeps that array's identity while the typists are unchanged
     // (`packages/chat-core/src/realtime-manager.spec.ts`, #1004), so a ping
@@ -1983,21 +2023,28 @@ describe("sendPoll() (#3701)", () => {
   });
 });
 
-describe("postTask() / postHours() from the + sheet (#3865)", () => {
+describe("postTask() / linkTask() from the + sheet (#3865, #5772)", () => {
   const task = {
     title: "Sweep the porch",
     assignee_id: "user-1",
     due_date: "2026-11-12",
   };
-  const hours = {
-    date: "2026-11-09",
-    duration_minutes: 90,
-    description: "Food bank",
-  };
+  it("links a task into this channel", async () => {
+    dispatchMocks.linkTask.mockResolvedValue({ ok: true });
+    const { result } = renderChannel();
+    await waitFor(() => expect(result.current.canSend).toBe(true));
+    await act(async () => {
+      await result.current.linkTask({ id: "t1", title: "Fix the door" });
+    });
+    expect(dispatchMocks.linkTask).toHaveBeenCalledWith(
+      mocks.runtime.ctx,
+      CHANNEL,
+      { id: "t1", title: "Fix the door" },
+    );
+  });
 
-  it("posts into this channel, and refreshes the board or the Service page", async () => {
-    dispatchMocks.postTask.mockResolvedValue({ ok: true });
-    dispatchMocks.postHours.mockResolvedValue({
+  it("posts into this channel, and refreshes the board", async () => {
+    dispatchMocks.postTask.mockResolvedValue({
       ok: true,
       unconfirmed: true,
       warning: "Couldn't confirm.",
@@ -2008,7 +2055,6 @@ describe("postTask() / postHours() from the + sheet (#3865)", () => {
 
     await act(async () => {
       await result.current.postTask(task);
-      await result.current.postHours(hours);
     });
 
     expect(dispatchMocks.postTask).toHaveBeenCalledWith(
@@ -2016,14 +2062,8 @@ describe("postTask() / postHours() from the + sheet (#3865)", () => {
       CHANNEL,
       task,
     );
-    expect(dispatchMocks.postHours).toHaveBeenCalledWith(
-      mocks.runtime.ctx,
-      CHANNEL,
-      hours,
-    );
     // A lost answer refreshes too: the entry may exist.
     expect(invalidate).toHaveBeenCalledWith({ queryKey: taskKeys.all });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["service-entries"] });
   });
 
   it("refreshes nothing after a refusal", async () => {

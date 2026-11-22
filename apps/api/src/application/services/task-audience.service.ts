@@ -30,7 +30,7 @@ import { RbacService } from './rbac.service';
 /**
  * Who a task goes to, or who may claim one up for grabs (Paul, 2026-11-18):
  * the chapter, a role's holders, a chapter group's members (manual or
- * automatic: a pledge class's, a class year's), everyone holding a role in a
+ * automatic: a pledge class's, a class year's, a major's), everyone holding a role in a
  * tier (#5473), or people picked one by one.
  */
 export type TaskAudienceTarget =
@@ -92,7 +92,7 @@ export class TaskAudienceReader {
       (role) =>
         role.tier_id === tierId && role.system_key !== SystemRoleKeys.ALUMNI,
     );
-    if (roles.some((role) => role.system_key === SystemRoleKeys.MEMBER)) {
+    if (roles.some((role) => role.system_key === SystemRoleKeys.EVERYONE)) {
       return [...this.activeIds];
     }
     const roleIds = new Set(roles.map((role) => role.id));
@@ -154,7 +154,7 @@ export class TaskAudienceReader {
       case 'role': {
         const role = await this.role(target.id);
         if (!role || role.system_key === SystemRoleKeys.ALUMNI) return [];
-        return role.system_key === SystemRoleKeys.MEMBER
+        return role.system_key === SystemRoleKeys.EVERYONE
           ? [...this.activeIds]
           : this.holdersOf(role.id);
       }
@@ -197,7 +197,7 @@ export class TaskAudienceReader {
             "Alumni don't get chapter tasks, so a task can't go to that role",
           );
         }
-        if (role.system_key === SystemRoleKeys.MEMBER) {
+        if (role.system_key === SystemRoleKeys.EVERYONE) {
           return this.resolve({ kind: 'chapter' });
         }
         return this.reaching(
@@ -394,8 +394,8 @@ export class TaskAudienceService {
    * A follower for a new or edited task, checked (#5473): an entry naming a
    * tier, role or group of the chapter that `userId` is in, so "From Exec
    * board" is true when an officer sets it. Not the Everyone or Alumni role
-   * (the chapter, or nobody), nor a class year, which opens no channel
-   * either. Returns the entry as stored; 400 otherwise.
+   * (the chapter, or nobody), nor a class year or a major, which open no
+   * channel either. Returns the entry as stored; 400 otherwise.
    */
   async checkedFollower(
     chapterId: string,
@@ -412,7 +412,7 @@ export class TaskAudienceService {
     const exists = await this.followerExists(chapterId, parsed.kind, parsed.id);
     if (!exists) {
       // Gone, another chapter's, or one that means the whole chapter (the
-      // Everyone role, its tier) or opens nothing (a class year).
+      // Everyone role, its tier) or opens nothing (a class year, a major).
       throw new BadRequestException(
         `That ${parsed.kind} can't be what a task is from. Pick one of this chapter's tiers, roles or groups.`,
       );
@@ -434,7 +434,7 @@ export class TaskAudienceService {
         return (
           !!role &&
           role.chapter_id === chapterId &&
-          role.system_key !== SystemRoleKeys.MEMBER &&
+          role.system_key !== SystemRoleKeys.EVERYONE &&
           role.system_key !== SystemRoleKeys.ALUMNI
         );
       }
@@ -453,7 +453,8 @@ export class TaskAudienceService {
           tiers.some((tier) => tier.id === id) &&
           !roles.some(
             (role) =>
-              role.tier_id === id && role.system_key === SystemRoleKeys.MEMBER,
+              role.tier_id === id &&
+              role.system_key === SystemRoleKeys.EVERYONE,
           )
         );
       }

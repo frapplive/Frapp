@@ -14,11 +14,19 @@ import {
   type TextInput,
 } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
-import { useFieldReveal, useUpdateUser } from "@repo/hooks";
+import {
+  useChapterMajors,
+  useFieldReveal,
+  usePermissionList,
+  useUpdateUser,
+} from "@repo/hooks";
 import {
   BIRTHDAY_COPY,
+  can,
   DISPLAY_NAME_MAX_LENGTH,
   MAJOR_MAX_LENGTH,
+  majorSuggestions,
+  NAME_LOCK_COPY,
   parseBirthdayVisibility,
   PHONE_MAX_LENGTH,
   PROFILE_ALUMNI_SECTION,
@@ -43,6 +51,7 @@ import {
 } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { Toggle } from "@/components/toggle";
+import { ListRow, ListSection } from "@/components/list-section";
 import {
   applyEdit,
   draftFromProfile,
@@ -170,11 +179,22 @@ export const EditProfileSheet = forwardRef<
   const styles = createStyles(tokens, accent);
   const backgroundStyle = useSheetBackgroundStyle();
   const updateUser = useUpdateUser();
+  const canViewMembers = can("members:view", usePermissionList());
 
   const original = useMemo(() => draftFromProfile(profile), [profile]);
   const [edits, setEdits] = useState<ProfileEdits | null>(null);
-  const [submitFailed, setSubmitFailed] = useState(false);
+  // `true` for a failed save, or the API's own words when it refused a
+  // locked name (#5801), which a retry can't fix.
+  const [submitFailed, setSubmitFailed] = useState<boolean | string>(false);
   const [focused, setFocused] = useState<ProfileDraftField | null>(null);
+  // The chapter's majors, offered under Major while it has focus (#5778), so
+  // a member picks the spelling the chapter already pings. Read only then:
+  // the sheet stays mounted under the You tab, and the groups read (which
+  // needs `members:view`, as on web) is the whole chapter's. Once read it
+  // stays cached for the next focus.
+  const chapterMajors = useChapterMajors({
+    enabled: canViewMembers && focused === "major",
+  });
   // When a refusal shows: once the member leaves the field or presses Save,
   // never on the keystroke that is still on its way to a valid value
   // (`useFieldReveal`, components.md § Text input, "When an error shows").
@@ -190,7 +210,14 @@ export const EditProfileSheet = forwardRef<
     setTypedAgainst(original);
     setEdits(typed);
   }
-  const shown: ProfileDraft = { ...original, ...typed };
+  // A locked name (#5801) shows as stored and is never sent, even when it was
+  // typed before the lock reached this device.
+  const nameLocked = profile?.nameLocked === true;
+  const shown: ProfileDraft = {
+    ...original,
+    ...typed,
+    ...(nameLocked ? { displayName: original.displayName } : {}),
+  };
 
   const result = profilePatch(original, shown);
   // A refusal exists only once the member has typed (the sheet must not open
@@ -222,6 +249,9 @@ export const EditProfileSheet = forwardRef<
   const birthdayVisibility = parseBirthdayVisibility(shown.birthdayVisibility);
   const birthdayTyped =
     shown.birthdayMonth.trim() !== "" && shown.birthdayDay.trim() !== "";
+
+  // At most four, so the list under Major stays above the keyboard.
+  const majorOptions = majorSuggestions(chapterMajors, shown.major, 4);
 
   const edit = (field: ProfileDraftField) => (value: string) => {
     setSubmitFailed(false);
@@ -352,7 +382,12 @@ export const EditProfileSheet = forwardRef<
         if (isSameVisit(sentFrom)) dismiss();
       },
       // The draft stays, so nothing typed is lost to a dropped connection.
-      onError: () => setSubmitFailed(true),
+      onError: (error) => {
+        const message = (error as { message?: unknown } | null)?.message;
+        setSubmitFailed(
+          message === NAME_LOCK_COPY.refusal ? NAME_LOCK_COPY.refusal : true,
+        );
+      },
       onSettled: () => {
         sending.current = false;
       },
@@ -376,6 +411,8 @@ export const EditProfileSheet = forwardRef<
       accessibleLabel?: string;
       /** A field sharing a row: its share of the width. */
       grow?: boolean;
+      /** Shown but not typed into: a name the chapter locks (#5801). */
+      readOnly?: boolean;
     },
   ) => (
     <View
@@ -400,7 +437,7 @@ export const EditProfileSheet = forwardRef<
         onChangeText={edit(name)}
         // Read-only while a save runs: the save sent what was typed when Save
         // was pressed, and anything typed after it would be dropped unsent.
-        editable={!updateUser.isPending}
+        editable={!updateUser.isPending && !options.readOnly}
         onFocus={() => setFocused(name)}
         onBlur={() => {
           setFocused((current) => (current === name ? null : current));
@@ -418,6 +455,7 @@ export const EditProfileSheet = forwardRef<
         textAlignVertical={options.multiline ? "top" : undefined}
         style={[
           styles.field,
+          options.readOnly ? styles.fieldReadOnly : null,
           options.multiline ? styles.fieldMultiline : null,
           focused === name ? styles.fieldFocused : null,
           shownRefusal?.field === name ? styles.fieldInvalid : null,
@@ -481,6 +519,8 @@ export const EditProfileSheet = forwardRef<
           placeholder: copy.displayName.placeholder,
           autoCapitalize: "words",
           maxLength: DISPLAY_NAME_MAX_LENGTH,
+          readOnly: nameLocked,
+          hint: nameLocked ? NAME_LOCK_COPY.lockedLine : undefined,
         })}
         {field("phone", copy.phone.label, {
           placeholder: copy.phone.placeholder,
@@ -505,6 +545,26 @@ export const EditProfileSheet = forwardRef<
           })}
         </View>
         {rowError(["major", "graduationYear"])}
+        {/* The chapter's majors matching what is typed (#5778), as Mail's
+            and Contacts' fields suggest under themselves: a tap takes its
+            exact spelling, and typing on keeps a new one. */}
+        {focused === "major" && majorOptions.length > 0 ? (
+          <View
+            accessibilityRole="list"
+            accessibilityLabel={copy.major.suggestionsLabel}
+          >
+            <ListSection>
+              {majorOptions.map((major) => (
+                <ListRow
+                  key={major}
+                  label={major}
+                  action
+                  onPress={() => edit("major")(major)}
+                />
+              ))}
+            </ListSection>
+          </View>
+        ) : null}
         {/* The birthday (#4959): month, day and an optional year as digits,
             then the switch that shares it with the chapter (#5282). */}
         <View
@@ -593,7 +653,11 @@ export const EditProfileSheet = forwardRef<
           </>
         ) : null}
 
-        {submitFailed ? (
+        {typeof submitFailed === "string" ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {submitFailed}
+          </Text>
+        ) : submitFailed ? (
           <Text accessibilityRole="alert" style={styles.error}>
             That didn&apos;t save. Your changes are still here, so try again.
           </Text>
@@ -662,6 +726,10 @@ function createStyles(tokens: SignetTokens, accent: string) {
         tokens.spacing.sm * 2,
     },
     fieldFocused: fieldStyles.fieldFocused,
+    // A locked name (#5801): its text muted, as web's read-only field.
+    fieldReadOnly: {
+      color: tokens.color.text.mutedForeground,
+    },
     fieldInvalid: {
       borderColor: tokens.color.semantic.destructive,
     },

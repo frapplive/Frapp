@@ -47,6 +47,10 @@ import {
 } from "@repo/chat-core/message-actions";
 import { setChannelLocked } from "@repo/chat-core/density";
 import { typingLabel } from "@repo/chat-core/typing-label";
+import {
+  CHANNEL_UNAVAILABLE_BODY,
+  CHANNEL_UNAVAILABLE_TITLE,
+} from "@repo/chat-core/join-denied";
 import type { ChatMessage } from "@repo/chat-core/types";
 import type { ClosableCardKind } from "@repo/chat-core/chat-client";
 import { canFlagMessage } from "@repo/chat-core/flags";
@@ -144,12 +148,14 @@ import { MessageThreadScreen } from "@/components/chat/message-thread-screen";
 import { messageLinkUrl } from "@repo/validation";
 import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
 import {
+  LINKS_TITLE,
   MessageListSheet,
   PINNED_TITLE,
   SAVED_TITLE,
   type ListedMessage,
   type MessageListKind,
 } from "@/components/chat/message-list-sheet";
+import { useChannelLinkSheet } from "@/components/chat/use-channel-link-sheet";
 import { MentionChipTargetsContext } from "@repo/hooks/mention-chips";
 import { ThreadSkeleton } from "@/components/chat/thread-skeleton";
 import { threadLayout } from "@/lib/chat/thread-layout";
@@ -374,12 +380,9 @@ function ChannelThreadScreen() {
     send,
     sendInFlight,
     sendPoll,
-    sendSignup,
-    sendRolePicker,
-    sendForm,
     sendGif,
     postTask,
-    postHours,
+    linkTask,
     trackEventCard,
     edit,
     remove,
@@ -405,6 +408,7 @@ function ChannelThreadScreen() {
     typingUsers,
     emitTyping,
     connection,
+    unavailable,
     retry,
     discard,
   } = useChatChannel(channelId);
@@ -927,8 +931,8 @@ function ChannelThreadScreen() {
     (arrival.unread ?? 0) >= CHAT_CATCH_UP_OFFER_AT
       ? chatCatchUpOfferLine(arrival.unread ?? 0)
       : null;
-  // Pinned and Saved (#3723), web's channel-menu panels: one tall sheet,
-  // retargeted per list, opened from the header's menu.
+  // Pinned, Saved and Links (#3723, #5779), web's channel-menu panels: one
+  // tall sheet, retargeted per list, opened from the header's menu.
   const listSheetRef = useRef<BottomSheetModal>(null);
   const [listKind, setListKind] = useState<MessageListKind>("pinned");
   const openList = useCallback((kind: MessageListKind) => {
@@ -950,8 +954,13 @@ function ChannelThreadScreen() {
         : []),
       { label: PINNED_TITLE, onPress: () => openList("pinned") },
       { label: SAVED_TITLE, onPress: () => openList("saved") },
+      // The sign-up links posted here (#5779), which Activity listed until
+      // then. Needs a channel, as web's row does.
+      ...(channelId
+        ? [{ label: LINKS_TITLE, onPress: () => openList("links") }]
+        : []),
     ],
-    [canCatchUpHere, startChannelCatchUp, openList],
+    [canCatchUpHere, startChannelCatchUp, openList, channelId],
   );
   // FlatList refuses a new `onViewableItemsChanged` after mount, so the pair
   // is made once and reads the latest report through a ref when it fires.
@@ -1255,6 +1264,19 @@ function ChannelThreadScreen() {
     },
     [channelId, jumpToImportant, openThreadFor, router],
   );
+  // A Links row's sheet (#5779), over the list, and its Undo bar. Open in
+  // chat goes where a Pinned row goes: the message the link was posted in.
+  const channelLinks = useChannelLinkSheet({
+    channelId: channelId ?? null,
+    viewerId,
+    onOpenInChat: ({ link }) =>
+      openListedMessage({
+        channelId: link.channel_id,
+        messageId: link.message_id,
+        threadRootId: link.thread_root_id,
+      }),
+    onLeaveList: () => listSheetRef.current?.dismiss(),
+  });
 
   // Mark unread (#3723): hold the channel so no read stamp follows (the blur
   // one, and the activity handler's, queued ones included), move the cursor
@@ -1663,11 +1685,8 @@ function ChannelThreadScreen() {
     channelId,
     channel: {
       sendPoll,
-      sendSignup,
-      sendRolePicker,
-      sendForm,
       postTask,
-      postHours,
+      linkTask,
       trackEventCard,
       photos,
       sendGif,
@@ -1988,6 +2007,7 @@ function ChannelThreadScreen() {
           <ScreenReady
             ready={
               !channelId ||
+              unavailable ||
               !!loadError ||
               (!viewerId && viewerQuery.isError) ||
               (!isLoading && !!viewerId)
@@ -1999,6 +2019,16 @@ function ChannelThreadScreen() {
               <Text style={styles.stateBody}>
                 Open a channel from Chat to see its messages.
               </Text>
+            </View>
+          ) : unavailable ? (
+            // Realtime refused the channel: deleted, or the member's access
+            // went (#5765). Ahead of the load error, because the channel's own
+            // reads are refused too once the list is read again. The header's
+            // Back is the way out, as on any thread; web's line carries a
+            // Browse channels link instead, having no Back.
+            <View style={styles.stateBlock} testID="chat-channel-unavailable">
+              <Text style={styles.stateTitle}>{CHANNEL_UNAVAILABLE_TITLE}</Text>
+              <Text style={styles.stateBody}>{CHANNEL_UNAVAILABLE_BODY}</Text>
             </View>
           ) : loadError ? (
             // Ahead of the identity gate, as on web (#2243): a failed read
@@ -2208,7 +2238,7 @@ function ChannelThreadScreen() {
         */}
           {/* The audit log (#3909): only Frapp posts there, so there is no
               composer at all, just the line that says so. */}
-          {postCapability.isAuditLog ? (
+          {unavailable ? null : postCapability.isAuditLog ? (
             <Text
               style={styles.auditLogNote}
               accessibilityRole="text"
@@ -2229,6 +2259,10 @@ function ChannelThreadScreen() {
               mentionRoles={mentionRoles.data}
               onPickMember={addMentionPick}
               ask={mayAskHere ? { naming: asksFrapp } : null}
+              dictationTarget={channelId}
+              tidyDictation={
+                !!openChannel && !isDirectChannel(openChannel.channel)
+              }
               placeholder={composerPlaceholder}
               // A send that never reached the outbox has no failed row to show
               // (nothing was queued), so this line is the only report of it.
@@ -2337,7 +2371,9 @@ function ChannelThreadScreen() {
         nameFor={nameFor}
         onOpen={openListedMessage}
         onRemoveSaved={(messageId) => handleSetSaved(messageId, false)}
+        onOpenLink={channelLinks.openLink}
       />
+      {channelLinks.sheet}
       {/*
         Last, so it is above the header, the thread, the composer and the mute
         menu in paint order and in hit-testing (#2033). The actions sheet
@@ -2345,6 +2381,9 @@ function ChannelThreadScreen() {
       */}
       <FormFillPage state={formFill} message={filledRow} nameFor={nameFor} />
       <ImageViewer viewer={imageViewer} />
+      {/* Over the composer, as the task screen's: a Links row's Done, Hide
+          or Remove, for a few seconds (#5779). */}
+      {channelLinks.undoBar}
     </SafeAreaView>
   );
 }

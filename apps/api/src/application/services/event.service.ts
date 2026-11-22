@@ -32,6 +32,9 @@ import {
 } from './event-role-targeting';
 import {
   DEFAULT_CHECK_IN_OPENS_MINUTES,
+  AGENDA_LOCKED_COPY,
+  agendaCheckOffOpen,
+  agendaItemsChanged,
   checkInWindowBounds,
   checkSeriesLength,
   isRepeatRule,
@@ -60,6 +63,12 @@ import type {
   SeriesUpdateInput,
 } from './event-input';
 
+/** Told when an event is created: its chapter and the event (a series' head). */
+export type EventCreatedListener = (
+  chapterId: string,
+  event: Event,
+) => Promise<void>;
+
 /**
  * Event reads and single-row writes. Recurring-series writes
  * live in `EventSeriesService` and the pushes and chat card that follow a write
@@ -68,6 +77,7 @@ import type {
 @Injectable()
 export class EventService {
   private readonly logger = new Logger(EventService.name);
+  private readonly createdListeners: EventCreatedListener[] = [];
 
   constructor(
     @Inject(EVENT_REPOSITORY) private readonly eventRepo: IEventRepository,
@@ -341,6 +351,16 @@ export class EventService {
   }
 
   /**
+   * Runs after an event (and, for a repeating one, its occurrences) is
+   * created. A listener's failure is reported and never fails the create.
+   * Used by Add to next meeting's agenda (#5790), whose waiting items go onto
+   * the next matching meeting when it is created.
+   */
+  onCreated(listener: EventCreatedListener): void {
+    this.createdListeners.push(listener);
+  }
+
+  /**
    * `requestZone` is the creating request's `x-time-zone`: a legacy repeat
    * token keeps that zone's wall clock (`EventSeriesService.legacyZoneFor`).
    */
@@ -516,6 +536,19 @@ export class EventService {
     // was ever due.
     const cardPosted = await this.announcements.tryPostEventCard(input, parent);
 
+    for (const listener of this.createdListeners) {
+      try {
+        await listener(input.chapter_id, parent);
+      } catch (error) {
+        reportCaughtFailure(this.logger, {
+          level: 'warning',
+          site: 'event-created-listener',
+          message: `A listener failed after event ${parent.id} was created`,
+          error,
+        });
+      }
+    }
+
     return cardPosted === undefined
       ? parent
       : { ...parent, card_posted: cardPosted };
@@ -581,6 +614,9 @@ export class EventService {
       // client, so a phone build that drops the key keeps it and none can
       // name another chapter's minutes.
       existing ??= await this.findById(id, chapterId);
+      if (agendaItemsChanged(agenda, existing.agenda ?? [])) {
+        assertAgendaOpen(input.start_time ?? existing.start_time);
+      }
       meetingOwn.agenda = keepAgendaTabledFrom(agenda, existing.agenda);
     }
     if (rawAttachments !== undefined) {
@@ -706,16 +742,36 @@ export class EventService {
     id: string,
     chapterId: string,
     item: EventAgendaItem,
+    now: Date = new Date(),
   ): Promise<EventAgendaItem[]> {
     const event = await this.findById(id, chapterId);
     const agenda = event.agenda ?? [];
     if (agenda.some((entry) => entry.id === item.id)) return agenda;
+    assertAgendaOpen(event.start_time, now);
     if (agenda.length >= EVENT_AGENDA_MAX) {
       throw new ConflictException(
         `An agenda holds at most ${EVENT_AGENDA_MAX} items.`,
       );
     }
     const next = [...agenda, item];
+    await this.eventRepo.update(id, chapterId, { agenda: next });
+    return next;
+  }
+
+  /**
+   * Takes one item off an event's agenda by its id (Undo of Add to next
+   * meeting's agenda, #5790). Returns the agenda as saved; an item already
+   * gone changes nothing.
+   */
+  async removeAgendaItem(
+    id: string,
+    chapterId: string,
+    itemId: string,
+  ): Promise<EventAgendaItem[]> {
+    const event = await this.findById(id, chapterId);
+    const agenda = event.agenda ?? [];
+    if (!agenda.some((entry) => entry.id === itemId)) return agenda;
+    const next = agenda.filter((entry) => entry.id !== itemId);
     await this.eventRepo.update(id, chapterId, { agenda: next });
     return next;
   }
@@ -781,4 +837,19 @@ function withoutRequirements(input: CreateEventInput): CreateEventInput {
       required_role_ids: input.required_role_ids,
     }),
   };
+}
+
+/**
+ * Once a meeting has started its agenda takes check-offs only (Paul
+ * 2026-11-20, "lock agenda edits once the meeting has started";
+ * `spec/behavior/events.md` § Agenda and attachments): adding, removing,
+ * moving or rewording an item is a 409. `start` is the meeting's start as
+ * this write leaves it, so a meeting moved later is open again.
+ */
+function assertAgendaOpen(start: string, now: Date = new Date()): void {
+  if (!agendaCheckOffOpen(start, now)) return;
+  throw new ConflictException({
+    code: 'event.agenda_locked',
+    message: AGENDA_LOCKED_COPY,
+  });
 }

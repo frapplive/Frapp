@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, MoreHorizontal, Undo2, Users } from "lucide-react";
+import { CheckCircle2, Undo2, Users } from "lucide-react";
 import {
   TASK_ACTION_LABELS,
   actionStatus,
@@ -59,17 +59,11 @@ import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { RepeatOptions } from "@/components/shared/repeat-options";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SegmentedChoice } from "@/components/ui/segmented";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ActionMenuButton } from "@/components/shared/row-menu";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { useToast } from "@/lib/hooks/use-toast";
 import { toastFailure } from "@/lib/failure-toast";
@@ -92,7 +86,7 @@ import {
   type CompletionProof,
 } from "./task-photo";
 import { WhoPicker } from "./who-picker";
-import type { RowPerson } from "./task-row";
+import { copyAudience, type RowPerson } from "./task-row";
 import { movesDayTo } from "./task-edit-form";
 
 /** What the panel shows: one task, or a group task's copies. */
@@ -171,27 +165,20 @@ function MoreMenu({
   const isGroup = target.kind === "group";
   const title = isGroup ? target.tile.sample.title : target.task.title;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton
-          label={`More for ${title}`}
-          className="text-muted-foreground"
-        >
-          <MoreHorizontal className="h-[18px] w-[18px]" aria-hidden="true" />
-        </IconButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          className="text-destructive-text"
-          disabled={!!gate.controlProps().disabled}
-          onSelect={() =>
-            isGroup ? onDeleteGroup(target.tile) : onDelete(target.task)
-          }
-        >
-          {isGroup ? "Delete for everyone" : "Delete task"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ActionMenuButton
+      label={`More for ${title}`}
+      entries={[
+        {
+          type: "item",
+          key: "delete",
+          label: isGroup ? "Delete for everyone" : "Delete task",
+          destructive: true,
+          disabled: !!gate.controlProps().disabled,
+          onSelect: () =>
+            isGroup ? onDeleteGroup(target.tile) : onDelete(target.task),
+        },
+      ]}
+    />
   );
 }
 
@@ -361,6 +348,7 @@ function TaskPanelBody({
   const references = (task.photos ?? []).filter(
     (photo) => photo.kind === "reference",
   );
+  const copyOf = isGroup ? null : copyAudience(task);
   // Handed in (#5732): who marked it done and when, under the status, with
   // the proof under it, so a done task reads as one before its fields do.
   const handedIn = isGroup
@@ -456,6 +444,24 @@ function TaskPanelBody({
             </span>
           )}
         </FieldRow>
+        {copyOf ? (
+          // A copy of a group task (#5699): Who is this copy's person, and
+          // For says who else got the same task and how far they are, as
+          // the phone's task screen does.
+          <FieldRow label="For">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-sm">
+              <Users
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              {TASK_AUDIENCE_COPY.groupLine(
+                copyOf.label,
+                copyOf.done,
+                copyOf.total,
+              )}
+            </span>
+          </FieldRow>
+        ) : null}
         <DueRow
           task={task}
           editable={editable}

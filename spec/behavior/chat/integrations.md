@@ -1,7 +1,7 @@
 # Chat Integrations — Slash Commands, Renderers, and System Channel
 
 Chat is the spine; an ops module with a message-shaped action is a **chat integration** (see [README.md](./README.md) → _Chat is the spine_; which modules have none, by design: [`../integrations.md` § Integration Pattern](../integrations.md#integration-pattern)).
-This file specifies the slash-command catalog, the dispatch path, the rich-message renderer registry, and the `#chapter-audit` system-channel bridge.
+This file specifies the slash-command catalog, the dispatch path, and the rich-message renderer registry. The `#chapter-audit` system-channel bridge it also specified was removed on 2026-11-21 (§ [`#chapter-audit` system-channel bridge](#chapter-audit-system-channel-bridge)).
 Push-notification rules for chat live in [../notifications.md](../notifications.md).
 
 ## Slash command catalog
@@ -50,8 +50,10 @@ Errors omit a hardcoded `/rush` so a chapter whose term is Intake is not toasted
 
 Every slash command also has a button and a visual form; typing the command stays the shortcut (Shawn's rule, [#3865](https://github.com/pdcarlson/Frapp/issues/3865), layout A picked 2026-11-09).
 The web composer's toolbar is **+ · emoji · help**: one **+** replaced the paperclip and the slash-palette button, and typing `/` in the message box (or Cmd/Ctrl+/) still opens the palette.
-The **+** opens one card (`apps/web/components/chat/composer-plus-card.tsx`, [#3983](https://github.com/pdcarlson/Frapp/issues/3983)) whose first view is a menu: Attach a file, then one row per command that has a form, each showing its shortcut in mono.
-The rows are Poll (`/poll`), Sign-up sheet (no shortcut, [#3926](https://github.com/pdcarlson/Frapp/issues/3926); [§ Sign-up sheet cards](#sign-up-sheet-cards)), Form (no shortcut, on web; [§ Form cards](#form-cards)), Event (`/event`), Task (`/task`), Service hours (`/hours`), Points (`/points`) and Role picker (no shortcut, [#4958](https://github.com/pdcarlson/Frapp/issues/4958); [§ Role picker cards](#role-picker-cards)).
+The **+** opens one card (`apps/web/components/chat/composer-plus-card.tsx`, [#3983](https://github.com/pdcarlson/Frapp/issues/3983)) whose first view is a menu: Attach a file and GIF, then a row each for Poll, Event and Task, each showing its shortcut in mono.
+The rows are Poll (`/poll`), Event (`/event`) and Task (`/task`), and nothing else (Paul, 2026-11-20, [#5772](https://github.com/pdcarlson/Frapp/issues/5772): photos and GIFs are what members post, and every further row made the menu read half-built). GIF, which first stayed only the toolbar's own button on web, is a row too since the favorites change ([#5772](https://github.com/pdcarlson/Frapp/issues/5772)), so web and phone list the same five things; it closes the card and opens the GIF picker. The toolbar's GIF button stays.
+Sign-up sheet, Form and Role picker can no longer be made from chat; the cards already posted still draw and answer as before ([§ Sign-up sheet cards](#sign-up-sheet-cards), [§ Form cards](#form-cards), [§ Role picker cards](#role-picker-cards)).
+Service hours and Points left the menu too; on web, `/hours` and `/points` typed bare still open their forms in the card.
 Picking a row turns the card into that form in place, above the +, with no dialog and no scrim, so the chat stays readable and live behind it (Paul, 2026-11-10; the card's size and step are [`components.md`](../../ui/design-system/components.md) § Surface size).
 Its header has a back arrow to the menu, the form's title and an X; Escape steps back to the menu once, then closes, and focus goes to the form's first field on open and back to the + on close.
 A typed command that opens a form (below) opens the same card on that form.
@@ -60,7 +62,10 @@ Each form posts its card into the channel it was opened in through the same chat
 A lost card gets the typed command's notice, titled for what was made rather than the command ("Task not confirmed", not "/task not confirmed"; [#3913](https://github.com/pdcarlson/Frapp/issues/3913)).
 Poll is `poll-form.tsx`.
 Event (`apps/web/components/chat/event-quick-form.tsx`) holds the four fields every event needs, name, date, start and end, starting at the next whole hour for an hour, and creates it as the one-liner does (10 points unless typed, not required, everyone invited; a member without `events:update` gets 0 points whatever is typed, #3709); More options opens the full editor with the draft carried over.
-Task (`apps/web/components/tasks/task-form.tsx`) is Title, Assignee and Due date, with Points, Repeat and Description behind More options (Repeat: [tasks.md § Repeating tasks](../tasks.md#repeating-tasks), #5119; a repeating task posts a card for its first copy only). Role assignees are #4295 step 3.
+**Task opens a picker first** ([#5772](https://github.com/pdcarlson/Frapp/issues/5772), Paul: "link a task or mention a task in chat"): a search field over the tasks the member can read (`GET /v1/tasks` scopes them), open ones first by when they are due, then done ones newest first, each row the title and "assignee · due" (`taskLinkChoices` in `@repo/hooks`, which web's `task-link-picker.tsx` and the phone's `task-link-sheet.tsx` share).
+A tap posts that task's card, the same card a created task posts, through `linkTask` in `@repo/chat-core/dispatch` (`POST /v1/tasks/:id/share`, which refuses a task the member can't read); a refusal shows under the field and keeps the picker open, and a lost answer reads as unconfirmed.
+**New task** sits beside the field for a member with `TASK_CREATE_PERMISSIONS` and turns the view into the Task form; it opens straight on the form when a Task draft is waiting. Comparable: Slack's and Linear's issue pickers.
+The Task form (`apps/web/components/tasks/task-form.tsx`) is Title, Assignee and Due date, with Points, Repeat and Description behind More options (Repeat: [tasks.md § Repeating tasks](../tasks.md#repeating-tasks), #5119; a repeating task posts a card for its first copy only). Role assignees are #4295 step 3.
 Service hours and Points are the bodies the Service page's Log service hours dialog and the Points page's Adjust points dialog also host (`apps/web/components/service/log-hours-form.tsx`, `apps/web/components/points/points-adjustment-form.tsx`), so the two never drift;
 Service hours, unlike `/hours log`, can attach proof, and Points lists members by name (a shared name gets its email, never a user id), picks nobody until asked, and leaves out the officer's own row, which the API refuses.
 Every form names a missing or invalid field under it, outlined, and focuses it on submit; only a write the server refuses toasts.
@@ -80,23 +85,21 @@ What a row does follows [`README.md` §5](../../ui/design-system/README.md#5-ent
 - **The role can't:** left out, with one footer line naming what ("Your role can't create polls or events."), never a permission key.
   Poll needs `polls:create`, the phone's rule; `/poll` typed still lets any member post one, and whether the server should enforce it is #3007.
   Event needs `EVENT_CREATE_PERMISSIONS`.
-  Task needs `tasks:manage` and `members:view`, Service hours `service:log`, and Points `points:adjust` and `members:view`, each its route's guard (the task and points forms also list members). Role picker needs `roles:manage`, which the send route checks for that kind ([§ Role picker cards](#role-picker-cards)).
-  A typed `/task`, or `/hours` or `/points` picked bare, by a role without them is refused with a toast before the form opens, as `/event` is.
+  Task needs only `members:view`, since linking a task needs no more than reading one; making one in the picker needs `TASK_CREATE_PERMISSIONS` (`tasks:manage` and `members:view`). The typed `/hours` and `/points` forms need `service:log`, and `points:adjust` and `members:view`, each its route's guard.
+  A typed `/task` with details, or `/hours` or `/points` typed bare, by a role without them is refused with a toast before the form opens, as `/event` is; a bare `/task` opens the picker.
   While permissions load, a row is left out without the line; if that read fails, the footer says the role couldn't be checked.
-- **No grant and no module:** Sign-up sheet and Form need neither (`PLUS_MENU_PERMISSIONS.signup` and `.form` are empty, and neither has a slash command to name a module), so each is offered as soon as the menu opens, before the permissions or module reads answer, and works offline because it queues like a poll.
 - **The chapter turned the module off:** left out, with "Polls are turned off in this chapter's Settings."
-- **It can't work this second:** shown greyed with the reason beside it and its shortcut still shown, the typed command's refusals: "Reconnect first" offline (not Poll, Sign-up sheet, Form or Role picker, which queue, unless the module read has nothing cached), "Send the file first" with a file staged, "Not while replying" with a reply staged, and "Still loading" or "Couldn't check Settings" while the module read hasn't answered.
-- The menu always opens, even when Attach a file is all it holds, so the footer can say why.
+- **It can't work this second:** shown greyed with the reason beside it and its shortcut still shown, the typed command's refusals: "Reconnect first" offline (not Poll, which queues, unless the module read has nothing cached), "Send the file first" with a file staged, "Not while replying" with a reply staged, and "Still loading" or "Couldn't check Settings" while the module read hasn't answered.
+- The menu always opens, even when Attach a file (and GIF, where GIFs are set up) is all it holds, so the footer can say why.
 
-**The phone** ([#3865](https://github.com/pdcarlson/Frapp/issues/3865), s05 in [`screens.md`](../../ui/mobile/screens.md)): the composer's **+** opens a bottom sheet on the New poll sheet's chrome (`apps/mobile/components/chat/composer-plus-sheet.tsx`, "Add to the conversation") with **Photo**, then Poll, Sign-up sheet, Form, Event, Task, Service hours and Role picker, in web's order and by the same model and footer lines.
-Points waits for a phone form, and the phone has no slash commands, so rows show no shortcut and there is no tip line.
+**The phone** ([#3865](https://github.com/pdcarlson/Frapp/issues/3865), s05 in [`screens.md`](../../ui/mobile/screens.md)): the composer's **+** opens a bottom sheet on the New poll sheet's chrome (`apps/mobile/components/chat/composer-plus-sheet.tsx`, "Add to the conversation") with **Photo** and **GIF**, then Poll, Event and Task, in web's order and by the same model and footer lines.
+The phone has no slash commands, so rows show no shortcut and there is no tip line.
 The phone's words differ in three places: "Send the photo first" with a photo staged, Photo greyed "Reconnect first" offline (an upload has no outbox) or "Up to 10 photos" with the tray full, and "Close this and try again." when the role couldn't be checked.
 The sheet always opens, even with Photo alone, so the line can show; the + is held dark only in a channel the member can't post in, and is absent while an edit is staged.
 A row runs once the sheet has finished closing.
 Each row opens the phone's existing sheet for it, posting into the channel it was opened from (`apps/mobile/components/chat/use-composer-plus.tsx`): Poll is the New poll sheet through `postPoll`;
 Event is the New event sheet, whose create asks for the card with `trackEventCard`'s placeholder (none for an event that keeps anyone out, which it says);
-Task and Service hours are the quick actions' New task and Log hours sheets through `postTask` and `postHours`, Log hours with its proof photo;
-Form is the New form sheet through `postForm` ([§ Form cards](#form-cards)).
+Task is the task picker sheet (`task-link-sheet.tsx`, 62% of the screen so the conversation stays in view above), whose header's **New task** closes it and opens the quick actions' New task sheet through `postTask`.
 A refusal keeps the sheet's draft and its own refusal copy.
 A lost answer, or a write whose card didn't post, closes the sheet and says so in an alert, since neither route dedupes.
 
@@ -159,9 +162,10 @@ A client therefore **cannot** post these kinds directly: `chat.service.sendMessa
 `PointsService.adjustPoints` is the only writer of `points` cards; `TaskService.create` is the only writer of `task` cards;
 `EventService.create` is the only writer of `event` cards (it posts through `EventAnnouncementService.postEventCard`);
 `ServiceEntryService.create` is the only writer of `hours` cards; `RushService.create` is the only writer of `rush` cards;
-`system_audit` has four server-side writers — the `#chapter-audit` bridge worker, plus `PollService` (expiry notices, into the poll's own channel), `InviteService` (acceptance notices, into the DM between the inviter and the new member) and `ChapterOnboardingService` (the one-time welcome message, whose channel [`onboarding.md` § First-Officer Onboarding Wizard](../onboarding.md#first-officer-onboarding-wizard) owns).
-**None of the four goes through `sendMessage`** — each writes on the service-role path instead (`PollService` and `InviteService` say why in comments).
-So `SERVER_ONLY_KINDS` is what stops a _client_ posting the kind; it is not what gates these four.
+`system_audit` has two server-side writers: `PollService` (expiry notices, into the poll's own channel) and `ChapterOnboardingService` (the one-time welcome message, whose channel [`onboarding.md` § First-Officer Onboarding Wizard](../onboarding.md#first-officer-onboarding-wizard) owns).
+The `#chapter-audit` bridge worker was a third until it was removed on 2026-11-21, and `InviteService`'s acceptance notice was one until #5625 made it a notification.
+**Neither goes through `sendMessage`**: each writes on the service-role path instead.
+So `SERVER_ONLY_KINDS` is what stops a _client_ posting the kind; it is not what gates these writers.
 `ask_answer` (#4713) has one writer, `AskPostService`, which inserts on the service-role path keyed `client_message_id = 'ask:<ask id>'`, from an answer the server sealed for the member posting it ([`../ai.md` § Posting an answer to the channel](../ai.md#posting-an-answer-to-the-channel)).
 The optimistic `loading` placeholder stays client-postable — it carries no assertion until the server's real card replaces it.
 
@@ -197,9 +201,11 @@ The route takes only the three action types the apps send, `reaction:<emoji>`, `
 A **sign-up sheet** ([#3926](https://github.com/pdcarlson/Frapp/issues/3926), Shawn, 2026-11-09 and 2026-11-12) replaces the Google Form or Sheet link a chapter posts for "sober drivers Friday: 2, Saturday: 2", so Frapp knows who signed up and nobody marks anything Done by hand.
 It is the first of a series on the issue: headcount, closing and an end time (step 2, below), short forms, and Activity's Needs you with CSV export follow in their own PRs.
 
+**No longer made from chat** (Paul, 2026-11-20, [#5772](https://github.com/pdcarlson/Frapp/issues/5772)): the + menu has no Sign-up sheet row and the apps hold no form for one. Cards already posted keep working as below; the passages on building one record how they were made.
+
 - **The card.**
   A `kind: "signup"` chat message whose `content` is the title and whose `payload` is `{ title, note?, slots: [{ id, label, capacity }] }`, `capacity` a whole number from 1 to `SIGNUP_SLOT_CAPACITY_MAX` (100) or `null` for no limit, at most `SIGNUP_SLOTS_MAX` (20) slots (bounds in `@repo/validation`'s `field-limits.ts`).
-  Both forms build it with `buildSignupMessage` in `@repo/chat-core/signups` and post it through the outbox (`postSignup` in `@repo/chat-core/dispatch`), so it is optimistic and survives going offline, like a poll.
+  Both forms built it with `buildSignupMessage` in `@repo/chat-core/signups` and posted it through the outbox (`postSignup`), until #5772 removed them.
   Anyone who can post in the channel may post one: no permission and no module (Shawn's chat, 2026-11-12).
   Access follows the channel, as for every card.
 - **Checked on send.**
@@ -267,9 +273,11 @@ A **form** ([#3926](https://github.com/pdcarlson/Frapp/issues/3926) step 3, Shaw
 It is its own card kind (`kind: 'form'`), separate from sign-ups (Shawn's pick): choices are free, with no per-option limit, because claiming a limited spot is what a sign-up is for.
 Comparable apps: Google Forms, Microsoft Forms, Typeform and Slack Workflow forms.
 
+
+**No longer made from chat** (Paul, 2026-11-20, [#5772](https://github.com/pdcarlson/Frapp/issues/5772)): the + menu has no Form row and the apps hold no form for one. Cards already posted keep working as below; the passages on building one record how they were made.
 - **Where it stands.**
   This step shipped in three PRs: the API, data and shared `@repo/chat-core/forms` helpers first, then web, then the phone.
-  Both surfaces build, draw and answer a form as below.
+  Both surfaces draw and answer a form as below; neither builds one since #5772.
   Activity's Needs you is step 4's first part.
   Step 4 also adds the creator's responses view and its export, on web and then the phone (below).
 - **The card.**
@@ -282,17 +290,7 @@ Comparable apps: Google Forms, Microsoft Forms, Typeform and Slack Workflow form
   Anyone who can post in the channel can post one; there is no module and no permission.
   The card is answered on a full page it opens, not on the card, so a long questionnaire doesn't crowd the timeline.
   The card shows the title, the question count and the viewer's state: Fill out, or Done with Edit your answers (`formCardAction` in `@repo/chat-core/forms`).
-- **Building one (web).**
-  The composer's **+** has a **Form** row after Sign-up sheet, with no slash command, no grant and no module, and, like a sign-up sheet, it works offline because the card posts through the outbox (`postForm` in `@repo/chat-core/dispatch`).
-  It opens the **New form** builder in the + card: a title, optional details, and the questions, each with its text, a type picker (Multiple choice, Checkboxes, Dropdown, Short answer, Paragraph, Yes or no), its options for a choice type, a **Required** switch, and Move up, Move down and Remove.
-  A new form starts with one multiple-choice question and two blank options, as Google Forms does, and a question added takes the type of the one before it.
-  **Closes at a set time** is the sign-up's end-time field.
-  A question with no text and no option is skipped; one with options but no text, a choice question with no option, and two options that read the same are refused before posting.
-  The draft model is `@repo/chat-core/form-draft`, shared with the phone's builder.
-- **Building one (phone).**
-  The + sheet's **Form** row opens the **New form** sheet (`apps/mobile/components/chat/new-form-sheet.tsx`), the New sign-up sheet's chrome holding the same draft model: a title, details, and each question with its text, its type (a row that opens the six types in place), its options, **Required**, and Move up, Move down and Remove.
-  **Closes at a set time** uses the sign-up sheet's platform date and time fields.
-  It posts through the outbox (`postForm`), and the draft outlives a close, not a Cancel.
+- **Building one** (until #5772): a **Form** row in the + menu opened a builder on web and the New form sheet on the phone (title, details, typed questions with options and Required, an optional close time), posting through the outbox (`postForm`).
 - **Answering one (web).**
   The card's button opens the full page over chat: a full-height panel (full screen on a phone-width window), as Slack's workflow forms open over the conversation, holding every question in order on one scrolling page, as Google Forms and Microsoft Forms do, with required ones starred.
   A short answer is a line, a paragraph a box, multiple choice and yes or no are radio rows (with **Clear selection** on one that isn't required), checkboxes are checkbox rows, and a dropdown is a select.
@@ -347,13 +345,15 @@ Comparable apps: Google Forms, Microsoft Forms, Typeform and Slack Workflow form
 
 ## Role picker cards
 
-An officer who manages roles posts a role picker into a channel from the **+** menu's Role picker row ([#4958](https://github.com/pdcarlson/Frapp/issues/4958), Shawn's "reaction roles").
+An officer who manages roles posted a role picker into a channel from the **+** menu's Role picker row ([#4958](https://github.com/pdcarlson/Frapp/issues/4958), Shawn's "reaction roles").
+
+**No longer made from chat** (Paul, 2026-11-20, [#5772](https://github.com/pdcarlson/Frapp/issues/5772)): the + menu has no Role picker row and the apps hold no form for one. Cards already posted keep working as below; the passages on building one record how they were made.
 It lists some of the chapter's Non-chapter business roles ([`../rbac.md` § Self-assignable roles](../rbac.md#self-assignable-roles)), and every member who reads it gets a **Join** or **Leave** button beside each, as Discord's button-role bots (Carl-bot) and Slack's interactive messages hand out roles: buttons rather than emoji reactions, so what a tap does is written on it.
 
 - **The card** is `kind: 'role_picker'` with `payload: { title, role_ids }` and the title as `content`, so previews and quotes read it. The form's title is optional and defaults to "Pick your roles" (`ROLE_PICKER_DEFAULT_TITLE`); it lists 1 to 25 roles (`ROLE_PICKER_ROLES_MAX`), checked and rebuilt by `normalizeRolePickerCard` (`apps/api/src/domain/utils/role-picker-card-rules.ts`) on send.
-- **Who may post one.** The send route (`ChatController.sendMessage`) refuses the kind with `403` to a member without `roles:manage`, the grant that marks a role, since the card hands roles out; the **+** row is offered by the same grant (`PLUS_MENU_PERMISSIONS.roles`). Every role it lists must be marked Non-chapter business in the chapter when it is posted (`400` otherwise; `RbacService.assertMayPostRolePicker`). Like any card, it can't be edited.
+- **Who may post one.** The send route (`ChatController.sendMessage`) refuses the kind with `403` to a member without `roles:manage`, the grant that marks a role, since the card hands roles out. Every role it lists must be marked Non-chapter business in the chapter when it is posted (`400` otherwise; `RbacService.assertMayPostRolePicker`). Like any card, it can't be edited.
 - **A tap** is the member's own `POST /v1/roles/:id/join` or `/leave`, the same call as Add roles and Your roles (`useSetPickedRole`), with all its rules: joining and leaving need the role still marked (leaving since #5650), and joining is refused to alumni. The card stores nothing per member, so each viewer's buttons read their own roles (`rolePickerRows` in `@repo/chat-core/role-pickers`): Join for a role they may join, Leave for one they hold, and "Closed. An officer can add or remove it." with no button for a role still in the chapter they can't join or leave now, held or not. A role deleted since the post drops off the card.
-- **Where it's drawn:** `apps/web/components/chat/renderers/role-picker-card.tsx` on web and `apps/mobile/components/chat/role-picker-card.tsx` on the phone; the forms are web's **+** card and the phone's New role picker sheet.
+- **Where it's drawn:** `apps/web/components/chat/renderers/role-picker-card.tsx` on web and `apps/mobile/components/chat/role-picker-card.tsx` on the phone.
 
 ## Rich-message renderer registry
 
@@ -373,7 +373,7 @@ A gate's refusal of either write is told in a member's words, `rushCardGateRefus
 Voter names are never shown); mobile draws `poll`, `signup`, `form`, `role_picker`, `event`, `task`, `points`, `hours`, `rush`, `announcement`, `system_audit` and `ask_answer` as cards in the same row frame (`apps/mobile/components/chat/`), and `dues` and `loading` as text via `message-item.tsx`; a card whose payload doesn't read is drawn as its `content` text, as on web.
 The `announcement` card draws the message's `content` through the message markdown, and `payload.body` only when `content` is empty: `content` is what the push and the channel preview showed, and `announcement` is not a server-only kind, so a client could send a body that says something else.
 The `system_audit` card names its actor through `actorLabel` (`@repo/hooks`): the roster's name, "Frapp" for the system, or the member fallback, never a bare id prefix.
-Only the `#chapter-audit` mirror writes that payload; the server's own notices (a poll closing, the chapter welcome) are `system_audit` rows without one, whose `content` is the whole sentence: mobile draws them as text, and web as that sentence in a muted card frame, because the renderer registry keeps every card kind out of the text body.
+Only the `#chapter-audit` mirror wrote that payload, and it was removed on 2026-11-21, so no new row carries one; the server's own notices (a poll closing, the chapter welcome) are `system_audit` rows without one, whose `content` is the whole sentence: mobile draws them as text, and web as that sentence in a muted card frame, because the renderer registry keeps every card kind out of the text body.
 The `task` card is an immutable creation-time snapshot (`assigner → assignee`, title, due date, point reward) whose **live** status is read back through the task query
 — the chat message row is never mutated — and carries inline lifecycle actions: the assignee can Start / Mark done and a `tasks:manage` admin can Confirm / Reject, gated client-side for UX with the existing task REST endpoints as the trust boundary.
 No control and no status badge is drawn until the live task is read, because the payload's status is the creation-time `TODO` forever (#2065); a viewer who can't read the task sees the snapshot without a live status ([`../tasks.md` § Chat Integration](../tasks.md#chat-integration)).
@@ -389,17 +389,10 @@ See [README.md](./README.md) → _Message Kinds and Actions_ for the canonical `
 
 ## `#chapter-audit` system-channel bridge
 
-Member-visible officer changes (dues, modules, roles) surface in chat as a system-written audit feed.
-The bridge worker subscribes (service-role) to `chapter_audit_log` INSERT via Supabase Realtime and posts a `kind='system_audit'` message into the chapter's `#chapter-audit` channel as the system sender (`00000000-0000-0000-0000-000000000000`).
-This is a server-originated insert that bypasses the client send path and goes direct via service role; it has a single owner (no inline audit-post in writing services).
+Removed on 2026-11-21 (Paul's call). Member-visible officer changes used to surface in chat: a bridge worker (`ChatBridgeWorkerService`, ADR-08) subscribed to `chapter_audit_log` INSERT and posted a `kind='system_audit'` message into the chapter's `#chapter-audit` channel as the system sender.
+The channel and the worker are gone; `chapter_audit_log` is still the record, and officers read it on the Logs page in Chapter settings ([`../settings/README.md` § Audit Rules](../settings/README.md#audit-rules)).
 
-- Rows with `member_visible=false` are skipped — internal-scope rows stay out of the channel.
-- Message shape: `sender_id` = system sender; `content` = human summary (`"<action>: <diff keys>"`); `kind` = `system_audit`; `payload` = `{ action, actor_user_id, diff }`.
-  The renderer reads from `payload`, not the prose `content`.
-- Chapters that pre-date the `#chapter-audit` channel have no mirror; the bridge logs and continues.
-  The audit row itself is always the source of truth.
-
-The same `system_audit` message pattern is reused, targeted to a DM, for a DM poll's closing notice. The invite-accept notice used to be one too; since #5625 it is a notification to the inviter ([`notifications.md`](../notifications.md)).
+The `system_audit` message pattern is still used, targeted to a DM, for a DM poll's closing notice. The invite-accept notice used to be one too; since #5625 it is a notification to the inviter ([`notifications.md`](../notifications.md)).
 
 ## The team's Dev log channel
 

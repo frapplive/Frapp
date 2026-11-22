@@ -18,8 +18,8 @@ import {
   GROUP_MEMBERS_MAX,
   GROUP_NAME_MAX_LENGTH,
   GROUPS_MAX,
+  groupDisplayName,
   roleColorOrNull,
-  type RoleColorHex,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ProfileSection } from "@/components/profile/profile-section";
-import { RoleColorSwatches } from "@/components/roles/role-color-swatches";
+import { RoleColorPicker } from "@/components/roles/role-color-picker";
 import {
   ErrorState,
   OfflineState,
@@ -64,9 +64,11 @@ function memberCountLabel(count: number): string {
  * roles and tiers. Behavior: `spec/behavior/members.md` § Groups.
  *
  * Manual groups are the officer's to name and fill. Below them, Frapp keeps
- * one group per pledge class and graduation year from each member's own
- * data; only their color and ping switch can change, so they are listed
- * apart and marked.
+ * one group per pledge class, graduation year and major (#5778) from each
+ * member's own data; only their color and ping switch can change, so they
+ * are listed apart and marked ("Follows major").
+ * A major's group is the major as most of its members write it, so a
+ * chapter that made a role per major just to ping it can ping the major.
  *
  * Every write needs `groups:manage`, which also shows the Roles and groups
  * tab to a holder without `roles:manage` (`settings-access.ts`). A member's
@@ -142,14 +144,14 @@ export function GroupsSection({ canManage }: { canManage: boolean }) {
 
         <ProfileSection
           id="settings-groups-automatic"
-          title="Pledge classes and class years"
-          hint="Frapp keeps these from each member's pledge class and graduation year, so who's in them changes with that. You can set their color and whether anyone can ping them. Class years can't decide who sees a channel, because members set their own graduation year."
+          title="Pledge classes, class years and majors"
+          hint="Frapp keeps these from each member's pledge class, graduation year and major, so who's in them changes with that. You can set their color and whether anyone can ping them. Class years and majors can't decide who sees a channel, because members set their own."
         >
           <div className="space-y-1">
             {automatic.length === 0 ? (
               <InlineNote>
-                None yet. One appears for each pledge class and graduation year
-                someone is in.
+                None yet. One appears for each pledge class, graduation year and
+                major someone has.
               </InlineNote>
             ) : (
               automatic.map((group) => (
@@ -261,7 +263,9 @@ function GroupRow({
     <div className="flex flex-wrap items-center gap-x-2 rounded-md px-1 py-1.5">
       <ColorDot color={group.color} />
       <div className="min-w-[8rem] flex-1">
-        <p className="break-words text-sm font-semibold">{group.name}</p>
+        <p className="break-words text-sm font-semibold">
+          {groupDisplayName(group)}
+        </p>
         <p className="text-caption text-muted-foreground">
           {details.join(" · ")}
         </p>
@@ -392,7 +396,7 @@ function GroupEditor({
   // under the officer when a background read lands.
   const [members] = useState(liveMembers);
   const [name, setName] = useState(group.name);
-  const [color, setColor] = useState<RoleColorHex | null>(
+  const [color, setColor] = useState<string | null>(
     roleColorOrNull(group.color),
   );
   const [mentionable, setMentionable] = useState(group.mentionable);
@@ -482,14 +486,16 @@ function GroupEditor({
             >
               {group.kind === "pledge_class"
                 ? "It follows the pledge class's name. Rename the class to change it."
-                : "It follows the graduation year."}
+                : group.kind === "major"
+                  ? "It follows the major as most of its members write it."
+                  : "It follows the graduation year."}
             </p>
           )}
         </div>
 
         <div className="grid gap-1">
           <Label id="group-edit-color-label">Color</Label>
-          <RoleColorSwatches
+          <RoleColorPicker
             labelId="group-edit-color-label"
             value={color}
             onChange={setColor}

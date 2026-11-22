@@ -647,7 +647,7 @@ describe('TaskService', () => {
           name: 'Member',
           tier_id: MEMBERS,
           permissions: [],
-          system_key: 'MEMBER',
+          system_key: 'EVERYONE',
         },
       ] as never);
       mockTierRepo.findByChapter.mockResolvedValue([
@@ -687,7 +687,7 @@ describe('TaskService', () => {
           id: 'role-everyone',
           name: 'Member',
           tier_id: ALL,
-          system_key: 'MEMBER',
+          system_key: 'EVERYONE',
         },
       ] as never);
       mockTierRepo.findByChapter.mockResolvedValue([
@@ -972,7 +972,7 @@ describe('TaskService', () => {
             id: 'role-everyone',
             chapter_id: 'ch-1',
             name: 'Everyone',
-            system_key: 'MEMBER',
+            system_key: 'EVERYONE',
           },
           {
             id: 'role-alumni',
@@ -2308,6 +2308,40 @@ describe('TaskService', () => {
         expect(mockChatService.sendMessage).not.toHaveBeenCalled();
         expect('card_posted' in result).toBe(false);
       });
+    });
+  });
+
+  describe('shareToChat (#5772)', () => {
+    it("posts the task's own card: its creator as assigner, its live status, sent as the linker", async () => {
+      mockUserRepo.findByIds.mockResolvedValue([
+        { id: 'admin-1', display_name: 'Admin Alice' } as User,
+        { id: 'user-1', display_name: 'Member Bob' } as User,
+      ]);
+
+      await service.shareToChat({ ...baseTask, status: 'COMPLETED' } as never, {
+        chapter_id: 'ch-1',
+        channel_id: 'channel-1',
+        sender_id: 'user-9',
+        client_message_id: 'cmid-9',
+      });
+
+      expect(mockChatService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel_id: 'channel-1',
+          sender_id: 'user-9',
+          kind: 'task',
+          system_originated: true,
+          client_message_id: 'cmid-9',
+          content: `"${baseTask.title}" for Member Bob (due ${baseTask.due_date})`,
+          payload: expect.objectContaining({
+            task_id: baseTask.id,
+            assigner_user_id: baseTask.created_by,
+            assigner_name: 'Admin Alice',
+            assignee_name: 'Member Bob',
+            status: 'COMPLETED',
+          }),
+        }),
+      );
     });
   });
 

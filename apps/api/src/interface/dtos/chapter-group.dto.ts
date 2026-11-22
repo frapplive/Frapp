@@ -2,27 +2,23 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
-  IsIn,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CHAPTER_GROUP_KINDS,
   GROUP_MEMBERS_MAX,
   GROUP_NAME_MAX_LENGTH,
-  ROLE_COLOR_HEXES,
 } from '@repo/validation';
+import {
+  IsRoleColor,
+  ROLE_COLOR_API_DESCRIPTION,
+} from '../decorators/is-role-color.decorator';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
-
-/** A palette color in any case, stored in the palette's spelling, as a role's is. */
-function normalizeColor(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim().toUpperCase() : value;
-}
 
 /** One of a chapter's groups (`GET /v1/groups`, #4076). */
 export class ChapterGroupDto {
@@ -33,22 +29,23 @@ export class ChapterGroupDto {
   chapter_id: string;
 
   @ApiProperty({
-    enum: ['manual', 'pledge_class', 'class_year'],
+    enum: CHAPTER_GROUP_KINDS,
     description:
-      '`manual`: an officer picks its members. `pledge_class` and `class_year`: Frapp keeps one per pledge class and per graduation year, and its members follow the members’ own data; only its color and ping switch can change.',
+      '`manual`: an officer picks its members. `pledge_class`, `class_year` and `major`: Frapp keeps one per pledge class, per graduation year and per major (matched ignoring case and spacing), and its members follow the members’ own data; only its color and ping switch can change. A `class_year` or `major` group can’t go on a channel list or be what a task is from: members set their own.',
   })
   kind: string;
 
   @ApiProperty({
     description:
-      "The group's name, which `@` mentions it. An automatic group's is its pledge class's, or \"Class of\" and the year.",
+      "The group's name, which `@` mentions it. An automatic group's is its pledge class's, \"Class of\" and the year, or the major as most of its members write it.",
   })
   name: string;
 
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'One of the role palette colors, or null.',
+    description:
+      'A palette color, or a custom `#RRGGBB` that reads on every surface (`isPaintableRoleColor` in `@repo/validation`), or null.',
   })
   color: string | null;
 
@@ -72,6 +69,14 @@ export class ChapterGroupDto {
     description: 'The graduation year a `class_year` group follows.',
   })
   class_year: number | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'The major a `major` group follows, folded: trimmed, spacing collapsed, lower case.',
+  })
+  major_key: string | null;
 
   @ApiProperty({
     type: [String],
@@ -102,15 +107,10 @@ export class CreateChapterGroupDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    enum: ROLE_COLOR_HEXES,
-    description: 'One of the role palette colors, in any letter case.',
+    description: ROLE_COLOR_API_DESCRIPTION,
   })
   @IsOptional()
-  @Transform(({ value }) => normalizeColor(value))
-  @ValidateIf((_, value) => value !== null)
-  @IsIn(ROLE_COLOR_HEXES, {
-    message: 'color must be one of the role palette colors',
-  })
+  @IsRoleColor()
   color?: string | null;
 
   @ApiPropertyOptional({
@@ -140,7 +140,7 @@ export class UpdateChapterGroupDto {
   @ApiPropertyOptional({
     maxLength: GROUP_NAME_MAX_LENGTH,
     description:
-      "A manual group's new name, under the same rules as a new one. An automatic group's name follows its class or year and is refused here.",
+      "A manual group's new name, under the same rules as a new one. An automatic group's name follows its class, year or major and is refused here.",
   })
   @IsOptional()
   @IsString()
@@ -151,16 +151,10 @@ export class UpdateChapterGroupDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    enum: ROLE_COLOR_HEXES,
-    description:
-      'One of the role palette colors, in any letter case. Null clears it.',
+    description: ROLE_COLOR_API_DESCRIPTION,
   })
   @IsOptional()
-  @Transform(({ value }) => normalizeColor(value))
-  @ValidateIf((_, value) => value !== null)
-  @IsIn(ROLE_COLOR_HEXES, {
-    message: 'color must be one of the role palette colors',
-  })
+  @IsRoleColor()
   color?: string | null;
 
   @ApiPropertyOptional({

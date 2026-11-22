@@ -12,6 +12,7 @@ import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.in
 import type { IChatChannelRepository } from '#domain/repositories/chat.repository.interface';
 import { ChannelCacheService } from './channel-cache.service';
 import {
+  baseRoleIds,
   rolesAfterSave,
   tierPositionsOf,
   topRoleColor,
@@ -156,7 +157,7 @@ export interface MemberRosterEntry {
   display_name: string;
   avatar_url: string | null;
   /**
-   * The palette color of the member's highest-ranked colored role, or `null`
+   * The paintable color of the member's highest-ranked colored role, or `null`
    * (#3485). Chat paints the author's name in it. Computed here so a chat
    * surface needs no second roles read and never sees `role_ids`.
    */
@@ -402,8 +403,10 @@ export class MemberService {
    * chairs' tier, and cannot give anyone, least of all themselves, a chair's
    * or officer's role.
    *
-   * Nobody ticks the Everyone role (#4191): `rolesAfterSave` decides it from
-   * what the save means, before any check below sees the list.
+   * Nobody ticks the Everyone role: `rolesAfterSave` keeps it on every member,
+   * and gives at most one base role (New Member, Actives, Alumni), the one
+   * the save adds winning, before any check below sees the list. A save that
+   * still names two base roles is refused (`400`, `role.base_conflict`).
    */
   async updateRoles(
     memberId: string,
@@ -419,6 +422,13 @@ export class MemberService {
 
     const roles = await this.roleRepo.findByChapter(chapterId);
     const roleIds = rolesAfterSave(requestedRoleIds, member.role_ids, roles);
+    if (baseRoleIds(roleIds, roles).length > 1) {
+      throw new BadRequestException({
+        code: 'role.base_conflict',
+        message:
+          'A member holds one of New Member, Actives and Alumni at a time.',
+      });
+    }
 
     // Ids the member ALREADY holds are exempt from validation: a row may
     // still carry an id that resolves to no role (fail-safe: it grants
@@ -515,13 +525,11 @@ export class MemberService {
     const beforeIds = new Set(before.map((role) => role.id));
     const afterIds = new Set(after.map((role) => role.id));
     // The Everyone role moves only as `rolesAfterSave` settles it, never at
-    // the caller's request (#4191), so it is not one the caller gives or
-    // takes: a chair who may make a member a pledge isn't refused because
-    // making them one takes Everyone away.
+    // the caller's request, so it is not one the caller gives or takes.
     const changed = [
       ...after.filter((role) => !beforeIds.has(role.id)),
       ...before.filter((role) => !afterIds.has(role.id)),
-    ].filter((role) => role.system_key !== SystemRoleKeys.MEMBER);
+    ].filter((role) => role.system_key !== SystemRoleKeys.EVERYONE);
     if (changed.length === 0) return;
 
     const isSelf = reach.memberId === member.id;
@@ -538,7 +546,7 @@ export class MemberService {
     // second account would otherwise collect it. What the Everyone role
     // carries is exempt, since every member gets it.
     const base = new Set(
-      roles.find((role) => role.system_key === SystemRoleKeys.MEMBER)
+      roles.find((role) => role.system_key === SystemRoleKeys.EVERYONE)
         ?.permissions ?? [],
     );
     const missing = permissionsNotHeld(
@@ -897,7 +905,8 @@ export class MemberService {
 
     // One `{ from, to }` pair per changed field, the audit line's convention
     // (`SystemAuditPayload.diff`), so `#chapter-audit` reads "Paul edited a
-    // member's profile · display name".
+    // member's profile · Ethan Smith to Paul" (a name diff reads as the
+    // names, `auditLineText`, #5801).
     const patch: MemberProfileCorrection = {};
     const diff: Record<string, { from: unknown; to: unknown }> = {};
     if (

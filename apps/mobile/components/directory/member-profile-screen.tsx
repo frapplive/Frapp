@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  type GestureResponderEvent,
   Linking,
   Pressable,
   StyleSheet,
@@ -12,9 +13,13 @@ import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
 import {
+  chipToggleName,
+  cutChips,
   dmChannelIdOf,
   memberGroupChips,
   memberRoleChips,
+  NO_BASE_ROLE_LABEL,
+  needsBaseRole,
   useBlockedUserIds,
   useGetOrCreateDm,
   useGroups,
@@ -25,6 +30,7 @@ import {
   useRemoveMember,
   useRoles,
   useViewerUserId,
+  type AssignmentChip,
 } from "@repo/hooks";
 import {
   PHONE_REACH_LABEL,
@@ -56,6 +62,7 @@ import { ChatGlyph } from "@/components/tab-glyphs";
 import { pageSurfaces } from "@/lib/surfaces";
 import { IconButton, ICON_BUTTON_SIZE } from "@/components/icon-button";
 import { OverflowGlyph } from "@/components/chat/overflow-glyph";
+import { pressAt } from "@/components/item-actions-menu";
 import {
   MemberRolesSheet,
   type MemberRolesSession,
@@ -136,7 +143,8 @@ import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
  *
  * **Roles, then groups**, right under Message (Paul, 2026-11-19, the same
  * order as web's card and profile): chips in the chapter's rank order
- * (`memberRoleChips`, as web's card), each with its color. A viewer holding `roles:manage`
+ * (`memberRoleChips`, as web's card), each with its color, the top three
+ * shown and "+N more" opening the rest in place (#5783, `cutChips`). A viewer holding `roles:manage`
  * or `groups:manage` gets "+ Add role" and "+ Add to group", which open
  * {@link MemberRolesSheet}, the one roles-and-groups editor on mobile.
  *
@@ -215,8 +223,8 @@ export function MemberProfile({
     [memberQuery.data],
   );
   const rolesData = useRolesData();
-  // Ordered as web's card orders them (`memberRoleChips`): by tier, then the
-  // role's own order, the Everyone role left out.
+  // Ordered as web's card orders them (`memberRoleChips`): by rank
+  // (`compareRolesByRank`), the Everyone role left out.
   const roleChips = useMemo(
     () =>
       memberRoleChips({
@@ -229,7 +237,8 @@ export function MemberProfile({
     [rolesData.roles, rolesData.tiers, rolesData.reach, detail?.roleIds],
   );
   const groupsQuery = useGroups({ enabled: true });
-  // The chapter's own groups first, then the pledge class's and class year's.
+  // The chapter's own groups first, then the pledge class's, class year's and
+  // major's.
   const memberGroups = useMemo(
     () => memberGroupChips(groupsQuery.data ?? [], userId, false),
     [groupsQuery.data, userId],
@@ -246,6 +255,8 @@ export function MemberProfile({
   // The member's pledge class and order number (#3939): each drawn only when
   // set, except to an officer who sets them here (the same `roles:manage`).
   const canEditClass = canEditRoles && !!detail?.memberId;
+  const noBaseRole =
+    canEditRoles && !!detail && needsBaseRole(rolesData.roles, detail.roleIds);
   const classRows = usePledgeClassRows(detail, { canEdit: canEditClass });
   const classSheetRef = useRef<BottomSheetModal>(null);
   const [classSession, setClassSession] = useState<MemberClassSession | null>(
@@ -311,55 +322,61 @@ export function MemberProfile({
     rolesSheetRef.current?.present();
   }
 
-  function openMenu() {
+  function openMenu(event?: GestureResponderEvent) {
     if (!detail) return;
     const target = detail;
-    showMemberMenu(target.displayName, menuActions, (action) => {
-      if (action === "edit" && target.memberId) {
-        setCorrectionSession({
-          memberId: target.memberId,
-          label: target.displayName,
-          name: target.storedName,
-          graduationYear: target.graduationYear,
-        });
-        correctionSheetRef.current?.present();
-      } else if (action === "block") {
-        confirmBlockMember({
-          name: target.displayName,
-          // Listed in the directory: that is where this is.
-          inDirectory: true,
-          run: () => blockActions.block(target.userId),
-        });
-      } else if (action === "unblock") {
-        confirmUnblockMember({
-          name: target.displayName,
-          run: () => blockActions.unblock(target.userId),
-        });
-      } else if (action === "remove" && target.memberId) {
-        const memberId = target.memberId;
-        confirmRemoveMember({
-          name: target.displayName,
-          run: () => {
-            removeMutation.mutate(memberId, {
-              // They are no longer a member, so their page goes; only while
-              // it is still the one on screen (#3405).
-              onSuccess: () => {
-                if (isShown()) leave();
-              },
-              onError: (error) =>
-                Alert.alert(
-                  removeFailedTitle(target.displayName),
-                  errorCopy(error, "Try again in a moment.", {
-                    // The route's refusals are sentences for members ("You
-                    // can only remove members ranked below you.").
-                    serverWritesForMembers: true,
-                  }),
-                ),
-            });
-          },
-        });
-      }
-    });
+    const at = pressAt(event);
+    showMemberMenu(
+      target.displayName,
+      menuActions,
+      (action) => {
+        if (action === "edit" && target.memberId) {
+          setCorrectionSession({
+            memberId: target.memberId,
+            label: target.displayName,
+            name: target.storedName,
+            graduationYear: target.graduationYear,
+          });
+          correctionSheetRef.current?.present();
+        } else if (action === "block") {
+          confirmBlockMember({
+            name: target.displayName,
+            // Listed in the directory: that is where this is.
+            inDirectory: true,
+            run: () => blockActions.block(target.userId),
+          });
+        } else if (action === "unblock") {
+          confirmUnblockMember({
+            name: target.displayName,
+            run: () => blockActions.unblock(target.userId),
+          });
+        } else if (action === "remove" && target.memberId) {
+          const memberId = target.memberId;
+          confirmRemoveMember({
+            name: target.displayName,
+            run: () => {
+              removeMutation.mutate(memberId, {
+                // They are no longer a member, so their page goes; only while
+                // it is still the one on screen (#3405).
+                onSuccess: () => {
+                  if (isShown()) leave();
+                },
+                onError: (error) =>
+                  Alert.alert(
+                    removeFailedTitle(target.displayName),
+                    errorCopy(error, "Try again in a moment.", {
+                      // The route's refusals are sentences for members ("You
+                      // can only remove members ranked below you.").
+                      serverWritesForMembers: true,
+                    }),
+                  ),
+              });
+            },
+          });
+        }
+      },
+      at,
+    );
   }
 
   // Not waiting on the channel-list refetch: chat home observes it and picks
@@ -530,13 +547,17 @@ export function MemberProfile({
               <Text style={styles.meta}>Loading roles</Text>
             ) : (
               <View style={styles.chips}>
-                {roleChips.map((chip) => (
-                  <ColorChip
-                    key={chip.id}
-                    name={chip.name}
-                    color={chip.color}
-                  />
-                ))}
+                {/* No base role: they see only what the whole chapter may
+                    (Paul, 2026-11-21), said as web's card says it, to
+                    whoever can give one. */}
+                {noBaseRole ? (
+                  <View style={[styles.chip, styles.addChip]}>
+                    <Text style={[styles.chipText, styles.addChipText]}>
+                      {NO_BASE_ROLE_LABEL}
+                    </Text>
+                  </View>
+                ) : null}
+                <FoldedChips chips={roleChips} noun="roles" />
                 {canOpenAssignments ? (
                   <AddChip
                     label="Add role"
@@ -544,7 +565,7 @@ export function MemberProfile({
                     onPress={() => openAssignments("roles")}
                   />
                 ) : roleChips.length === 0 ? (
-                  // Everyone draws no chip (#4191): as Discord says it.
+                  // Everyone draws no chip: as Discord says it.
                   <Text style={styles.meta}>No roles</Text>
                 ) : null}
               </View>
@@ -557,13 +578,7 @@ export function MemberProfile({
                 Groups
               </Text>
               <View style={styles.chips}>
-                {memberGroups.map((group) => (
-                  <ColorChip
-                    key={group.id}
-                    name={group.name}
-                    color={group.color}
-                  />
-                ))}
+                <FoldedChips chips={memberGroups} noun="groups" />
                 {canOpenAssignments ? (
                   <AddChip
                     label="Add to group"
@@ -584,8 +599,12 @@ export function MemberProfile({
                 label="Phone"
                 value={detail.phone}
                 accessibilityHint="Offers to call or text them"
-                onPress={() =>
-                  showPhoneActions(detail.displayName, detail.phone ?? "")
+                onPress={(event) =>
+                  showPhoneActions(
+                    detail.displayName,
+                    detail.phone ?? "",
+                    event,
+                  )
                 }
               />
             ) : null}
@@ -793,6 +812,46 @@ function AddChip({
   );
 }
 
+/**
+ * A roles or groups row's chips: the top three, then "+N more" opening the
+ * rest in place, and "Show less" folding them back (#5783, the same cut as
+ * web's, `cutChips`). Editing happens in the sheet, which lists every role.
+ */
+function FoldedChips({
+  chips,
+  noun,
+}: {
+  chips: readonly AssignmentChip[];
+  noun: "roles" | "groups";
+}) {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  const [expanded, setExpanded] = useState(false);
+  const cut = cutChips(chips, expanded);
+  return (
+    <>
+      {cut.shown.map((chip) => (
+        <ColorChip key={chip.id} name={chip.name} color={chip.color} />
+      ))}
+      {cut.toggle ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={chipToggleName(cut.toggle, noun)}
+          accessibilityState={{ expanded }}
+          hitSlop={8}
+          onPress={() => setExpanded(cut.toggle?.expands ?? false)}
+          style={({ pressed }) => [
+            styles.moreChip,
+            pressed ? styles.addChipDim : null,
+          ]}
+        >
+          <Text style={styles.moreChipText}>{cut.toggle.label}</Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
+}
+
 /** A role or a group: its color as a dot, its name beside it. */
 function ColorChip({ name, color }: { name: string; color: string | null }) {
   const { tokens } = useFrappTheme();
@@ -917,6 +976,18 @@ function createStyles(tokens: SignetTokens) {
     },
     addChipDim: {
       opacity: 0.5,
+    },
+    // "+N more" and "Show less": the chip's step with no box, quieter than
+    // the chips it stands for.
+    moreChip: {
+      justifyContent: "center",
+      paddingHorizontal: tokens.spacing.sm,
+      paddingVertical: tokens.spacing.xs,
+      borderRadius: tokens.radius.card,
+    },
+    moreChipText: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
     },
     chips: {
       flexDirection: "row",

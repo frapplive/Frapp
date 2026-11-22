@@ -67,6 +67,11 @@ These cause most of the iterations, so they come first.
   title and the close at every width. Until #5686 merges, `PageActions` still draws its own row, so a
   page built before then is checked again after. Only a control that needs the page's width (Points'
   window switch) stays in the body. (11-19, P8.1)
+- **A list opens on the viewer's own items, and nothing sits between the header and the first item at
+  rest.** Whose items is the header's view switch and the filters are § Filtering a list's one Filter
+  button, so nothing waits under the header until a filter is on; a create row appears only after New
+  is pressed. Tasks is the first (#5578; Shawn: "it should default to my tasks, not all tasks").
+  (11-19, P8.1)
 - **One create button, one look, everywhere.** Every "New …" action is the same shared component with
   the same icon, style and wording pattern ("New event", "New minutes", "New task"), on web and phone.
   A filled pill on one page and an outlined button on the next is a defect. On web it is
@@ -246,6 +251,11 @@ These cause most of the iterations, so they come first.
   `apps/web/components/layout/every-page-has-a-way-back.spec.ts` and
   `apps/mobile/lib/every-screen-has-a-way-back.spec.ts`: a new page fails there until it has both.
 - **Opening a notification doesn't stack the screen on itself.** (11-07)
+- **On a phone, the app is the only way in.** An invite link opened in a phone's browser leads to the app
+  (open it, or get it), never to signing in on the web, so a new member signs in once and is asked each
+  onboarding question once. "Way too many clicks", after a new member signed in on both the app and the
+  browser and was asked his name twice ([`onboarding.md`](../../../spec/behavior/onboarding.md)).
+  (11-21)
 - **Several sections to fill in is a pushed screen on the phone, not a sheet.** A sheet is for one short
   pick or action over what's under it; a profile or settings page with sections opens as its own screen with
   a back row, on the page background ("not sure a sheet is the move here", on Finish your profile). (11-20)
@@ -266,14 +276,15 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   `Segmented` only for 2 to 4 short choices that stay visible; swatches only for a look (accent,
   background, density). Never a hand-drawn radio list, and never filter chips used as a form picker.
 - **lint** (partly) **Acting on a thing:** one action menu. Web: `RowMenu` (right-click plus the row's ⋯) and
-  `ActionMenuButton` (a header's ⋯), the same entries. Phone: the glass menu through `useItemMenu`, from
-  long-press and every ⋯. Most used first, at most three groups, Delete red and last and confirmed.
+  `ActionMenuButton` (a header's ⋯), the same entries. Phone: the glass menu, `useItemMenu` for a row's
+  long-press and `openItemMenu` from any other press (a ⋯, a value row, a repeating item's "this one or
+  all upcoming"). The phone has no other menu system: no iOS system sheet, no Android dialog list (Paul,
+  11-20: the system menus "take up almost the whole screen"). Most used first, at most three groups, Delete red and last and confirmed.
   Right-click and long-press are shortcuts, never the only way in; the screen's main action is a visible
   button, and a menu of one or two items becomes buttons. Never the iOS system action sheet, an Alert
   with three or more buttons, or a bottom sheet of actions. A chat message's long-press sheet with its
   reaction row is the one exception. Lint catches only a hand-drawn ⋯ icon or a `ui/context-menu`
-  import on web, and the iOS action sheet, `lib/action-menu` or an inline Alert of three or more buttons
-  on the phone; the rest of this rule is checked in review.
+  import on web, and `ActionSheetIOS` or an inline Alert of three or more buttons on the phone; the rest of this rule is checked in review.
 - **Settings:** web `SettingsGroup` and `SettingsRow` (`components/shared/settings-row.tsx`), phone
   `ListSection` and `ListRow`. A row is a label, at most one muted line, and one trailing thing: a switch,
   a value that opens the picker, or a chevron. **Settings save on their own** (Paul's pick, 11-20): a
