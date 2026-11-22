@@ -477,9 +477,9 @@ describe('CreateEventActTool', () => {
         point_value: null,
         points_from: null,
         attendance: { everyone: 'optional', roles: {} },
-          attendance_from: null,
-          attendance_line: 'Optional for everyone',
-          event_type_id: null,
+        attendance_from: null,
+        attendance_line: 'Optional for everyone',
+        event_type_id: null,
         is_mandatory: false,
         recurrence_rule: null,
       },
@@ -739,7 +739,11 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
         name: 'Cabinet',
         roles: [role(PRESIDENT, 'President'), role(TREASURER, 'Treasurer')],
       },
-      { id: CHAIRS, name: 'Committee Chairs', roles: [role(SOCIAL, 'Social Chair')] },
+      {
+        id: CHAIRS,
+        name: 'Committee Chairs',
+        roles: [role(SOCIAL, 'Social Chair')],
+      },
     ],
     untiered: [role(MEMBER, 'Actives')],
     groups: [],
@@ -755,7 +759,9 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       {
         findByChapter: jest.fn().mockResolvedValue(events),
       } as unknown as EventService,
-      { list: jest.fn().mockResolvedValue([FSL]) } as unknown as EventTypeService,
+      {
+        list: jest.fn().mockResolvedValue([FSL]),
+      } as unknown as EventTypeService,
       audienceOver(audience),
     );
   const officer = toolContext(['events:create', 'events:update']);
@@ -814,7 +820,7 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
     ).toEqual({ status: 'unclear', missing: 'invitees' });
   });
 
-  it('sends an event type that is not the chapter\'s back', async () => {
+  it("sends an event type that is not the chapter's back", async () => {
     expect(
       await build().draft(reception({ event_type: 'Council' }), officer),
     ).toEqual({ status: 'unclear', missing: 'event_type' });
@@ -849,15 +855,14 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       excluded_role_ids: null,
       others_invited: false,
     } as unknown as Event;
-    expect(
-      await build([lastYear]).draft(reception(), officer),
-    ).toMatchObject({
+    expect(await build([lastYear]).draft(reception(), officer)).toMatchObject({
       payload: {
         attendance: {
           everyone: 'not_invited',
           roles: { [PRESIDENT]: 'required', [TREASURER]: 'required' },
         },
-        attendance_line: 'President and Treasurer required, nobody else invited',
+        attendance_line:
+          'President and Treasurer required, nobody else invited',
         attendance_from: { kind: 'event', name: 'FSL Leaders Reception' },
       },
     });

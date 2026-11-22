@@ -484,7 +484,10 @@ export class NewEventAttendanceDto {
 
   @ApiProperty({
     type: 'object',
-    additionalProperties: { type: 'string', enum: [...EVENT_ATTENDANCE_STATUSES] },
+    additionalProperties: {
+      type: 'string',
+      enum: [...EVENT_ATTENDANCE_STATUSES],
+    },
     description:
       'Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status.',
   })

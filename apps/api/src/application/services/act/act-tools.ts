@@ -103,7 +103,10 @@ const SAME_NAME_BACK_DAYS = 400;
  * name, or the one type whose name the event's words fit ("Chapter" is a
  * "Chapter meeting"). None when two types fit.
  */
-function matchingType(name: string, types: readonly EventType[]): EventType | null {
+function matchingType(
+  name: string,
+  types: readonly EventType[],
+): EventType | null {
   const lower = name.toLowerCase();
   const exact = types.find((type) => type.name.toLowerCase() === lower);
   if (exact) return exact;
@@ -116,9 +119,14 @@ function matchingType(name: string, types: readonly EventType[]): EventType | nu
 }
 
 /** A type the loop named from the chapter's list, as written or near it. */
-function typeNamed(typed: string, types: readonly EventType[]): EventType | null {
+function typeNamed(
+  typed: string,
+  types: readonly EventType[],
+): EventType | null {
   const lower = typed.trim().toLowerCase();
-  const exact = types.filter((type) => type.name.trim().toLowerCase() === lower);
+  const exact = types.filter(
+    (type) => type.name.trim().toLowerCase() === lower,
+  );
   if (exact.length === 1) return exact[0];
   const near = types.filter(
     (type) => words(type.name).join(' ') === words(typed).join(' '),
@@ -611,9 +619,7 @@ export class CreateEventActTool implements ActTool {
         event_type_id: type?.id ?? null,
         is_mandatory: attendance.everyone === 'required',
         attendance,
-        attendance_line: describeAttendance(attendance, (id) =>
-          names?.get(id),
-        ),
+        attendance_line: describeAttendance(attendance, (id) => names?.get(id)),
         attendance_from: attendanceFrom,
         recurrence_rule: plan.repeats
           ? proposedRepeatRule(plan.repeats, plan.date, context.timeZone)

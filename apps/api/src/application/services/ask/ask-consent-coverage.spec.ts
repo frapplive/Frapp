@@ -27,6 +27,7 @@ const TOOL_ROWS: Record<string, readonly Row[]> = {
   // People, tasks, events and standing (`agent/tools-chapter`).
   FindMemberAgentTool: ['roster'],
   RosterAgentTool: ['roster'],
+  ChapterRolesAgentTool: ['roster'],
   MyTasksAgentTool: ['chapter_records'],
   ChapterTasksAgentTool: ['chapter_records'],
   EventsAgentTool: ['chapter_records'],

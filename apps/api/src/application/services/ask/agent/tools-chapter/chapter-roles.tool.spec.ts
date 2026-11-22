@@ -4,7 +4,12 @@ import type { EventService } from '../../../event.service';
 import type { EventTypeService } from '../../../event-type.service';
 import { ChapterRolesAgentTool } from './chapter-roles.tool';
 
-const role = (id: string, name: string, holders: number, systemKey: string | null = null) => ({
+const role = (
+  id: string,
+  name: string,
+  holders: number,
+  systemKey: string | null = null,
+) => ({
   id,
   name,
   holders,
@@ -17,9 +22,16 @@ function build() {
       {
         id: 'tier-cabinet',
         name: 'Cabinet',
-        roles: [role('role-president', 'President', 1), role('role-treasurer', 'Treasurer', 0)],
+        roles: [
+          role('role-president', 'President', 1),
+          role('role-treasurer', 'Treasurer', 0),
+        ],
       },
-      { id: 'tier-alumni', name: 'Alumni', roles: [role('role-grads', 'Grad Brothers', 4, 'ALUMNI')] },
+      {
+        id: 'tier-alumni',
+        name: 'Alumni',
+        roles: [role('role-grads', 'Grad Brothers', 4, 'ALUMNI')],
+      },
     ],
     untiered: [role('role-floor', 'Third Floor', 3)],
     groups: [{ id: 'group-1', name: 'Fall 2025', members: 6 }],
@@ -49,9 +61,11 @@ function build() {
     ]),
   };
   const types = {
-    list: jest.fn().mockResolvedValue([
-      { name: 'FSL', point_value: 5, is_mandatory: false },
-    ]),
+    list: jest
+      .fn()
+      .mockResolvedValue([
+        { name: 'FSL', point_value: 5, is_mandatory: false },
+      ]),
   };
   const tool = new ChapterRolesAgentTool(
     { options } as unknown as ActAudienceResolver,
@@ -64,9 +78,7 @@ function build() {
 describe('chapter_roles (#5853)', () => {
   it('lists the tiers with their roles and holders, the untiered roles and the alumni rule', async () => {
     const { tool, events, types } = build();
-    const lines = linesOf(
-      await tool.run(tool.input.parse({}), askerContext()),
-    );
+    const lines = linesOf(await tool.run(tool.input.parse({}), askerContext()));
     expect(lines).toEqual(
       expect.arrayContaining([
         '- Tier "Cabinet": President (1 member), Treasurer (0 members)',
@@ -87,7 +99,9 @@ describe('chapter_roles (#5853)', () => {
     const text = linesOf(
       await tool.run(tool.input.parse({ for_card: 'event' }), context),
     ).join('\n');
-    expect(text).toContain('Event types: "FSL" (5 points, optional for everyone)');
+    expect(text).toContain(
+      'Event types: "FSL" (5 points, optional for everyone)',
+    );
     expect(text).toContain(
       '- "Officer retreat" on Saturday, September 19, 2026: President and Treasurer required, nobody else invited',
     );
@@ -106,7 +120,9 @@ describe('chapter_roles (#5853)', () => {
     const text = linesOf(
       await tool.run(tool.input.parse({ for_card: 'task' }), askerContext()),
     ).join('\n');
-    expect(text).toContain('Groups, classes and class years: Fall 2025 (6 members)');
+    expect(text).toContain(
+      'Groups, classes and class years: Fall 2025 (6 members)',
+    );
     expect(options).toHaveBeenCalledWith('chapter-a', { groups: true });
   });
 });

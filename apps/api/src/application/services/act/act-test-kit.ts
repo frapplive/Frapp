@@ -82,11 +82,11 @@ export function audienceOver(
   options: AudienceOptions = { tiers: [], untiered: [], groups: [] },
 ): ActAudienceResolver {
   return {
-    options: async () => options,
-    resolve: async (
+    options: () => Promise.resolve(options),
+    resolve: (
       names: readonly string[],
       _chapterId: string,
       kinds: readonly AudienceKind[],
-    ) => resolveAudience(names, options, kinds),
+    ) => Promise.resolve(resolveAudience(names, options, kinds)),
   } as unknown as ActAudienceResolver;
 }

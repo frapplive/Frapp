@@ -66,6 +66,10 @@ const WRITERS = [
  */
 const CALLS = new Set([
   // Reads of the chapter's records.
+  // Who an event card can invite, by the chapter's own names (#5853).
+  'audience.options',
+  'audience.resolve',
+  'tiers.list',
   'attendance.getAttendance',
   'corpus.indexedAmong',
   'events.findByChapter',

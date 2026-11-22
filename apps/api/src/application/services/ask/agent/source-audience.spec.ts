@@ -14,6 +14,7 @@ import { join } from 'node:path';
 const AUDIENCES: Record<string, string[]> = {
   // Anyone who holds `members:view` reads the same rows.
   'tools-chapter/roster.tool.ts': ['chapter'],
+  'tools-chapter/chapter-roles.tool.ts': ['chapter'],
   // Only members who may browse backwork can open a file: nobody else.
   'tools-chapter/find-backwork.tool.ts': [],
   'tools-chapter/find-member.tool.ts': ['chapter'],

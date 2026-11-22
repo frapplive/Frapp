@@ -1,4 +1,8 @@
-import { resolveAudience, type AudienceOptions } from './act-audience';
+import {
+  resolveAudience,
+  type AudienceKind,
+  type AudienceOptions,
+} from './act-audience';
 
 const role = (id: string, name: string) => ({
   id,
@@ -13,14 +17,24 @@ const OPTIONS: AudienceOptions = {
     {
       id: 'tier-cabinet',
       name: 'Cabinet',
-      roles: [role('role-president', 'President'), role('role-historian', 'Historian')],
+      roles: [
+        role('role-president', 'President'),
+        role('role-historian', 'Historian'),
+      ],
     },
     {
       id: 'tier-chairs',
       name: 'Committee Chairs',
-      roles: [role('role-social', 'Social Chair'), role('role-risk', 'Risk Chair')],
+      roles: [
+        role('role-social', 'Social Chair'),
+        role('role-risk', 'Risk Chair'),
+      ],
     },
-    { id: 'tier-brothers', name: 'Brothers', roles: [role('role-actives', 'Actives')] },
+    {
+      id: 'tier-brothers',
+      name: 'Brothers',
+      roles: [role('role-actives', 'Actives')],
+    },
     {
       id: 'tier-new',
       name: 'New members',
@@ -31,8 +45,10 @@ const OPTIONS: AudienceOptions = {
   groups: [{ id: 'group-recruit', name: 'Recruitment Committee', members: 3 }],
 };
 
-const ids = (names: string[], kinds = ['role', 'tier', 'group'] as const) =>
-  resolveAudience(names, OPTIONS, kinds);
+const ids = (
+  names: string[],
+  kinds: readonly AudienceKind[] = ['role', 'tier', 'group'],
+) => resolveAudience(names, OPTIONS, kinds);
 
 describe('resolveAudience', () => {
   it('reads a tier, a role and a group by the names the chapter uses', () => {
@@ -46,10 +62,9 @@ describe('resolveAudience', () => {
   });
 
   it('reads a plural or a leading word as the same name', () => {
-    expect(ids(['all brothers', 'Historians']).entries.map((e) => e.id)).toEqual([
-      'tier-brothers',
-      'role-historian',
-    ]);
+    expect(
+      ids(['all brothers', 'Historians']).entries.map((e) => e.id),
+    ).toEqual(['tier-brothers', 'role-historian']);
   });
 
   it('takes the name as written first, then the role over a tier of the same name', () => {

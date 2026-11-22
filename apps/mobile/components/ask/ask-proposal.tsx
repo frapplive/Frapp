@@ -442,10 +442,15 @@ function EventFacts({
           {repeat.line}
         </Fact>
       ) : null}
-      <Fact glyph="people" styles={styles}>
-        {event.is_mandatory
-          ? ACT_COPY.everyone_required
-          : ACT_COPY.everyone_optional}
+      <Fact
+        glyph="people"
+        under={actPointsFromLine(event.attendance_from) || undefined}
+        styles={styles}
+      >
+        {event.attendance_line ??
+          (event.is_mandatory
+            ? ACT_COPY.everyone_required
+            : ACT_COPY.everyone_optional)}
       </Fact>
       {pointsField ??
         (event.point_value === null ? null : (

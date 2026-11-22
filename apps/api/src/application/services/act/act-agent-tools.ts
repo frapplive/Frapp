@@ -203,7 +203,7 @@ const FRONTS: Readonly<Record<string, Front<unknown>>> = {
   }),
   create_event: front<z.infer<typeof EventArgs>>({
     description:
-      "Prepare a card that puts one event, or a repeating series, on the chapter calendar, for the member to confirm. Use it only when the member asked for an event to be made and you have its name, day and start time; for a series, the day is its first meeting. Read chapter_roles with for_card event first, then set invite and event_type from what the event is. It changes nothing by itself.",
+      'Prepare a card that puts one event, or a repeating series, on the chapter calendar, for the member to confirm. Use it only when the member asked for an event to be made and you have its name, day and start time; for a series, the day is its first meeting. Read chapter_roles with for_card event first, then set invite and event_type from what the event is. It changes nothing by itself.',
     reading: 'Working out the event',
     input: EventArgs,
     plan: (args) => ({
@@ -272,10 +272,10 @@ export function proposalNote(outcome: ActOutcome): string {
         return 'No card was made: that is more members than one card can hold.';
       }
       if (outcome.missing === 'invitees') {
-        return 'No card was made: a name in invite is not one of the chapter\'s roles or tiers, or could be two of them. Call chapter_roles with for_card event and use its names exactly.';
+        return "No card was made: a name in invite is not one of the chapter's roles or tiers, or could be two of them. Call chapter_roles with for_card event and use its names exactly.";
       }
       if (outcome.missing === 'event_type') {
-        return 'No card was made: event_type is not one of the chapter\'s event types. Use a name chapter_roles lists, or leave event_type out.';
+        return "No card was made: event_type is not one of the chapter's event types. Use a name chapter_roles lists, or leave event_type out.";
       }
       const what = MISSING[outcome.missing];
       return what
