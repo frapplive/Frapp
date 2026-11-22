@@ -75,7 +75,7 @@ export function calendarEventFacts(
       typeof event.parent_event_id === "string" &&
       event.parent_event_id.length > 0,
     clockLabel,
-    viewLabel: `View ${eventName}${clockLabel ? `, ${clockLabel}` : ""}${isMandatory ? ", mandatory" : ""}`,
+    viewLabel: `View ${eventName}${clockLabel ? `, ${clockLabel}` : ""}${isMandatory ? ", required" : ""}`,
   };
 }
 

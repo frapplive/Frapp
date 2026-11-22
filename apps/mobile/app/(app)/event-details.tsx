@@ -7,6 +7,8 @@ import {
   checkInZoneLine,
   describeAttendance,
   EVENT_FORM_ROW_LABELS,
+  EVENT_PAGE_COPY,
+  eventPagePhase,
   statusLabel,
 } from "@repo/validation";
 import type { EventFormGlyphName } from "@repo/theme/event-form-glyphs";
@@ -32,6 +34,7 @@ import {
   usePermissionList,
   useRequiredOfViewer,
   useRoles,
+  useEventInvitees,
   useViewerUserId,
 } from "@repo/hooks";
 import { toRoleOptions } from "@repo/hooks/chapter-roles";
@@ -51,6 +54,7 @@ import {
 import { useEventEditTarget } from "@/lib/events/use-event-edit";
 import { useOneTapCheckIn } from "@/lib/events/use-one-tap-check-in";
 import { SelfCheckInLink } from "@/components/events/self-check-in-link";
+import { EventPeopleSection } from "@/components/events/event-people";
 import { BACK_TO_EVENTS, pinnedBackClearance } from "@/components/back-row";
 import { goBackTo } from "@/lib/href";
 import { useDropKeptSheetDraft } from "@/lib/kept-sheet-draft";
@@ -254,6 +258,12 @@ export default function EventDetailsScreen() {
     event.check_in_opens_minutes,
   );
   const requiredOfViewer = requiredOf(event.attendance);
+  const phase = eventPagePhase(
+    event.start_time,
+    event.end_time,
+    event.check_in_opens_minutes,
+    now.getTime(),
+  );
 
   return (
     // Around the shell, not inside it: a provider in the body would fold the
@@ -294,7 +304,7 @@ export default function EventDetailsScreen() {
             {requiredOfViewer ? (
               // The hairline kind, as the list and the chat card draw it
               // (#4132): one look for Mandatory on every screen.
-              <HairlineChip label="Mandatory" />
+              <HairlineChip label={EVENT_PAGE_COPY.required} />
             ) : null}
             {event.point_value ? (
               <AccentChip label={formatPointsChip(event.point_value)} />
@@ -302,25 +312,36 @@ export default function EventDetailsScreen() {
           </View>
         ) : null}
 
+        {/* While check-in is open it is the one thing to do, so its card
+            leads (web's sheet lifts its Check-in row the same way). */}
+        {phase === "live" ? (
+          <CheckInCard event={event} window={window} now={now} />
+        ) : null}
+
         {/* Details first, then the agenda, then attendance (Paul
             2026-11-19: "details should come first, followed by the agenda
             and the attendance"), web's event page in the same order. */}
-        <DetailsSection event={event} now={now} />
-
-        {/* The member's own part, checking in or saying they can't
-            come, reads right under the details, where web's sheet puts its
-            check-in row and excuse. */}
-        <CheckInCard event={event} window={window} now={now} />
-
-        <MyExcuse
-          eventId={event.id}
-          required={requiredOfViewer}
-          start={event.start_time}
-          end={event.end_time}
-          opensMinutes={event.check_in_opens_minutes}
+        {/* "You're required · Can't make it?" rides the Who's coming row,
+            under its headcount, as web's has it (Paul 2026-11-22). */}
+        <DetailsSection
+          event={event}
           now={now}
-          startWriting={startExcuse}
+          excuse={
+            <MyExcuse
+              eventId={event.id}
+              required={requiredOfViewer}
+              start={event.start_time}
+              end={event.end_time}
+              opensMinutes={event.check_in_opens_minutes}
+              now={now}
+              startWriting={startExcuse}
+            />
+          }
         />
+
+        {phase !== "live" ? (
+          <CheckInCard event={event} window={window} now={now} />
+        ) : null}
 
         {/* Keyed by meeting: a half-typed item, or a change still waiting
             to save, must not carry over to another occurrence opened from
@@ -349,6 +370,16 @@ export default function EventDetailsScreen() {
             canUpdateEvents={canDecideExcuses}
           />
         ) : null}
+
+        {/* Who's coming, as people, until check-in opens; then, for whoever
+            takes attendance, the roster (`eventPagePhase`, Paul
+            2026-11-22: a month out the roster had nothing to mark). */}
+        <EventPeopleSection
+          eventId={event.id}
+          audience={event.attendance}
+          phase={phase}
+          canTakeAttendance={canDecideExcuses && !eventGone}
+        />
 
         <EventMinutesRow eventId={event.id} eventName={event.name} />
 
@@ -642,13 +673,23 @@ export function EventDetailSkeleton() {
  * when I click on one"): the calendar holds the rest. Read from the cached
  * chapter events (`useEvents`), which already hold every occurrence.
  */
-function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
+function DetailsSection({
+  event,
+  now,
+  excuse,
+}: {
+  event: EventDetail;
+  now: Date;
+  /** The viewer's own "Can't make it?", under the headcount. */
+  excuse?: ReactNode;
+}) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const router = useRouter();
   const key = eventSeriesKey(event);
   const eventsQuery = useEvents({ enabled: !!key });
   const rolesQuery = useRoles();
+  const invitees = useEventInvitees(event.attendance);
   // Parsed once per payload; only the upcoming filter follows the clock.
   const rows = useMemo(
     () => selectAllEventRows(eventsQuery.data),
@@ -713,12 +754,20 @@ function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
           </DetailRow>
         ) : null}
         <DetailRow glyph="attendance" label={EVENT_FORM_ROW_LABELS.attendance}>
-          <Text style={styles.detailValue}>
-            {describeAttendance(
-              attendanceFromEvent(event.attendance),
-              roleName,
-            )}
-          </Text>
+          <View>
+            <Text style={styles.detailValue}>
+              {describeAttendance(
+                attendanceFromEvent(event.attendance),
+                roleName,
+              )}
+            </Text>
+            {invitees !== null ? (
+              <Text style={styles.detailMuted}>
+                {EVENT_PAGE_COPY.people(invitees.length)}
+              </Text>
+            ) : null}
+            {excuse}
+          </View>
         </DetailRow>
         {event.description ? (
           <DetailRow
@@ -872,6 +921,10 @@ function createStyles(tokens: SignetTokens) {
     detailValue: {
       color: tokens.color.text.foreground,
       ...typeRole(tokens.typography.role.body),
+    },
+    detailMuted: {
+      color: tokens.color.text.mutedForeground,
+      ...typeRole(tokens.typography.role.caption),
     },
     detailLink: {
       color: tokens.color.text.mutedForeground,
