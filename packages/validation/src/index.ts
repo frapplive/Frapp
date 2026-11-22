@@ -277,6 +277,7 @@ export * from "./task-suggestion-guess";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";
+export * from "./type-menu";
 // ── Upload MIME / extension allowlists + size caps (25 MB; backwork 100 MB) ──
 export {
   acceptAttribute,

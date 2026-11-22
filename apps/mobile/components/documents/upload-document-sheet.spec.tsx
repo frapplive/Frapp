@@ -42,12 +42,36 @@ const accessQuery = vi.hoisted(() => ({
   isError: false,
 }));
 
+const typesState = vi.hoisted(() => ({
+  data: [
+    {
+      id: "t-1",
+      chapter_id: "c",
+      name: "Constitution",
+      sort_order: 0,
+      created_at: "",
+    },
+    {
+      id: "t-2",
+      chapter_id: "c",
+      name: "Contract",
+      sort_order: 1,
+      created_at: "",
+    },
+  ],
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useRequestDocumentUploadUrl: () => ({ mutateAsync: vi.fn() }),
   useConfirmDocumentUpload: () => ({ mutateAsync: vi.fn() }),
   // Who can see (#5216): unread by default, so no row shows.
   useDocumentAccessOptions: () => accessQuery,
+  // Type (Paul 2026-11-22): the chapter's list, picked in the Type sheet.
+  useDocumentTypes: () => ({ data: typesState.data }),
+  usePermissionList: () => [],
+  useUpdateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/chapter-branding", () => ({
@@ -286,12 +310,49 @@ describe("UploadDocumentSheet (#3399)", () => {
 
     expect(uploadDocumentPhoto).toHaveBeenCalledWith(
       PHOTO,
-      { title: "Minutes — Aug 14", folder: "Bylaws", whoCanSee: null },
+      {
+        title: "Minutes — Aug 14",
+        folder: "Bylaws",
+        whoCanSee: null,
+        documentType: "",
+      },
       expect.any(Object),
       undefined,
     );
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(onUploaded).toHaveBeenCalledWith("Minutes — Aug 14");
+  });
+
+  it("sends the type picked in the Type sheet, a new name included (Paul 2026-11-22)", async () => {
+    const tree = render();
+    await choose(tree);
+    expect(pressable(tree, "Type: none")).toBeDefined();
+    // Picking "Contract" from the chapter's list.
+    act(() => {
+      pressable(tree, "Contract").props.onPress();
+    });
+    expect(pressable(tree, "Type: Contract")).toBeDefined();
+    // Then a name the list lacks, made with Create: held, added on upload.
+    const search = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Find or add a type" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => search.props.onChangeText("Accreditation"));
+    act(() => {
+      pressable(tree, "Create \u201cAccreditation\u201d").props.onPress();
+    });
+    expect(pressable(tree, "Type: Accreditation")).toBeDefined();
+    uploadDocumentPhoto.mockResolvedValue({ status: "uploaded", title: "" });
+
+    await pressUpload(tree);
+
+    expect(uploadDocumentPhoto).toHaveBeenCalledWith(
+      PHOTO,
+      expect.objectContaining({ documentType: "Accreditation" }),
+      expect.any(Object),
+      undefined,
+    );
   });
 
   it("starts on s12's folder, and None files at the root", async () => {
@@ -305,7 +366,7 @@ describe("UploadDocumentSheet (#3399)", () => {
     await pressUpload(tree);
     expect(uploadDocumentPhoto).toHaveBeenLastCalledWith(
       PHOTO,
-      { title: "", folder: "Minutes", whoCanSee: null },
+      { title: "", folder: "Minutes", whoCanSee: null, documentType: "" },
       expect.any(Object),
       undefined,
     );
@@ -319,7 +380,7 @@ describe("UploadDocumentSheet (#3399)", () => {
     await pressUpload(tree);
     expect(uploadDocumentPhoto).toHaveBeenLastCalledWith(
       PHOTO,
-      { title: "", folder: null, whoCanSee: null },
+      { title: "", folder: null, whoCanSee: null, documentType: "" },
       expect.any(Object),
       undefined,
     );
@@ -433,7 +494,12 @@ describe("UploadDocumentSheet (#3399)", () => {
     await pressUpload(tree);
     expect(uploadDocumentPhoto).toHaveBeenCalledWith(
       PHOTO,
-      { title: "Minutes — Aug 14", folder: "Bylaws", whoCanSee: null },
+      {
+        title: "Minutes — Aug 14",
+        folder: "Bylaws",
+        whoCanSee: null,
+        documentType: "",
+      },
       expect.any(Object),
       undefined,
     );
@@ -1078,7 +1144,7 @@ describe("UploadDocumentSheet (#3399)", () => {
     await pressUpload(tree);
     expect(uploadDocumentPhoto).toHaveBeenLastCalledWith(
       PHOTO,
-      { title: "Minutes", folder: null, whoCanSee: null },
+      { title: "Minutes", folder: null, whoCanSee: null, documentType: "" },
       expect.any(Object),
       expect.objectContaining({ title: "Minutes", folder: null }),
     );
@@ -1337,7 +1403,7 @@ describe("UploadDocumentSheet with Files (#3401)", () => {
     await pressUpload(tree);
     expect(uploadDocumentPhoto).toHaveBeenCalledWith(
       PDF,
-      { title: "", folder: null, whoCanSee: null },
+      { title: "", folder: null, whoCanSee: null, documentType: "" },
       expect.anything(),
       undefined,
     );
@@ -1506,7 +1572,7 @@ describe("UploadDocumentSheet who can see (#5216)", () => {
 
     expect(uploadDocumentPhoto).toHaveBeenCalledWith(
       PHOTO,
-      { title: "", folder: null, whoCanSee: ["tier:t-exec"] },
+      { title: "", folder: null, whoCanSee: ["tier:t-exec"], documentType: "" },
       expect.any(Object),
       undefined,
     );

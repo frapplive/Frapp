@@ -55,7 +55,7 @@ const {
   // The chapter's document types (#3642). Unread by default, so the panel
   // falls back to the common types plus the library's own, as before.
   typesQuery: { data: undefined as unknown[] | undefined, isSuccess: false },
-  // Whether the viewer also holds `chapter_docs:manage` ("Edit types").
+  // Whether the viewer also holds `chapter_docs:manage` (editing types).
   manageGate: { granted: false },
   stars: {
     value: { folder_ids: [] as string[], document_ids: [] as string[] },
@@ -766,6 +766,16 @@ describe("DocumentsPage upload metadata", () => {
     return file;
   };
 
+  /** The Type field, by its value: "Type: Bylaws", or "Type: none". */
+  const typeField = (dialog: HTMLElement) =>
+    within(dialog).getByRole("button", { name: /^Type: / });
+  const expectType = (dialog: HTMLElement, name: string) =>
+    expect(typeField(dialog)).toHaveAccessibleName(`Type: ${name}`);
+  const pickType = async (dialog: HTMLElement, name: string) => {
+    await userEvent.click(typeField(dialog));
+    await userEvent.click(await screen.findByRole("option", { name }));
+  };
+
   it("offers the chapter's own types once they load (#3642)", async () => {
     typesQuery.data = [
       { id: "t-1", chapter_id: "chap-1", name: "By-Laws", sort_order: 1, created_at: "" },
@@ -780,32 +790,42 @@ describe("DocumentsPage upload metadata", () => {
 
     // The file name's guess lands on the chapter's spelling, and the seeded
     // defaults the chapter deleted are gone.
-    expect(within(dialog).getByRole("button", { name: "By-Laws" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(dialog).getByRole("button", { name: "Contract" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: "Minutes" })).toBeNull();
+    expectType(dialog, "By-Laws");
+    await userEvent.click(typeField(dialog));
+    expect(await screen.findByRole("option", { name: "Contract" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Minutes" })).toBeNull();
     // Editing the list is for document managers only.
-    expect(within(dialog).queryByRole("button", { name: /edit types/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Contract" })).toBeNull();
   });
 
-  it("shows Edit types to a document manager", async () => {
+  it("holds a type typed with Create and sends it with the upload", async () => {
     typesQuery.data = [
       { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
     ];
     typesQuery.isSuccess = true;
-    manageGate.granted = true;
     render(<DocumentsPage />);
     await userEvent.click(uploadTrigger());
-
     const dialog = screen.getByRole("dialog");
-    await userEvent.click(within(dialog).getByRole("button", { name: /edit types/i }));
-    expect(await screen.findByText("Document types")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rename Bylaws" })).toBeInTheDocument();
+    pickFile(dialog, "fsl-program.pdf");
+
+    await userEvent.click(typeField(dialog));
+    await userEvent.type(
+      screen.getByPlaceholderText("Find or add a type"),
+      "Accreditation",
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "Create “Accreditation”" }),
+    );
+    expectType(dialog, "Accreditation");
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
+    await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
+    expect(mockConfirmUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ document_type: "Accreditation" }),
+    );
   });
 
-  it("renames a type from Edit types without starting an upload", async () => {
+  it("edits a type from its row in the Type menu, for a document manager", async () => {
     typesQuery.data = [
       { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
     ];
@@ -816,8 +836,8 @@ describe("DocumentsPage upload metadata", () => {
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "bylaws.pdf");
 
-    await userEvent.click(within(dialog).getByRole("button", { name: /edit types/i }));
-    await userEvent.click(await screen.findByRole("button", { name: "Rename Bylaws" }));
+    await userEvent.click(typeField(dialog));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Bylaws" }));
     const name = screen.getByLabelText("Name");
     await userEvent.clear(name);
     await userEvent.type(name, "  Constitution {Enter}");
@@ -825,9 +845,11 @@ describe("DocumentsPage upload metadata", () => {
     await waitFor(() =>
       expect(mockUpdateType).toHaveBeenCalledWith({ id: "t-1", name: "Constitution" }),
     );
-    // The inline form's submit stays inside the popover (it's portalled, but
-    // React bubbles it up to the upload form around the trigger).
+    // The edit view's submit stays inside the menu (it's portalled, but React
+    // bubbles it up to the upload form around the trigger).
     expect(mockRequestUpload).not.toHaveBeenCalled();
+    // The upload follows its type's new name.
+    await waitFor(() => expectType(dialog, "Constitution"));
   });
 
   it("lets go of a picked type that left the list rather than re-adding it", async () => {
@@ -840,10 +862,7 @@ describe("DocumentsPage upload metadata", () => {
     await userEvent.click(uploadTrigger());
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "bylaws.pdf");
-    expect(within(dialog).getByRole("button", { name: "Bylaws" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expectType(dialog, "Bylaws");
 
     // An officer renames Bylaws elsewhere; the list refetches.
     typesQuery.data = [
@@ -852,15 +871,7 @@ describe("DocumentsPage upload metadata", () => {
     ];
     rerender(<DocumentsPage />);
 
-    await waitFor(() =>
-      expect(within(dialog).queryByLabelText("New type name")).toBeNull(),
-    );
-    for (const chip of ["Constitution", "Minutes"]) {
-      expect(within(dialog).getByRole("button", { name: chip })).toHaveAttribute(
-        "aria-pressed",
-        "false",
-      );
-    }
+    await waitFor(() => expectType(dialog, "none"));
   });
 
   it("fills title and type from the file name and sends them with the date", async () => {
@@ -873,10 +884,7 @@ describe("DocumentsPage upload metadata", () => {
     expect(within(dialog).getByLabelText(/title/i)).toHaveValue(
       "Fall 2026 bylaws revision",
     );
-    expect(within(dialog).getByRole("button", { name: "Bylaws" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expectType(dialog, "Bylaws");
 
     fireEvent.change(within(dialog).getByLabelText(/effective date/i), {
       target: { value: "2026-01-01" },
@@ -988,15 +996,12 @@ describe("DocumentsPage upload metadata", () => {
     const title = within(dialog).getByLabelText(/title/i);
     await userEvent.clear(title);
     await userEvent.type(title, "Exec minutes, Oct 12");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Policy" }));
+    await pickType(dialog, "Policy");
 
     pickFile(dialog, "budget-final.pdf");
 
     expect(title).toHaveValue("Exec minutes, Oct 12");
-    expect(within(dialog).getByRole("button", { name: "Policy" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expectType(dialog, "Policy");
   });
 
   it("files a fresh upload into the folder on screen", async () => {
@@ -1042,7 +1047,7 @@ describe("DocumentsPage upload metadata", () => {
 
     const dialog = screen.getByRole("dialog");
     pickFile(dialog, "finance-committee-minutes.pdf");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Budget" }));
+    await pickType(dialog, "Budget");
     await userEvent.click(within(dialog).getByRole("button", { name: /^upload$/i }));
 
     await waitFor(() => expect(mockConfirmUpload).toHaveBeenCalledTimes(1));
@@ -1065,10 +1070,7 @@ describe("DocumentsPage upload metadata", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("chapter-budget.pdf")).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/title/i)).toHaveValue("Chapter budget");
-    expect(within(dialog).getByRole("button", { name: "Budget" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expectType(dialog, "Budget");
   });
 
   const uploadPdf = async (name: string) => {

@@ -285,6 +285,10 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   with three or more buttons, or a bottom sheet of actions. A chat message's long-press sheet with its
   reaction row is the one exception. Lint catches only a hand-drawn ⋯ icon or a `ui/context-menu`
   import on web, and `ActionSheetIOS` or an inline Alert of three or more buttons on the phone; the rest of this rule is checked in review.
+- **A chapter's own list of types** (event types, document types) is one Type menu on both apps: find,
+  `Create “…”`, and each type's edit view (pencil on its row) inside the menu that applies it. Never a chip
+  row, a separate "Edit types" popover, or an explainer header over the list (Paul, 11-22: "yo what is
+  this?"; [`components.md` § Type menu](../../../spec/ui/design-system/components.md#type-menu-a-chapters-own-list-of-types)).
 - **Settings:** web `SettingsGroup` and `SettingsRow` (`components/shared/settings-row.tsx`), phone
   `ListSection` and `ListRow`. A row is a label, at most one muted line, and one trailing thing: a switch,
   a value that opens the picker, or a chevron. **Settings save on their own** (Paul's pick, 11-20): a
