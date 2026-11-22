@@ -9964,11 +9964,11 @@ export interface components {
             audience_tier_id?: string;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. */
             followed_by?: string;
-            /** @description Due date (YYYY-MM-DD) */
-            due_date: string;
+            /** @description Due date (YYYY-MM-DD). Omit, or send null, for a task with no due date (#5761): it is never overdue, gets no due reminders and can't repeat. */
+            due_date?: string | null;
             /**
              * Format: date-time
-             * @description The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it. Omit for a task due on `due_date` with no time.
+             * @description The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it, so it needs a `due_date`. Omit for a task due on `due_date` with no time.
              */
             due_at?: string;
             /** @description Subtasks, in order: a checklist of steps the assignee ticks off (#4003). Blank lines are dropped. */
@@ -10018,8 +10018,11 @@ export interface components {
             assignee_id: string;
             /** Format: uuid */
             created_by: string;
-            /** Format: date */
-            due_date: string;
+            /**
+             * Format: date
+             * @description Null for a task with no due date (#5761).
+             */
+            due_date: string | null;
             /** Format: date-time */
             due_at: string | null;
             /** @enum {string} */
@@ -10103,8 +10106,8 @@ export interface components {
             description?: string | null;
             /** @description User ID of the new assignee. A new assignee starts the task over: it goes back to To do and they are notified. */
             assignee_id?: string;
-            /** @description Due date (YYYY-MM-DD) */
-            due_date?: string;
+            /** @description Due date (YYYY-MM-DD), or null to take it off (#5761), which takes the time off too. A copy of a repeating task keeps its day. */
+            due_date?: string | null;
             /**
              * Format: date-time
              * @description The moment the task is due, or null to take its time off. Send it with `due_date`: the pair must agree, as on create.
@@ -11378,9 +11381,10 @@ export interface components {
             title: string;
             /**
              * Format: date
+             * @description Null for a task with no due date (#5761).
              * @example 2026-11-20
              */
-            due_date: string;
+            due_date: string | null;
             /**
              * Format: date-time
              * @description The moment it is due, when it has a time of day.
@@ -11473,9 +11477,10 @@ export interface components {
             description: string | null;
             /**
              * Format: date
+             * @description Null for a task with no due date (#5761).
              * @example 2026-11-20
              */
-            due_date: string;
+            due_date: string | null;
             /**
              * Format: date-time
              * @description The moment it is due, when it has a time of day.

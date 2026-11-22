@@ -21,9 +21,12 @@ export function suggestionEdits(
   if (!sameTaskWho(form.who, taskWhoOf(task))) {
     Object.assign(edits, taskWhoSuggestionFields(form.who));
   }
+  // No due date (#5761) leaves `due_date` off the form; it is sent as null,
+  // which the accept route reads as taking the suggestion's day off.
+  const dueDate = form.due_date ?? null;
   const dueAt = form.due_at ?? null;
-  if (form.due_date !== task.due_date || dueAt !== task.due_at) {
-    edits.due_date = form.due_date;
+  if (dueDate !== (task.due_date ?? null) || dueAt !== (task.due_at ?? null)) {
+    edits.due_date = dueDate;
     edits.due_at = dueAt;
   }
   const steps = form.subtasks ?? [];

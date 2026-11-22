@@ -428,9 +428,9 @@ const viewSwitch = () =>
 
 /** Which view the header's switch is on. */
 const viewOn = (name: "My tasks" | "Everyone's") =>
-  within(viewSwitch()!).getByRole("radio", { name }).getAttribute(
-    "aria-checked",
-  ) === "true";
+  within(viewSwitch()!)
+    .getByRole("radio", { name })
+    .getAttribute("aria-checked") === "true";
 
 /**
  * An officer opens on My tasks (#5578); the chapter's board is Everyone's,
@@ -452,7 +452,9 @@ const rowOf = (name: string) =>
 async function pickView(name: string) {
   await userEvent.click(filterButton());
   await userEvent.click(
-    await screen.findByRole("menuitem", { name: new RegExp(`^${rowOf(name)}`) }),
+    await screen.findByRole("menuitem", {
+      name: new RegExp(`^${rowOf(name)}`),
+    }),
   );
   await userEvent.click(await screen.findByRole("menuitemradio", { name }));
 }
@@ -461,7 +463,9 @@ async function pickView(name: string) {
 async function viewChecked(name: string): Promise<boolean> {
   await userEvent.click(filterButton());
   await userEvent.click(
-    await screen.findByRole("menuitem", { name: new RegExp(`^${rowOf(name)}`) }),
+    await screen.findByRole("menuitem", {
+      name: new RegExp(`^${rowOf(name)}`),
+    }),
   );
   const item = await screen.findByRole("menuitemradio", { name });
   const checked = item.getAttribute("aria-checked") === "true";
@@ -507,9 +511,7 @@ describe("TasksBoard suggested tasks (#4313)", () => {
       ).toBeNull();
       // The skeleton stands in for the whole board: no header actions, no
       // groups, until both reads have answered.
-      expect(
-        screen.queryByRole("button", { name: /^new task$/i }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^new task$/i })).toBeNull();
       expect(screen.queryByRole("region", { name: "To do" })).toBeNull();
     } finally {
       suggestionsPending.current = false;
@@ -1261,7 +1263,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
     expect(titleField()).toHaveValue("Order pizza");
   });
 
-  it("flags who and a due date on Enter, and sends nothing", async () => {
+  it("flags who on Enter, and sends nothing", async () => {
     render(<TasksBoard />);
     await showEveryones();
 
@@ -1270,7 +1272,8 @@ describe("TasksBoard quick add (2026-11-18)", () => {
     expect(createTaskMutate).not.toHaveBeenCalled();
     const alert = within(addForm()).getByRole("alert");
     expect(alert).toHaveTextContent("Pick who it's for.");
-    expect(alert).toHaveTextContent(/pick a due date/i);
+    // A task can have no due date (#5761).
+    expect(alert).not.toHaveTextContent(/due date/i);
     expect(
       within(addForm()).getByRole("button", { name: /^who/i }),
     ).toHaveFocus();
@@ -1427,17 +1430,20 @@ describe("TasksBoard quick add (2026-11-18)", () => {
     expect(sent.due_date).toBe(`${new Date().getFullYear()}-12-31`);
   });
 
-  it("focuses the due field when it is the one thing missing", async () => {
+  it("creates a task with no due date when Due is left empty (#5761)", async () => {
     render(<TasksBoard />);
     await showEveryones();
     await pickWho(/Cole Martin/);
     await userEvent.type(titleField(), "Order pizza{Enter}");
 
-    expect(await within(addForm()).findByRole("alert")).toHaveTextContent(
-      /pick a due date/i,
-    );
-    expect(screen.getByLabelText("Due date")).toHaveFocus();
-    expect(createTaskMutate).not.toHaveBeenCalled();
+    await waitFor(() => expect(createTaskMutate).toHaveBeenCalledTimes(1));
+    expect(createTaskMutate.mock.calls[0]![0]).toEqual({
+      title: "Order pizza",
+      description: undefined,
+      assignee_id: "u-other",
+      point_reward: undefined,
+    });
+    expect(within(addForm()).queryByRole("alert")).toBeNull();
   });
 
   it("keeps what was typed when the create fails", async () => {
@@ -1649,6 +1655,25 @@ describe("TasksBoard editing a task (#4296)", () => {
       }),
     );
     expect(within(panel).queryByLabelText("Title")).toBeNull();
+  });
+
+  it("takes the due date off when the Due field is emptied (#5761)", async () => {
+    const user = userEvent.setup();
+    render(<TasksBoard />);
+
+    const panel = await openPanel(user, "Sweep the chapter room");
+    await user.click(within(panel).getByRole("button", { name: /^Due: / }));
+    const due = within(panel).getByLabelText("Due date");
+    expect(due).toHaveAttribute("placeholder", "No due date");
+    await user.clear(due);
+    await user.click(within(panel).getByText("Changes save as you make them."));
+
+    await waitFor(() =>
+      expect(updateTaskMutate).toHaveBeenCalledWith({
+        id: "task-todo",
+        body: { due_date: null, due_at: null },
+      }),
+    );
   });
 
   it("saves points on their own when the field loses focus", async () => {
@@ -2016,7 +2041,9 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     expect(viewSwitch()).toBeNull();
     await userEvent.click(filterButton());
     expect(screen.queryByRole("menuitem", { name: /^Assignee/ })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: /^Layout/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /^Layout/ }),
+    ).toBeInTheDocument();
   });
 
   /** Picks a filter's value in the Filter menu (#5578). */
@@ -2042,6 +2069,34 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     await userEvent.keyboard("{Escape}{Escape}");
     return values;
   }
+
+  it("puts a task with no due date under No due date, after Later (#5761)", () => {
+    permissionsRef.current = ["members:view"];
+    tasksRef.current = [
+      ...ROWS.filter((row) => row.assignee_id === ME),
+      task("someday", "Write the chapter history", ME, 0, "TODO", {
+        due_date: null,
+      }),
+    ];
+    render(<TasksBoard />);
+
+    expect(titlesIn("No due date")).toEqual(["Write the chapter history"]);
+    expect(titlesIn("Later")).toEqual(["Plan formal"]);
+    const headings = screen
+      .getAllByRole("region")
+      .map((section) => section.getAttribute("aria-labelledby"));
+    expect(headings.indexOf("tasks-column-none")).toBeGreaterThan(
+      headings.indexOf("tasks-column-later"),
+    );
+  });
+
+  it("draws no No due date group when every task has a date (#5761)", () => {
+    permissionsRef.current = ["members:view"];
+    tasksRef.current = ROWS.filter((row) => row.assignee_id === ME);
+    render(<TasksBoard />);
+
+    expect(screen.queryByRole("region", { name: "No due date" })).toBeNull();
+  });
 
   it("opens an officer on My tasks, with no switch or chips over it, and Everyone's is the chapter's board (#5578)", async () => {
     render(<TasksBoard />);
@@ -2112,7 +2167,9 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
 
     // Clear all is in the Filter menu too.
     await user.click(filterButton());
-    await user.click(await screen.findByRole("menuitem", { name: "Clear all" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Clear all" }),
+    );
     await pickFilter("Due", "Due today");
     expect(titlesIn("To do")).toEqual(["Sweep the chapter room"]);
     expect(titlesIn("Overdue")).toEqual([]);
@@ -2184,9 +2241,7 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     expect(screen.getAllByText("From Exec board").length).toBeGreaterThan(0);
     // The chapter's filters and grouping stay an officer's.
     await user.click(filterButton());
-    expect(
-      screen.queryByRole("menuitem", { name: /^Assignee/ }),
-    ).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^Assignee/ })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /^Group/ })).toBeNull();
   });
 
@@ -2286,7 +2341,9 @@ describe("TasksBoard repeating tasks (#5119)", () => {
 
   it("says on the tile how it repeats and when it comes next", () => {
     render(<TasksBoard />);
-    expect(screen.getByText("Every Monday · next November 23")).toBeInTheDocument();
+    expect(
+      screen.getByText("Every Monday · next November 23"),
+    ).toBeInTheDocument();
   });
 
   it("says nothing once the series has ended", () => {
@@ -2492,7 +2549,9 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     const tier = screen
       .getAllByRole("listitem")
       .find((item) => item.textContent?.includes("Plan the retreat"))!;
-    expect(within(tier).getByText("Everyone in Exec board")).toBeInTheDocument();
+    expect(
+      within(tier).getByText("Everyone in Exec board"),
+    ).toBeInTheDocument();
     // A task of their own alone is unchanged: their face, no audience.
     const own = screen
       .getAllByRole("listitem")
@@ -2511,12 +2570,16 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
 
     // Its panel keeps Who as the viewer and says who it's for.
     await user.click(
-      within(everyone).getByRole("button", { name: "Fill out the tabling form" }),
+      within(everyone).getByRole("button", {
+        name: "Fill out the tabling form",
+      }),
     );
     const panel = await screen.findByRole("dialog", {
       name: "Fill out the tabling form",
     });
-    expect(within(panel).getByText("Everyone · 14 of 20 done")).toBeInTheDocument();
+    expect(
+      within(panel).getByText("Everyone · 14 of 20 done"),
+    ).toBeInTheDocument();
   });
 
   it("says who a copy went to on a My tasks Grid card too (#5699)", () => {

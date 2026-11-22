@@ -52,7 +52,9 @@ import {
 import { useWhoDirectory, WhoPicker } from "./who-picker";
 
 /** "Due Saturday", as the posting's row and its claim toast say it. */
-function dueWords(posting: Pick<OpenTask, "due_date" | "due_at">): string | null {
+function dueWords(
+  posting: Pick<OpenTask, "due_date" | "due_at">,
+): string | null {
   return taskDueLine(posting.due_at ?? posting.due_date, "TODO")?.text ?? null;
 }
 
@@ -86,7 +88,10 @@ export function UpForGrabs({
   async function giveBack(taskId: string, title: string) {
     try {
       await release.mutateAsync(taskId);
-      toast({ title: "Given back", description: `${title} is up for grabs again.` });
+      toast({
+        title: "Given back",
+        description: `${title} is up for grabs again.`,
+      });
     } catch (error) {
       toastFailure({
         title: "Couldn't give it back",
@@ -98,7 +103,8 @@ export function UpForGrabs({
 
   async function claimIt(posting: OpenTask) {
     try {
-      const task = (await claim.mutateAsync(posting.id)) as { id?: string } | undefined;
+      const task = (await claim.mutateAsync(posting.id)) as
+        { id?: string } | undefined;
       const due = dueWords(posting);
       toast({
         title: due ? `It's yours. ${due}.` : "It's yours.",
@@ -121,7 +127,11 @@ export function UpForGrabs({
         });
         return;
       }
-      toastFailure({ title: "Couldn't claim it", error, fallback: "Retry in a moment." });
+      toastFailure({
+        title: "Couldn't claim it",
+        error,
+        fallback: "Retry in a moment.",
+      });
     }
   }
 
@@ -141,7 +151,11 @@ export function UpForGrabs({
         });
         return;
       }
-      toastFailure({ title: "Couldn't assign it", error, fallback: "Retry in a moment." });
+      toastFailure({
+        title: "Couldn't assign it",
+        error,
+        fallback: "Retry in a moment.",
+      });
     }
   }
 
@@ -149,7 +163,12 @@ export function UpForGrabs({
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         Couldn&apos;t load what&apos;s up for grabs.
-        <Button type="button" size="toolbar" variant="ghost" onClick={() => void query.refetch()}>
+        <Button
+          type="button"
+          size="toolbar"
+          variant="ghost"
+          onClick={() => void query.refetch()}
+        >
           Try again
         </Button>
       </p>
@@ -167,7 +186,9 @@ export function UpForGrabs({
           const due = dueWords(posting);
           const names =
             posting.scope === "people"
-              ? (posting.scope_user_ids ?? []).map((id) => personName(id, directory))
+              ? (posting.scope_user_ids ?? []).map((id) =>
+                  personName(id, directory),
+                )
               : undefined;
           const scope = openTaskScopeLabel(posting, names);
           // The title over who may claim it and when it's due, so the row
@@ -203,7 +224,9 @@ export function UpForGrabs({
                   {titleBlock}
                 </button>
               ) : (
-                <span className="flex min-w-0 flex-1 items-center">{titleBlock}</span>
+                <span className="flex min-w-0 flex-1 items-center">
+                  {titleBlock}
+                </span>
               )}
               <PointsTag points={posting.point_reward} />
               {posting.viewer_can_claim ? (
@@ -225,7 +248,8 @@ export function UpForGrabs({
                   label={`Assign ${posting.title}`}
                   value={null}
                   onChange={(next) => {
-                    if (next?.kind === "person") void assignIt(posting, next.userId);
+                    if (next?.kind === "person")
+                      void assignIt(posting, next.userId);
                   }}
                   align="end"
                   trigger={
@@ -272,7 +296,12 @@ export function OpenTaskPanel({
     >
       {posting ? (
         <PanelContent aria-describedby={undefined}>
-          <OpenTaskPanelInner key={posting.id} posting={posting} gate={gate} onClose={onClose} />
+          <OpenTaskPanelInner
+            key={posting.id}
+            posting={posting}
+            gate={gate}
+            onClose={onClose}
+          />
         </PanelContent>
       ) : null}
     </Panel>
@@ -315,7 +344,11 @@ function OpenTaskPanelInner({
         onClose();
         return false;
       }
-      toastFailure({ title: "Couldn't save it", error, fallback: "Retry in a moment." });
+      toastFailure({
+        title: "Couldn't save it",
+        error,
+        fallback: "Retry in a moment.",
+      });
       return false;
     } finally {
       setSaving(false);
@@ -335,7 +368,11 @@ function OpenTaskPanelInner({
       toast({ title: "Taken down", description: posting.title });
       onClose();
     } catch (error) {
-      toastFailure({ title: "Couldn't take it down", error, fallback: "Retry in a moment." });
+      toastFailure({
+        title: "Couldn't take it down",
+        error,
+        fallback: "Retry in a moment.",
+      });
     }
   }
 
@@ -363,15 +400,30 @@ function OpenTaskPanelInner({
       </PanelHeader>
       <PanelBody>
         <div className="grid gap-5">
-          <TitleField task={posting} editable={editable} onSave={(title) => save({ title })} />
+          <TitleField
+            task={posting}
+            editable={editable}
+            onSave={(title) => save({ title })}
+          />
           <p className="text-sm text-muted-foreground">
-            {TASK_AUDIENCE_COPY.upForGrabs} · {openTaskScopeLabel(posting, names)} ·{" "}
+            {TASK_AUDIENCE_COPY.upForGrabs} ·{" "}
+            {openTaskScopeLabel(posting, names)} ·{" "}
             {posting.eligible_count === 1
               ? "1 member can claim it"
               : `${posting.eligible_count} members can claim it`}
           </p>
           <dl className="grid gap-1">
-            <DueRow task={posting} editable={editable} onSave={(body) => save(body)} />
+            <DueRow
+              task={posting}
+              editable={editable}
+              // A task up for grabs keeps a due date: whoever claims it gets it by then.
+              canClear={false}
+              onSave={({ due_date, due_at }) =>
+                due_date === null
+                  ? Promise.resolve(false)
+                  : save({ due_date, due_at })
+              }
+            />
             <PointsRow
               task={posting}
               editable={editable}
@@ -388,7 +440,9 @@ function OpenTaskPanelInner({
                       label: TASK_PROOF_KIND_LABELS[kind],
                     }))}
                     value={posting.proof_kind}
-                    onChange={(proof_kind: TaskProofKind) => void save({ proof_kind })}
+                    onChange={(proof_kind: TaskProofKind) =>
+                      void save({ proof_kind })
+                    }
                     dense
                   />
                   <span className="text-caption text-muted-foreground">
@@ -396,7 +450,9 @@ function OpenTaskPanelInner({
                   </span>
                 </div>
               ) : (
-                <StaticValue>{TASK_PROOF_KIND_LABELS[posting.proof_kind]}</StaticValue>
+                <StaticValue>
+                  {TASK_PROOF_KIND_LABELS[posting.proof_kind]}
+                </StaticValue>
               )}
             </FieldRow>
             <NotesRow
@@ -404,7 +460,9 @@ function OpenTaskPanelInner({
               editable={editable}
               onSave={(description) => save({ description })}
             />
-            {posting.meeting_id ? <FromMinutesRow meetingId={posting.meeting_id} /> : null}
+            {posting.meeting_id ? (
+              <FromMinutesRow meetingId={posting.meeting_id} />
+            ) : null}
             {posting.subtask_titles.length > 0 ? (
               <FieldRow label="Steps" alignTop>
                 <ul className="grid gap-1 px-2 py-1.5 text-sm text-foreground">
@@ -415,7 +473,10 @@ function OpenTaskPanelInner({
               </FieldRow>
             ) : null}
           </dl>
-          <p className="h-5 text-caption text-muted-foreground" aria-live="polite">
+          <p
+            className="h-5 text-caption text-muted-foreground"
+            aria-live="polite"
+          >
             {saving ? "Saving…" : "Changes save as you make them."}
           </p>
         </div>
