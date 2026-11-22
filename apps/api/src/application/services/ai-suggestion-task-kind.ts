@@ -229,11 +229,6 @@ function toPayload(task: TaskSuggestionPayload): AiSuggestionPayload {
   return { ...task };
 }
 
-/**
- * The task the chapter already has that an accept says this suggestion is
- * (#5562, "Already a task"), or null when the accept makes a new one. Only an
- * officer's accept sets it, never a proposal.
- */
 /** What the change log compares for a suggested task (Paul, 2026-11-22). */
 const TASK_CHANGE_FIELDS: ChangeFieldSpec = {
   title: 'text',
@@ -271,6 +266,11 @@ export function taskChangeView(payload: AiSuggestionPayload): ChangeView {
   };
 }
 
+/**
+ * The task the chapter already has that an accept says this suggestion is
+ * (#5562, "Already a task"), or null when the accept makes a new one. Only an
+ * officer's accept sets it, never a proposal.
+ */
 function existingTaskIdOf(payload: AiSuggestionPayload): string | null {
   return uuidOrNull(payload.existing_task_id);
 }

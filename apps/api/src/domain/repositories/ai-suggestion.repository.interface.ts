@@ -26,6 +26,7 @@ export type NewAiSuggestion = Pick<
   dedupe_key?: string | null;
   ask_id?: string | null;
   request_sealed?: string | null;
+  drew_on_chat?: boolean;
 };
 
 /** A change log row as written; `decided_at` defaults to now. */
@@ -190,7 +191,8 @@ export interface IAiSuggestionRepository {
 
   /**
    * Deletes every change log row a person decided or that was made for
-   * them, in every chapter: they said No on the AI sheet.
+   * them, in every chapter, and empties the sealed question on their
+   * waiting cards: they said No on the AI sheet. Returns how many rows went.
    */
   deleteChangesForUser(userId: string): Promise<number>;
 

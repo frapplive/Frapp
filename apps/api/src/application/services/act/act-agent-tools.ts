@@ -281,6 +281,7 @@ class ActProposeTool implements AgentProposeTool {
         ...(context.question === undefined
           ? {}
           : { question: context.question }),
+        ...(context.readChat?.() ? { drewOnChat: true } : {}),
       },
       this.name,
       { action: this.name, ...this.plan(args) },

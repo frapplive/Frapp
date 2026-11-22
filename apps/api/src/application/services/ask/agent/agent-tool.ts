@@ -62,6 +62,12 @@ export interface AgentToolContext {
    * for the change log (Paul, 2026-11-22). No read tool uses it.
    */
   question?: string;
+  /**
+   * Whether this turn has read channel messages so far, for a propose tool
+   * to mark its card: a card drawn from chat keeps no words in the change
+   * log (Paul, 2026-11-22).
+   */
+  readChat?: () => boolean;
 }
 
 /**

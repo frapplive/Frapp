@@ -323,9 +323,7 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
 
   async recordChanges(rows: readonly NewAiSuggestionChange[]): Promise<void> {
     if (rows.length === 0) return;
-    const inserts: TablesInsert<'ai_suggestion_changes'>[] = rows.map(
-      (row) => ({ ...row }),
-    );
+    const inserts: readonly TablesInsert<'ai_suggestion_changes'>[] = rows;
     const { error } = await this.supabase
       .from('ai_suggestion_changes')
       .upsert(inserts, {
@@ -345,6 +343,14 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
     ) {
       throw new Error('deleteChangesForUser: not a user id');
     }
+    // Their question waiting sealed on a card first, so a failure after it
+    // is retried with nothing of theirs left behind.
+    const dropped = await this.supabase
+      .from('ai_suggestions')
+      .update({ request_sealed: null })
+      .eq('requested_for', userId)
+      .not('request_sealed', 'is', null);
+    if (dropped.error) throw new SupabaseQueryError(dropped.error);
     const { data, error } = await this.supabase
       .from('ai_suggestion_changes')
       .delete()

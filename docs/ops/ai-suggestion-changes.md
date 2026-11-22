@@ -4,19 +4,19 @@ How the Frapp team sees what members change when they confirm, edit or dismiss a
 
 ## What is kept
 
-One row of `ai_suggestion_changes` per suggestion decided or expired, written by `AiSuggestionChangeLogService` when the suggestion service accepts, dismisses or expires one. Today that covers every row of `ai_suggestions`: Ask's event, task and points cards, tasks suggested from minutes, and "this time last year" events (decision and card-or-form only).
+One row of `ai_suggestion_changes` per suggestion decided or expired, written by `AiSuggestionChangeLogService` when the suggestion service accepts, dismisses (sending a minutes task to the next agenda counts) or expires one. Today that covers every row of `ai_suggestions`: Ask's event, task and points cards, tasks suggested from minutes, and "this time last year" events (decision only, always `via = 'form'`).
 
 | Column         | Holds                                                                                                                                                                                                                                                                                           |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `decision`     | `accepted`, `dismissed` or `expired`                                                                                                                                                                                                                                                            |
 | `via`          | On an accept: `card` (as shown, or with the card's own fields) or `form` (made in the full form the card's Edit opened)                                                                                                                                                                         |
 | `fields`       | Field by field: `verdict` (`kept`, `changed`, `added`, `removed`), and for fields that are not free text the `proposed` and `saved` values as ids, numbers and booleans, with `delta_minutes` for a moment or a day. A text field has its verdict only. A field empty on both sides is left out |
-| `ask_id`       | The Ask turn that made the card, the `id` of its row in `ai_ask_traces` ([`ask-answer-quality.md`](ask-answer-quality.md)), while that trace is kept                                                                                                                                            |
-| `words_sealed` | The member's question, the proposed text and the saved text, sealed with `AI_STORED_TEXT_KEY`, only when the member who decided has Frapp AI on. Null without the key                                                                                                                           |
+| `ask_id`       | The Ask turn that made the card, the `id` of its row in `ai_ask_traces` ([`ask-answer-quality.md`](ask-answer-quality.md)), while that trace is kept. Null for a card from the older request lane (`ASK_AGENT` off), which keeps no trace                                                       |
+| `words_sealed` | The member's question, the proposed text and the saved text, sealed with `AI_STORED_TEXT_KEY`, only when the member who decided has Frapp AI on. Null without the key, and for a card drawn from chat (`ai_suggestions.drew_on_chat`, or a channel source)                                      |
 
 The fields each kind compares are its handler's `changeLog` (`ai-suggestion-*-kind.ts`). A new event is always compared with the event as saved, read back, so who it invites is in the row even when it was set in the form.
 
-A row is deleted after 90 days (the hourly suggestion sweep), when the member who decided leaves the chapter or deletes their account, when the member who decided or the member it was made for answers No on the AI sheet, and with the chapter.
+A row is deleted after 90 days (the hourly suggestion sweep), when the member who decided or the member it was made for leaves the chapter, deletes their account or answers No on the AI sheet (a trigger on `members` and the consent listener), and with the chapter.
 
 `ai-suggestion-accepted` in PostHog also carries `changed_fields` (names only) and `changed_field_count`.
 

@@ -35,7 +35,11 @@ import {
   type IChapterRepository,
 } from '#domain/repositories/chapter.repository.interface';
 import { RbacService } from './rbac.service';
-import { AiSuggestionChangeLogService } from './ai-suggestion-change-log.service';
+import {
+  AiSuggestionChangeLogService,
+  type AiSuggestionDecided,
+} from './ai-suggestion-change-log.service';
+import type { SuggestionChanges } from '#domain/utils/ai-suggestion-changes';
 import { NotificationService } from './notification.service';
 import { AnalyticsService } from './analytics.service';
 import { assertModuleEnabled, type EnabledModules } from './module-gate';
@@ -76,6 +80,11 @@ export interface ProposeAiSuggestionsInput {
    * while the card waits, for the change log (Paul, 2026-11-22).
    */
   request?: string | null;
+  /**
+   * The Ask turn read channel messages before proposing it: their authors'
+   * words may be in it, so the change log keeps none of its words.
+   */
+  drewOnChat?: boolean;
   /** The member the run acted for. Notified by default. */
   requestedFor: string | null;
   source: {
@@ -248,12 +257,16 @@ export class AiSuggestionService {
     const now = this.now();
     const rows: NewAiSuggestion[] = [];
     let dropped = 0;
-    const requestSealed =
-      this.changeLog?.sealRequest(
-        input.chapterId,
-        input.batchId,
-        input.request,
-      ) ?? null;
+    // A card drawn from chat keeps no words in the change log, so its
+    // question is not kept waiting for one either.
+    const drewOnChat = input.drewOnChat === true;
+    const requestSealed = drewOnChat
+      ? null
+      : (this.changeLog?.sealRequest(
+          input.chapterId,
+          input.batchId,
+          input.request,
+        ) ?? null);
 
     input.proposals.forEach((proposal, ordinal) => {
       const handler = this.kinds.get(proposal.kind);
@@ -285,6 +298,7 @@ export class AiSuggestionService {
         dedupe_key: proposal.dedupeKey ?? null,
         ask_id: input.askId ?? null,
         request_sealed: requestSealed,
+        drew_on_chat: drewOnChat,
         required_permission: handler.requiredPermission,
         expires_at: new Date(
           now.getTime() +
@@ -766,10 +780,7 @@ export class AiSuggestionService {
       accepted: payload,
       resultId,
     };
-    const changes = this.changeLog
-      ? await this.changeLog.compare(decided)
-      : null;
-    if (this.changeLog) await this.changeLog.recordDecision(decided, changes);
+    const changes = await this.logDecision(decided);
 
     this.emit(
       this.analytics.track('ai-suggestion-accepted', userId, {
@@ -872,18 +883,7 @@ export class AiSuggestionService {
         'dismissed',
       );
     }
-    if (this.changeLog) {
-      const decided = {
-        row,
-        decision: 'dismissed' as const,
-        userId,
-        handler,
-      };
-      await this.changeLog.recordDecision(
-        decided,
-        await this.changeLog.compare(decided),
-      );
-    }
+    await this.logDecision({ row, decision: 'dismissed', userId, handler });
     this.emit(
       this.analytics.track('ai-suggestion-dismissed', userId, {
         chapterId,
@@ -954,6 +954,13 @@ export class AiSuggestionService {
       }
       return made;
     }
+    // Sent elsewhere (the agenda) is a dismissal of the card as proposed.
+    await this.logDecision({
+      row,
+      decision: 'dismissed',
+      userId,
+      handler: this.kinds.get(row.kind),
+    });
     this.emit(
       this.analytics.track('ai-suggestion-dismissed', userId, {
         chapterId,
@@ -1197,7 +1204,7 @@ export class AiSuggestionService {
    */
   async expireDue(): Promise<number> {
     const expired = await this.repo.expireDue(this.now().toISOString());
-    await this.changeLog?.recordExpired(expired);
+    await this.changeLog?.recordExpired(expired, this.now());
     const byChapterKind = countBy(
       expired,
       (row) => `${row.chapter_id}|${row.kind}`,
@@ -1220,6 +1227,20 @@ export class AiSuggestionService {
    */
   async deleteExpiredChanges(): Promise<number> {
     return this.changeLog ? this.changeLog.deleteExpired(this.now()) : 0;
+  }
+
+  /**
+   * Compares and keeps one decision's change log row (Paul, 2026-11-22).
+   * Returns the changes, or null with no change log or when they couldn't
+   * be worked out. Never throws.
+   */
+  private async logDecision(
+    decided: AiSuggestionDecided,
+  ): Promise<SuggestionChanges | null> {
+    if (!this.changeLog) return null;
+    const changes = await this.changeLog.compare(decided);
+    await this.changeLog.recordDecision(decided, changes, this.now());
+    return changes;
   }
 }
 

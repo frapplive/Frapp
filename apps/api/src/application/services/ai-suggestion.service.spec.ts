@@ -93,6 +93,7 @@ class FakeRepo implements IAiSuggestionRepository {
           dedupe_key: row.dedupe_key ?? null,
           ask_id: row.ask_id ?? null,
           request_sealed: row.request_sealed ?? null,
+          drew_on_chat: row.drew_on_chat ?? false,
           id: `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`,
           chapter_id: chapterId,
           status: 'pending',
@@ -319,7 +320,7 @@ function build(
     openable?: string[];
     chapterModules?: Record<string, boolean>;
     /** The change log, with this consent answer and key (Paul, 2026-11-22). */
-    changeLog?: { consent: 'yes' | 'no' | null; key: boolean };
+    changeLog?: { consent: 'yes' | 'no' | null | 'fails'; key: boolean };
   } = {},
 ) {
   const repo = new FakeRepo();
@@ -374,7 +375,10 @@ function build(
         })),
       } as never,
       {
-        getConsentState: jest.fn(async () => ({ answer })),
+        getConsentState: jest.fn(async () => {
+          if (answer === 'fails') throw new Error('consent read failed');
+          return { answer };
+        }),
       } as never,
     );
     const ring = options.changeLog.key ? TEST_KEY_RING : null;
@@ -1643,6 +1647,64 @@ describe('AiSuggestionService change log (Paul, 2026-11-22)', () => {
     });
     service.now = () => new Date(NOW.getTime() + 200 * 24 * 60 * 60 * 1000);
     expect(await service.deleteExpiredChanges()).toBe(1);
+  });
+
+  it('seals neither the question nor the words of a card drawn from chat', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const { created } = await service.proposeBatch({
+      chapterId: CHAPTER,
+      batchId: BATCH,
+      requestedFor: OFFICER,
+      request: 'make a task from what Sam said',
+      drewOnChat: true,
+      source: { type: 'meeting', id: MEETING, title: 'Chapter meeting' },
+      proposals: [taskProposal('Book the venue')],
+    });
+    expect(created[0]).toMatchObject({
+      request_sealed: null,
+      drew_on_chat: true,
+    });
+    await service.dismiss(CHAPTER, OFFICER, created[0].id);
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'dismissed',
+      words_sealed: null,
+    });
+  });
+
+  it('logs a suggestion sent to the agenda as dismissed', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.handleElsewhere(CHAPTER, OFFICER, suggestion.id, {
+      reason: 'to_agenda',
+      accepts: () => true,
+      findMade: async () => null,
+      make: async () => ({ id: 'item' }),
+      unmake: async () => undefined,
+    });
+    expect(repo.changes).toEqual([
+      expect.objectContaining({
+        suggestion_id: suggestion.id,
+        decision: 'dismissed',
+        decided_by: OFFICER,
+      }),
+    ]);
+  });
+
+  it('keeps the changes when the words cannot be sealed', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'fails', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules });
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'accepted',
+      words_sealed: null,
+      fields: expect.objectContaining({ title: { verdict: 'kept' } }),
+    });
   });
 
   it('never fails an accept when the log cannot be written', async () => {

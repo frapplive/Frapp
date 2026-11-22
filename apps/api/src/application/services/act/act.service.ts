@@ -51,6 +51,8 @@ export interface ActMember {
    * `ActInput.request`.
    */
   question?: string;
+  /** The Ask turn read channel messages before this card (see `proposeBatch`). */
+  drewOnChat?: boolean;
 }
 
 /**
@@ -279,6 +281,7 @@ export class ActService {
       requestedFor: member.userId,
       source: { ...source, title: 'Ask Frapp' },
       askId: member.askId ?? null,
+      drewOnChat: member.drewOnChat === true,
       request:
         member.question ??
         ('request' in member && typeof member.request === 'string'

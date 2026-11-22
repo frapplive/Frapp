@@ -9,6 +9,7 @@ import {
   EVENT_NAME_MAX_LENGTH,
   MAX_REPEAT_RULE_LENGTH,
   POINTS_ADJUSTMENT_MAX,
+  eventOthersInvited,
   isRepeatRule,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
@@ -163,6 +164,9 @@ const NEW_EVENT_CHANGE_FIELDS: ChangeFieldSpec = {
   required_role_ids: 'ids',
   optional_role_ids: 'ids',
   excluded_role_ids: 'ids',
+  // Whether a member holding none of those roles is invited: "only these
+  // roles" and "everyone, these roles required" list the same ids.
+  others_invited: 'boolean',
 };
 
 function lengthMinutes(start: string, end: string): number | null {
@@ -182,7 +186,20 @@ export function newEventChangeView(payload: AiSuggestionPayload): ChangeView {
     required_role_ids: payload.required_role_ids ?? null,
     optional_role_ids: payload.optional_role_ids ?? null,
     excluded_role_ids: payload.excluded_role_ids ?? null,
+    others_invited: eventOthersInvited({
+      required_role_ids: idsOrNull(payload.required_role_ids),
+      others_invited:
+        typeof payload.others_invited === 'boolean'
+          ? payload.others_invited
+          : null,
+    }),
   };
+}
+
+function idsOrNull(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : null;
 }
 
 /** An event as saved, as the change log's fields. */
@@ -201,6 +218,7 @@ export function savedEventChangeView(event: Event): ChangeView {
     required_role_ids: event.required_role_ids,
     optional_role_ids: event.optional_role_ids,
     excluded_role_ids: event.excluded_role_ids,
+    others_invited: eventOthersInvited(event),
   };
 }
 

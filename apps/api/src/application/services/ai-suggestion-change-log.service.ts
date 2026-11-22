@@ -155,23 +155,23 @@ export class AiSuggestionChangeLogService {
   async recordDecision(
     input: AiSuggestionDecided,
     changes: SuggestionChanges | null,
+    now: Date,
   ): Promise<void> {
     const { row } = input;
     try {
-      const member = await this.members.findByUserAndChapter(
-        input.userId,
-        row.chapter_id,
-      );
+      const [member, words] = await Promise.all([
+        this.members.findByUserAndChapter(input.userId, row.chapter_id),
+        changes ? this.sealWords(input, changes.words) : null,
+      ]);
       const fields =
         changes && changeFieldsAreCodes(changes.fields) ? changes.fields : {};
-      const words = changes ? await this.sealWords(input, changes.words) : null;
       const log = input.handler?.changeLog;
       const madeInForm =
         input.decision === 'accepted' &&
         input.accepted !== undefined &&
         log?.madeInForm?.(input.accepted) === true;
       await this.repo.recordChanges([
-        this.row(row, {
+        this.row(row, now, {
           decision: input.decision,
           decided_by: input.userId,
           member_id: member?.id ?? null,
@@ -196,12 +196,13 @@ export class AiSuggestionChangeLogService {
       AiSuggestion,
       'id' | 'chapter_id' | 'kind' | 'source_type' | 'requested_for' | 'ask_id'
     >[],
+    now: Date,
   ): Promise<void> {
     if (rows.length === 0) return;
     try {
       await this.repo.recordChanges(
         rows.map((row) =>
-          this.row(row, {
+          this.row(row, now, {
             decision: 'expired',
             decided_by: null,
             member_id: null,
@@ -231,6 +232,7 @@ export class AiSuggestionChangeLogService {
       AiSuggestion,
       'id' | 'chapter_id' | 'kind' | 'source_type' | 'requested_for' | 'ask_id'
     >,
+    now: Date,
     decided: Pick<
       NewAiSuggestionChange,
       | 'decision'
@@ -241,7 +243,6 @@ export class AiSuggestionChangeLogService {
       | 'words_sealed'
     >,
   ): NewAiSuggestionChange {
-    const now = new Date();
     return {
       suggestion_id: row.id,
       chapter_id: row.chapter_id,
@@ -258,18 +259,32 @@ export class AiSuggestionChangeLogService {
   }
 
   /**
-   * The words sealed, or null: no key, the decider hasn't said yes to Frapp
-   * AI, or there are none.
+   * The words sealed, or null: no key, the card drew on chat, the decider
+   * hasn't said yes to Frapp AI, there are none, or sealing failed (the row
+   * is still kept, with the changes alone). Never throws.
    */
   private async sealWords(
     input: AiSuggestionDecided,
     words: SuggestionChanges['words'],
   ): Promise<string | null> {
     const ring = this.keyRing();
-    if (!ring) return null;
-    const state = await this.consent.getConsentState(input.userId);
-    if (state.answer !== 'yes') return null;
-    const request = this.openRequest(ring, input.row);
+    if (!ring || drewOnChat(input.row)) return null;
+    try {
+      const state = await this.consent.getConsentState(input.userId);
+      if (state.answer !== 'yes') return null;
+      return this.seal(ring, input.row, words);
+    } catch (error) {
+      this.report('ai-suggestion-change-seal', input.row, error);
+      return null;
+    }
+  }
+
+  private seal(
+    ring: AiTextKeyRing,
+    row: AiSuggestion,
+    words: SuggestionChanges['words'],
+  ): string | null {
+    const request = this.openRequest(ring, row);
     const record: AiSuggestionChangeWords = {
       request,
       proposed: words.proposed,
@@ -283,7 +298,7 @@ export class AiSuggestionChangeLogService {
     return sealAiText(
       ring,
       JSON.stringify(record),
-      aiSuggestionChangeContext(input.row.id),
+      aiSuggestionChangeContext(row.id),
     );
   }
 
@@ -310,6 +325,16 @@ export class AiSuggestionChangeLogService {
       error,
     });
   }
+}
+
+/**
+ * Whether other members' chat may be in this card's words: the Ask turn read
+ * channel messages before proposing it, or it was drawn from a channel.
+ * Their authors never said yes to having their words kept, so none are
+ * (as the beta diagnostics never keep an answer that drew on chat).
+ */
+function drewOnChat(row: AiSuggestion): boolean {
+  return row.drew_on_chat === true || row.source_type === 'channel';
 }
 
 function emptyWords(): SuggestionChanges['words'] {

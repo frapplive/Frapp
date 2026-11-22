@@ -13,8 +13,13 @@
 --    foreign key: a trace is swept after 90 days and the link may outlive it.
 --    `ai_suggestions.request_sealed`: the member's question, sealed with
 --    `AI_STORED_TEXT_KEY` (never plaintext), held only while the card waits
---    and emptied with the rest of its text when it is decided, by the same
---    `ai_suggestions_decided_hold_no_text` rule, redefined here to cover it.
+--    and emptied with the rest of its text when it is decided: a trigger
+--    empties it on any write that decides the card (so an API older than
+--    this column can still decide one), and the redefined
+--    `ai_suggestions_decided_hold_no_text` rule holds it.
+--    `ai_suggestions.drew_on_chat`: the Ask turn had read channel messages
+--    before it proposed the card. Their authors' words may be in it, so
+--    the card's words are never sealed into the change log.
 -- 2. `ai_suggestion_change_fields_ok(jsonb)`: holds `fields` to codes, ids
 --    and numbers, so no sentence can be parked there by a bug upstream.
 -- 3. `ai_suggestion_changes`: one row per decided suggestion. How it was
@@ -29,24 +34,53 @@
 --
 -- When rows go. With the chapter, and with the decider's membership (they
 -- left the chapter, or deleted their account, which removes their
--- memberships); the API deletes a member's rows when they answer No on the
--- AI sheet; an hourly sweep deletes every row past `expires_at`, which the
+-- memberships); with the membership of the member a card was made for (a
+-- trigger on `members`); the API deletes a member's rows when they answer
+-- No on the AI sheet; an hourly sweep deletes every row past `expires_at`, which the
 -- check holds to at most 90 days. RLS on, no policies: the API reads and
 -- writes with the service role, and only the Frapp team reads them.
 --
--- Locks. Adding two nullable columns with no default and re-adding a check
--- take ACCESS EXCLUSIVE on `ai_suggestions` and scan it once to validate the
--- check; the table holds few rows (waiting ones expire within days and
--- decided ones hold no text), so that is milliseconds. The new table's
--- foreign keys add triggers to `chapters`, `members` and `ai_suggestions`
--- under a SHARE ROW EXCLUSIVE lock until commit; the table is new and empty.
+-- Locks. Adding the columns (nullable, or a boolean with a constant
+-- default, so no rewrite), a trigger, and re-adding a check take ACCESS
+-- EXCLUSIVE on `ai_suggestions` and scan it once to validate the check. Its
+-- rows are short once decided (no text), so on staging's and production's
+-- sizes that is well under a second. The new foreign keys and the trigger on
+-- `members` take SHARE ROW EXCLUSIVE on `chapters`, `members` and
+-- `ai_suggestions` until commit, which blocks writes there, not reads.
 
 -- 1. ------------------------------------------------------------------------
 
 alter table public.ai_suggestions
   add column if not exists ask_id uuid,
   add column if not exists request_sealed text
-    check (request_sealed is null or char_length(request_sealed) <= 12000);
+    check (request_sealed is null or char_length(request_sealed) <= 12000),
+  add column if not exists drew_on_chat boolean not null default false;
+
+-- A decision empties the sealed question here, so an API that predates this
+-- column (a rollout or a rollback) can still decide and expire cards: its
+-- write leaves `request_sealed` alone and the check below would refuse it.
+create or replace function public.ai_suggestions_drop_request_on_decide()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.status not in ('pending', 'accepting') then
+    new.request_sealed := null;
+  end if;
+  return new;
+end;
+$$;
+
+-- A trigger needs no grant; nobody calls it as an RPC.
+revoke all on function public.ai_suggestions_drop_request_on_decide()
+  from public, anon, authenticated;
+
+drop trigger if exists ai_suggestions_drop_request_on_decide
+  on public.ai_suggestions;
+create trigger ai_suggestions_drop_request_on_decide
+  before insert or update of status on public.ai_suggestions
+  for each row execute function public.ai_suggestions_drop_request_on_decide();
 
 alter table public.ai_suggestions
   drop constraint if exists ai_suggestions_decided_hold_no_text;
@@ -65,6 +99,8 @@ comment on column public.ai_suggestions.ask_id is
   'The Ask turn (ai_ask_traces.id) that proposed this card, when Ask did. No foreign key: the trace is swept first. See 20261122221259_ai_suggestion_changes.sql.';
 comment on column public.ai_suggestions.request_sealed is
   'The member''s question, sealed with AI_STORED_TEXT_KEY, only while the card waits. See 20261122221259_ai_suggestion_changes.sql.';
+comment on column public.ai_suggestions.drew_on_chat is
+  'True when the Ask turn that proposed this card had read channel messages first: its words are never kept in the change log. See 20261122221259_ai_suggestion_changes.sql.';
 
 -- 2. ------------------------------------------------------------------------
 
@@ -198,6 +234,39 @@ create index if not exists ai_suggestion_changes_expires_at
   on public.ai_suggestion_changes (expires_at);
 
 alter table public.ai_suggestion_changes enable row level security;
+
+-- Leaving the chapter (or deleting the account, which removes every
+-- membership) also takes what was kept for that member as the one a card was
+-- made for: the sealed question on their waiting cards, and the change log
+-- rows of cards someone else decided for them. Rows they decided go by the
+-- `member_id` foreign key.
+create or replace function public.ai_suggestion_changes_member_left()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  -- Not security definer: memberships are deleted by the API's service role
+  -- and by `anonymize_user`, both of which may write these tables.
+  update public.ai_suggestions
+     set request_sealed = null
+   where chapter_id = old.chapter_id
+     and requested_for = old.user_id
+     and request_sealed is not null;
+  delete from public.ai_suggestion_changes
+   where chapter_id = old.chapter_id
+     and requested_for = old.user_id;
+  return old;
+end;
+$$;
+
+revoke all on function public.ai_suggestion_changes_member_left()
+  from public, anon, authenticated;
+
+drop trigger if exists ai_suggestion_changes_member_left on public.members;
+create trigger ai_suggestion_changes_member_left
+  after delete on public.members
+  for each row execute function public.ai_suggestion_changes_member_left();
 
 comment on table public.ai_suggestion_changes is
   'What a person changed when deciding on an AI suggestion: codes, ids and numbers, plus the words sealed with AI_STORED_TEXT_KEY when the decider said yes to Frapp AI. Deleted after at most 90 days. API only; the Frapp team reads it. See 20261122221259_ai_suggestion_changes.sql.';
