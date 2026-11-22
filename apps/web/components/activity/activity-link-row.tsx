@@ -16,7 +16,11 @@ import {
   type ActivityRow,
 } from "@repo/hooks";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
-import { ActivityRowLead } from "./activity-row-lead";
+import {
+  ActivityRowDetail,
+  ActivityRowLead,
+  ActivityUnreadDot,
+} from "./activity-row-lead";
 import { IconButton } from "@/components/ui/icon-button";
 import { ToastAction } from "@/components/ui/toast";
 import { chatDeepLink } from "@/lib/chat/chat-links";
@@ -30,7 +34,7 @@ type LinkRow = Extract<ActivityRow, { kind: "link" }>;
  * reply isn't on the channel's timeline, so it goes to the thread's first
  * message, where the thread opens from.
  */
-export function linkChatHref(row: LinkRow): string {
+function linkChatHref(row: LinkRow): string {
   return chatDeepLink({
     channelId: row.link.channel_id,
     messageId: row.link.thread_root_id ?? row.link.message_id,
@@ -110,7 +114,7 @@ export function useActivityLinkActions(): ActivityLinkActions {
       act(
         remove,
         row,
-        "Removed from everyone's Activity",
+        "Removed for everyone",
         restore,
         "Couldn't remove the link",
       ),
@@ -125,7 +129,7 @@ export function useActivityLinkActions(): ActivityLinkActions {
  * Later put their check, because it is what a member does after filling one
  * in. The rest is in the row's menu (⋯, or a right-click off the link): Hide
  * ("Not chapter business"), Open in chat, and for an officer
- * (`channels:manage`) Remove, which takes it off everyone's Activity. Each
+ * (`channels:manage`) Remove, which takes it off everyone's list. Each
  * takes the row away at once and offers Undo, since none of them can be seen
  * again from this page.
  */
@@ -134,11 +138,14 @@ export function ActivityLinkRow({
   rowClassName,
   canRemove,
   actions,
+  onOpen,
 }: {
   row: LinkRow;
   rowClassName: string;
   canRemove: boolean;
   actions: ActivityLinkActions;
+  /** The link was opened (a click, or a middle-click to a new tab). */
+  onOpen?: (row: LinkRow) => void;
 }) {
   const router = useRouter();
   const { link } = row;
@@ -183,18 +190,19 @@ export function ActivityLinkRow({
             rel="noopener noreferrer"
             title={link.url}
             className={cn(rowClassName, "min-w-0 flex-1")}
+            onClick={() => onOpen?.(row)}
+            onAuxClick={(event) => {
+              if (event.button === 1) onOpen?.(row);
+            }}
           >
+            <ActivityUnreadDot unread={row.unread} />
             <ActivityRowLead row={row} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-foreground">
                 {row.title}
                 <span className="sr-only"> (opens in a new tab)</span>
               </span>
-              {row.detail ? (
-                <span className="block truncate text-caption text-muted-foreground">
-                  {row.detail}
-                </span>
-              ) : null}
+              <ActivityRowDetail row={row} />
             </span>
             <ExternalLink
               className="h-4 w-4 shrink-0 text-muted-foreground"
