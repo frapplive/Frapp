@@ -1,7 +1,9 @@
 import { AskPage } from "@/components/ask/ask-page";
 
+// The root layout appends " · Frapp" (#2147), so the tab reads
+// "Ask · Frapp"; "Ask Frapp" here would name the product twice.
 export const metadata = {
-  title: "Ask Frapp",
+  title: "Ask",
 };
 
 /**
