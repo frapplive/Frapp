@@ -74,10 +74,19 @@ export function useRolesDataFrom({
     () => permissionsQuery.data?.permissions ?? [],
     [permissionsQuery.data],
   );
-  const reach = useMemo(
-    () => callerReach(myRoleIds, myPermissions, roles, tiers, viewerUserId),
-    [myRoleIds, myPermissions, roles, tiers, viewerUserId],
-  );
+  const permissionsRead = permissionsQuery.isSuccess;
+  const reach = useMemo(() => {
+    const read = callerReach(
+      myRoleIds,
+      myPermissions,
+      roles,
+      tiers,
+      viewerUserId,
+    );
+    // The rank rules also ask what the caller holds (#5730), so until that
+    // read lands a role refused for a missing permission would be a guess.
+    return permissionsRead ? read : { ...read, known: false };
+  }, [myRoleIds, myPermissions, roles, tiers, viewerUserId, permissionsRead]);
 
   return {
     rolesQuery,
