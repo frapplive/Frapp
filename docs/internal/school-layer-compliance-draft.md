@@ -3,6 +3,7 @@
 > **DRAFT. Not legal advice. Pending Paul and counsel. Nothing here ships.**
 >
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
+> GitHub hides that account's issues and PRs (#4192 and this doc's first PR, #4271) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 >
 > - Legal and App Store copy is Paul's call ([AGENTS.md § ADR discipline](../../AGENTS.md#adr-discipline)). This file **proposes** text for Paul and a lawyer to review. It does not change [`spec/behavior/legal.md`](../../spec/behavior/legal.md), the Terms, the Privacy Policy, the FERPA notice or any shipped copy.
 > - It was written by an agent from web sources and the repo. No lawyer has read it. **No web source could be opened from the sandbox, so every citation is unverified** ([§ Sources](#sources)): it rests on search excerpts. Statements about what the law requires are the drafter's reading of those sources, not a legal opinion.
