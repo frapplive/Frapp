@@ -29,7 +29,8 @@ export const BLANK_NAME_REFUSAL = "Enter a name.";
  * (`isServerBusy` in `@repo/api-sdk`): nothing the member did, and it passes
  * when the load does. writing.md § Rate limited (global).
  */
-export const SERVER_BUSY_COPY = "Frapp is busy right now. Try again in a moment.";
+export const SERVER_BUSY_COPY =
+  "Frapp is busy right now. Try again in a moment.";
 
 export const OFFLINE_COPY =
   "Couldn't reach Frapp. Check your connection and try again.";
@@ -85,6 +86,14 @@ export function copyForErrorCode(code: string | null): string | null {
   // officer's), each with its own sentence, read from SERVER_MESSAGE_COPY.
   if (code in SELF_ASSIGNABLE_REFUSAL_COPY) {
     return SELF_ASSIGNABLE_REFUSAL_COPY[code as SelfAssignableRefusal];
+  }
+  // Giving or taking a role the rank rules refuse (#5730,
+  // `spec/behavior/rbac.md` § Rank).
+  if (code === "role.assign_out_of_reach") {
+    return "You can only give or take away roles ranked below yours, and only for members ranked below you.";
+  }
+  if (code === "role.assign_permission_not_held") {
+    return "This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.";
   }
   if (code === "service_entry.receipt_required") {
     return "Add a photo of your proof, then submit.";

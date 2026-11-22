@@ -4,6 +4,7 @@ import {
   isBaseRole,
   isEveryoneRole,
   needsBaseRole,
+  permissionLabel,
   roleColorOrNull,
   tierPositionsOf,
 } from "@repo/validation";
@@ -13,6 +14,7 @@ import {
   assignsRole,
   assignsToMember,
   isWildcardRole,
+  permissionsNotHeldFor,
   type Reach,
   type TierRow,
   type TieredRole,
@@ -46,6 +48,18 @@ export const ASSIGN_CAPTIONS = {
   noRoles: "Your role can't give roles",
   noGroups: "Your role can't change groups",
 } as const;
+
+/**
+ * Why a role row can't be ticked when it carries permissions the viewer
+ * lacks (#5730): the API refuses to give it, whoever it goes to. Names the
+ * permission when there is one, so the officer knows what to ask for.
+ */
+export function permissionNotHeldCaption(missing: readonly string[]): string {
+  if (missing.length === 1) {
+    return `Gives “${permissionLabel(missing[0]!)}”, which your role doesn't have`;
+  }
+  return `Gives ${missing.length} permissions your role doesn't have`;
+}
 
 /**
  * The words both apps use when a role or group change from a member goes
@@ -116,6 +130,11 @@ function roleReason(role: TieredRole, inputs: AssignmentInputs): string | null {
   if (!memberReachable(inputs)) return ASSIGN_CAPTIONS.memberAbove;
   if (!assignsRole(inputs.reach, role, inputs.tiers)) {
     return ASSIGN_CAPTIONS.ranksAbove;
+  }
+  // Only giving checks the permissions: taking a role away hands out nothing.
+  if (!inputs.heldRoleIds.includes(role.id)) {
+    const missing = permissionsNotHeldFor(inputs.reach, role, inputs.roles);
+    if (missing.length > 0) return permissionNotHeldCaption(missing);
   }
   return null;
 }

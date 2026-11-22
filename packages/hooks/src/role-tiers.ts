@@ -264,6 +264,24 @@ export function mayGrant(reach: Reach, permission: string): boolean {
 }
 
 /**
+ * What giving `role` would hand out that the caller doesn't hold, sorted:
+ * the API's "every role added carries only permissions the caller holds"
+ * (`assertRolesWithinReach`, `spec/behavior/rbac.md` § Rank, #5730). What
+ * the chapter's Everyone role carries is exempt, since every member has it.
+ */
+export function permissionsNotHeldFor(
+  reach: Reach,
+  role: Pick<TieredRole, "permissions">,
+  roles: readonly TieredRole[],
+): string[] {
+  if (reach.wildcard) return [];
+  const everyone = new Set(roles.find(isEveryoneRole)?.permissions ?? []);
+  return [...new Set(role.permissions)]
+    .filter((p) => !reach.held.has(p) && !everyone.has(p))
+    .sort();
+}
+
+/**
  * The chapter's word for a tier, as a heading ("Tier") and in running text
  * ("tier"), with a plural. The word is the chapter's own (`tier` vocabulary,
  * #4068 decision 5), so this never assumes it is "Tier".

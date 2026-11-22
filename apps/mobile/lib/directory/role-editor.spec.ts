@@ -30,6 +30,20 @@ describe("rolesSaveFailedBody", () => {
       /^Your change to Ada's roles didn't reach the server/,
     );
   });
+
+  it("says which rank rule refused a 403 when the API named it (#5730)", () => {
+    const refusal = "This role has a permission your role doesn't.";
+    expect(rolesSaveFailedBody(403, null, refusal)).toBe(
+      `The change was put back. ${refusal}`,
+    );
+    expect(rolesSaveFailedBody(403, "Ada", refusal)).toMatch(
+      /^Your change to Ada's roles was put back\. This role/,
+    );
+    // A 409 keeps its own words whatever the refusal says.
+    expect(rolesSaveFailedBody(409, null, refusal)).toContain(
+      "at the same time",
+    );
+  });
 });
 
 describe("the Everyone role and the base roles (2026-11-21)", () => {

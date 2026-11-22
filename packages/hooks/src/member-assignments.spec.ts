@@ -10,6 +10,7 @@ import {
   memberRoleChips,
   NO_BASE_ROLE_FILTER,
   needsBaseRole,
+  permissionNotHeldCaption,
 } from "./member-assignments";
 import type { ChapterGroup } from "./use-groups";
 import type { Reach, TierRow, TieredRole } from "./role-tiers";
@@ -160,6 +161,63 @@ describe("base roles (2026-11-21)", () => {
     expect(matchesRoleFilter(withBase, active, NO_BASE_ROLE_FILTER)).toBe(
       false,
     );
+  });
+});
+
+// #5730: a cabinet officer with roles:manage was offered New Member, then
+// refused by the API, because New Member's tier carries a permission the
+// officer's tier lacks (backwork:upload, after the 2026-11-12 backfill).
+describe("a role carrying a permission the viewer lacks (#5730)", () => {
+  const withNew = [
+    ...ROLES.filter((r) => r.id !== "r-everyone"),
+    role("r-new", "New Member", null, {
+      system_key: "NEW_MEMBER",
+      is_system: true,
+      permissions: ["members:view", "backwork:upload"],
+    }),
+    role("r-everyone", "Everyone", "t-chairs", {
+      system_key: "EVERYONE",
+      is_system: true,
+      permissions: ["members:view"],
+    }),
+  ];
+  const reasonFor = (
+    name: string,
+    overrides: Partial<Parameters<typeof memberAssignmentSections>[0]> = {},
+  ) =>
+    sections({ roles: withNew, heldRoleIds: [], ...overrides })
+      .flatMap((s) => s.rows)
+      .find((r) => r.name === name)?.disabledReason;
+
+  it("disables it and names the permission, as the API would refuse it", () => {
+    expect(reasonFor("New Member")).toBe(
+      permissionNotHeldCaption(["backwork:upload"]),
+    );
+    expect(permissionNotHeldCaption(["backwork:upload"])).toMatch(
+      /^Gives “Upload backwork”, which your role doesn't have$/,
+    );
+  });
+
+  it("exempts what the Everyone role carries, and counts several", () => {
+    // members:view comes with Everyone, so only backwork:upload is named.
+    expect(permissionNotHeldCaption(["a:b", "c:d"])).toBe(
+      "Gives 2 permissions your role doesn't have",
+    );
+  });
+
+  it("offers it once the viewer holds the permission, or holds *", () => {
+    const holds: Reach = {
+      ...VP_REACH,
+      held: new Set([...VP_REACH.held, "backwork:upload"]),
+    };
+    expect(reasonFor("New Member", { reach: holds })).toBeNull();
+    expect(
+      reasonFor("New Member", { reach: { ...VP_REACH, wildcard: true } }),
+    ).toBeNull();
+  });
+
+  it("still lets the viewer take it away: taking hands out nothing", () => {
+    expect(reasonFor("New Member", { heldRoleIds: ["r-new"] })).toBeNull();
   });
 });
 

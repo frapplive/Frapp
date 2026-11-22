@@ -537,9 +537,11 @@ export class MemberService {
       changed.some((role) => !canAssignAt(reach, roleRank(role, positions))) ||
       (!isSelf && !canAssignAt(reach, holderRank(before, positions)))
     ) {
-      throw new ForbiddenException(
-        'You can only give or take away roles ranked below your own, and only from members ranked below you.',
-      );
+      throw new ForbiddenException({
+        code: 'role.assign_out_of_reach',
+        message:
+          'You can only give or take away roles ranked below your own, and only from members ranked below you.',
+      });
     }
     // Nobody hands out a permission they don't hold, to anyone: a lower role
     // can still carry one (a role outside the tiers, an override), and a
@@ -558,9 +560,10 @@ export class MemberService {
       ),
     ).filter((permission) => !base.has(permission));
     if (missing.length > 0) {
-      throw new ForbiddenException(
-        `You can only give roles whose permissions you hold: ${missing.join(', ')}.`,
-      );
+      throw new ForbiddenException({
+        code: 'role.assign_permission_not_held',
+        message: `You can only give roles whose permissions you hold: ${missing.join(', ')}.`,
+      });
     }
   }
 
