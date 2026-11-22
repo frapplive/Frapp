@@ -5,10 +5,10 @@ import { ChevronLeft, Eye, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeleteRole, useUpdateRole } from "@repo/hooks";
 import {
+  isActiveRole,
   isEveryoneRole,
   ROLE_NAME_MAX_LENGTH,
   roleColorOrNull,
-  type RoleColorHex,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   selfAssignableRefusal,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
@@ -28,7 +28,7 @@ import { ErrorState } from "@/components/shared/async-states";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { SettingsListCardSkeleton } from "@/components/settings/settings-skeleton";
-import { RoleColorSwatches } from "@/components/roles/role-color-swatches";
+import { RoleColorPicker } from "@/components/roles/role-color-picker";
 import { PermissionSwitchList } from "@/components/roles/permission-switch-list";
 import { RoleOverrideList } from "@/components/roles/role-override-list";
 import { useRolePermissionToggle } from "@/components/roles/use-role-permission-toggle";
@@ -177,16 +177,19 @@ function RoleBody({
   // The Everyone role (#4191): its permissions and @everyone switch are
   // edited here; its name and tier are fixed, as the API holds them.
   const everyone = isEveryoneRole(role);
+  // Actives (#5802) stays in its tier: presidency's claim walk stops there.
+  const tierFixed = everyone || isActiveRole(role);
   const wildcard = isWildcardRole(role);
   const editable = canManage && reachesRole(reach, role, tiers);
 
   const [name, setName] = useState(role.name);
-  // An off-palette value (a pre-#3485 seed or free pick) reads as none,
-  // which is also how every client paints it.
-  const [color, setColor] = useState<RoleColorHex | null>(
+  // A stored value that may not paint (a pre-#3485 seed in red or gold, or
+  // one too dark to read) reads as none, which is also how every client
+  // paints it.
+  const [color, setColor] = useState<string | null>(
     roleColorOrNull(role.color),
   );
-  // Whether the officer picked a swatch: an off-palette stored value shows as
+  // Whether the officer picked a color: an unpaintable stored value shows as
   // "No color", so the draft alone can't tell "left alone" from "cleared".
   const [colorTouched, setColorTouched] = useState(false);
   const [placement, setPlacement] = useState(role.tier_id ?? OUTSIDE);
@@ -355,10 +358,9 @@ function RoleBody({
         </p>
         {everyone ? (
           <p className="max-w-2xl text-sm text-muted-foreground">
-            What members get when no role of theirs gives them access: whoever
-            joins with no role, and new members once they&apos;re made members.
-            It isn&apos;t offered in any list, and its name and {words.singular}{" "}
-            stay as they are.
+            Every member holds it, including someone who has just joined and has
+            no base role yet. It isn&apos;t offered in any list, and its name
+            and {words.singular} stay as they are.
           </p>
         ) : null}
       </header>
@@ -380,7 +382,7 @@ function RoleBody({
             <Select
               value={placement}
               onValueChange={setPlacement}
-              disabled={!editable || everyone}
+              disabled={!editable || tierFixed}
             >
               <SelectTrigger id="role-tier">
                 <SelectValue />
@@ -409,7 +411,7 @@ function RoleBody({
           </div>
           <div className="grid gap-1 md:col-span-2">
             <Label id="role-color-label">Color</Label>
-            <RoleColorSwatches
+            <RoleColorPicker
               labelId="role-color-label"
               value={color}
               onChange={(next) => {

@@ -23,9 +23,11 @@ import {
   DISPLAY_NAME_MAX_LENGTH,
   GRADUATION_YEAR_MAX,
   GRADUATION_YEAR_MIN,
+  isDisplayNameLocked,
   isPhoneNumber,
   MAJOR_MAX_LENGTH,
   majorSuggestions,
+  NAME_LOCK_COPY,
   PHONE_INVALID_MESSAGE,
   PHONE_MAX_LENGTH,
   PROFILE_ALUMNI_SECTION,
@@ -35,6 +37,7 @@ import {
   USER_CITY_MAX_LENGTH,
   USER_COMPANY_MAX_LENGTH,
 } from "@repo/validation";
+import { StandingCards } from "@/components/activity/standing-cards";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +91,8 @@ export function ProfilePanel() {
   const { avatarTintFor } = useMemberDisplayNames();
   const ownId = (userQuery.data as CurrentUser | undefined)?.id;
   const updateUser = useUpdateUser();
+  // Whether the chapter locks the member's own name (#5801).
+  const nameLocked = isDisplayNameLocked(userQuery.data);
   // Points and approved service hours, read and summed as the phone's Profile
   // does them (`@repo/hooks` `profile-stats.ts`, #4137).
   const stats = useMyProfileStats();
@@ -219,6 +224,8 @@ export function ProfilePanel() {
     // before a limit never refuses an unrelated edit.
     const saved = (userQuery.data ?? {}) as CurrentUser;
     const body = profileSaveBody(saved, profileDraft);
+    // A locked name is shown, never sent (#5801).
+    if (nameLocked) delete body.display_name;
     if (body.phone && !isPhoneNumber(body.phone)) {
       setPhoneError(true);
       return;
@@ -400,6 +407,14 @@ export function ProfilePanel() {
           />
         </section>
 
+        {/*
+          Last week and This semester, beside your numbers (#5779): how you
+          are standing, which Activity no longer shows. Its Points and Service
+          hours are this semester's, beside a goal; the figures above are all
+          time, so both stay.
+        */}
+        {stats.hasChapter ? <StandingCards /> : null}
+
         {/* Non-chapter business roles you pick yourself (#4958). */}
         {canViewMembers ? <PickRolesSection /> : null}
 
@@ -413,10 +428,23 @@ export function ProfilePanel() {
               <Label htmlFor="display-name">
                 {PROFILE_FIELD_COPY.displayName.label}
               </Label>
+              {/*
+                Locked by the chapter (#5801): the stored name, read-only, with
+                the fact that officers set it. The save sends only changed
+                fields, so a locked name is never sent.
+              */}
               <Input
                 id="display-name"
                 maxLength={DISPLAY_NAME_MAX_LENGTH}
-                value={profile.display_name ?? ""}
+                value={
+                  nameLocked
+                    ? ((userQuery.data as CurrentUser | undefined)
+                        ?.display_name ?? "")
+                    : (profile.display_name ?? "")
+                }
+                readOnly={nameLocked}
+                aria-describedby={nameLocked ? "display-name-hint" : undefined}
+                className={nameLocked ? "text-muted-foreground" : undefined}
                 onChange={(event) =>
                   setProfileDraft((prev) => ({
                     ...prev,
@@ -425,6 +453,14 @@ export function ProfilePanel() {
                 }
                 placeholder={PROFILE_FIELD_COPY.displayName.placeholder}
               />
+              {nameLocked ? (
+                <p
+                  id="display-name-hint"
+                  className="text-caption text-muted-foreground"
+                >
+                  {NAME_LOCK_COPY.lockedLine}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="phone">{PROFILE_FIELD_COPY.phone.label}</Label>

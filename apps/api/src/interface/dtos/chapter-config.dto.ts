@@ -404,7 +404,7 @@ export class PatchChapterConfigDto {
     format: 'uuid',
     nullable: true,
     description:
-      'Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role (once Member, #4191). Must belong to this chapter (400 otherwise).',
+      'Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role, the floor every member holds (#5802). Must belong to this chapter (400 otherwise).',
   })
   @ValidateIf((_object, value) => value !== null)
   @IsOptional()
@@ -422,4 +422,12 @@ export class PatchChapterConfigDto {
   @IsOptional()
   @IsUUID()
   birthday_channel_id?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether settled members (finished the welcome screen, or joined over a day ago) may change their own name (#5801). False, the default, locks it: PATCH /v1/users/me refuses a changed display_name unless the member holds roles:manage here. Officers fix names through PATCH /v1/members/{id}/profile; a member of two or more chapters is never locked, since that route refuses them.',
+  })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsStrictBoolean()
+  members_can_change_name?: boolean;
 }

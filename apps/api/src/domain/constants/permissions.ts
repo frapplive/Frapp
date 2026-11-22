@@ -1,6 +1,7 @@
 import {
   ALUMNI_CHANNEL_PERMISSION,
   roleColor,
+  ACTIVE_ROLE_NAME,
   EVERYONE_ROLE_NAME,
   RUSH_MEMBER_PERMISSIONS,
   type PermissionDefinition,
@@ -143,8 +144,14 @@ export const SystemRoleKeys = {
   TREASURER: 'TREASURER',
   VICE_PRESIDENT: 'VICE_PRESIDENT',
   SECRETARY: 'SECRETARY',
-  /** The Everyone role, called Member until #4191; the key stayed. */
+  /**
+   * The Actives base role (Paul, 2026-11-21). The seeded Member role, then
+   * from #4191 to 2026-11-21 the hidden Everyone role; the key stayed, so
+   * every stored reference to the row now means the actives.
+   */
   MEMBER: 'MEMBER',
+  /** The Everyone role every member holds, the floor (2026-11-21). */
+  EVERYONE: 'EVERYONE',
   NEW_MEMBER: 'NEW_MEMBER',
   ALUMNI: 'ALUMNI',
 } as const;
@@ -328,12 +335,14 @@ const SEEDED_ROLES = [
     color: roleColor('rose'),
   },
   {
-    // The Everyone role (#4191): the seeded Member role, renamed and hidden.
+    // The Actives base role (Paul, 2026-11-21): a chapter's full members.
     // It keeps the `MEMBER` key, so every lookup of "the Member role" (the
-    // invite fallback, presidency's floor, the rank rules' exemption) still
-    // finds it, and its starting tier, so plain members rank where they did.
-    // Not mentionable: `@everyone` is officers-only until a chapter opens it.
-    name: EVERYONE_ROLE_NAME,
+    // semester rollover's promotion, presidency's floor, the tier reorder's
+    // floor) finds it, and its starting tier, so actives rank where members
+    // did. A chapter renames it ("Brothers"). `@Actives` reaches nearly the
+    // whole chapter, so it starts officers-only, as `@everyone` does, and the
+    // Members tier follows its switch.
+    name: ACTIVE_ROLE_NAME,
     system_key: SystemRoleKeys.MEMBER,
     starting_tier: 2,
     extra_permissions: [],
@@ -367,6 +376,20 @@ const SEEDED_ROLES = [
     display_order: 7,
     color: roleColor('slate'),
   },
+  {
+    // The Everyone role (2026-11-21): every member holds it, whatever else
+    // they hold, and it gives only what anyone in the chapter may do. Outside
+    // the tiers, so it ranks below all of them and no tier lends it more.
+    // Not mentionable: `@everyone` is officers-only until a chapter opens it.
+    name: EVERYONE_ROLE_NAME,
+    system_key: SystemRoleKeys.EVERYONE,
+    starting_tier: null,
+    extra_permissions: [SystemPermissions.MEMBERS_VIEW],
+    is_system: true,
+    display_order: 8,
+    color: null,
+    mentionable: false,
+  },
 ] as const satisfies readonly {
   starting_tier: number | null;
   extra_permissions: readonly string[];
@@ -380,7 +403,7 @@ const SEEDED_ROLES = [
  * database applies on every later save (`role_effective_permissions`).
  *
  * Colors come from the role palette in `@repo/validation` (#3485): the five
- * officer and Alumni roles get one, while Member and New Member stay uncolored
+ * officer and Alumni roles get one, while Actives, New Member and Everyone stay uncolored
  * so most of a chapter's chat reads in the plain foreground and the officers
  * stand out. Migration `20261105200000_role_color_palette_defaults.sql` moves
  * existing chapters' untouched seeds onto the same values.
@@ -419,15 +442,16 @@ export type SeededChannelAccess = {
  * - `#announcements`: officers post (the top two starting tiers), everyone
  *   reads. Before #3722 it took `announcements:post`, which no seeded role
  *   held, so only the President could post in a new chapter.
- * - `#chapter-audit`: everyone reads, nobody posts. The audit flag (#3909)
- *   refuses every member's write anyway; the empty list says so in the data.
+ *
+ * No `#chapter-audit` since 2026-11-21: the record of officer changes is the
+ * Logs page in Chapter settings, which reads `chapter_audit_log` itself.
  * - `#alumni`: every starting tier and the Alumni role read and post, which
  *   is what lets alumni post there (`spec/behavior/alumni.md`).
  *
  * `description` is the line the channel header shows beside the name and the
  * channel start repeats ("Welcome to #general"). Officers edit it in Chat
  * admin. Migration `20261105210000_default_channel_descriptions.sql` wrote the
- * same four lines into chapters created before they were seeded. Changing one
+ * same lines into chapters created before they were seeded. Changing one
  * here only reaches new chapters: to change existing ones, add a new forward
  * migration (never edit the shipped one), and update the Channel header row in
  * `spec/ui/design-system/writing.md`.
@@ -444,18 +468,6 @@ export const DEFAULT_CHANNELS = [
     description: 'News from officers. Everyone gets notified.',
     who_can_see: null,
     who_can_post: { tiers: [0, 1] },
-  },
-  // System-write, member-read audit feed. The Chunk 02 audit bridge and the
-  // onboarding welcome message post system_audit messages here / to #general.
-  {
-    name: 'chapter-audit',
-    description:
-      'Officer changes to dues, roles and settings, posted automatically.',
-    // System-write only (#3909): no member posts here, whatever their
-    // roles, and the audit mirror finds the channel by this flag.
-    is_audit_log: true,
-    who_can_see: null,
-    who_can_post: { tiers: [] },
   },
   {
     name: 'alumni',

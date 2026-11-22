@@ -209,7 +209,7 @@ How the first two gates are kept (#4308, #4790):
   Chat as a source is not a call's switch: it decides which messages the corpus reads and whether a summary may read a channel ([Catch me up](#catch-me-up), 2026-11-12), and with it off no member's messages are read.
 - **Only the president turns the switches on or off.**
   That is the member holding the chapter's President role.
-  Each change is recorded in the audit log and shows in `#chapter-audit`.
+  Each change is recorded in the audit log, which officers read on the Logs page in Chapter settings ([`settings/README.md` § Audit Rules](settings/README.md#audit-rules)).
   Every member can see which switches are on.
 - **The answer is one per person, not per chapter.**
   It names the same providers wherever the person is a member, so one Yes covers every chapter they are in, and one No turns AI off for them in all of them.
@@ -694,7 +694,12 @@ How Frapp finds out whether an answer was any good, without keeping anyone's wor
 
 ### Dictation
 
-A member can speak a question into Ask's field instead of typing it (#5276).
+A member can speak a question into Ask's field instead of typing it (#5276), and, on the phone, a message into any chat composer: a channel, a DM or a thread (#5772, Paul 2026-11-21; web has no mic in either).
+Chat uses the same recogniser, the same cleanup route and the same rules below, with three differences:
+
+- **Never a DM's words.** In a DM or group DM (and while the channel is still loading) the words land as the phone heard them and nothing goes to the cleanup, because Frapp AI never receives direct messages (privacy policy, Frapp AI).
+- **One go holds what the cleanup takes** (1,000 characters) as well as what the message has left of its 10,000. The `full` line names the limit that stopped it: "That's all one dictation can hold." or "That's all one message can hold."
+- **Words go only where they were spoken for.** A dictation in progress is dropped when the channel changes in place or a reply or edit opens, and the Original chip goes once the box holds anything other than the tidied words.
 
 - **The phone hears it.**
   The phone's own speech recogniser turns the speech into words: on the device where the phone can, otherwise Apple's or Google's recogniser.
@@ -1051,7 +1056,7 @@ Why it never reached him, read on staging that day: no `member_nudges` row had e
 
 ### The card and its tray
 
-Activity draws one card under the week card, from `POST /v1/activity/card`, and a tray of up to three more under it (the phone first, and web after; a phone build from before #5464 still draws only the task card, from `POST /v1/nudges/current`) (Paul's pick on #5464, 2026-11-18: one spotlight with a tray, over the spotlight alone).
+Activity draws one card under Now (under the week card until #5779 replaced it with a small ring), from `POST /v1/activity/card`, and a tray of up to three more under it (the phone first, and web after; a phone build from before #5464 still draws only the task card, from `POST /v1/nudges/current`) (Paul's pick on #5464, 2026-11-18: one spotlight with a tray, over the spotlight alone).
 
 - **What earns a card.** Any of these, for the member, under each module's own rule for who may see it, with the module on:
   an event starting today or tomorrow (in the member's time zone) that they haven't checked in to or snoozed, until it ends;

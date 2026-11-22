@@ -404,7 +404,7 @@ export interface paths {
         };
         /**
          * List chapter audit log entries
-         * @description Officer-action history (config changes, role/field changes, member removal, and similar). Callers other than the chapter President see only `member_visible` entries; the President sees every entry, including exec-only ones. Optional filters — `actor_user_id`, `action`, and the inclusive `start_date`/`end_date` window — compose as an intersection. Paginate via a cursor (`before` ISO8601), which is separate from the window so paging does not move the filter. Returns newest-first, capped at `limit` (default 50, max 200).
+         * @description Officer-action history (config changes, role/field changes, member removal, and similar). Callers other than the chapter President see only `member_visible` entries; the President sees every entry, including exec-only ones. Optional filters — `actor_user_id`, `action`, `kind` (a Logs kind: any of its actions), and the inclusive `start_date`/`end_date` window — compose as an intersection. Paginate via a cursor (`before` ISO8601), which is separate from the window so paging does not move the filter. Returns newest-first, capped at `limit` (default 50, max 200).
          */
         get: operations["ChapterAuditLogController_list_v1"];
         put?: never;
@@ -2438,6 +2438,41 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gifs/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The member's favorite GIFs, newest first (#5772) */
+        get: operations["GifController_favorites_v1"];
+        put?: never;
+        /** Star a GIF from the picker (#5772) */
+        post: operations["GifController_addFavorite_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gifs/favorites/{gifId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unstar a GIF (#5772) */
+        delete: operations["GifController_removeFavorite_v1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6427,7 +6462,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add a suggestion to the end of the agenda */
+        /**
+         * Add a suggestion to the end of the agenda
+         * @description 409 `event.agenda_locked` once the meeting has started: its agenda takes check-offs only.
+         */
         post: operations["AgendaSuggestionController_add_v1"];
         delete?: never;
         options?: never;
@@ -7210,7 +7248,7 @@ export interface components {
             analytics_opt_out?: boolean;
             /**
              * Format: uuid
-             * @description Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role (once Member, #4191). Must belong to this chapter (400 otherwise).
+             * @description Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role, the floor every member holds (#5802). Must belong to this chapter (400 otherwise).
              */
             default_invite_role_id?: string | null;
             /**
@@ -7218,6 +7256,8 @@ export interface components {
              * @description The channel Frapp posts a happy-birthday message in on each member's birthday, for members who share theirs with the chapter (#4959). Null, the default, turns the posts off. Must be one of this chapter's public channels that isn't archived or the audit log (400 otherwise).
              */
             birthday_channel_id?: string | null;
+            /** @description Whether settled members (finished the welcome screen, or joined over a day ago) may change their own name (#5801). False, the default, locks it: PATCH /v1/users/me refuses a changed display_name unless the member holds roles:manage here. Officers fix names through PATCH /v1/members/{id}/profile; a member of two or more chapters is never locked, since that route refuses them. */
+            members_can_change_name?: boolean;
         };
         CustomRoleDto: {
             id: string;
@@ -7327,11 +7367,8 @@ export interface components {
             name: string;
             permissions: string[];
             display_order?: number;
-            /**
-             * @description One of the role palette colors (`ROLE_COLOR_PALETTE` in `@repo/validation`), in any letter case; it is stored as listed. Null clears the color.
-             * @enum {string|null}
-             */
-            color?: "#F2994A" | "#F47FA4" | "#B392F0" | "#8FA8FF" | "#5CC8F0" | "#3DD6C4" | "#6FD08C" | "#C5E06A" | "#D9B99B" | "#A9B4C2" | null;
+            /** @description A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color. */
+            color?: string | null;
             /** @description Whether any member may `@` this role in chat. Defaults to true. While false, only a member holding `channels:manage` or `roles:manage` (or the wildcard) can ping it. */
             mentionable?: boolean;
             /**
@@ -7347,11 +7384,8 @@ export interface components {
             name?: string;
             permissions?: string[];
             display_order?: number;
-            /**
-             * @description One of the role palette colors (`ROLE_COLOR_PALETTE` in `@repo/validation`), in any letter case; it is stored as listed. Null clears the color.
-             * @enum {string|null}
-             */
-            color?: "#F2994A" | "#F47FA4" | "#B392F0" | "#8FA8FF" | "#5CC8F0" | "#3DD6C4" | "#6FD08C" | "#C5E06A" | "#D9B99B" | "#A9B4C2" | null;
+            /** @description A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color. */
+            color?: string | null;
             /** @description Whether any member may `@` this role in chat. Defaults to true. While false, only a member holding `channels:manage` or `roles:manage` (or the wildcard) can ping it. */
             mentionable?: boolean;
             /**
@@ -7479,7 +7513,7 @@ export interface components {
             /** @description May be an empty string: the column is NOT NULL DEFAULT '', so clients treat empty as unresolved rather than rendering a blank name. */
             display_name: string;
             avatar_url: string | null;
-            /** @description Palette color of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it. */
+            /** @description Color (palette or readable custom, `isPaintableRoleColor`) of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it. */
             role_color: string | null;
         };
         MemberBirthdayDto: {
@@ -8073,7 +8107,7 @@ export interface components {
             /** @description Whether a member holding none of the listed roles is invited (then `is_mandatory` says whether they must attend). Omitted, it is left as stored. A stored null reads as true unless `required_role_ids` is non-empty, the older "only these roles" meaning. */
             others_invited?: boolean;
             notes?: string;
-            /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
+            /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
             /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
@@ -8213,7 +8247,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @description A role's palette color; null for a tier or an uncolored role. */
+            /** @description A role's color (palette or readable custom, `isPaintableRoleColor`); null for a tier or an uncolored role. */
             color: string | null;
             /**
              * Format: uuid
@@ -8228,7 +8262,7 @@ export interface components {
         MentionRoleDto: {
             /**
              * Format: uuid
-             * @description The role's id, or the tier's or group's (`kind`).
+             * @description The role's id, or the tier's or group's (`kind`). A class year's standing (`@Seniors`, #5786) has its own id, fixed for that group and standing, so no two rows share one.
              */
             role_id: string;
             /**
@@ -8238,7 +8272,7 @@ export interface components {
             kind: "role" | "tier" | "group";
             /** @description The name; the picker inserts it folded. */
             name: string;
-            /** @description The role’s palette color, or null. */
+            /** @description The role’s color (a palette color or a readable custom `#RRGGBB`, `isPaintableRoleColor`), or null. */
             color: string | null;
             /** @description Whether the caller may `@` it: its own switch (`mentionable` on the role, tier or group, on by default), or the caller holding `channels:manage` or `roles:manage`. A token naming one the sender may not ping reaches nobody. */
             mentionable: boolean;
@@ -9069,6 +9103,18 @@ export interface components {
         GifPageDto: {
             results: components["schemas"]["GifResultDto"][];
             next_page: number | null;
+        };
+        GifFavoriteRenditionDto: {
+            url: string;
+            width: number;
+            height: number;
+        };
+        AddGifFavoriteDto: {
+            id: string;
+            title?: string;
+            preview: components["schemas"]["GifFavoriteRenditionDto"];
+            full: components["schemas"]["GifFavoriteRenditionDto"];
+            token: string;
         };
         ScheduledAttachmentDto: {
             filename: string;
@@ -10732,7 +10778,7 @@ export interface components {
             kind: "manual" | "pledge_class" | "class_year" | "major";
             /** @description The group's name, which `@` mentions it. An automatic group's is its pledge class's, "Class of" and the year, or the major as most of its members write it. */
             name: string;
-            /** @description One of the role palette colors, or null. */
+            /** @description A palette color, or a custom `#RRGGBB` that reads on every surface (`isPaintableRoleColor` in `@repo/validation`), or null. */
             color: string | null;
             /** @description Whether any member may `@` the group. While false, only a member holding `channels:manage` or `roles:manage` can ping it. */
             mentionable: boolean;
@@ -10755,11 +10801,8 @@ export interface components {
         CreateChapterGroupDto: {
             /** @description The name, as the chapter writes it ("Third floor", "Live-ins"). Stored trimmed. No other role, tier or group of the chapter may be called the same, ignoring case and punctuation, and it may not read as @everyone or @here. */
             name: string;
-            /**
-             * @description One of the role palette colors, in any letter case.
-             * @enum {string|null}
-             */
-            color?: "#F2994A" | "#F47FA4" | "#B392F0" | "#8FA8FF" | "#5CC8F0" | "#3DD6C4" | "#6FD08C" | "#C5E06A" | "#D9B99B" | "#A9B4C2" | null;
+            /** @description A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color. */
+            color?: string | null;
             /** @description Whether any member may `@` it. Defaults to true. */
             mentionable?: boolean;
             /** @description Its first members, as `users.id`s of members of the chapter. Defaults to none. */
@@ -10768,11 +10811,8 @@ export interface components {
         UpdateChapterGroupDto: {
             /** @description A manual group's new name, under the same rules as a new one. An automatic group's name follows its class, year or major and is refused here. */
             name?: string;
-            /**
-             * @description One of the role palette colors, in any letter case. Null clears it.
-             * @enum {string|null}
-             */
-            color?: "#F2994A" | "#F47FA4" | "#B392F0" | "#8FA8FF" | "#5CC8F0" | "#3DD6C4" | "#6FD08C" | "#C5E06A" | "#D9B99B" | "#A9B4C2" | null;
+            /** @description A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color. */
+            color?: string | null;
             /** @description Whether any member may `@` it. */
             mentionable?: boolean;
         };
@@ -11245,7 +11285,7 @@ export interface components {
              */
             end_date: string;
             /**
-             * @description Also bulk-promote every New Member in the chapter to the Everyone role (once Member), in the same transaction as the archive. Members keep all their other roles. Defaults to false.
+             * @description Also bulk-promote every New Member in the chapter to the Actives role, in the same transaction as the archive. Members keep all their other roles. Defaults to false.
              * @default false
              */
             promote_new_members: boolean;
@@ -14335,6 +14375,8 @@ export interface operations {
                 actor_user_id?: string;
                 /** @description Filter to a single action verb, e.g. `member_removed`. Matched exactly; an unknown verb returns an empty list. */
                 action?: string;
+                /** @description Filter to one Logs kind: any of the actions it holds (`CHAPTER_LOG_KINDS` in `@repo/validation`). */
+                kind?: "roles" | "members" | "settings";
                 /** @description Inclusive lower bound on `created_at`. Full ISO 8601 timestamp with an explicit UTC offset — a bare date is rejected rather than read as midnight. Filters the range; pair with `before` to page within it. */
                 start_date?: string;
                 /** @description Inclusive upper bound on `created_at`. Full ISO 8601 timestamp with an explicit UTC offset — send `…T23:59:59.999Z` for a whole final day rather than a bare date. Unlike `before`, this bounds the range rather than moving with pagination. */
@@ -18838,6 +18880,92 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GifPageDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    GifController_favorites_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GifPageDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    GifController_addFavorite_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddGifFavoriteDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    GifController_removeFavorite_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gifId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

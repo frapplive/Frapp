@@ -77,7 +77,7 @@ export type ChapterGroupView = ChapterGroup & { member_ids: string[] };
  * Only a manual group's name and members are written here. An automatic
  * group (a pledge class's, a graduation year's, a major's) follows the
  * members' data, which the database keeps (`20261113040007_chapter_groups.sql`,
- * `20261120215726_major_groups.sql`); its color
+ * `20261121173330_major_groups.sql`); its color
  * and ping switch are the chapter's.
  *
  * Every change writes a `chapter_audit_log` row mirrored to `#chapter-audit`,
@@ -423,7 +423,7 @@ export class ChapterGroupService {
       // must not lock an officer out of a name (the row of a major nobody has
       // any more is hidden and can't be deleted). A major gives way instead:
       // one named like another set isn't a mention target
-      // (`namesMajorsGiveWayTo` in chat-mention.service.ts).
+      // (`namesAutomaticGroupsGiveWayTo` in chat-mention.service.ts).
       ...groups
         .filter((g) => g.id !== selfId && g.kind !== 'major')
         .map((g) => g.name),

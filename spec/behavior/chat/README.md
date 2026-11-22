@@ -7,7 +7,7 @@ The mobile app opens directly into chat.
 
 - **Chat is non-optional.
   It cannot be disabled.**
-  Every chapter always has, at minimum: `#general` (everyone, the landing channel when a device has no last channel and the chapter has set no default), `#announcements` (exec-write, member-read, push by default), `#chapter-audit` (system-write only, member-read — the audit feed), and DMs / group DMs (always on).
+  Every chapter always has, at minimum: `#general` (everyone, the landing channel when a device has no last channel and the chapter has set no default), `#announcements` (exec-write, member-read, push by default), and DMs / group DMs (always on). The record of officer changes is not a channel: officers read it on the Logs page in Chapter settings ([`../settings/README.md` § Audit Rules](../settings/README.md#audit-rules)); `#chapter-audit` was removed on 2026-11-21.
 - **Modules-as-integrations.**
   When an ops module is enabled it does not get a top-level nav tab first.
   It gets: (1) one or more **slash commands** in chat, (2) a **rich message renderer** that turns the artifact into an inline card with primary actions (RSVP / Done / Vote / Pay / Confirm / Submit), and (3) _optionally_ a secondary dashboard page for the longer-form view.
@@ -146,11 +146,10 @@ Paul, 2026-11-10 (#3722, under #4068): each channel answers two questions, and o
   Categories are display-only grouping with a sort order.
   Channels not assigned to a category appear in a default "Channels" group.
 - **Default channels** created on chapter setup (`DEFAULT_CHANNELS` in `apps/api/src/domain/constants/permissions.ts`): `#general` (everyone sees and posts), `#announcements` (everyone sees;
-  the top two starting tiers post), `#chapter-audit` (everyone sees, nobody posts, `is_audit_log` — system-write audit feed;
-  § [The audit log is system-write only](#the-audit-log-is-system-write-only)), `#alumni` (seen and posted in by the four starting tiers and the Alumni role, which makes it the one seeded channel alumni may write in).
+  the top two starting tiers post), `#alumni` (seen and posted in by the four starting tiers and the Alumni role, which makes it the one seeded channel alumni may write in).
 - **Seeding happens at chapter creation (applies to all tiers)** — the onboarding submit `POST /v1/chapters/onboard`, the one way to create a chapter, seeds channels.
   It is **not** gated on billing/subscription.
-  `#chapter-audit` is required so the audit bridge has a destination.
+  `#chapter-audit` was seeded here until 2026-11-21, when the Logs page replaced it (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)).
 - **Welcome message on onboarding submit.**
   A chapter created through the onboarding wizard gets a one-time welcome `system_audit` message, the first message it sees.
   Its channel and text, and where each client lands after submit, are owned by [`../onboarding.md` § First-Officer Onboarding Wizard](../onboarding.md#first-officer-onboarding-wizard).
@@ -177,7 +176,7 @@ Added 2026-11-05, owner direction ("Mobile opens up to the last channel you were
   A member who can't see it falls through to `#general`.
   Mobile does not use it: with no remembered channel, launch stays on chat home.
 - **Fallback:** a remembered channel that is deleted, no longer visible to the member, or a DM they hid is skipped.
-  Web then opens the chapter default, else `#general`, else the first channel the member can post in that isn't `#chapter-audit` (2026-11-19), else the first channel.
+  Web then opens the chapter default, else `#general`, else the first channel the member can post in (2026-11-19; it skipped `#chapter-audit` until that channel was removed on 2026-11-21), else the first channel.
   The same applies in the middle of a visit: the open channel disappearing lands there.
 - **Web's two lists** (since [#3774](https://github.com/pdcarlson/Frapp/issues/3774), Shawn, 2026-11-12).
   Web's chat panel shows the chapter's channels or the member's direct messages, and each remembers its own last conversation.
@@ -198,7 +197,7 @@ Added 2026-11-06, owner request ([#2252](https://github.com/pdcarlson/Frapp/issu
   It is not keyed by member, so a shared device keeps one density across sign-ins, and sign-out leaves it.
   Syncing it to the account would need a stored setting and an endpoint; revisit if members ask for it to follow them.
 - **Bubbles is a third choice** (added 2026-11-10;
-  "Read" under your latest message in an open DM is not built: the Messages list shows the sent or read check (§ Read Receipts → Shown to the sender), and the footer waits on a live signal when the other member reads, [#5532](https://github.com/pdcarlson/Frapp/issues/5532) *(corrected 2026-11-18: this cited #4040, which does not exist)*;
+  "Read" under your latest message in an open DM is not built: the Messages list shows the sent or read check (§ Read Receipts → Shown to the sender), and the footer waits on a live signal when the other member reads, [#5532](https://github.com/pdcarlson/Frapp/issues/5532) _(corrected 2026-11-18: this cited #4040, which does not exist)_;
   [#3787](https://github.com/pdcarlson/Frapp/issues/3787);
   Paul's opt-in OK is [his comment there](https://github.com/pdcarlson/Frapp/issues/3787#issuecomment-6771881257)).
   Cozy stays the default; nobody is put on Bubbles.
@@ -378,9 +377,9 @@ Each member arranges their own channel list (#2877, owner decision 2026-09-29).
 The arrangement belongs to the member and the chapter together: it follows the member between web and mobile, it differs per chapter, and nobody else can read or change it, an officer included.
 The categories themselves stay the chapter's (§ Channels).
 
-- **Sections, top to bottom:** Pinned, the default Channels group, one section per category in the chapter's order, Direct messages, then System on web (`#chapter-audit`).
+- **Sections, top to bottom:** Pinned, the default Channels group, one section per category in the chapter's order, then Direct messages. Web drew a System section after them for `#chapter-audit` until the channel was removed on 2026-11-21.
   On web since [#3774](https://github.com/pdcarlson/Frapp/issues/3774) (Shawn, 2026-11-12) the Direct messages section is its own list behind the nav's Direct messages row: Pinned (its pinned DMs), its rows, then Hidden conversations;
-  the channel list is Pinned (pinned channels), the channel groups, then System.
+  the channel list is Pinned (pinned channels), then the channel groups.
   Hidden conversations stays at the end, as § Direct Messages describes.
   An empty section is not drawn.
 - **Pin.**
@@ -434,7 +433,7 @@ The categories themselves stay the chapter's (§ Channels).
   Pinned, Direct messages, System and Hidden conversations carry none, and the + is gone while a row or heading is held.
   On mobile the + sits at the right of the Channels heading and each category heading on s04, always drawn (a phone has no hover), and opens a New channel sheet: name, description, category, a Private switch, and who can see and post, started with the category's answers and following a change of category until the officer changes one (§ [Who can see and post](#who-can-see-and-post)).
   - **Where it lives.**
-    `chat_channels.display_order` (`20261111190000`), null until the channel's section is first arranged, and never set on a DM, a group DM or `#chapter-audit`; categories keep `chat_channel_categories.display_order`.
+    `chat_channels.display_order` (`20261111190000`), null until the channel's section is first arranged, and never set on a DM or a group DM; categories keep `chat_channel_categories.display_order`.
     `PUT /v1/channels/order` takes a section (`category_id`, null for the default group) and its channels top to bottom, moving any listed channel into it; `PUT /v1/channels/categories/order` takes the categories top to bottom.
     Both need `channels:manage`.
     Each writes in one transaction under a per-chapter lock (`reorder_chat_channels`, `reorder_chat_categories`), and a row the officer couldn't see (a private channel they're not in, a category created mid-drag) keeps its relative place after the listed ones.
@@ -490,10 +489,10 @@ The categories themselves stay the chapter's (§ Channels).
 - **Row menu** (owner, 2026-11-06).
   Each channel row opens that channel's actions: on web a right-click on a rail row (or a long press, the menu key, or Shift+F10 with the row focused), and the row itself draws no hover controls; on mobile a long press on an s04 row, hidden conversations included, which taps and opens the app's own glass menu rather than a system alert.
   Which actions a row offers is `channelRowActions` in `@repo/hooks`, one rule for both clients, scoped to the member's permissions so nobody sees an action the server would refuse.
-  Leaving Edit and Delete off DMs and `#chapter-audit` (below) matches the server, which enforces it: it refuses `#chapter-audit`'s delete and rename (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)), and refuses any edit or delete of a DM or group DM (§ [Direct Messages](#direct-messages)).
+  Leaving Edit and Delete off DMs (below) matches the server, which enforces it: it refuses any edit or delete of a DM or group DM (§ [Direct Messages](#direct-messages)). Until 2026-11-21 the same held for `#chapter-audit` (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)).
   In order: Mark as read (an unread row only), Pin to top or Unpin from top, Notifications (the three levels, the current one checked; locked while the level is unknown, and on mobile while offline), Display (mobile; this channel's display on this phone, § [Chat density](#chat-density), outside `channelRowActions` because it writes nothing to the server; web keeps it in the open channel's `⋯` menu), Copy link (web), and Hide conversation (a 1:1 DM); then, after a divider and only with `channels:manage`, Edit channel (on web it opens Chat settings on that channel; on mobile an Edit channel sheet with its name, description, category and who can see and post, #3838, #3702), Arrange channels (mobile; opens the Arrange channels screen above) and Delete channel (asks first, and Delete stays disabled until the channel's name is typed exactly, case and all: Paul, #3838, "deleting a channel should be harder"; Chat settings' Delete asks the same way).
   Mobile leaves out Copy link, since a phone has no address bar; it asks for the typed name in a sheet, since an Android alert can't hold a text field.
-  Edit and Delete are never offered on a DM, a group DM or `#chapter-audit`.
+  Edit and Delete are never offered on a DM or a group DM.
   On web every action is also reachable without the menu: the open channel's `⋯` menu, opening the channel, the address bar, or Chat settings.
 - **Rows carry no read-only mark.**
   Web used to draw a lock at the end of every read-only row, the same glyph that marks a private channel at the start of a row.
@@ -992,7 +991,7 @@ WhatsApp marks the copy "Forwarded".
   It is sent under category `reminder`, which no notification switch silences (the member asked for it); quiet hours still make it silent.
   No push goes out for a message in a channel the member can no longer read, a blocked author's message is not quoted (and its in-app row is withheld as that author's chat is), and a deleted one says it was deleted.
   What the push and row carry is [`../notifications.md` § Deep Linking](../notifications.md#deep-linking).
-- **On Activity,** the member's reminders, due and waiting, are listed in their own Reminders group until they clear them ([`../activity.md` § Reminders](../activity.md#reminders) owns which and how many).
+- **On Activity,** the member's reminders, due and waiting, are rows in To do on the day each is for (#5779; their own Reminders group until then) until they clear them ([`../activity.md` § Reminders](../activity.md#reminders) owns which and how many).
 - **Not a bookmark with a due time.**
   The issue asked whether it should be; it is not, because Save is one idempotent row per (member, message) that un-Save deletes: folded together, un-Save would cancel a reminder and every reminder would sit in Saved.
   A reminder touches the message's lifecycle no more than a bookmark does.
@@ -1051,9 +1050,9 @@ This keeps ephemerality real — there's no third path that lets a sender unilat
 **Two presence topics, deliberately.**
 They answer different questions and must not be merged:
 
-| Topic                          | Scope                                  | Read by                                                                                                                                                                                                                     |
-| ------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat:channel:<channelId>`     | Who has _this channel_ open            | The push worker, via service role, to suppress pushes to members already looking (ADR-10), except in an announcements channel                                                                                             |
+| Topic                          | Scope                                  | Read by                                                                                                                                                                                                               |
+| ------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat:channel:<channelId>`     | Who has _this channel_ open            | The push worker, via service role, to suppress pushes to members already looking (ADR-10), except in an announcements channel                                                                                         |
 | `presence:chapter:<chapterId>` | Who is present in the _chapter_ at all | The web Directory, Chat's member list on both apps, the phone's member profile, and the API's `ChapterPresenceReader` for `@here` (§ Role mentions; one service-role join per read, same config as the push worker's) |
 
 The chat topic's channel config and its `{ userId, ts }` payload are a cross-service contract pinned by `packages/chat-core/src/presence-contract.spec.ts`.
@@ -1189,17 +1188,32 @@ Picking a hit selects its channel if it is not already open and then jumps, reus
   Landing directly on a hit past the bound needs a window around the message rather than every page between —
   #2785.
 
+### Dictation
+
+On the phone, every chat composer (a channel, a DM, a thread reply, an edit) has Ask's dictation (#5772, Paul 2026-11-21): a mic inside the box's right end; while it listens the box becomes the voice's waveform in the chapter's colour with cancel at its left, the words heard run faint above it, and Send becomes a Done check.
+On Done the words land in the box after anything already typed, to read, edit and send; nothing is sent by speaking.
+In a channel they are tidied by Frapp's AI first, with an Original chip that puts back the words as spoken; in a DM or group DM they land as heard.
+When they are tidied, what the cleanup needs, its limits and its notices: [`../ai.md` § Dictation](../ai.md#dictation).
+Web has no mic in chat (Paul 2026-11-21: phone only for now), as web's Ask has none.
+
 ### GIFs
 
 A member can send a GIF (#4631, Paul picked KLIPY on 2026-11-12).
 Tenor, which most apps used, shut its API down on 2026-06-30; Discord moved to KLIPY.
 
 - **Where it starts.**
-  On web, a "GIF" button beside the emoji button opens a picker the emoji panel's size, the way Discord and Slack place theirs: two columns of GIFs at their own heights.
-  On the phone, the + sheet's GIF row, under Photo, opens a tall sheet, as iMessage's keyboard app does: two GIFs to a row, in tiles of one height.
+  On web, a "GIF" button beside the emoji button opens a picker the emoji panel's size, the way Discord and Slack place theirs: two columns of GIFs at their own heights. The + card's GIF row, under Attach a file, opens the same picker (#5772), so the + offers what the phone's does.
+  On the phone, the + sheet's GIF row, under Photo, opens a sheet at 62% of the screen, so the conversation stays in view above it, as iMessage's keyboard app keeps it: two GIFs to a row, in tiles of one height.
   Each shows trending GIFs until the member types, then search results, and loads more on scroll; a failed load of more offers a retry rather than retrying on its own.
   One click or tap sends; there is no preview step and no caption.
   The search field reads "Search KLIPY", which is the attribution KLIPY's terms ask for.
+- **Favorites** ([#5772](https://github.com/pdcarlson/Frapp/issues/5772), Paul, 2026-11-20).
+  The picker has two tabs, Search and Favorites, on web and the phone.
+  A star on each GIF adds it to Favorites or takes it off: on web it shows on hover or keyboard focus and stays once starred; on the phone it is always on the tile, as Discord's phone picker draws it.
+  Favorites are the member's own, the same in every chapter, newest first, up to 200 (`GIF_FAVORITES_MAX`; a star past that is refused with "You can keep up to 200 favorite GIFs. Remove one to add another.").
+  They live in `gif_favorites`, one row per member and GIF, which only the API reads, and account deletion removes them.
+  A star must carry the result's token, as a send must, so only a GIF this server's search returned can be starred; `GET /v1/gifs/favorites` signs each again, so a GIF sent from Favorites passes the same check. A favorite from a provider the server no longer uses is left out.
+  The star turns at once and turns back with the reason if the server refuses.
 - **When it is offered.**
   Only when the server has a provider key (`KLIPY_API_KEY`), which `GET /v1/gifs/availability` reports, so a server without one shows no button or row rather than a broken picker.
   The phone greys the row offline ("Reconnect first") and while a reply is staged ("Not while replying").
@@ -1527,7 +1541,7 @@ The rules, `POST /v1/chat/reports/{id}/remove-message` (`channels:manage` on top
   It never opens a channel read, a thread, a pin list or the channel row: `assertChannelAccess` and every list surface take no report, and the route returns the resolved report, never the message.
   What an officer knows about the message is the evidence snapshot the report already carried.
   The response does carry the message's `channel_id` — an id, which every channel route still refuses — so the client can blank that one cached timeline instead of refetching every timeline it holds.
-- **Not one of Frapp's entries in the audit log** (2026-11-17): a report on an entry Frapp wrote in `#chapter-audit` can't remove it (403), as no delete can (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)), and web's queue offers no Remove on one; the officer marks it reviewed or dismisses it.
+- **Not one of Frapp's entries in the audit log** (2026-11-17; the channel was removed on 2026-11-21, so this now has nothing to apply to): a report on an entry Frapp wrote in `#chapter-audit` can't remove it (403), as no delete can (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)), and web's queue offers no Remove on one; the officer marks it reviewed or dismisses it.
   A report on a member's post there, from before the channel was read-only, removes it as anywhere else.
 - **In a 1:1 DM the removal can reveal the reporter to the sender** — the one inference § Report accepts.
   The sender sees their message removed, and the DM's other member is the only person who could have reported it.
@@ -1586,7 +1600,7 @@ The rules, `POST /v1/chat/reports/{id}/remove-message` (`channels:manage` on top
   Nothing they send reaches the blocker.
 
 - **A member cannot block themselves, nor the system actor.**
-  Blocking the system sender would silently mask the chapter welcome post, the `#chapter-audit` bridge and the poll-expiry notice, with nothing rendering as "blocked" to explain why — chapter features would simply appear broken.
+  Blocking the system sender would silently mask the chapter welcome post and the poll-expiry notice, with nothing rendering as "blocked" to explain why — chapter features would simply appear broken.
   (A poll and its tally are _not_ in that set: `poll` is not a server-only kind, so they are authored by the member who created the poll.)
 - **Blocking is reversible, and the unblock affordance is durable.**
   The blocked-members list is the one place a block can always be undone (mobile: Settings → Blocked members; web: Settings → Blocked members, the personal page on the account menu, `/preferences?section=blocked`); a tombstone in a thread the member may never reopen is not sufficient.
@@ -1708,7 +1722,6 @@ The App Review note states this answer ([`apps/mobile/store/README.md`](../../..
     Changed in #3722 by Claude for pdcarlson, 2026-11-11; pending Paul.
 - **Message threads are allowed under announcements** (#3785, Winston's pick 2026-11-10).
   Any member who can read the channel may start a thread on an announcement or reply in one; only officers still post top-level, and quote replies follow posting, as above.
-  `#chapter-audit` takes no threads.
   Discord's announcement threads and Telegram's channel comments work the same way.
   Paul's recorded rule was that no member threads an announcement.
   - Overridden in #4027 by whewitt-frapp, 2026-11-10; pending Paul.
@@ -1716,6 +1729,8 @@ The App Review note states this answer ([`apps/mobile/store/README.md`](../../..
   A cross-channel `reply_to_id` is still a 400 (above).
 
 ### The audit log is system-write only
+
+**Removed 2026-11-21.** `#chapter-audit` no longer exists: migration `20261121001755` deleted every channel flagged `is_audit_log` and dropped the `chat_channels_flag_audit_log` trigger, new chapters are not seeded one, and the audit mirror (`ChatBridgeWorkerService`) is gone. Officers read `chapter_audit_log` on the Logs page in Chapter settings instead ([`../settings/README.md` § Audit Rules](../settings/README.md#audit-rules)). The `is_audit_log` column and the code that reads it are still in place, unreachable, until #5808 removes them (along with the name-keyed `chapter-audit` checks: `builtInChannelDefault` and `isSystemChannel` still treat a channel by that name as the old one); the rules below describe that code and are kept as history.
 
 `#chapter-audit` is the chapter's record of officer changes, so only Frapp posts in it (#3909).
 Until 2026-11-09 it was gated like any read-only channel, and a member holding `announcements:post` or the President's `*` could post there; a beta chapter reported a member's message in it.
@@ -1744,7 +1759,7 @@ Until 2026-11-09 it was gated like any read-only channel, and a member holding `
 ## Slash Commands and Integrations
 
 Slash commands turn chat into the dispatcher for the ops modules that have a message-shaped action.
-The full command catalog, slash-command dispatch path (simple vs heavy commands), announcement gating, vote-change semantics, the rich-message renderer registry, and the audit bridge are specified in [integrations.md](./integrations.md).
+The full command catalog, slash-command dispatch path (simple vs heavy commands), announcement gating, vote-change semantics, and the rich-message renderer registry are specified in [integrations.md](./integrations.md).
 Push-notification behavior for chat lives in [../notifications.md](../notifications.md).
 
 ## Message Persistence
@@ -1785,9 +1800,8 @@ A member with no receipt for a channel has never opened it, so **every** message
   An archive is history the chapter imported, not messages anyone sent them, and the rule above would otherwise hand every member a badge the size of the import that no amount of reading could clear.
   This is stated explicitly in `get_channel_unread_counts` rather than left to fall out of the nullable-sender comparison, which excluded it only as an artefact of `NULL <> uuid` being NULL.
 
-- **`#chapter-audit` entries never count** (owner decision, 2026-11-06: audit entries arrive silently).
+- **`#chapter-audit` entries never count** (owner decision, 2026-11-06: audit entries arrive silently). The channel and its mirror were removed on 2026-11-21 (§ [The audit log is system-write only](#the-audit-log-is-system-write-only)), so no new mirror row is written; this bullet describes the rule while its code remains.
   A `system_audit` row the audit mirror wrote, keyed `client_message_id = 'audit:<id>'` (`auditMirrorClientId`), is a log line, not a message to anyone.
-  It never pushes either, whatever level the member set: `decidePush` refuses a mirror row ahead of every preference ([`../notifications.md`](../notifications.md#chat-notification-preferences)).
   The server's other `system_audit` notices (a poll closing, the chapter welcome) are addressed to members and still count.
 
 Mention count is the subset of that same set which mentions the viewer, plus every message-thread reply in the channel that mentions them and is newer than both the channel's cursor and their read of that thread (§ Messages → Message threads).
@@ -1798,7 +1812,7 @@ Clients MUST NOT re-derive either number locally: a second definition would disa
 
 ### Shown to the sender
 
-*(Added in [#5519](https://github.com/pdcarlson/Frapp/issues/5519), Paul, 2026-11-18: "show the double check if it's been read, or a check if it's been sent … just for DMs".)*
+_(Added in [#5519](https://github.com/pdcarlson/Frapp/issues/5519), Paul, 2026-11-18: "show the double check if it's been read, or a check if it's been sent … just for DMs".)_
 
 In a DM or group DM whose last message is the viewer's own, the Messages row draws a check before that line: one, in `--muted`, for **sent**, and two, in the chapter accent, for **read**.
 Someone else's last message, a channel, an audit line and an imported message carry no check.
@@ -1975,7 +1989,7 @@ Which member, if any, is the shared answer in `packages/chat-core/src/profile-ta
 **The web profile popout** (2026-11-15, [#4593](https://github.com/pdcarlson/Frapp/issues/4593), item 8 there; Discord's user popout and Slack's profile card are the comparables).
 A name, photo, chip or member-list row opens a 288px card beside it instead of the full profile: to the right of a name in the timeline, to the left of a member-list row, flipping when there is no room.
 It shows the photo, the name in its role color, the class-year line and up to four role chips (then "+N"), with Message (absent on the viewer's own) and View profile, which opens the full profile over the chat column and closes the Members list it came from.
-*Changed 2026-11-19 ([#5684](https://github.com/frapplive/Frapp/issues/5684)): the card shows every role and a Groups row (`MemberAssignments`), scrolling inside the card when they are many, and a viewer who may change them takes one away with its x or gives one from "+ Add role" / "+ Add to group" ([`members.md` § Groups](../members.md#groups)). A Directory row or tile opens the same card.*
+_Changed 2026-11-19 ([#5684](https://github.com/frapplive/Frapp/issues/5684)): the card shows every role and a Groups row (`MemberAssignments`), scrolling inside the card when they are many, and a viewer who may change them takes one away with its x or gives one from "+ Add role" / "+ Add to group" ([`members.md` § Groups](../members.md#groups)). A Directory row or tile opens the same card._ _Changed 2026-11-20 ([#5783](https://github.com/frapplive/Frapp/issues/5783)): a long row folds behind "+N more", opening in place ([`members.md` § Groups](../members.md#groups))._
 It follows its name as the timeline scrolls. Escape or a click away closes it and puts focus back on what opened it; a popout opened from the Members list closes back to the list.
 Implementation: `apps/web/components/chat/member-popout.tsx`.
 
@@ -1983,7 +1997,7 @@ Implementation: `apps/web/components/chat/member-popout.tsx`.
 The message read carries `mentions` to both clients (`ChatMessage.mentions` in `@repo/chat-core/types`, an empty list when the server sent none or masked it), and a row whose list includes the viewer wears the chapter accent ([components.md](../../ui/design-system/components.md) §11, "A row that mentions you").
 The highlight reads that server list and never the body, so what lights up is exactly who was mentioned.
 The viewer's own message lights up too when the list holds them (their own `@here`, a role they hold, their own name), though it never notifies them (Paul, 2026-11-13).
-*(Until then it never lit up.)*
+_(Until then it never lit up.)_
 
 Two properties of _how_ the roster is read are load-bearing, because both are easy to undo without any test noticing:
 
@@ -2029,10 +2043,11 @@ The rules (`ChatMentionService`, `apps/api/src/application/services/chat-mention
   No role may be named so it reads as `@here` (`role.everyone_name`, and a Discord import's new role), and a role an older chapter named "Here" is no longer mentionable by that name.
   Presence is advisory (`presence-topics.ts`), so a forged entry can make someone "here" who isn't; that costs them a mention, never access.
 - **Tiers and groups are pinged the same way** (#4076; tiers decided by Paul and Shawn on 2026-11-11).
-  `@<tier name>` reaches everyone holding any role in the tier, and `@<group name>` everyone in the group now ([`members.md` § Groups](../members.md#groups)): a pledge class's group reaches the class, "Class of 2027" whoever has that graduation year, and a major's group (`@Mechanical Engineering`, #5778) whoever has that major, however they capitalized it.
+  `@<tier name>` reaches everyone holding any role in the tier, and `@<group name>` everyone in the group now ([`members.md` § Groups](../members.md#groups)): a pledge class's group reaches the class, "Class of 2027" whoever has that graduation year (also by its standing, `@Seniors` while 2027 is this academic year's senior class, #5786), and a major's group (`@Mechanical Engineering`, #5778) whoever has that major, however they capitalized it.
   A member types their own major, so a major gives way: one named like a role, tier or other group of the chapter, or like a member's name or first name, is no mention target (it still lists under Roles and groups), and that name keeps meaning what it meant. Otherwise saving "Exec Board" as a major would add you to every `@Exec Board`, and a major "Art" would take a typed `@Art` from a member named Art. A chapter that made a role per major keeps pinging the role until it deletes it, and then the major takes the name.
+  A class year's standing (`@Seniors`, `@Juniors`, `@Sophomores`, `@Freshmen`, #5786) gives way the same way, and a major is never named like a standing, so a major saved as "Seniors" can't join `@Seniors`. When the chapter's roles can't be read, neither a major nor a standing is a target for that message, since what it would give way to isn't known.
   Each tier and group has its own `mentionable` switch, on by default, with the role's rule: while off, only a member holding `channels:manage`, `roles:manage` or `*` can ping it (the tier's on its page under Roles, the group's under Roles and groups).
-  A tier holding the Everyone role reaches nearly the whole chapter, so it also follows the Everyone role's switch (§ `@everyone`, officers only by default): without that, `@Members` would be `@everyone` for anyone.
+  A tier holding the Everyone role reaches nearly the whole chapter, so it also follows the Everyone role's switch (§ `@everyone`, officers only by default): without that, `@Members` would be `@everyone` for anyone. Since #5802 the Everyone role sits outside the tiers, so no tier holds it; a tier holding the Actives role (the old Everyone row) follows Actives' switch the same way.
   Matching is the role's, by the whole folded name.
   When a tier, a role and a group share a name, the token reaches everyone in the ones the sender may ping, together, and the picker lists each, labelled by kind.
   Two groups sharing a name reach together the same way, since a pledge class or class year can take a hand-made group's name; two roles or two tiers sharing a name stay ambiguous and reach nobody.
@@ -2263,7 +2278,7 @@ That is a real cross-tenant surface and it is contained by two things, both re-c
   - **Roles are mapped before channels**, bot path only (an export names no roles).
     Each Discord role becomes an existing Frapp role, a new role named after it, or nothing (Skip, stored as `ignore`; the wizard called it Ignore until 2026-11-06).
     The default is the Frapp role with the same name, ignoring case and punctuation (letters of any script count, so "ΔΔ Class" and "ΓΓ Class" differ);
-    then a close match to a seeded role, read from the end of the Discord name ("Recording Secretary" is a Secretary, "Pledges" are New Members, but "Pledge Educator" is not a pledge), except Everyone (once Member, #4191), the widest role, which matches only a whole name ("Brothers", never "Board Member"), and except a name that starts by saying it is not the sitting officer ("Past Treasurer", "PC President", "Assistant Treasurer"), which only a same-name role matches;
+    then a close match to a seeded role, read from the end of the Discord name ("Recording Secretary" is a Secretary, "Pledges" are New Members, but "Pledge Educator" is not a pledge), except Actives (once Member, then Everyone until #5802), the widest role an officer gives, which matches only a whole name ("Brothers", never "Board Member"), and except a name that starts by saying it is not the sitting officer ("Past Treasurer", "PC President", "Assistant Treasurer"), which only a same-name role matches;
     then a new role named after it.
     _2026-09-29, owner's decision (#2855), replacing "a new role if it could read a private channel, and Ignore if it could not, so colour, class-year and game roles create nothing": a role classifies people (a class year, a committee) even when it gates no channel, and the admin sets any role they don't want to Ignore._
     A viewer who cannot manage roles, or cannot load the chapter's roles, keeps every role on Skip and can still import.
@@ -2490,26 +2505,26 @@ A member fixes that by **linking the Discord account they used**, and from then 
 
 `chat_messages.kind` extends the simple TEXT/POLL distinction:
 
-| Kind           | Description                                                                                                                                                                                                       |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`         | Plain text message (default)                                                                                                                                                                                      |
-| `event`        | Event RSVP card (created by `/event` slash command)                                                                                                                                                               |
-| `task`         | Task assignment card                                                                                                                                                                                              |
-| `poll`         | Poll (inline vote)                                                                                                                                                                                                |
-| `signup`       | Sign-up sheet: named slots with a limit, and who holds which, on web and mobile ([integrations.md § Sign-up sheet cards](./integrations.md#sign-up-sheet-cards), #3926)                                           |
-| `form`         | Form: a questionnaire that opens a full page; each member's answers are private to them and the form's creator ([integrations.md § Form cards](./integrations.md#form-cards), #3926 step 3). On web and the phone |
-| `role_picker`  | Role picker: an officer's card listing Non-chapter business roles, with a Join or Leave button beside each for every member, on web and the phone ([integrations.md § Role picker cards](./integrations.md#role-picker-cards), #4958) |
-| `dues`         | Dues reminder card — in the enum, but still renders the placeholder `ComingSoonCard`                                                                                                                              |
-| `points`       | Points grant or deduction notification (`/points`)                                                                                                                                                                |
-| `hours`        | Service hours log confirmation (created by `/hours log`)                                                                                                                                                          |
-| `rush`         | Recruitment candidate card (created by `/<vocab> add`; live votes and bid via GET), on web and mobile                                                                                                             |
-| `audio`        | Voice memo (mobile-native): recorded, uploaded to Storage, sent with waveform metadata — **specified, not yet in `CHAT_MESSAGE_KINDS`**                                                                           |
-| `pulse`        | Chapter-health catch-up card — see [catch-up.md](./catch-up.md) — **specified, not yet in `CHAT_MESSAGE_KINDS`** (#821)                                                                                           |
+| Kind           | Description                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`         | Plain text message (default)                                                                                                                                                                                                                                                                                                                             |
+| `event`        | Event RSVP card (created by `/event` slash command)                                                                                                                                                                                                                                                                                                      |
+| `task`         | Task assignment card                                                                                                                                                                                                                                                                                                                                     |
+| `poll`         | Poll (inline vote)                                                                                                                                                                                                                                                                                                                                       |
+| `signup`       | Sign-up sheet: named slots with a limit, and who holds which, on web and mobile ([integrations.md § Sign-up sheet cards](./integrations.md#sign-up-sheet-cards), #3926)                                                                                                                                                                                  |
+| `form`         | Form: a questionnaire that opens a full page; each member's answers are private to them and the form's creator ([integrations.md § Form cards](./integrations.md#form-cards), #3926 step 3). On web and the phone                                                                                                                                        |
+| `role_picker`  | Role picker: an officer's card listing Non-chapter business roles, with a Join or Leave button beside each for every member, on web and the phone ([integrations.md § Role picker cards](./integrations.md#role-picker-cards), #4958)                                                                                                                    |
+| `dues`         | Dues reminder card — in the enum, but still renders the placeholder `ComingSoonCard`                                                                                                                                                                                                                                                                     |
+| `points`       | Points grant or deduction notification (`/points`)                                                                                                                                                                                                                                                                                                       |
+| `hours`        | Service hours log confirmation (created by `/hours log`)                                                                                                                                                                                                                                                                                                 |
+| `rush`         | Recruitment candidate card (created by `/<vocab> add`; live votes and bid via GET), on web and mobile                                                                                                                                                                                                                                                    |
+| `audio`        | Voice memo (mobile-native): recorded, uploaded to Storage, sent with waveform metadata — **specified, not yet in `CHAT_MESSAGE_KINDS`**                                                                                                                                                                                                                  |
+| `pulse`        | Chapter-health catch-up card — see [catch-up.md](./catch-up.md) — **specified, not yet in `CHAT_MESSAGE_KINDS`** (#821)                                                                                                                                                                                                                                  |
 | `ask_answer`   | An Ask Frapp answer its asker posted to the channel: the Frapp sender's row, the answer's words as `content`, who asked and the sources in `payload`. Server-only, never edited, deleted by its asker or a `channels:manage` holder, notifies nobody ([`../ai.md` § Posting an answer to the channel](../ai.md#posting-an-answer-to-the-channel), #4713) |
-| `system_audit` | System-generated notice, never client-postable. Its server-side writers and where each posts: [integrations.md § Server-originated kinds](./integrations.md#server-originated-kinds-anti-forgery)                 |
-| `imported`     | A read-only archive message brought in from another system (Discord). Server-only; see _Imported archive messages_ below                                                                                          |
-| `loading`      | Client-side placeholder while NestJS RPC completes a heavy command. `_status: "recorded"` is the terminal form when the write committed but the chat card did not post — no Retry, no Discard                     |
-| `announcement` | Broadcast announcement                                                                                                                                                                                            |
+| `system_audit` | System-generated notice, never client-postable. Its server-side writers and where each posts: [integrations.md § Server-originated kinds](./integrations.md#server-originated-kinds-anti-forgery)                                                                                                                                                        |
+| `imported`     | A read-only archive message brought in from another system (Discord). Server-only; see _Imported archive messages_ below                                                                                                                                                                                                                                 |
+| `loading`      | Client-side placeholder while NestJS RPC completes a heavy command. `_status: "recorded"` is the terminal form when the write committed but the chat card did not post — no Retry, no Discard                                                                                                                                                            |
+| `announcement` | Broadcast announcement                                                                                                                                                                                                                                                                                                                                   |
 
 Rows marked _specified, not yet in `CHAT_MESSAGE_KINDS`_ are absent from the enum; rows marked _placeholder_ are in the enum but render `ComingSoonCard`.
 Everything else is built.
@@ -2554,7 +2569,7 @@ These are the user-observable guarantees of the chat client (web and mobile), in
 - **Author and DM names resolve by id, client-side, from one narrow roster.**
   A message carries only `sender_id`; a DM channel carries only its server-generated `dm-<userA>-<userB>` / `group-dm-<epoch>` name plus `member_ids`.
   Both clients resolve those against a single cached chapter projection — `GET /v1/members/roster`, which returns `{ user_id, display_name, avatar_url, role_color }` and deliberately nothing else, so rendering a name never puts the chapter's contact details on a device.
-  `role_color` is the palette color of the member's highest-ranked colored role, or `null`, and paints the author's name on both clients ([`rbac.md` § Role Lifecycle](../rbac.md#role-lifecycle), #3485).
+  `role_color` is the color (a palette value or a readable custom hue, [`rbac.md` § Role Lifecycle](../rbac.md#role-lifecycle)) of the member's highest-ranked colored role, or `null`, and paints the author's name on both clients ([`rbac.md` § Role Lifecycle](../rbac.md#role-lifecycle), #3485).
   On both clients a message author's avatar is their profile photo from that roster (`avatar_url`, signed by the API), else initials of the resolved name (#732, mobile #2884);
   a row with a `sender_id`, a linked imported row included, draws only the member, never its Discord snapshot, and only an imported author nobody has linked draws their Discord avatar (`resolveAuthorAvatar`, #2878).
   On web a DM row in the channel list still draws initials only.
@@ -2562,7 +2577,7 @@ These are the user-observable guarantees of the chat client (web and mobile), in
   Mobile caches each photo on disk by its storage path rather than its signed URL, so the API re-signing a photo doesn't download it again; a new photo is a new path, so it is never served stale.
   A 1:1 DM shows the other participant; a group DM keeps a chapter-supplied title and otherwise summarises participants.
   A sender that cannot be resolved — a deleted account, whose membership row `anonymize_user` purges — degrades to a truncated id rather than a blank name, and an empty stored `display_name` counts as unresolved because the column is `NOT NULL DEFAULT ''`.
-  The system actor (`SYSTEM_SENDER_ID`: the welcome, the audit bridge, a poll's closing notice) is on no roster, so it is named before any lookup: it reads "Frapp" (`SYSTEM_AUTHOR_LABEL` in `@repo/validation`, which `@repo/hooks`' `resolveAuthorName` and the activity feed's announcement actor both use) on every surface that names an author, including web's new-message announcement, and on both clients its avatar is the Frapp crest on the crest's own field, never initials, even before the image loads (#3347).
+  The system actor (`SYSTEM_SENDER_ID`: the welcome, a poll's closing notice) is on no roster, so it is named before any lookup: it reads "Frapp" (`SYSTEM_AUTHOR_LABEL` in `@repo/validation`, which `@repo/hooks`' `resolveAuthorName` and the activity feed's announcement actor both use) on every surface that names an author, including web's new-message announcement, and on both clients its avatar is the Frapp crest on the crest's own field, never initials, even before the image loads (#3347).
   Before that it fell through to the truncated id and read "Member 000000".
 - **The name is deliberately not joined onto the message.**
   Messages reach the cache four ways, and the live one is a `postgres_changes` echo of the `chat_messages` row, which cannot carry a join.

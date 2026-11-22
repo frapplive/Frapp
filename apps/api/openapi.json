@@ -1233,7 +1233,7 @@
     },
     "/v1/audit-log": {
       "get": {
-        "description": "Officer-action history (config changes, role/field changes, member removal, and similar). Callers other than the chapter President see only `member_visible` entries; the President sees every entry, including exec-only ones. Optional filters — `actor_user_id`, `action`, and the inclusive `start_date`/`end_date` window — compose as an intersection. Paginate via a cursor (`before` ISO8601), which is separate from the window so paging does not move the filter. Returns newest-first, capped at `limit` (default 50, max 200).",
+        "description": "Officer-action history (config changes, role/field changes, member removal, and similar). Callers other than the chapter President see only `member_visible` entries; the President sees every entry, including exec-only ones. Optional filters — `actor_user_id`, `action`, `kind` (a Logs kind: any of its actions), and the inclusive `start_date`/`end_date` window — compose as an intersection. Paginate via a cursor (`before` ISO8601), which is separate from the window so paging does not move the filter. Returns newest-first, capped at `limit` (default 50, max 200).",
         "operationId": "ChapterAuditLogController_list_v1",
         "parameters": [
           {
@@ -1254,6 +1254,20 @@
             "schema": {
               "example": "member_removed",
               "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "description": "Filter to one Logs kind: any of the actions it holds (`CHAPTER_LOG_KINDS` in `@repo/validation`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "roles",
+                "members",
+                "settings"
+              ]
             }
           },
           {
@@ -7980,6 +7994,120 @@
           }
         ],
         "summary": "Search GIFs (rated PG-13 at most)",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/v1/gifs/favorites": {
+      "get": {
+        "operationId": "GifController_favorites_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GifPageDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The member's favorite GIFs, newest first (#5772)",
+        "tags": [
+          "Chat"
+        ]
+      },
+      "post": {
+        "operationId": "GifController_addFavorite_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddGifFavoriteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Star a GIF from the picker (#5772)",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/v1/gifs/favorites/{gifId}": {
+      "delete": {
+        "operationId": "GifController_removeFavorite_v1",
+        "parameters": [
+          {
+            "name": "gifId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Unstar a GIF (#5772)",
         "tags": [
           "Chat"
         ]
@@ -21333,6 +21461,7 @@
     },
     "/v1/events/{id}/agenda-suggestions/{suggestionId}/add": {
       "post": {
+        "description": "409 `event.agenda_locked` once the meeting has started: its agenda takes check-offs only.",
         "operationId": "AgendaSuggestionController_add_v1",
         "parameters": [
           {
@@ -23628,13 +23757,17 @@
             "type": "string",
             "format": "uuid",
             "nullable": true,
-            "description": "Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role (once Member, #4191). Must belong to this chapter (400 otherwise)."
+            "description": "Role id new invites default to when the caller does not name one. Null clears the default, and invites fall back to the seeded Everyone role, the floor every member holds (#5802). Must belong to this chapter (400 otherwise)."
           },
           "birthday_channel_id": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "The channel Frapp posts a happy-birthday message in on each member's birthday, for members who share theirs with the chapter (#4959). Null, the default, turns the posts off. Must be one of this chapter's public channels that isn't archived or the audit log (400 otherwise)."
+          },
+          "members_can_change_name": {
+            "type": "boolean",
+            "description": "Whether settled members (finished the welcome screen, or joined over a day ago) may change their own name (#5801). False, the default, locks it: PATCH /v1/users/me refuses a changed display_name unless the member holds roles:manage here. Officers fix names through PATCH /v1/members/{id}/profile; a member of two or more chapters is never locked, since that route refuses them."
           }
         }
       },
@@ -24012,19 +24145,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "enum": [
-              "#F2994A",
-              "#F47FA4",
-              "#B392F0",
-              "#8FA8FF",
-              "#5CC8F0",
-              "#3DD6C4",
-              "#6FD08C",
-              "#C5E06A",
-              "#D9B99B",
-              "#A9B4C2"
-            ],
-            "description": "One of the role palette colors (`ROLE_COLOR_PALETTE` in `@repo/validation`), in any letter case; it is stored as listed. Null clears the color."
+            "description": "A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color."
           },
           "mentionable": {
             "type": "boolean",
@@ -24067,19 +24188,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "enum": [
-              "#F2994A",
-              "#F47FA4",
-              "#B392F0",
-              "#8FA8FF",
-              "#5CC8F0",
-              "#3DD6C4",
-              "#6FD08C",
-              "#C5E06A",
-              "#D9B99B",
-              "#A9B4C2"
-            ],
-            "description": "One of the role palette colors (`ROLE_COLOR_PALETTE` in `@repo/validation`), in any letter case; it is stored as listed. Null clears the color."
+            "description": "A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color."
           },
           "mentionable": {
             "type": "boolean",
@@ -24462,7 +24571,7 @@
           "role_color": {
             "type": "string",
             "nullable": true,
-            "description": "Palette color of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it."
+            "description": "Color (palette or readable custom, `isPaintableRoleColor`) of the member’s highest-ranked colored role (lowest `display_order`), or null when none of their roles has one. Chat paints the author’s name in it."
           }
         },
         "required": [
@@ -26120,7 +26229,7 @@
             "maxLength": 20000
           },
           "agenda": {
-            "description": "This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none.",
+            "description": "This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAgendaItemDto"
@@ -26479,7 +26588,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "description": "A role's palette color; null for a tier or an uncolored role."
+            "description": "A role's color (palette or readable custom, `isPaintableRoleColor`); null for a tier or an uncolored role."
           },
           "tier_id": {
             "type": "string",
@@ -26516,7 +26625,7 @@
           "role_id": {
             "type": "string",
             "format": "uuid",
-            "description": "The role's id, or the tier's or group's (`kind`)."
+            "description": "The role's id, or the tier's or group's (`kind`). A class year's standing (`@Seniors`, #5786) has its own id, fixed for that group and standing, so no two rows share one."
           },
           "kind": {
             "type": "string",
@@ -26534,7 +26643,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "description": "The role’s palette color, or null."
+            "description": "The role’s color (a palette color or a readable custom `#RRGGBB`, `isPaintableRoleColor`), or null."
           },
           "mentionable": {
             "type": "boolean",
@@ -29009,6 +29118,60 @@
         "required": [
           "results",
           "next_page"
+        ]
+      },
+      "GifFavoriteRenditionDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "width": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 4096
+          }
+        },
+        "required": [
+          "url",
+          "width",
+          "height"
+        ]
+      },
+      "AddGifFavoriteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "preview": {
+            "$ref": "#/components/schemas/GifFavoriteRenditionDto"
+          },
+          "full": {
+            "$ref": "#/components/schemas/GifFavoriteRenditionDto"
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "preview",
+          "full",
+          "token"
         ]
       },
       "ScheduledAttachmentDto": {
@@ -33657,7 +33820,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "description": "One of the role palette colors, or null."
+            "description": "A palette color, or a custom `#RRGGBB` that reads on every surface (`isPaintableRoleColor` in `@repo/validation`), or null."
           },
           "mentionable": {
             "type": "boolean",
@@ -33722,19 +33885,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "enum": [
-              "#F2994A",
-              "#F47FA4",
-              "#B392F0",
-              "#8FA8FF",
-              "#5CC8F0",
-              "#3DD6C4",
-              "#6FD08C",
-              "#C5E06A",
-              "#D9B99B",
-              "#A9B4C2"
-            ],
-            "description": "One of the role palette colors, in any letter case."
+            "description": "A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color."
           },
           "mentionable": {
             "type": "boolean",
@@ -33765,19 +33916,7 @@
           "color": {
             "type": "string",
             "nullable": true,
-            "enum": [
-              "#F2994A",
-              "#F47FA4",
-              "#B392F0",
-              "#8FA8FF",
-              "#5CC8F0",
-              "#3DD6C4",
-              "#6FD08C",
-              "#C5E06A",
-              "#D9B99B",
-              "#A9B4C2"
-            ],
-            "description": "One of the role palette colors, in any letter case. Null clears it."
+            "description": "A role palette color (`ROLE_COLOR_PALETTE` in `@repo/validation`), or any custom `#RRGGBB` that reads at WCAG AA on every dark surface and is not red or gold (`isPaintableRoleColor`), in any letter case. A palette color is stored as listed, a custom one in uppercase; any other value is refused (`400`). Null clears the color."
           },
           "mentionable": {
             "type": "boolean",
@@ -35163,7 +35302,7 @@
           },
           "promote_new_members": {
             "type": "boolean",
-            "description": "Also bulk-promote every New Member in the chapter to the Everyone role (once Member), in the same transaction as the archive. Members keep all their other roles. Defaults to false.",
+            "description": "Also bulk-promote every New Member in the chapter to the Actives role, in the same transaction as the archive. Members keep all their other roles. Defaults to false.",
             "default": false
           }
         },

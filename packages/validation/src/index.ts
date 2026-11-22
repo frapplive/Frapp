@@ -51,6 +51,8 @@ export * from "./chapter-branding";
 export * from "./chapter-config";
 export * from "./chapter-goals";
 export * from "./chapter-groups";
+// Logs (Paul, 2026-11-21): the chapter's record of officer changes.
+export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
 // The audit log (#3909): what may change on a line already in it.
@@ -100,16 +102,24 @@ export * from "./event-excuse";
 export * from "./event-form-rows";
 // What is on right now, and the Now card's words (#5777).
 export * from "./event-now";
-// The chapter's Everyone role, the Member role renamed and hidden (#4191).
+// The chapter's Everyone role, the floor every member holds, and the three
+// base roles an officer gives (Paul, 2026-11-21).
 export {
+  ACTIVE_ROLE_NAME,
+  ACTIVE_ROLE_SYSTEM_KEY,
+  BASE_ROLE_SYSTEM_KEYS,
+  baseRoleIds,
   EVERYONE_MEMBER_LIST_HEADING,
   EVERYONE_MENTION_NAME,
   EVERYONE_ROLE_NAME,
   EVERYONE_ROLE_SYSTEM_KEY,
   HERE_MENTION_NAME,
   type HereMentionSource,
+  isActiveRole,
+  isBaseRole,
   isEveryoneRole,
   mentionRoleHint,
+  needsBaseRole,
   reservedMentionName,
   rolesAfterSave,
   withHereMention,
@@ -163,6 +173,7 @@ export * from "./minutes-timeline";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
+export * from "./name-lock";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen
 // default and the app-link files name one app. See ./native-app.
