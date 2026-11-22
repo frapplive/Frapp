@@ -903,8 +903,9 @@ describe("MemberProfile fact rows", () => {
   });
 
   // #3711: a contact card, the phone first.
+  // #5798: stored normalized, shown formatted, there and in the menu.
   it("draws the member's phone above Email, and a tap offers Call or Text", () => {
-    state.phones[CARA] = "(518) 555-0142";
+    state.phones[CARA] = "+15185550142";
     const tree = render(CARA);
     const rows = tree.root.findAllByType(ListRow).map((row) => row.props.label);
     expect(rows.slice(0, 2)).toEqual(["Phone", "Email"]);

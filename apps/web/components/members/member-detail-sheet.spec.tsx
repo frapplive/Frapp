@@ -432,6 +432,14 @@ describe("MemberDetailSheet custom fields", () => {
           visibility: "exec",
           value: "true",
         },
+        {
+          field_id: "f4",
+          key: "emergency_phone",
+          label: "Emergency contact",
+          type: "phone",
+          visibility: "exec",
+          value: "518.555.0199",
+        },
       ],
     });
 
@@ -444,6 +452,8 @@ describe("MemberDetailSheet custom fields", () => {
     expect(screen.getByText("Computer Science")).toBeInTheDocument();
     expect(screen.getByText("Dues Paid")).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
+    // A phone field reads formatted, like the Phone row (#5798).
+    expect(screen.getByText("(518) 555-0199")).toBeInTheDocument();
     // An unset field is left out (#1749).
     expect(screen.queryByText("Hometown")).not.toBeInTheDocument();
   });
@@ -670,8 +680,18 @@ describe("MemberDetailSheet phone", () => {
   it("links the phone to a call", () => {
     renderProfile({ ...baseMember, phone: "+1 (518) 555-0142" });
     expect(
-      screen.getByRole("link", { name: "+1 (518) 555-0142" }),
+      screen.getByRole("link", { name: "(518) 555-0142" }),
     ).toHaveAttribute("href", "tel:+15185550142");
+  });
+
+  // #5798: stored normalized or as typed, it reads formatted.
+  it.each([
+    ["+15185550142", "(518) 555-0142"],
+    ["518.555.0142", "(518) 555-0142"],
+    ["+442079460958", "+44 20 7946 0958"],
+  ])("shows a stored %j as %j", (phone, shown) => {
+    renderProfile({ ...baseMember, phone });
+    expect(screen.getByRole("link", { name: shown })).toBeInTheDocument();
   });
 
   it("offers to text the same number", () => {

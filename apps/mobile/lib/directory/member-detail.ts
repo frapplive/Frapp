@@ -13,7 +13,7 @@
  * do not hold — the same "omit, don't fake" call `@repo/hooks`
  * `profile-stats.ts` makes for the drawn attendance stat no member can read.
  */
-import { parseInstant } from "@repo/formatting";
+import { formatPhone, parseInstant } from "@repo/formatting";
 import { formatGraduationYear, memberLabel } from "@repo/hooks";
 import { formatBirthday } from "@repo/validation";
 import {
@@ -47,7 +47,7 @@ export interface MemberDetail {
   storedName: string;
   initials: string;
   email: string | null;
-  /** The member's own phone (#3711), as they typed it, or `null`. */
+  /** The member's own phone (#3711), as stored (E.164 since #5798, older ones as typed), or `null`; shown through `formatPhone`. */
   phone: string | null;
   /** "March 4" when they share their birthday with the chapter (#4959), else `null`. */
   birthday: string | null;
@@ -149,8 +149,16 @@ function parseCustomFields(data: unknown): MemberCustomField[] {
     const label = str(row, "label");
     const raw = str(row, "value");
     if (!fieldId || !label || !raw) return [];
+    const type = str(row, "type");
+    // A chapter's own phone field reads like the member's Phone row (#5798).
     const value =
-      str(row, "type") === "boolean" ? (raw === "true" ? "Yes" : "No") : raw;
+      type === "boolean"
+        ? raw === "true"
+          ? "Yes"
+          : "No"
+        : type === "phone"
+          ? formatPhone(raw)
+          : raw;
     return [{ fieldId, label, value }];
   });
 }

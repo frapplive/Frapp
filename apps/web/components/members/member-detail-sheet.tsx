@@ -23,7 +23,7 @@ import {
   formatBirthday,
   phoneHref,
 } from "@repo/validation";
-import { formatDay } from "@repo/formatting";
+import { formatDay, formatPhone } from "@repo/formatting";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -79,6 +79,8 @@ function formatCustomValue(
   if (field.type === "boolean") {
     return field.value === "true" ? "Yes" : "No";
   }
+  // A chapter's own phone field reads like the member's Phone row (#5798).
+  if (field.type === "phone") return formatPhone(field.value);
   return field.value;
 }
 
@@ -500,10 +502,10 @@ export function MemberDetailSheet({
                           FOCUS_RING_OFFSET,
                         )}
                       >
-                        {phone}
+                        {formatPhone(phone)}
                       </a>
                     ) : (
-                      phone
+                      formatPhone(phone)
                     )}
                     {textLink ? (
                       <>

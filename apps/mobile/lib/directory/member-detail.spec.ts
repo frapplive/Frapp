@@ -41,6 +41,27 @@ function profile(overrides: Record<string, unknown> = {}) {
 }
 
 describe("selectMemberDetail", () => {
+  // #5798: a chapter's own phone field reads like the Phone row.
+  it("formats a phone-type custom field", () => {
+    const detail = selectMemberDetail(
+      profile({
+        custom_fields: [
+          {
+            field_id: "f-3",
+            key: "emergency_phone",
+            label: "Emergency contact",
+            type: "phone",
+            visibility: "exec",
+            value: "518.555.0199",
+          },
+        ],
+      }),
+    );
+    expect(detail?.customFields).toEqual([
+      { fieldId: "f-3", label: "Emergency contact", value: "(518) 555-0199" },
+    ]);
+  });
+
   it("maps the full profile", () => {
     const detail = selectMemberDetail(profile());
     expect(detail).toEqual({

@@ -20,6 +20,7 @@ import {
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
+import { formatPhone, formatPhoneInput } from "@repo/formatting";
 import {
   BIRTHDAY_COPY,
   can,
@@ -255,7 +256,13 @@ export const EditProfileSheet = forwardRef<
 
   const edit = (field: ProfileDraftField) => (value: string) => {
     setSubmitFailed(false);
-    setEdits((latest) => applyEdit(latest, original, field, value));
+    // The phone formats as it is typed (#5798); `onChangeText` reports no
+    // caret, so it is worked out from the text before.
+    const next =
+      field === "phone"
+        ? formatPhoneInput(value, undefined, shown.phone).value
+        : value;
+    setEdits((latest) => applyEdit(latest, original, field, next));
   };
 
   const resetReveal = reveal.reset;
@@ -442,6 +449,12 @@ export const EditProfileSheet = forwardRef<
         onBlur={() => {
           setFocused((current) => (current === name ? null : current));
           reveal.blur(name);
+          // A 7-digit local number reads `555-0142` once the member leaves
+          // the field, not half-grouped as a longer one (#5798).
+          if (name === "phone" && formatPhone(shown.phone) !== shown.phone) {
+            const tidy = formatPhone(shown.phone);
+            setEdits((latest) => applyEdit(latest, original, "phone", tidy));
+          }
         }}
         placeholder={options.placeholder}
         placeholderTextColor={tokens.color.text.muted}

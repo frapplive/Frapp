@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
@@ -13,6 +13,7 @@ import {
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
+import { formatPhone, formatPhoneInput } from "@repo/formatting";
 import {
   BIRTHDAY_VISIBILITY_DEFAULT,
   type BirthdayDraftProblem,
@@ -127,9 +128,29 @@ export function ProfilePanel() {
   // field the member edited from one they left alone.
   const seededFrom = useRef<CurrentUser | null>(null);
 
+  // Where the Phone field's caret goes once its formatted value renders. It
+  // runs after every keystroke, not only when the value changed: a keystroke
+  // the formatting undoes (a space mid-number) still has React write the value
+  // back, which would throw the caret to the end.
+  const phoneInput = useRef<HTMLInputElement>(null);
+  const phoneCaret = useRef<number | null>(null);
+  const [phoneKeystrokes, setPhoneKeystrokes] = useState(0);
+  useLayoutEffect(() => {
+    const caret = phoneCaret.current;
+    phoneCaret.current = null;
+    if (caret === null || !phoneInput.current) return;
+    phoneInput.current.setSelectionRange(caret, caret);
+  }, [phoneKeystrokes]);
+
   useEffect(() => {
     if (!userQuery.data) return;
-    const next = userQuery.data as CurrentUser;
+    const loaded = userQuery.data as CurrentUser;
+    // The Phone field shows the stored number formatted (#5798). Seeding it
+    // formatted, and comparing re-seeds the same way, keeps a stored
+    // `+15185550142` from reading as an edit the member made.
+    const next: CurrentUser = loaded.phone
+      ? { ...loaded, phone: formatPhone(loaded.phone) }
+      : loaded;
     const previous = seededFrom.current;
     seededFrom.current = next;
     setProfileDraft((draft) => {
@@ -444,6 +465,7 @@ export function ProfilePanel() {
             <div className="grid gap-2">
               <Label htmlFor="phone">{PROFILE_FIELD_COPY.phone.label}</Label>
               <Input
+                ref={phoneInput}
                 id="phone"
                 type="tel"
                 autoComplete="tel"
@@ -454,11 +476,33 @@ export function ProfilePanel() {
                 aria-describedby="phone-hint"
                 onChange={(event) => {
                   setPhoneError(false);
+                  // Formats as the member types (#5798), keeping the caret
+                  // among the same digits.
+                  const inputType = (event.nativeEvent as InputEvent).inputType;
+                  const typed = formatPhoneInput(
+                    event.target.value,
+                    event.target.selectionStart ?? event.target.value.length,
+                    profile.phone ?? "",
+                    inputType === "deleteContentForward"
+                      ? "forward"
+                      : "backward",
+                  );
+                  phoneCaret.current = typed.caret;
+                  setPhoneKeystrokes((count) => count + 1);
                   setProfileDraft((prev) => ({
                     ...prev,
-                    phone: event.target.value,
+                    phone: typed.value,
                   }));
                 }}
+                // A 7-digit local number reads `555-0142` once the member
+                // leaves the field, not half-grouped as a longer one.
+                onBlur={() =>
+                  setProfileDraft((prev) =>
+                    prev.phone
+                      ? { ...prev, phone: formatPhone(prev.phone) }
+                      : prev,
+                  )
+                }
                 placeholder={PROFILE_FIELD_COPY.phone.placeholder}
               />
               <p

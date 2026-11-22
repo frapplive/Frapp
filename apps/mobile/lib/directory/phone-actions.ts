@@ -4,6 +4,7 @@
  * glass menu (`openItemMenu`).
  */
 import { Linking } from "react-native";
+import { formatPhone } from "@repo/formatting";
 import { phoneHref } from "@repo/validation";
 import { openItemMenu, pressAt } from "@/components/item-actions-menu";
 import type { GestureResponderEvent } from "react-native";
@@ -21,7 +22,7 @@ export function showPhoneActions(
   openItemMenu(
     {
       title: name,
-      message: phone,
+      message: formatPhone(phone),
       actions: [
         { key: "call", label: "Call", run: () => open(call) },
         { key: "text", label: "Text", run: () => open(text) },
