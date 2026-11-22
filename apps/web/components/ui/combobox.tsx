@@ -18,13 +18,13 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * The shell every web text field with a floating list shares (#5795):
- * `TimeField` and `SuggestField` today. It owns what must not drift between
- * them: the popover anchored to the field, the WAI-ARIA combobox wiring, the
+ * The shell `TimeField` and `SuggestField` share (#5795). It owns what must
+ * not drift between them: the popover anchored to the field, the WAI-ARIA combobox wiring, the
  * arrow / Enter / Escape keys, keeping focus in the field while the list is
  * open, and the option row's look. What the list holds, which row is
  * highlighted and when it opens stay with the field, so each keeps its own
- * state model (a parsed time, free text with suggestions).
+ * state model (a parsed time, free text with suggestions). The geofence
+ * place search (`geofences/zone-picker.tsx`) still draws its own list (#5847).
  */
 
 const ListIdContext = createContext<string>("");

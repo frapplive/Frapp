@@ -452,7 +452,7 @@ Each row carries the member's presence dot on the avatar and their custom status
 The search field leads with a magnifier and reads "Search members", web's words, because `GET /v1/members/search` matches more than the name; Documents and Roles take the same glyph.
 Deliberately different from web (#4137): a 40pt avatar in a touch-height row (44pt and up) where web draws a 24px avatar in a 36px dense row;
 the meta line is class · company · city · year, what a member looks someone up by on a phone, where web's officer roster reads role · class · joined · email;
-and the placeholder takes `text.muted` as every phone field does (it clears 4.5:1 since the 2026-11-09 ladder), where web's take `--muted-foreground`.
+and the placeholder takes `text.muted` as every phone field does (it clears 4.5:1 since the 2026-11-09 ladder), as web's do since 2026-11-22 ([#5666](https://github.com/frapplive/Frapp/issues/5666)); until then web's took `--muted-foreground`.
 Web's Directory shows each member's points and the phone's doesn't.
 Any member who can open the Directory could read them (web takes them from `GET /v1/points/leaderboard`, behind `members:view`), so this is a layout call, not a permission: web's points are a column of its wide officer roster, and a phone row already carries the face, dot, name, status line and meta line, so points stay on the Points leaderboard.
 
