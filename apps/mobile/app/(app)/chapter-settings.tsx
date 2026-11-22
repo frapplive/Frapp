@@ -47,14 +47,11 @@ import {
   ChannelFormSheet,
   type ChannelFormMode,
 } from "@/components/chat/channel-form-sheet";
-import {
-  NewRoleSheet,
-  type NewRolePlacement,
-} from "@/components/roles/new-role-sheet";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
 import { accessOptionsStateOf } from "@/lib/chat/create-channel";
 import { useCreateChannelAndOpen } from "@/lib/chat/use-create-channel-and-open";
 import { selectCategories } from "@/lib/chat/channel-list";
-import { newRolePlacements } from "@/lib/roles/new-role";
+import { newRolePlacements, type NewRolePlacement } from "@/lib/roles/new-role";
 import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { chapterSettingsAccess } from "@/lib/more/chapter-settings";

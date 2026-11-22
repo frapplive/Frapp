@@ -5,7 +5,13 @@ import {
   type Reach,
   type TierRow,
 } from "@repo/hooks/role-tiers";
-import type { NewRolePlacement } from "@/components/roles/new-role-sheet";
+
+/** Where a chapter role can go: a tier the officer reaches, or none. */
+export interface NewRolePlacement {
+  /** `null` is outside the tiers. */
+  value: string | null;
+  label: string;
+}
 
 /**
  * Where an officer may put a new role (#5296): every tier ranked below their

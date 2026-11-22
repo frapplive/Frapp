@@ -30,14 +30,10 @@ import { OptionSheet, type SheetOption } from "@/components/option-sheet";
 import { CheckGlyph, ForwardGlyph } from "@/components/control-glyphs";
 import { successHaptic } from "@/lib/haptics";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
-import { defaultNewRolePlacement } from "@/lib/roles/new-role";
-
-/** Where a chapter role can go: a tier the officer reaches, or none. */
-export interface NewRolePlacement {
-  /** `null` is outside the tiers. */
-  value: string | null;
-  label: string;
-}
+import {
+  defaultNewRolePlacement,
+  type NewRolePlacement,
+} from "@/lib/roles/new-role";
 
 /**
  * A chapter role (#5296): placed in a tier, with a color. Absent, the sheet
