@@ -57,6 +57,7 @@ const OFF_NAV_DOORS: Readonly<Record<string, string>> = {
   "/preferences": "account menu",
   "/settings": "chapter menu",
   "/whats-new": "account menu",
+  "/ask": "Ask bar at the sidebar's foot",
 };
 
 const ALL = routes(DASHBOARD).filter((r) => !NOT_A_TOOL_PAGE.has(r));

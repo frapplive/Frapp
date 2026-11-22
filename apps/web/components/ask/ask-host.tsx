@@ -4,11 +4,11 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
-  useRef,
-  useState,
   type ReactNode,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AskConversationProvider,
   aiAvailableFrom,
@@ -19,7 +19,6 @@ import {
   useMyPermissions,
 } from "@repo/hooks";
 import type { AskAccess } from "@repo/validation";
-import { AskCard } from "@/components/ask/ask-card";
 import { AskInChannelBridge } from "@/components/ask/ask-in-channel";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 
@@ -28,28 +27,45 @@ import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
  * (`ask-bar.tsx`; #5476, Paul's pick of 2026-11-18), at the sidebar's foot
  * from `lg` up and floating at the bottom of the page below it (#5560).
  *
- * The door moved twice before. A button in the chat composer (#4702) read as
- * out of place to Paul once it shipped; then the top bar's field asked as well
- * as searched ("Search or ask Frapp", #4904), which Shawn and Paul didn't want
- * in the search bar. The conversation still opens where Find does, centered
- * over the page, from any page. `@Frapp` typed in a channel asks from there
+ * **The conversation is a page** (`/ask`, Paul's pick of 2026-11-22: Ask on
+ * web was "too small"). It opens in the main area the way the sidebar opens
+ * Events, with chat beside it, and no scrim. Before that it was a 640px
+ * dialog centered over the page, in Find's place and measures (#4904), a
+ * reason gone once the bar replaced the field (#5476). ChatGPT, Claude and
+ * Gemini give the conversation a page; Slack's assistant a full-height pane
+ * beside the channel. `@Frapp` typed in a channel asks from there
  * (`ask-in-channel.tsx`, #4713).
  *
  * `AskHost` wraps the dashboard. It decides whether this member has Ask at
  * all, and it owns the conversation (`AskConversationProvider`), so the
- * thread is the same one on every page, in the dialog and in a channel a
- * member asked `@Frapp` from. `useAskEntry` is how the bar reaches it.
+ * thread is the same one on the Ask page and in a channel a member asked
+ * `@Frapp` from, and an answer still being written when the member leaves
+ * the page is there when they come back. `useAskEntry` is how the bar
+ * reaches it.
  *
  * **Who gets it** is the server's answer: the server has AI, the president
  * has Ask on, and the member holds `ai:use`. Anyone else gets no bar
  * (#2259), and nor does an officer viewing the chapter as a role (#4072):
  * asking is a POST, which the preview refuses (#4504). Until all of that is
- * known there is no bar.
+ * known there is no bar. A member who lost Ask on the Ask page (a role
+ * preview began, the president turned Ask off) is taken to chat.
  */
 export interface AskEntry {
+  /** Whether the Ask page is the page on screen. */
   open: boolean;
-  /** Opens the conversation. `opener` takes focus back when it closes. */
-  openWith: (opener?: HTMLElement | null) => void;
+  /** Opens the Ask page, or puts focus in its field when it is open. */
+  openAsk: () => void;
+}
+
+/** The Ask page's route. */
+export const ASK_ROUTE = "/ask";
+
+/** The Ask page's field carries it, so the bar can hand it focus. */
+export const ASK_FIELD_ATTRIBUTE = "data-ask-field";
+
+/** Whether `pathname` is the Ask page. */
+export function isAskRoute(pathname: string | null): boolean {
+  return pathname === ASK_ROUTE || !!pathname?.startsWith(`${ASK_ROUTE}/`);
 }
 
 const AskEntryContext = createContext<AskEntry | null>(null);
@@ -77,19 +93,26 @@ export function AskHost({ children }: { children: ReactNode }) {
       });
   const has = access === "yes";
 
-  const [open, setOpen] = useState(false);
-  // A member who lost Ask (a role preview began, the president turned Ask
-  // off) has no conversation left to come back to. Without this the dialog
-  // would open itself, over the page, when Ask returned.
-  if (!has && open) setOpen(false);
-  const opener = useRef<HTMLElement | null>(null);
-  const openWith = useCallback((from?: HTMLElement | null) => {
-    opener.current = from ?? null;
-    setOpen(true);
-  }, []);
+  const pathname = usePathname();
+  const router = useRouter();
+  const open = isAskRoute(pathname);
+  // Only a settled "no": while the reads are out the page waits for them.
+  const lost = access === "no" && open;
+  useEffect(() => {
+    if (lost) router.replace("/chat");
+  }, [lost, router]);
+  const openAsk = useCallback(() => {
+    if (!open) {
+      router.push(ASK_ROUTE);
+      return;
+    }
+    document
+      .querySelector<HTMLElement>(`[${ASK_FIELD_ATTRIBUTE}]`)
+      ?.focus({ preventScroll: true });
+  }, [open, router]);
   const entry = useMemo<AskEntry | null>(
-    () => (has ? { open, openWith } : null),
-    [has, open, openWith],
+    () => (has ? { open, openAsk } : null),
+    [has, open, openAsk],
   );
 
   return (
@@ -98,9 +121,6 @@ export function AskHost({ children }: { children: ReactNode }) {
       <AskInChannelBridge access={access}>
         <AskEntryContext.Provider value={entry}>
           {children}
-          {has ? (
-            <AskCard open={open} onOpenChange={setOpen} returnFocus={opener} />
-          ) : null}
         </AskEntryContext.Provider>
       </AskInChannelBridge>
     </AskConversationProvider>

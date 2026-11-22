@@ -60,7 +60,7 @@ import { WelcomeGate } from "@/components/onboarding/welcome-gate";
 import { WhatsNewHost } from "@/components/whats-new/whats-new-host";
 import { GetTheAppCard } from "@/components/layout/get-the-app-card";
 import { AskBar } from "@/components/ask/ask-bar";
-import { useAskEntry } from "@/components/ask/ask-host";
+import { isAskRoute, useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
@@ -162,9 +162,10 @@ export function DashboardShell({
 }: DashboardShellProps) {
   // Ask Frapp's bar (#5476) floats at the bottom of the page below `lg`,
   // where there is no sidebar to hold it (#5560), so a page there reserves
-  // room under its last row.
-  const askBar = useAskEntry() !== null;
+  // room under its last row. Not on the Ask page itself, whose own field is
+  // there.
   const pathname = usePathname();
+  const askBar = useAskEntry() !== null && !isAskRoute(pathname);
   const searchParams = useSearchParams();
   const router = useRouter();
   // Chapter accent, shell-wide: maps the persisted engine roles onto the

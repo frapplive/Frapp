@@ -6,7 +6,7 @@ import { ASK_COPY, ASK_STARTER, askSavedLine } from "@repo/validation";
 /**
  * The Ask conversation's own rules: consent before the first question
  * leaves, the saved notice shown before a question may be kept (#4315), and
- * where it is drawn: a dialog where Find opens (#4904).
+ * where it is drawn: a page beside chat (Paul's pick of 2026-11-22).
  */
 
 const state = vi.hoisted(() => ({
@@ -67,14 +67,14 @@ vi.mock("@/components/ai/meet-frapp-ai", () => ({
   }),
 }));
 
-const { AskCard } = await import("./ask-card");
+const { AskConversation } = await import("./ask-card");
 
-/** The conversation as `AskHost` renders it. */
-function Card(props: Partial<Parameters<typeof AskCard>[0]>) {
-  return <AskCard open onOpenChange={() => undefined} {...props} />;
+/** The conversation as the Ask page renders it. */
+function Card() {
+  return <AskConversation />;
 }
 
-const open = (isOpen = true) => render(<Card open={isOpen} />);
+const open = () => render(<Card />);
 
 /** Opened, once the opening has read this browser's record and drawn. */
 async function openSettled() {
@@ -125,7 +125,7 @@ const sent = (over: Record<string, unknown> = {}) => ({
 /** The record that says this member has seen Ask's first-open starter. */
 const STARTER_SEEN = "frapp.web.ask-starter-seen:me";
 
-describe("AskCard", () => {
+describe("AskConversation", () => {
   beforeEach(() => {
     state.ask.mockReset().mockResolvedValue(undefined);
     state.retry.mockReset().mockResolvedValue(undefined);
@@ -182,19 +182,15 @@ describe("AskCard", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText("Ask about your chapter")).toBeNull();
       expect(screen.queryByText(ASK_STARTER.answer)).toBeNull();
-      // The name is still the dialog's, for a screen reader.
-      expect(
-        screen.getByRole("dialog", { name: ASK_COPY.name }),
-      ).toBeInTheDocument();
       expect(screen.queryByRole("list")).toBeNull();
       expect(
         screen.getByRole("textbox", { name: ASK_COPY.placeholder }),
       ).toBeInTheDocument();
     });
 
-    it("opens a member's first time on the exchange that says what Frapp can do, once, the card staying mounted as AskHost keeps it", async () => {
+    it("opens a member's first time on the exchange that says what Frapp can do, once", async () => {
       window.localStorage.removeItem(STARTER_SEEN);
-      const view = render(<Card open />);
+      const view = render(<Card />);
       expect(
         await screen.findByText("Hey Marcus, I'm Frapp."),
       ).toBeInTheDocument();
@@ -206,8 +202,9 @@ describe("AskCard", () => {
       await waitFor(() =>
         expect(window.localStorage.getItem(STARTER_SEEN)).toBe("ask"),
       );
-      view.rerender(<Card open={false} />);
-      view.rerender(<Card open />);
+      // Leaving the page and coming back.
+      view.unmount();
+      render(<Card />);
       expect(
         await screen.findByText(/^Good (morning|afternoon|evening), Marcus\.$/),
       ).toBeInTheDocument();
@@ -221,15 +218,6 @@ describe("AskCard", () => {
         screen.queryByText(/^Good (morning|afternoon|evening)/),
       ).toBeNull();
       expect(screen.queryByText("Hey Marcus, I'm Frapp.")).toBeNull();
-    });
-
-    it("reads them only once the card is open", () => {
-      const view = open(false);
-      expect(state.suggestionsEnabled.every((enabled) => !enabled)).toBe(true);
-      view.unmount();
-      state.suggestionsEnabled = [];
-      open();
-      expect(state.suggestionsEnabled.at(-1)).toBe(true);
     });
 
     it("sends a tapped question as a suggestion, never as words the member typed", async () => {
@@ -300,10 +288,11 @@ describe("AskCard", () => {
   });
 
   it("reads whether answers are being saved again each time it opens", () => {
-    const { rerender } = render(<Card open={false} />);
-    expect(state.refetchStatus).not.toHaveBeenCalled();
-    rerender(<Card open />);
+    const view = open();
     expect(state.refetchStatus).toHaveBeenCalledTimes(1);
+    view.unmount();
+    open();
+    expect(state.refetchStatus).toHaveBeenCalledTimes(2);
   });
 
   it("shows the saved line while answers are kept, and only then says it was shown", async () => {
@@ -447,184 +436,54 @@ describe("AskCard", () => {
     });
   });
 
-  describe("a dialog where Find opens (#4904)", () => {
-    const dialog = () => screen.queryByRole("dialog", { name: ASK_COPY.name });
-
-    it("is a dialog over the page, on Find's surface, and gone when closed", () => {
-      const view = render(<Card />);
-      expect(dialog()).toBeInTheDocument();
-      expect(dialog()).toHaveClass("bg-popover");
-      // No panel beside the page, and the shell is not asked to move.
-      expect(screen.queryByRole("complementary")).toBeNull();
-      expect(document.documentElement).not.toHaveAttribute("data-ask-open");
-      view.rerender(<Card open={false} />);
-      expect(dialog()).toBeNull();
+  describe("a page beside chat (Paul's pick of 2026-11-22)", () => {
+    it("is no dialog and dims nothing: the app stays usable around it", () => {
+      open();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.querySelector("[data-state=open]")).toBeNull();
     });
 
-    it("names itself in its header, beside the crest", () => {
-      render(<Card />);
-      expect(
-        screen.getByRole("heading", { name: ASK_COPY.name }),
-      ).toBeInTheDocument();
-      // The crest is decoration: the words beside it name the dialog.
-      expect(dialog()!.querySelector("svg[aria-hidden]")).not.toBeNull();
+    it("keeps the thread and the field to one centred 720px reading column", () => {
+      state.exchanges = [DONE];
+      open();
+      const thread = screen.getByRole("article").closest(".max-w-\\[720px\\]");
+      expect(thread).not.toBeNull();
+      expect(thread).toHaveClass("mx-auto");
+      const field = screen.getByRole("textbox", { name: ASK_COPY.placeholder });
+      expect(field.closest(".max-w-\\[720px\\]")).not.toBeNull();
     });
 
-    it("does not close on a click outside while its own question is being answered", async () => {
-      state.exchanges = [{ ...DONE, phase: "working", answer: null }];
-      const onOpenChange = vi.fn();
-      render(
-        <>
-          <button>page</button>
-          <Card onOpenChange={onOpenChange} />
-        </>,
-      );
-      const user = userEvent.setup({ pointerEventsCheck: 0 });
-      await user.click(
-        screen.getByRole("button", { name: "page", hidden: true }),
-      );
-      expect(onOpenChange).not.toHaveBeenCalled();
-      await user.keyboard("{Escape}");
-      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    it("starts with the cursor in the field, marked so the Ask bar can hand it focus", () => {
+      open();
+      const field = screen.getByRole("textbox", { name: ASK_COPY.placeholder });
+      expect(field).toHaveFocus();
+      expect(field).toHaveAttribute("data-ask-field");
     });
 
-    it("closes on Escape and by its close button, with the cursor starting in the field", async () => {
-      const onOpenChange = vi.fn();
-      render(<Card onOpenChange={onOpenChange} />);
-      const user = userEvent.setup();
-      expect(
-        screen.getByRole("textbox", { name: ASK_COPY.placeholder }),
-      ).toHaveFocus();
-      await user.keyboard("{Escape}");
-      expect(onOpenChange).toHaveBeenLastCalledWith(false);
-      onOpenChange.mockClear();
-      await user.click(screen.getByRole("button", { name: ASK_COPY.close }));
-      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    it("hosts a form docked from an answer, over the page", () => {
+      open();
+      expect(document.querySelector("[data-panel-host]")).not.toBeNull();
     });
 
-    it("drops a question still being answered when it closes, and keeps the turns before it", () => {
+    it("goes on answering a question when the member leaves the page, and keeps every turn", () => {
       state.exchanges = [
         DONE,
         { ...DONE, id: "turn-2", phase: "working", answer: null },
       ];
-      const view = render(<Card />);
+      const view = open();
+      view.unmount();
       expect(state.stop).not.toHaveBeenCalled();
-      view.rerender(<Card open={false} />);
-      expect(state.stop).toHaveBeenCalledTimes(1);
       expect(state.reset).not.toHaveBeenCalled();
     });
 
-    it("leaves a question asked from a channel to finish when it closes (#4713)", () => {
-      // Its answer is drawn in the channel, which closing this does not
-      // take away, so the question goes on being answered.
-      state.exchanges = [
-        {
-          ...DONE,
-          id: "turn-2",
-          phase: "working",
-          answer: null,
-          origin: { channelId: "chan-1", at: "2026-11-13T16:00:00.000Z" },
-        },
-      ];
-      const view = render(<Card />);
-      view.rerender(<Card open={false} />);
-      expect(state.stop).not.toHaveBeenCalled();
-    });
-
-    it("keeps a finished answer across a close, and gives focus back to what opened it", async () => {
+    it("leaves a link in the thread an ordinary link: following it is leaving the page, not starting over", async () => {
       state.exchanges = [DONE];
-      const opener = { current: null as HTMLButtonElement | null };
-      const tree = (isOpen: boolean) => (
-        <>
-          <button ref={(node) => void (opener.current = node)}>Find</button>
-          <Card open={isOpen} returnFocus={opener} />
-        </>
-      );
-      const view = render(tree(true));
-      view.rerender(tree(false));
-      expect(state.reset).not.toHaveBeenCalled();
-      expect(state.stop).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Find" })).toHaveFocus(),
-      );
-      view.rerender(tree(true));
-      expect(
-        screen.getByText("The budget vote is in the minutes."),
-      ).toBeInTheDocument();
-    });
-
-    it("skips an Ask bar the layout hides, opener or not, for one on screen (#5476)", async () => {
-      // Below `lg` with a channel open, the Channels column's bar is in the
-      // page but `display: none`; `checkVisibility` is how the card tells.
-      const tree = (
-        isOpen: boolean,
-        opener: { current: HTMLElement | null },
-      ) => (
-        <>
-          <button data-ask-entry="" data-hidden="">
-            Hidden bar
-          </button>
-          <button data-ask-entry="">Shown bar</button>
-          <Card open={isOpen} returnFocus={opener} />
-        </>
-      );
-      const hidden = { current: null as HTMLElement | null };
-      const view = render(tree(true, hidden));
-      // The dialog hides the page from assistive tech while it is open.
-      hidden.current = screen.getByRole("button", {
-        name: "Hidden bar",
-        hidden: true,
-      });
-      for (const button of screen.getAllByRole("button", {
-        name: /bar$/,
-        hidden: true,
-      })) {
-        button.checkVisibility = () => !button.hasAttribute("data-hidden");
-      }
-      view.rerender(tree(false, hidden));
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Shown bar" })).toHaveFocus(),
-      );
-    });
-
-    it("gives focus to the Ask bar on screen when what opened it is gone", async () => {
-      const gone = { current: document.createElement("button") };
-      const tree = (isOpen: boolean) => (
-        <>
-          <button data-ask-entry="">Ask Frapp</button>
-          <Card open={isOpen} returnFocus={gone} />
-        </>
-      );
-      const view = render(tree(true));
-      view.rerender(tree(false));
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Ask Frapp" })).toHaveFocus(),
-      );
-    });
-
-    it("closes when a link in the thread is followed: whatever it opens is under the dialog", async () => {
-      state.exchanges = [DONE];
-      const onOpenChange = vi.fn();
-      render(<Card onOpenChange={onOpenChange} />);
+      open();
       const source = screen.getByRole("link", { name: /Chapter meeting/ });
       source.addEventListener("click", (event) => event.preventDefault());
       await userEvent.setup().click(source);
-      expect(onOpenChange).toHaveBeenLastCalledWith(false);
-      // Closing is not starting over.
       expect(state.reset).not.toHaveBeenCalled();
-    });
-
-    it("stays open when a link is opened in a new tab", async () => {
-      state.exchanges = [DONE];
-      const onOpenChange = vi.fn();
-      render(<Card onOpenChange={onOpenChange} />);
-      const source = screen.getByRole("link", { name: /Chapter meeting/ });
-      source.addEventListener("click", (event) => event.preventDefault());
-      const user = userEvent.setup();
-      await user.keyboard("{Control>}");
-      await user.click(source);
-      await user.keyboard("{/Control}");
-      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(state.stop).not.toHaveBeenCalled();
     });
   });
 });

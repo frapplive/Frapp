@@ -41,13 +41,15 @@ export type PageTitle = {
 /**
  * Routes that are not nav rows. Profile and the personal Settings page hang
  * off the account menu; Chapter settings opens from the chapter menu atop the
- * nav, under the words that menu item uses.
+ * nav, under the words that menu item uses; Ask Frapp from the Ask bar.
  */
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/profile": "Profile",
   "/preferences": "Settings",
   "/settings": "Chapter settings",
   "/whats-new": "What's new",
+  // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
+  "/ask": "Ask Frapp",
 };
 
 /**

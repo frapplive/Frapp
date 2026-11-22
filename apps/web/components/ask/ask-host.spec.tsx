@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Ask Frapp's front door on web: the floating Ask bar (#5476, Paul's pick of
- * 2026-11-18). The host hands the bar a way in (`useAskEntry`) and draws the
- * conversation over whatever page is up.
+ * 2026-11-18). The host hands the bar a way in (`useAskEntry`), which opens
+ * the Ask page (`/ask`, Paul's pick of 2026-11-22).
  */
 
 const who = vi.hoisted(() => ({
@@ -60,30 +60,17 @@ vi.mock("@/components/ask/ask-in-channel", () => ({
   },
 }));
 
-// The conversation has its own spec (`ask-card.spec.tsx`). Here it only has
-// to be opened, closed and handed a question by the host.
-const card = vi.hoisted(() => ({ mounts: 0 }));
-vi.mock("@/components/ask/ask-card", async () => {
-  const { useEffect } = await import("react");
-  return {
-    AskCard: (props: {
-      open: boolean;
-      onOpenChange: (open: boolean) => void;
-    }) => {
-      useEffect(() => {
-        card.mounts += 1;
-      }, []);
-      if (!props.open) return null;
-      return (
-        <div data-testid="ask-card">
-          <button onClick={() => props.onOpenChange(false)}>close card</button>
-        </div>
-      );
-    },
-  };
-});
+const nav = vi.hoisted(() => ({
+  pathname: "/chat" as string | null,
+  push: vi.fn(),
+  replace: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: nav.push, replace: nav.replace }),
+}));
 
-const { AskHost, useAskEntry } = await import("./ask-host");
+const { AskHost, isAskRoute, useAskEntry } = await import("./ask-host");
 
 /** A page with an entry on it, as `ask-bar.tsx` reaches Ask. */
 function Page({ name = "chat" }: { name?: string }) {
@@ -92,7 +79,7 @@ function Page({ name = "chat" }: { name?: string }) {
     <section aria-label={name}>
       {ask ? (
         <>
-          <button onClick={() => ask.openWith()}>open</button>
+          <button onClick={ask.openAsk}>open</button>
           <output>{ask.open ? "open" : "closed"}</output>
         </>
       ) : null}
@@ -108,8 +95,10 @@ beforeEach(() => {
   who.previewing = false;
   who.chapterId = "chapter-1";
   who.settingsEnabled = [];
-  card.mounts = 0;
   bridge.access = [];
+  nav.pathname = "/chat";
+  nav.push.mockReset();
+  nav.replace.mockReset();
 });
 
 describe("who gets Ask Frapp", () => {
@@ -124,9 +113,9 @@ describe("who gets Ask Frapp", () => {
     expect(bridge.access.at(-1)).toBe("yes");
   });
 
-  it("holds one conversation over the card and every channel, and it is this chapter's (#4713)", async () => {
+  it("holds one conversation over the Ask page and every channel, and it is this chapter's (#4713)", () => {
     // Without the one provider above both, a question asked with `@Frapp`
-    // would be missing from the card, and "one question at a time" would
+    // would be missing from the Ask page, and "one question at a time" would
     // not hold across them. Scoped, so it starts over in another chapter.
     const view = render(
       <AskHost>
@@ -137,8 +126,6 @@ describe("who gets Ask Frapp", () => {
     expect(conversation).toHaveAttribute("data-scope", "chapter-1");
     expect(conversation).toContainElement(screen.getByTestId("ask-bridge"));
     expect(conversation).toContainElement(entry());
-    await userEvent.setup().click(entry()!);
-    expect(conversation).toContainElement(screen.getByTestId("ask-card"));
     expect(screen.getAllByTestId("ask-conversation")).toHaveLength(1);
     who.chapterId = "chapter-2";
     view.rerender(
@@ -202,7 +189,6 @@ describe("who gets Ask Frapp", () => {
         </AskHost>,
       );
       expect(entry()).toBeNull();
-      expect(card.mounts).toBe(0);
       expect(bridge.access.at(-1)).toBe(access);
       // And nothing stands in for it: no "not ready" control anywhere.
       expect(screen.queryByRole("button")).toBeNull();
@@ -226,59 +212,62 @@ describe("who gets Ask Frapp", () => {
 });
 
 describe("the way in", () => {
-  it("opens the conversation, and follows its own close", async () => {
+  const host = () => (
+    <AskHost>
+      <Page />
+    </AskHost>
+  );
+
+  it("opens the Ask page from anywhere else", async () => {
+    nav.pathname = "/events";
+    render(host());
+    expect(screen.getByRole("status")).toHaveTextContent("closed");
+    await userEvent.setup().click(entry()!);
+    expect(nav.push).toHaveBeenCalledWith("/ask");
+  });
+
+  it("is open on the Ask page, where it hands focus to the page's field instead of opening it again", async () => {
+    nav.pathname = "/ask";
     render(
       <AskHost>
         <Page />
+        <textarea data-ask-field="" aria-label="field" />
       </AskHost>,
     );
-    const user = userEvent.setup();
-    expect(screen.getByRole("status")).toHaveTextContent("closed");
-    expect(screen.queryByTestId("ask-card")).toBeNull();
-
-    await user.click(entry()!);
     expect(screen.getByRole("status")).toHaveTextContent("open");
-    expect(screen.getByTestId("ask-card")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "close card" }));
-    expect(screen.getByRole("status")).toHaveTextContent("closed");
+    await userEvent.setup().click(entry()!);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "field" })).toHaveFocus();
   });
 
-  it("keeps one conversation across pages: the page changes, the conversation does not remount", async () => {
-    const view = render(
-      <AskHost>
-        <Page key="chat" name="chat" />
-      </AskHost>,
-    );
-    await userEvent.setup().click(entry()!);
-    view.rerender(
-      <AskHost>
-        <Page key="settings" name="settings" />
-      </AskHost>,
-    );
-    expect(screen.getByTestId("ask-card")).toBeInTheDocument();
-    expect(card.mounts).toBe(1);
-  });
-
-  it("closes for good when the member loses Ask: it does not open itself when Ask returns", async () => {
-    const view = render(
-      <AskHost>
-        <Page />
-      </AskHost>,
-    );
-    await userEvent.setup().click(entry()!);
+  it("takes a member who loses Ask on the Ask page to chat", () => {
+    nav.pathname = "/ask";
+    const view = render(host());
+    expect(nav.replace).not.toHaveBeenCalled();
     who.previewing = true;
-    view.rerender(
-      <AskHost>
-        <Page />
-      </AskHost>,
-    );
-    who.previewing = false;
-    view.rerender(
-      <AskHost>
-        <Page />
-      </AskHost>,
-    );
-    expect(screen.queryByTestId("ask-card")).toBeNull();
+    view.rerender(host());
+    expect(nav.replace).toHaveBeenCalledWith("/chat");
+  });
+
+  it("waits on the Ask page while whether the member has Ask is still being read", () => {
+    nav.pathname = "/ask";
+    who.permissions = undefined;
+    render(host());
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("leaves every other page alone when the member has no Ask", () => {
+    nav.pathname = "/events";
+    who.previewing = true;
+    render(host());
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("knows the Ask page by its route", () => {
+    expect(isAskRoute("/ask")).toBe(true);
+    expect(isAskRoute("/ask/later")).toBe(true);
+    expect(isAskRoute("/asked")).toBe(false);
+    expect(isAskRoute("/chat")).toBe(false);
+    expect(isAskRoute(null)).toBe(false);
   });
 });
