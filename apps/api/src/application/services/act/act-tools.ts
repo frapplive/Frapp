@@ -163,6 +163,33 @@ interface ActDraftInvite {
   draft: EventAttendanceDraft;
 }
 
+/**
+ * The draft with each `tier:<id>` entry spelled out as the roles in that
+ * tier today, a role named on its own keeping its own status. Null when a
+ * tier is not in `tierRoles`. Events take role ids only until the tiers
+ * change (Add tiers to the event invite picker) merges; the card's line
+ * still names the tier.
+ */
+export function attendanceByRole(
+  draft: EventAttendanceDraft,
+  tierRoles: ReadonlyMap<string, readonly string[]>,
+): EventAttendanceDraft | null {
+  const roles: Record<string, EventAttendanceStatus> = {};
+  for (const [key, status] of Object.entries(draft.roles)) {
+    if (!key.startsWith('tier:')) continue;
+    const inTier = tierRoles.get(key);
+    if (!inTier) return null;
+    for (const id of inTier) roles[id] = status;
+  }
+  for (const [key, status] of Object.entries(draft.roles)) {
+    if (!key.startsWith('tier:')) roles[key] = status;
+  }
+  for (const [key, status] of Object.entries(roles)) {
+    if (status === draft.everyone) delete roles[key];
+  }
+  return { everyone: draft.everyone, roles };
+}
+
 function holds(context: ActToolContext, permission: string): boolean {
   return (
     context.heldPermissions.has(WILDCARD) ||
@@ -605,7 +632,16 @@ export class CreateEventActTool implements ActTool {
       return { status: 'unclear', missing: 'invitees' };
     }
     const setApart = Object.keys(attendance.roles).length > 0;
-    const names = setApart ? await this.entryNames(context) : null;
+    const read = setApart ? await this.entryNames(context) : null;
+    const names = read?.names ?? null;
+    const line = describeAttendance(attendance, (id) => names?.get(id));
+    if (read) {
+      const byRole = attendanceByRole(attendance, read.tierRoles);
+      if (!byRole || attendanceInvitesNobody(attendanceToWire(byRole))) {
+        return { status: 'unclear', missing: 'invitees' };
+      }
+      attendance = byRole;
+    }
     return {
       status: 'draft',
       payload: {
@@ -619,7 +655,7 @@ export class CreateEventActTool implements ActTool {
         event_type_id: type?.id ?? null,
         is_mandatory: attendance.everyone === 'required',
         attendance,
-        attendance_line: describeAttendance(attendance, (id) => names?.get(id)),
+        attendance_line: line,
         attendance_from: attendanceFrom,
         recurrence_rule: plan.repeats
           ? proposedRepeatRule(plan.repeats, plan.date, context.timeZone)
@@ -664,17 +700,26 @@ export class CreateEventActTool implements ActTool {
     return { draft: { everyone, roles } };
   }
 
-  /** Each role and tier by its attendance key, for the card's line. */
-  private async entryNames(
-    context: ActToolContext,
-  ): Promise<Map<string, string>> {
+  /**
+   * Each role and tier by its attendance key, for the card's line, and the
+   * roles in each tier by its key.
+   */
+  private async entryNames(context: ActToolContext): Promise<{
+    names: Map<string, string>;
+    tierRoles: Map<string, string[]>;
+  }> {
     const names = new Map<string, string>();
+    const tierRoles = new Map<string, string[]>();
     try {
       const options = await this.audience.options(context.chapterId, {
         groups: false,
       });
       for (const tier of options.tiers) {
         names.set(`tier:${tier.id}`, tier.name);
+        tierRoles.set(
+          `tier:${tier.id}`,
+          tier.roles.map((role) => role.id),
+        );
         for (const role of tier.roles) names.set(role.id, role.name);
       }
       for (const role of options.untiered) names.set(role.id, role.name);
@@ -686,7 +731,7 @@ export class CreateEventActTool implements ActTool {
         error,
       });
     }
-    return names;
+    return { names, tierRoles };
   }
 
   /** The chapter's event types, or null when they cannot be read. */

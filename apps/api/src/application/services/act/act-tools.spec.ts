@@ -792,7 +792,9 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       payload: {
         attendance: {
           everyone: 'not_invited',
-          roles: { [`tier:${EXEC}`]: 'required' },
+          // The tier as its roles today, until events keep tiers; the
+          // card still names the tier.
+          roles: { [PRESIDENT]: 'required', [TREASURER]: 'required' },
         },
         attendance_line: 'Cabinet required, nobody else invited',
         attendance_from: null,
@@ -886,7 +888,11 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       payload: {
         attendance: {
           everyone: 'not_invited',
-          roles: { [`tier:${EXEC}`]: 'optional', [SOCIAL]: 'optional' },
+          roles: {
+            [PRESIDENT]: 'optional',
+            [TREASURER]: 'optional',
+            [SOCIAL]: 'optional',
+          },
         },
         point_value: 0,
       },
