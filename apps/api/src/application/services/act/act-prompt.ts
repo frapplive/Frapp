@@ -67,7 +67,25 @@ export const ActPlanSchema = z.object({
   required: z.boolean().nullable(),
   repeats: z.enum(ACT_REPEATS).nullable(),
 });
-export type ActPlan = z.infer<typeof ActPlanSchema>;
+/**
+ * Who an event invites, by the chapter's own role and tier names (#5853).
+ * Only the tool loop sets it (`act-agent-tools.ts`), after reading the
+ * chapter's roles: the planning call above is never shown them, so it never
+ * writes one.
+ */
+export interface ActInvite {
+  required: string[];
+  optional: string[];
+  not_invited: string[];
+  /** Members holding none of the named roles; null keeps the default. */
+  everyone_else: 'required' | 'optional' | 'not_invited' | null;
+}
+
+export type ActPlan = z.infer<typeof ActPlanSchema> & {
+  invite?: ActInvite | null;
+  /** The chapter's event type, by its name, when the loop picked one. */
+  event_type?: string | null;
+};
 
 /** Earlier messages shown to the planner, the last few. */
 const ACT_EARLIER_MESSAGES = 3;

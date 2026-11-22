@@ -273,5 +273,57 @@ export function gradeRealQuestion(
     }
   }
 
+  if (expect.invite) violations.push(...gradeInvite(expect.invite, answer));
+
   return [...violations, ...gradeUniversalInvariants(evalCase, answer)];
+}
+
+const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
+  const left = new Set(a.map((name) => name.toLowerCase()));
+  const right = new Set(b.map((name) => name.toLowerCase()));
+  return left.size === right.size && [...left].every((name) => right.has(name));
+};
+
+/** The one event card's invite list against what the question wants (#5853). */
+export function gradeInvite(
+  want: NonNullable<RealQuestion['expect']['invite']>,
+  answer: AgentAnswer,
+): EvalViolation[] {
+  const events = (answer.proposals ?? []).filter((card) => card.event);
+  const card = events[0]?.event;
+  if (!card) {
+    return [{ rule: 'invite', detail: 'no event card was proposed' }];
+  }
+  const out: EvalViolation[] = [];
+  if (card.everyone !== want.everyone) {
+    out.push({
+      rule: 'invite-everyone',
+      detail: `everyone else ${card.everyone}; wanted ${want.everyone}`,
+    });
+  }
+  if (!sameSet(card.requiredRoles, want.required)) {
+    out.push({
+      rule: 'invite-required',
+      detail: `required [${card.requiredRoles.join(', ')}]; wanted [${want.required.join(', ')}]`,
+    });
+  }
+  if (!sameSet(card.optionalRoles, want.optional ?? [])) {
+    out.push({
+      rule: 'invite-optional',
+      detail: `optional [${card.optionalRoles.join(', ')}]; wanted [${(want.optional ?? []).join(', ')}]`,
+    });
+  }
+  if (want.type !== undefined && card.type !== want.type) {
+    out.push({
+      rule: 'event-type',
+      detail: `type ${card.type ?? 'none'}; wanted ${want.type ?? 'none'}`,
+    });
+  }
+  if (want.points !== undefined && card.points !== want.points) {
+    out.push({
+      rule: 'event-points',
+      detail: `${card.points ?? 'no'} points; wanted ${want.points}`,
+    });
+  }
+  return out;
 }

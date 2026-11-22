@@ -84,6 +84,30 @@ const TaskArgs = z.object({
   details: words(2_000).optional().describe('Anything else worth saying.'),
 });
 
+const roleNames = (what: string) =>
+  z
+    .array(words(120))
+    .max(20)
+    .optional()
+    .describe(
+      `Roles or tiers ${what}, each by the name chapter_roles gives it.`,
+    );
+
+const InviteArgs = z
+  .object({
+    required: roleNames('that must come'),
+    optional: roleNames('invited but not required'),
+    not_invited: roleNames('left out while everyone else is invited'),
+    everyone_else: z
+      .enum(['required', 'optional', 'not_invited'])
+      .describe(
+        'Every member holding none of the roles or tiers named above: required, optional, or not invited.',
+      ),
+  })
+  .describe(
+    "Who is invited. Decide it from what the event is, in this chapter's own roles and tiers. An event for the chapter's leaders, officers, executive board, cabinet or a committee (a leadership reception, an officer training or transition, an exec or committee meeting, a council or FSL event for officers) invites that tier or those roles and nobody else. A chapter meeting requires everyone. A social, a philanthropy event or anything casual is optional for everyone. When a recent event of the same kind invited a set list, follow it. Make a role required only when the member said so, a source says attendance is expected, or that kind of event requires it.",
+  );
+
 const EventArgs = z.object({
   name: words(200).describe("The event's name."),
   date: day.describe('The day it is on.'),
@@ -91,16 +115,18 @@ const EventArgs = z.object({
   end_time: time.optional().describe('When it ends. Left out: an hour.'),
   location: words(500).optional(),
   details: words(2_000).optional(),
-  required: z
-    .boolean()
+  invite: InviteArgs.optional(),
+  event_type: words(120)
     .optional()
-    .describe('True only when members must attend.'),
+    .describe(
+      "The chapter's event type it is, by the name chapter_roles gives it, when one fits. Its points and attendance are then the type's unless said otherwise.",
+    ),
   points: z
     .number()
     .int()
     .min(0)
     .optional()
-    .describe('The points it is worth, when the member said.'),
+    .describe('The points it is worth, when the member or a source said.'),
   repeats: z
     .enum(ACT_REPEATS)
     .optional()
@@ -123,6 +149,8 @@ const EMPTY_PLAN: Omit<ActPlan, 'action'> = {
   location: null,
   required: null,
   repeats: null,
+  invite: null,
+  event_type: null,
 };
 
 interface Front<Args> {
@@ -169,7 +197,7 @@ const FRONTS: Readonly<Record<string, Front<unknown>>> = {
   }),
   create_event: front<z.infer<typeof EventArgs>>({
     description:
-      'Prepare a card that puts one event, or a repeating series, on the chapter calendar, for the member to confirm. Use it only when the member asked for an event to be made and you have its name, day and start time; for a series, the day is its first meeting. It changes nothing by itself.',
+      "Prepare a card that puts one event, or a repeating series, on the chapter calendar, for the member to confirm. Use it only when the member asked for an event to be made and you have its name, day and start time; for a series, the day is its first meeting. Read chapter_roles with for_card event first, then set invite and event_type from what the event is. It changes nothing by itself.",
     reading: 'Working out the event',
     input: EventArgs,
     plan: (args) => ({
@@ -180,9 +208,17 @@ const FRONTS: Readonly<Record<string, Front<unknown>>> = {
       end_time: args.end_time ?? null,
       location: args.location ?? null,
       details: args.details ?? null,
-      required: args.required ?? null,
       amount: args.points ?? null,
       repeats: args.repeats ?? null,
+      invite: args.invite
+        ? {
+            required: args.invite.required ?? [],
+            optional: args.invite.optional ?? [],
+            not_invited: args.invite.not_invited ?? [],
+            everyone_else: args.invite.everyone_else,
+          }
+        : null,
+      event_type: args.event_type ?? null,
     }),
   }),
 };
@@ -228,6 +264,12 @@ export function proposalNote(outcome: ActOutcome): string {
       }
       if (outcome.missing === 'too_many_members') {
         return 'No card was made: that is more members than one card can hold.';
+      }
+      if (outcome.missing === 'invitees') {
+        return 'No card was made: a name in invite is not one of the chapter\'s roles or tiers, or could be two of them. Call chapter_roles with for_card event and use its names exactly.';
+      }
+      if (outcome.missing === 'event_type') {
+        return 'No card was made: event_type is not one of the chapter\'s event types. Use a name chapter_roles lists, or leave event_type out.';
       }
       const what = MISSING[outcome.missing];
       return what

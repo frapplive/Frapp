@@ -52,7 +52,8 @@ import type { EventAttendance } from '#domain/entities/event-attendance.entity';
 import type { FinancialInvoice } from '#domain/entities/financial-invoice.entity';
 import type { Meeting } from '#domain/entities/meeting.entity';
 import type { Member } from '#domain/entities/member.entity';
-import type { Role } from '#domain/entities/role.entity';
+import type { EventType } from '#domain/entities/event-type.entity';
+import type { Role, RoleTier } from '#domain/entities/role.entity';
 import type {
   ServiceEntry,
   ServiceLeaderboardRow,
@@ -64,6 +65,7 @@ import type {
   IChatCatchUpRepository,
 } from '#domain/repositories/chat-catch-up.repository.interface';
 import { actProposeTools } from '../../../src/application/services/act/act-agent-tools';
+import { ActAudienceResolver } from '../../../src/application/services/act/act-audience';
 import { ActPeopleResolver } from '../../../src/application/services/act/act-people';
 import { ActService } from '../../../src/application/services/act/act.service';
 import {
@@ -100,7 +102,10 @@ import {
   type TermEvent,
   type TermTask,
 } from '../synthetic-chapter/term';
-import type { SyntheticMember } from '../synthetic-chapter/roster';
+import {
+  SYNTHETIC_TIERS,
+  type SyntheticMember,
+} from '../synthetic-chapter/roster';
 import { createEvalCorpus } from './eval-corpus';
 import type {
   AgentInvocation,
@@ -266,6 +271,58 @@ export function createTermWorld(
     created_at: stamp,
   }));
   const alumniRoleId = roleNames.includes('Alumni') ? roleId('Alumni') : null;
+  // The tiers (#5853): every role of the chapter in its tier.
+  const tierId = (name: string) => termId(`tier:${name}`);
+  const tierRows: RoleTier[] = SYNTHETIC_TIERS.map((tier, index) => ({
+    id: tierId(tier.name),
+    chapter_id: chapterId,
+    position: index + 1,
+    name: tier.name,
+    permissions: [],
+    mentionable: true,
+    created_at: stamp,
+    updated_at: stamp,
+  }));
+  for (const role of roles) {
+    const tier = SYNTHETIC_TIERS.find((entry) =>
+      (entry.roles as readonly string[]).includes(role.name),
+    );
+    role.tier_id = tier ? tierId(tier.name) : null;
+  }
+  const roleTiers = {
+    list: (asked: string) => quietly(asked === chapterId ? tierRows : []),
+  };
+  const typeRows: EventType[] = (chapter.eventTypes ?? []).map(
+    (type, index) => ({
+      id: termId(`event-type:${type.name}`),
+      chapter_id: chapterId,
+      name: type.name,
+      position: index,
+      point_value: type.points,
+      is_mandatory: type.required,
+      created_at: stamp,
+      updated_at: stamp,
+    }),
+  );
+  const eventTypes = {
+    list: (asked: string) => quietly(asked === chapterId ? typeRows : []),
+  };
+  /** A role or tier name as an event's attendance key. */
+  const inviteKey = (name: string): string => {
+    if (SYNTHETIC_TIERS.some((tier) => tier.name === name)) {
+      return `tier:${tierId(name)}`;
+    }
+    return roleId(name);
+  };
+  /** What a tier key stands for today, as the database keeps it. */
+  const roleIdsOf = (keys: readonly string[]): string[] =>
+    keys.flatMap((key) =>
+      key.startsWith('tier:')
+        ? roles
+            .filter((role) => role.tier_id === key.slice('tier:'.length))
+            .map((role) => role.id)
+        : [key],
+    );
   const person = (id: string): SyntheticMember | undefined =>
     chapter.members.find((entry) => termId(entry.id) === id);
   const memberRow = (entry: SyntheticMember): Member => ({
@@ -447,13 +504,21 @@ export function createTermWorld(
       Date.parse(termEvent.start) + EVENT_HOURS * HOUR_MS,
     ).toISOString(),
     point_value: termEvent.points,
-    is_mandatory: termEvent.required,
+    is_mandatory: termEvent.invites
+      ? termEvent.invites.everyoneElse === 'required'
+      : termEvent.required,
     recurrence_rule: null,
     parent_event_id: null,
-    required_role_ids: null,
-    optional_role_ids: null,
+    required_role_ids: termEvent.invites?.required
+      ? roleIdsOf(termEvent.invites.required.map(inviteKey))
+      : null,
+    optional_role_ids: termEvent.invites?.optional
+      ? roleIdsOf(termEvent.invites.optional.map(inviteKey))
+      : null,
     excluded_role_ids: null,
-    others_invited: null,
+    others_invited: termEvent.invites
+      ? termEvent.invites.everyoneElse !== 'not_invited'
+      : null,
     notes: null,
     check_in_zone: null,
     check_in_zone_name: null,
@@ -1239,7 +1304,16 @@ export function createTermWorld(
     BackworkService: backwork,
     CorpusRetrievalService: corpus.retrieval,
     MeetingService: meetings,
+    RoleTierService: roleTiers,
+    EventTypeService: eventTypes,
   };
+  // Shared by the roles read and the event card, as in `ActModule`.
+  held.ActAudienceResolver = new ActAudienceResolver(
+    rbac as never,
+    roleTiers as never,
+    groups as never,
+    members as never,
+  );
   // Each tool is given what its constructor asks for, by the class Nest
   // would inject, so a tool that gains a dependency fails here by name
   // instead of running with the wrong service in the slot.
@@ -1295,6 +1369,48 @@ export function createTermWorld(
     const names = ids.flatMap((id) => person(id)?.name ?? []);
     return names.length > 0 ? names.join(', ') : null;
   };
+  const nameOfKey = (key: string): string =>
+    key.startsWith('tier:')
+      ? (tierRows.find((tier) => `tier:${tier.id}` === key)?.name ?? key)
+      : (roles.find((role) => role.id === key)?.name ?? key);
+  /** A proposed event's who and what, by the chapter's names. */
+  const eventOf = (
+    payload: Record<string, unknown>,
+  ): NonNullable<ProposedCard['event']> => {
+    const draft = (payload.attendance ?? null) as {
+      everyone: 'required' | 'optional' | 'not_invited';
+      roles: Record<string, 'required' | 'optional' | 'not_invited'>;
+    } | null;
+    const everyone =
+      draft?.everyone ?? (payload.is_mandatory === true ? 'required' : 'optional');
+    const by = (status: string) =>
+      Object.entries(draft?.roles ?? {})
+        .filter(([, value]) => value === status)
+        .map(([key]) => nameOfKey(key));
+    const typeId = payload.event_type_id;
+    return {
+      everyone,
+      required: by('required'),
+      optional: by('optional'),
+      notInvited: by('not_invited'),
+      requiredRoles: roleIdsOf(
+        Object.entries(draft?.roles ?? {})
+          .filter(([, value]) => value === 'required')
+          .map(([key]) => key),
+      ).map(nameOfKey),
+      optionalRoles: roleIdsOf(
+        Object.entries(draft?.roles ?? {})
+          .filter(([, value]) => value === 'optional')
+          .map(([key]) => key),
+      ).map(nameOfKey),
+      type:
+        typeof typeId === 'string'
+          ? (typeRows.find((type) => type.id === typeId)?.name ?? null)
+          : null,
+      points: typeof payload.point_value === 'number' ? payload.point_value : null,
+      line: typeof payload.attendance_line === 'string' ? payload.attendance_line : null,
+    };
+  };
   const suggestions = {
     withdrawSource: () => quietly(0),
     proposeBatch: (input: {
@@ -1307,6 +1423,9 @@ export function createTermWorld(
             kind: proposal.kind,
             title: titleOf(proposal.payload, proposal.kind),
             owner: ownerOf(proposal.payload),
+            ...(proposal.kind === 'new_event'
+              ? { event: eventOf(proposal.payload) }
+              : {}),
           });
           return { id, ...proposal };
         }),
@@ -1321,7 +1440,11 @@ export function createTermWorld(
   const acting = [
     new GivePointsActTool(people, events as never, attendance as never),
     new CreateTaskActTool(people),
-    new CreateEventActTool(events as never, { list: async () => [] } as never),
+    new CreateEventActTool(
+      events as never,
+      eventTypes as never,
+      held.ActAudienceResolver as ActAudienceResolver,
+    ),
   ];
   const act = new ActService(
     gateway,

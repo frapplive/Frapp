@@ -63,6 +63,8 @@ export const ACT_MISSING = [
   "attendance_access",
   "nobody_attended",
   "too_many_members",
+  "invitees",
+  "event_type",
   "request",
 ] as const;
 export type ActMissing = (typeof ACT_MISSING)[number];
@@ -147,6 +149,8 @@ export const ACT_COPY = {
     nobody_attended: "Nobody is marked as having attended that event.",
     too_many_members:
       "That is more members than one points change can hold. Split it up.",
+    invitees: "Say which roles or tiers are invited.",
+    event_type: "Say which event type it is.",
     request:
       "I couldn't work out what to do from that. Try saying it another way.",
   } satisfies Record<ActMissing, string>,
@@ -168,7 +172,10 @@ export const ACT_COPY = {
   pick_event: "Which event?",
   no_recent_events: "There are no recent events to pick from.",
   former_member: "A former member",
-  /** Who an event proposed on the card is for: always the whole chapter. */
+  /**
+   * Who an event proposed on the card is for, when the card carries no
+   * invite list of its own (one saved before #5853).
+   */
   everyone_required: "Required for everyone",
   everyone_optional: "Optional, everyone invited",
   /**

@@ -1,4 +1,5 @@
 import { AttendanceSummaryAgentTool } from './attendance-summary.tool';
+import { ChapterRolesAgentTool } from './chapter-roles.tool';
 import { ChapterTasksAgentTool } from './chapter-tasks.tool';
 import { EventAttendanceAgentTool } from './event-attendance.tool';
 import { EventsAgentTool } from './events.tool';
@@ -32,6 +33,7 @@ import { ServiceHoursAgentTool } from './service-hours.tool';
 export const CHAPTER_AGENT_TOOLS = [
   FindMemberAgentTool,
   RosterAgentTool,
+  ChapterRolesAgentTool,
   MyTasksAgentTool,
   ChapterTasksAgentTool,
   EventsAgentTool,

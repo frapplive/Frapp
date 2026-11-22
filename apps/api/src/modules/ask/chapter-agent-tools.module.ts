@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ActAudienceResolver } from '../../application/services/act/act-audience';
 import { CHAPTER_AGENT_TOOLS } from '../../application/services/ask/agent/tools-chapter';
 // Each import is the module of a route these tools mirror, for the service
 // that route calls.
@@ -39,7 +40,9 @@ import { TaskModule } from '../task/task.module';
     BackworkModule,
     SearchModule,
   ],
-  providers: [...CHAPTER_AGENT_TOOLS],
+  // The resolver is shared with the act cards (`ActModule`): the same
+  // names the read lists are the names a card is made with (#5853).
+  providers: [...CHAPTER_AGENT_TOOLS, ActAudienceResolver],
   exports: [...CHAPTER_AGENT_TOOLS],
 })
 export class ChapterAgentToolsModule {}

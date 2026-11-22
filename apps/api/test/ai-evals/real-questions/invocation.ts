@@ -93,7 +93,7 @@ export function evalCaseFor(question: RealQuestion): EvalCase {
     id: question.id,
     category: 'missing-information',
     intent: question.rightAnswer,
-    invocation: invocationFor(question),
+    invocation: invocationFor(question, question.chapter),
     expect: {},
   };
 }
