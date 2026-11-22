@@ -803,14 +803,11 @@ describe('AiSuggestionService (#4309)', () => {
         audience: null,
         audience_role_id: null,
         audience_group_id: null,
-        audience_tier_id: null,
         created_by: OFFICER,
         due_date: '2026-11-14',
         due_at: null,
         subtasks: [],
         point_reward: null,
-        proof_kind: 'none',
-        followed_by: null,
         // The minutes it came from, by id (#5562).
         meeting_id: MEETING,
       });
