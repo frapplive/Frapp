@@ -95,7 +95,7 @@ export function SettingsSearch({ className }: { className?: string }) {
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
         className={cn(
-          "h-[34px] w-full rounded-[10px] border border-control-edge bg-surface-1 pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground pointer-coarse:h-11 pointer-coarse:text-base",
+          "h-[34px] w-full rounded-[10px] border border-control-edge bg-surface-1 pl-8 pr-8 text-sm text-foreground placeholder:text-muted pointer-coarse:h-11 pointer-coarse:text-base",
           FOCUS_RING,
         )}
       />

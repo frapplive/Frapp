@@ -165,7 +165,7 @@ export function EmailChipsInput({
         onBlur={() => {
           if (draft.trim() !== "") commit(draft);
         }}
-        className="h-7 min-w-[6rem] flex-1 bg-transparent px-1 text-base text-foreground caret-primary outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+        className="h-7 min-w-[6rem] flex-1 bg-transparent px-1 text-base text-foreground caret-primary outline-none placeholder:text-muted disabled:cursor-not-allowed"
       />
     </div>
   );
