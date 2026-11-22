@@ -657,8 +657,6 @@ export const ASK_COPY = {
   /** A long question's bubble, folded and open (`askQuestionShown`). */
   question_more: "Show more",
   question_less: "Show less",
-  /** The arrow over the field while the newest words are out of view. */
-  jump_latest: "Jump to latest",
   close: "Close Ask Frapp",
   placeholder: "Ask Frapp anything",
   /** A step that ended without finding anything (`ask-steps.ts`, #5427). */

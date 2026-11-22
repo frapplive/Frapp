@@ -556,5 +556,8 @@ describe("askQuestionShown", () => {
     expect(askQuestionShown("When is the next meeting?").long).toBe(false);
     expect(askQuestionShown("a\nb\nc\nd\ne\nf\ng").long).toBe(true);
     expect(askQuestionShown("x".repeat(421)).long).toBe(true);
+    // Exactly at the limits stays open.
+    expect(askQuestionShown("a\nb\nc\nd\ne\nf").long).toBe(false);
+    expect(askQuestionShown("x".repeat(420)).long).toBe(false);
   });
 });

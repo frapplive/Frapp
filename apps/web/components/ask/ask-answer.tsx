@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { Check, Copy, Download, Lightbulb, LoaderCircle } from "lucide-react";
 import {
@@ -64,18 +71,27 @@ import {
 export function AskQuestionBubble({ children }: { children: string }) {
   const { text, long } = askQuestionShown(children);
   const [open, setOpen] = useState(false);
+  // Whether the six-line clamp hides anything at this width: a 430-character
+  // paragraph fits six lines in a wide bubble, and Show more must then not
+  // be offered for nothing.
+  const words = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(true);
+  useLayoutEffect(() => {
+    const element = words.current;
+    if (!long || open || !element) return;
+    setCut(element.scrollHeight > element.clientHeight + 1);
+  }, [long, open, text]);
   const folded = long && !open;
   return (
     <div className="ml-auto flex w-fit max-w-[85%] flex-col items-end gap-1">
-      <h3
-        className={cn(
-          "whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-primary px-3.5 py-2 text-sm font-normal text-primary-foreground",
-          folded && "line-clamp-6",
-        )}
-      >
-        {text}
+      {/* The clamp is on the words, inside the bubble's padding, so a
+          seventh line never peeks into it. */}
+      <h3 className="whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-primary px-3.5 py-2 text-sm font-normal text-primary-foreground">
+        <span ref={words} className={cn("block", folded && "line-clamp-6")}>
+          {text}
+        </span>
       </h3>
-      {long ? (
+      {long && (open || cut) ? (
         <button
           type="button"
           aria-expanded={open}
