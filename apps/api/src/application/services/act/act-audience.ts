@@ -13,8 +13,8 @@ import type { ActNote } from './act-tool';
 /**
  * Who a card is for, by the chapter's own names (#5853): the roles, the
  * tiers of roles and the groups an officer already invites and assigns by.
- * Shared by the event card ("Cabinet required, nobody else invited") and the
- * task card ("for the Recruitment Committee").
+ * Used by the event card ("Cabinet required, nobody else invited"), and
+ * built to serve the task card too ("for the Recruitment Committee").
  *
  * A model writes names, never ids (`act-tool.ts`): each is looked up here,
  * in this chapter and nowhere else, and one that is not a role, tier or
@@ -143,10 +143,13 @@ export class ActAudienceResolver {
     private readonly members: MemberService,
   ) {}
 
-  /** The chapter's tiers, roles and groups, each with who is in it. */
+  /**
+   * The chapter's tiers, roles and groups; with `holders`, how many members
+   * hold each role (0 otherwise).
+   */
   async options(
     chapterId: string,
-    include: { groups: boolean } = { groups: true },
+    include: { groups: boolean; holders?: boolean } = { groups: true },
   ): Promise<AudienceOptions> {
     const [roles, tiers, groups, profiles] = await Promise.all([
       this.rbac.findByChapter(chapterId),
@@ -154,7 +157,10 @@ export class ActAudienceResolver {
       include.groups
         ? this.groups.list(chapterId).then(askableGroups)
         : Promise.resolve([] as ChapterGroupView[]),
-      this.members.findProfilesByChapter(chapterId),
+      // The whole roster, read only when the counts are shown.
+      include.holders
+        ? this.members.findProfilesByChapter(chapterId)
+        : Promise.resolve([]),
     ]);
     const holders = new Map<string, number>();
     for (const profile of profiles) {
@@ -275,9 +281,11 @@ export function resolveAudience(
 }
 
 /**
- * An entry as an event's attendance key: a role by its id, a tier as
- * `tier:<id>` (`@repo/validation` `attendanceTierEntry`), which the event
- * keeps live as roles move between tiers.
+ * An entry as a card's attendance key: a role by its id, a tier as
+ * `tier:<id>`, the form the event's Who's coming picker gives a tier. The
+ * card names the tier by it; `attendanceByRole` (act-tools.ts) spells it out
+ * as the tier's roles before the draft is stored, since events take role
+ * ids only.
  */
 export function attendanceKeyOf(entry: AudienceEntry): string | null {
   if (entry.kind === 'role') return entry.id;

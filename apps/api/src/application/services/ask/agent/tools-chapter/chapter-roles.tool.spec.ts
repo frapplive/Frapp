@@ -1,4 +1,5 @@
 import { askerContext, linesOf } from '#test/helpers/agent-tool.fixture';
+import type { AgentToolResult } from '../agent-tool';
 import type { ActAudienceResolver } from '../../../act/act-audience';
 import type { EventService } from '../../../event.service';
 import type { EventTypeService } from '../../../event-type.service';
@@ -39,6 +40,7 @@ function build() {
   const events = {
     findByChapter: jest.fn().mockResolvedValue([
       {
+        id: 'event-retreat',
         name: 'Officer retreat',
         start_time: '2026-09-19T17:00:00.000Z',
         end_time: '2026-09-19T20:00:00.000Z',
@@ -49,6 +51,7 @@ function build() {
         others_invited: false,
       },
       {
+        id: 'event-meeting',
         name: 'Chapter meeting',
         start_time: '2026-11-08T23:00:00.000Z',
         end_time: '2026-11-09T00:00:00.000Z',
@@ -96,23 +99,43 @@ describe('chapter_roles (#5853)', () => {
   it('adds the event types and who recent events invited, for an event card', async () => {
     const { tool, events } = build();
     const context = askerContext();
-    const text = linesOf(
-      await tool.run(tool.input.parse({ for_card: 'event' }), context),
-    ).join('\n');
-    expect(text).toContain(
+    const result: AgentToolResult = await tool.run(
+      tool.input.parse({ for_card: 'event' }),
+      context,
+    );
+    const [roster, recent] = result.sources;
+    expect(roster.text).toContain(
       'Event types: "FSL" (5 points, optional for everyone)',
     );
-    expect(text).toContain(
+    expect(roster.audience).toEqual({ type: 'chapter' });
+    expect(recent.text).toContain(
       '- "Officer retreat" on Saturday, September 19, 2026: President and Treasurer required, nobody else invited',
     );
     // An event that invites everyone the same way says nothing new.
-    expect(text).not.toContain('"Chapter meeting" on');
-    // Read as the asker, so an event they can't see is never listed.
+    expect(recent.text).not.toContain('"Chapter meeting" on');
+    // Read as the asker, so an event they can't see is never listed, and a
+    // post to a channel is checked as the events tool's is.
     expect(events.findByChapter).toHaveBeenCalledWith(
       context.chapterId,
       context.userId,
       expect.any(Object),
     );
+    expect(recent.audience).toEqual({
+      type: 'events',
+      limited: ['event-retreat'],
+    });
+  });
+
+  it('leaves events out when the chapter has them off', async () => {
+    const { tool, events, types } = build();
+    const result = await tool.run(
+      tool.input.parse({ for_card: 'event' }),
+      askerContext({ enabledModules: { events: false } }),
+    );
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0].text).not.toContain('Event types');
+    expect(events.findByChapter).not.toHaveBeenCalled();
+    expect(types.list).not.toHaveBeenCalled();
   });
 
   it('adds the groups for a task card', async () => {
@@ -123,6 +146,9 @@ describe('chapter_roles (#5853)', () => {
     expect(text).toContain(
       'Groups, classes and class years: Fall 2025 (6 members)',
     );
-    expect(options).toHaveBeenCalledWith('chapter-a', { groups: true });
+    expect(options).toHaveBeenCalledWith('chapter-a', {
+      groups: true,
+      holders: true,
+    });
   });
 });

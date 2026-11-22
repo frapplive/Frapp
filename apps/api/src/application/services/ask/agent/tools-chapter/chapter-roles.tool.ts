@@ -3,7 +3,9 @@ import { z } from 'zod';
 import {
   attendanceFromEvent,
   describeAttendance,
+  eventLimitsAudience,
   eventSetsRolesApart,
+  isModuleEnabled,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { Event } from '#domain/entities/event.entity';
@@ -77,10 +79,15 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
   ) {}
 
   async run(args: Args, context: AgentToolContext): Promise<AgentToolResult> {
-    const forEvent = args.for_card === 'event';
+    // Event types and events stay out when the chapter has events off, as
+    // `GET /v1/events` and `GET /v1/event-types` do.
+    const forEvent =
+      args.for_card === 'event' &&
+      isModuleEnabled(context.enabledModules, 'events');
     const [options, types, recent] = await Promise.all([
       this.audience.options(context.chapterId, {
         groups: args.for_card === 'task',
+        holders: true,
       }),
       forEvent
         ? this.eventTypes.list(context.chapterId)
@@ -92,6 +99,8 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
       'Tiers, highest first, each with its roles and how many members hold each:',
     ];
     const rows: string[] = [];
+    // Kept apart: these are read as the asker, not as any member.
+    const eventRows: string[] = [];
     for (const tier of options.tiers) {
       rows.push(
         `- Tier ${quoted(tier.name)}: ${tier.roles.length > 0 ? tier.roles.map(roleLine).join(', ') : 'no roles'}`,
@@ -133,20 +142,20 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
         names.set(role.id, role.name);
       }
       for (const tier of options.tiers) names.set(`tier:${tier.id}`, tier.name);
-      rows.push(
+      eventRows.push(
         recent.length > 0
           ? 'Recent events that did not invite everyone the same way:'
           : 'No recent event invited only some members, or set roles apart.',
       );
       for (const event of recent) {
-        rows.push(
+        eventRows.push(
           `- ${quoted(event.name)} on ${longDay(event.start_time, context.timeZone)}: ${describeAttendance(attendanceFromEvent(event), (id) => names.get(id))}`,
         );
       }
     }
 
     const shown = fitRows(summary, rows, ROWS_LIMIT);
-    return found(
+    const result = found(
       context,
       liveSource({
         id: listSourceId(this.name, args.for_card),
@@ -161,6 +170,24 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
         ? `Showing ${shown.length} of ${rows.length} lines.`
         : null,
     );
+    if (eventRows.length > 0) {
+      // Who recent events invited, read as the asker: a post to a channel
+      // checks these as it checks the events tool's.
+      result.sources.push(
+        liveSource({
+          id: listSourceId(this.name, args.for_card, 'events'),
+          kind: 'events',
+          audience: {
+            type: 'events',
+            limited: recent.filter(eventLimitsAudience).map(({ id }) => id),
+          },
+          title: 'Recent invite lists',
+          page: 'events',
+          lines: eventRows,
+        }),
+      );
+    }
+    return result;
   }
 
   /** Events the asker can see that set roles apart, newest first. */

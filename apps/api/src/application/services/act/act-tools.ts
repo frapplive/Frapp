@@ -12,6 +12,7 @@ import {
   attendanceInvitesNobody,
   attendanceToWire,
   describeAttendance,
+  EVENT_ATTENDANCE_LABELS,
   eventSetsRolesApart,
   formatRepeatRule,
   isModuleEnabled,
@@ -146,17 +147,17 @@ function resolveAudienceName(
 /**
  * The rule as a member without `events:update` may set it: nobody
  * required (`EventService.create` moves each required role to optional).
+ * A role that comes to match everyone stays, so it still overrides its
+ * tier in `attendanceByRole`, which drops it after.
  */
 function withoutRequired(draft: EventAttendanceDraft): EventAttendanceDraft {
   const soften = (status: EventAttendanceStatus): EventAttendanceStatus =>
     status === 'required' ? 'optional' : status;
-  const everyone = soften(draft.everyone);
   const roles: Record<string, EventAttendanceStatus> = {};
   for (const [key, status] of Object.entries(draft.roles)) {
-    const next = soften(status);
-    if (next !== everyone) roles[key] = next;
+    roles[key] = soften(status);
   }
-  return { everyone, roles };
+  return { everyone: soften(draft.everyone), roles };
 }
 
 interface ActDraftInvite {
@@ -165,14 +166,15 @@ interface ActDraftInvite {
 
 /**
  * The draft with each `tier:<id>` entry spelled out as the roles in that
- * tier today, a role named on its own keeping its own status. Null when a
- * tier is not in `tierRoles`. Events take role ids only until the tiers
- * change (Add tiers to the event invite picker) merges; the card's line
- * still names the tier.
+ * tier today, a role named on its own keeping its own status, and a role
+ * the chapter no longer has (one copied from an old event) left out. Null
+ * when a tier is not in `tierRoles`. Events take role ids only, so the
+ * stored draft is roles; the card's line still names the tier.
  */
 export function attendanceByRole(
   draft: EventAttendanceDraft,
   tierRoles: ReadonlyMap<string, readonly string[]>,
+  knownRoles: ReadonlySet<string>,
 ): EventAttendanceDraft | null {
   const roles: Record<string, EventAttendanceStatus> = {};
   for (const [key, status] of Object.entries(draft.roles)) {
@@ -185,9 +187,31 @@ export function attendanceByRole(
     if (!key.startsWith('tier:')) roles[key] = status;
   }
   for (const [key, status] of Object.entries(roles)) {
-    if (status === draft.everyone) delete roles[key];
+    if (status === draft.everyone || !knownRoles.has(key)) delete roles[key];
   }
   return { everyone: draft.everyone, roles };
+}
+
+/**
+ * The card's line for a draft that may name tiers. `describeAttendance`
+ * leaves out a role that matches everyone, so a role named apart from its
+ * tier ("not the President") is added after it.
+ */
+function attendanceLine(
+  draft: EventAttendanceDraft,
+  tierRoles: ReadonlyMap<string, readonly string[]>,
+  names: ReadonlyMap<string, string>,
+): string {
+  const line = describeAttendance(draft, (id) => names.get(id));
+  const inTiers = new Set(
+    Object.keys(draft.roles).flatMap((key) => tierRoles.get(key) ?? []),
+  );
+  const apart = Object.entries(draft.roles)
+    .filter(([key, status]) => status === draft.everyone && inTiers.has(key))
+    .map(([key]) => names.get(key))
+    .filter((name): name is string => Boolean(name));
+  if (apart.length === 0) return line;
+  return `${line}; ${apart.join(' and ')} ${EVENT_ATTENDANCE_LABELS[draft.everyone].toLowerCase()}`;
 }
 
 function holds(context: ActToolContext, permission: string): boolean {
@@ -594,8 +618,9 @@ export class CreateEventActTool implements ActTool {
     // the card asks for them before it can be confirmed. Who is invited,
     // when nobody chose, is copied the same way from the last event of the
     // same name (#5853: last year's reception invites last year's list).
+    const copiesInvite = !invite && plan.required == null;
     const earlier =
-      setsRequirements && ((said === null && !type) || !invite)
+      setsRequirements && ((said === null && !type) || copiesInvite)
         ? await this.earlierNamed(name, context)
         : null;
     const points = setsRequirements
@@ -614,7 +639,7 @@ export class CreateEventActTool implements ActTool {
     let attendanceFrom: { kind: 'event'; name: string } | null = null;
     if (invite) {
       attendance = invite.draft;
-    } else if (earlier && eventSetsRolesApart(earlier)) {
+    } else if (copiesInvite && earlier && eventSetsRolesApart(earlier)) {
       attendance = attendanceFromEvent(earlier);
       attendanceFrom = { kind: 'event', name: earlier.name };
     } else {
@@ -631,12 +656,17 @@ export class CreateEventActTool implements ActTool {
     if (attendanceInvitesNobody(attendanceToWire(attendance))) {
       return { status: 'unclear', missing: 'invitees' };
     }
-    const setApart = Object.keys(attendance.roles).length > 0;
-    const read = setApart ? await this.entryNames(context) : null;
-    const names = read?.names ?? null;
-    const line = describeAttendance(attendance, (id) => names?.get(id));
-    if (read) {
-      const byRole = attendanceByRole(attendance, read.tierRoles);
+    let line = describeAttendance(attendance, () => undefined);
+    if (Object.keys(attendance.roles).length > 0) {
+      // A failed read fails the card rather than telling the loop that a
+      // name it read from chapter_roles is wrong.
+      const read = await this.entryNames(context);
+      line = attendanceLine(attendance, read.tierRoles, read.names);
+      const byRole = attendanceByRole(
+        attendance,
+        read.tierRoles,
+        new Set(read.roleIds),
+      );
       if (!byRole || attendanceInvitesNobody(attendanceToWire(byRole))) {
         return { status: 'unclear', missing: 'invitees' };
       }
@@ -694,7 +724,9 @@ export class CreateEventActTool implements ActTool {
       for (const typed of names) {
         const one = resolveAudienceName(typed, resolved.entries);
         const key = one ? attendanceKeyOf(one) : null;
-        if (key && status !== everyone) roles[key] = status;
+        // Kept even when it matches everyone: it may set a role apart from
+        // its tier ("the Cabinet, not the President").
+        if (key) roles[key] = status;
       }
     }
     return { draft: { everyone, roles } };
@@ -707,31 +739,27 @@ export class CreateEventActTool implements ActTool {
   private async entryNames(context: ActToolContext): Promise<{
     names: Map<string, string>;
     tierRoles: Map<string, string[]>;
+    roleIds: string[];
   }> {
+    const options = await this.audience.options(context.chapterId, {
+      groups: false,
+    });
     const names = new Map<string, string>();
     const tierRoles = new Map<string, string[]>();
-    try {
-      const options = await this.audience.options(context.chapterId, {
-        groups: false,
-      });
-      for (const tier of options.tiers) {
-        names.set(`tier:${tier.id}`, tier.name);
-        tierRoles.set(
-          `tier:${tier.id}`,
-          tier.roles.map((role) => role.id),
-        );
-        for (const role of tier.roles) names.set(role.id, role.name);
-      }
-      for (const role of options.untiered) names.set(role.id, role.name);
-    } catch (error) {
-      reportCaughtFailure(this.logger, {
-        level: 'warning',
-        site: 'ask-event-invite-names',
-        message: `Ask could not read role names for chapter ${context.chapterId}`,
-        error,
-      });
+    for (const tier of options.tiers) {
+      names.set(`tier:${tier.id}`, tier.name);
+      tierRoles.set(
+        `tier:${tier.id}`,
+        tier.roles.map((role) => role.id),
+      );
+      for (const role of tier.roles) names.set(role.id, role.name);
     }
-    return { names, tierRoles };
+    for (const role of options.untiered) names.set(role.id, role.name);
+    return {
+      names,
+      tierRoles,
+      roleIds: [...names.keys()].filter((key) => !key.startsWith('tier:')),
+    };
   }
 
   /** The chapter's event types, or null when they cannot be read. */
@@ -751,7 +779,8 @@ export class CreateEventActTool implements ActTool {
 
   /**
    * The latest event this member can see with the same name, in the last
-   * half year, for its points.
+   * 400 days (a yearly event a little late still counts), for its points
+   * and who it invited.
    */
   private async earlierNamed(
     name: string,

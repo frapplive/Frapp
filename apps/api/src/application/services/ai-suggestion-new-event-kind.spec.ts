@@ -151,6 +151,7 @@ describe('NewEventSuggestionKind', () => {
   describe('who it invites (#5853)', () => {
     const EXEC_TIER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const SOCIAL = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const PRESIDENT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
     it('keeps a well-formed invite list and drops what is not one', () => {
       const { kind } = build();
@@ -160,9 +161,11 @@ describe('NewEventSuggestionKind', () => {
             attendance: {
               everyone: 'not_invited',
               roles: {
-                [`tier:${EXEC_TIER}`]: 'required',
+                [PRESIDENT]: 'required',
                 [SOCIAL]: 'optional',
                 'not-an-id': 'required',
+                // Events take role ids only, so a tier key is not kept.
+                [`tier:${EXEC_TIER}`]: 'required',
                 [`tier:${SOCIAL}`]: 'maybe',
                 // The same as everyone: not set apart.
                 'cccccccc-cccc-4ccc-8ccc-cccccccccccc': 'not_invited',
@@ -174,7 +177,7 @@ describe('NewEventSuggestionKind', () => {
       ).toMatchObject({
         attendance: {
           everyone: 'not_invited',
-          roles: { [`tier:${EXEC_TIER}`]: 'required', [SOCIAL]: 'optional' },
+          roles: { [PRESIDENT]: 'required', [SOCIAL]: 'optional' },
         },
         attendance_line: 'Exec board required, nobody else invited',
       });
@@ -191,7 +194,7 @@ describe('NewEventSuggestionKind', () => {
         payload: proposal({
           attendance: {
             everyone: 'not_invited',
-            roles: { [`tier:${EXEC_TIER}`]: 'required', [SOCIAL]: 'optional' },
+            roles: { [PRESIDENT]: 'required', [SOCIAL]: 'optional' },
           },
         }),
       });
@@ -199,7 +202,7 @@ describe('NewEventSuggestionKind', () => {
         expect.objectContaining({
           is_mandatory: false,
           others_invited: false,
-          required_role_ids: [`tier:${EXEC_TIER}`],
+          required_role_ids: [PRESIDENT],
           optional_role_ids: [SOCIAL],
           excluded_role_ids: [],
         }),

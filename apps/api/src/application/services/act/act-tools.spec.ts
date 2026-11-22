@@ -7,7 +7,7 @@ import type { Event } from '#domain/entities/event.entity';
 import type { AttendanceService } from '../attendance.service';
 import type { EventService } from '../event.service';
 import type { EventTypeService } from '../event-type.service';
-import type { ActPlan } from './act-prompt';
+import type { ActInvite, ActPlan } from './act-prompt';
 import type { ActPeopleResolver } from './act-people';
 import type { AudienceOptions } from './act-audience';
 import {
@@ -754,7 +754,7 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
     point_value: 5,
     is_mandatory: false,
   };
-  const build = (events: Event[] = []) =>
+  const build = (events: Event[] = [], options = audience) =>
     new CreateEventActTool(
       {
         findByChapter: jest.fn().mockResolvedValue(events),
@@ -762,8 +762,30 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       {
         list: jest.fn().mockResolvedValue([FSL]),
       } as unknown as EventTypeService,
-      audienceOver(audience),
+      audienceOver(options),
     );
+  const lastYearWith = (required: string[]) =>
+    ({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      name: 'FSL Leaders Reception',
+      start_time: '2026-01-20T22:00:00.000Z',
+      end_time: '2026-01-20T23:00:00.000Z',
+      point_value: 5,
+      is_mandatory: false,
+      required_role_ids: required,
+      optional_role_ids: null,
+      excluded_role_ids: null,
+      others_invited: false,
+    }) as unknown as Event;
+  const inviting = (invite: Partial<ActInvite>): Partial<ActPlan> => ({
+    invite: {
+      required: [],
+      optional: [],
+      not_invited: [],
+      everyone_else: 'not_invited',
+      ...invite,
+    },
+  });
   const officer = toolContext(['events:create', 'events:update']);
   const reception = (overrides: Partial<ActPlan> = {}) =>
     plan({
@@ -866,6 +888,110 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
         attendance_line:
           'President and Treasurer required, nobody else invited',
         attendance_from: { kind: 'event', name: 'FSL Leaders Reception' },
+      },
+    });
+  });
+
+  it('keeps a role named apart from its tier, and says so on the card', async () => {
+    expect(
+      await build().draft(
+        reception(
+          inviting({ required: ['Cabinet'], not_invited: ['President'] }),
+        ),
+        officer,
+      ),
+    ).toMatchObject({
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [TREASURER]: 'required' },
+        },
+        attendance_line:
+          'Cabinet required, nobody else invited; President not invited',
+      },
+    });
+  });
+
+  it('keeps the stronger status for a name given twice', async () => {
+    expect(
+      await build().draft(
+        reception(
+          inviting({
+            required: ['Social Chair'],
+            not_invited: ['Social Chair'],
+          }),
+        ),
+        officer,
+      ),
+    ).toMatchObject({
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [SOCIAL]: 'required' },
+        },
+      },
+    });
+  });
+
+  it('sends back a tier that holds no roles, which would invite nobody', async () => {
+    const empty: AudienceOptions = {
+      ...audience,
+      tiers: [
+        ...audience.tiers,
+        { id: CHAIRS.replace('2', '3'), name: 'Advisors', roles: [] },
+      ],
+    };
+    expect(
+      await build([], empty).draft(
+        reception(inviting({ required: ['Advisors'] })),
+        officer,
+      ),
+    ).toEqual({ status: 'unclear', missing: 'invitees' });
+  });
+
+  it("copies the last list even when the event's type matched", async () => {
+    expect(
+      await build([lastYearWith([PRESIDENT, TREASURER])]).draft(
+        reception({ event_type: 'FSL' }),
+        officer,
+      ),
+    ).toMatchObject({
+      payload: {
+        event_type_id: FSL.id,
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [PRESIDENT]: 'required', [TREASURER]: 'required' },
+        },
+        attendance_from: { kind: 'event', name: 'FSL Leaders Reception' },
+      },
+    });
+  });
+
+  it('follows what the member said over the last list', async () => {
+    expect(
+      await build([lastYearWith([PRESIDENT])]).draft(
+        reception({ required: true }),
+        officer,
+      ),
+    ).toMatchObject({
+      payload: {
+        attendance: { everyone: 'required', roles: {} },
+        attendance_from: null,
+      },
+    });
+  });
+
+  it('leaves out a role the chapter no longer has from the last list', async () => {
+    expect(
+      await build([
+        lastYearWith([PRESIDENT, 'abababab-abab-4bab-8bab-abababababab']),
+      ]).draft(reception(), officer),
+    ).toMatchObject({
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [PRESIDENT]: 'required' },
+        },
       },
     });
   });

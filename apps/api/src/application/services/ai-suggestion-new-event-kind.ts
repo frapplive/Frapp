@@ -59,7 +59,8 @@ export interface NewEventSuggestionPayload {
   is_mandatory: boolean;
   /**
    * Who it invites, as the event form's draft: the default for everyone and
-   * each role (by id) or tier (`tier:<id>`) set apart from it. Null on a
+   * each role (by id) set apart from it. A tier is stored as its roles
+   * (`attendanceByRole`), since events take role ids only. Null on a
    * card saved before #5853, which invites everyone as `is_mandatory` says.
    */
   attendance: EventAttendanceDraft | null;
@@ -95,7 +96,7 @@ function pointsFromOrNull(value: unknown): NewEventPointsFrom | null {
 /** Roles and tiers one card may set apart. */
 const ATTENDANCE_ENTRIES_MAX = 100;
 const ATTENDANCE_KEY =
-  /^(?:tier:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ATTENDANCE_LINE_MAX = 300;
 
 function statusOrNull(value: unknown): EventAttendanceStatus | null {

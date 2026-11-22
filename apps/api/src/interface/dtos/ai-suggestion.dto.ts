@@ -489,7 +489,7 @@ export class NewEventAttendanceDto {
       enum: [...EVENT_ATTENDANCE_STATUSES],
     },
     description:
-      'Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status.',
+      'Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles.',
   })
   roles: Record<string, EventAttendanceStatus>;
 }

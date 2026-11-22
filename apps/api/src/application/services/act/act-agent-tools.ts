@@ -272,7 +272,7 @@ export function proposalNote(outcome: ActOutcome): string {
         return 'No card was made: that is more members than one card can hold.';
       }
       if (outcome.missing === 'invitees') {
-        return "No card was made: a name in invite is not one of the chapter's roles or tiers, or could be two of them. Call chapter_roles with for_card event and use its names exactly.";
+        return "No card was made: a name in invite is not one of the chapter's roles or tiers, or could be two of them, or the list invites nobody (a tier with no roles counts as nobody). Call chapter_roles with for_card event and use its names exactly.";
       }
       if (outcome.missing === 'event_type') {
         return "No card was made: event_type is not one of the chapter's event types. Use a name chapter_roles lists, or leave event_type out.";
