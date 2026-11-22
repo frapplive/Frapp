@@ -3,6 +3,7 @@ import { CronExpression } from '@nestjs/schedule';
 import { ReportedCron } from './reported-cron.decorator';
 import { AiSuggestionService } from '../services/ai-suggestion.service';
 import { MinutesNextAgendaService } from '../services/minutes-next-agenda.service';
+import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 
 /**
  * Puts back accepts the API never finished, then expires AI suggestions
@@ -23,12 +24,32 @@ export class AiSuggestionExpiryService {
     private readonly nextAgenda: MinutesNextAgendaService,
   ) {}
 
+  private async deleteExpiredChanges(): Promise<void> {
+    try {
+      const forgotten = await this.suggestions.deleteExpiredChanges();
+      if (forgotten > 0) {
+        this.logger.log(`Deleted ${forgotten} AI suggestion change logs`);
+      }
+    } catch (error) {
+      reportCaughtFailure(this.logger, {
+        level: 'error',
+        site: 'ai-suggestion-change-sweep',
+        message: 'could not delete expired AI suggestion change logs',
+        error,
+      });
+    }
+  }
+
   @ReportedCron(CronExpression.EVERY_HOUR)
   async handleAiSuggestionExpirySweep(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      // First, so an accept that died past its expiry is expired below.
+      // What people changed in suggestions is kept 90 days (Paul,
+      // 2026-11-22). First and on its own, so no failure below keeps a row
+      // past its 90 days, and its own failure holds up nothing.
+      await this.deleteExpiredChanges();
+      // Then, so an accept that died past its expiry is expired below.
       const released = await this.suggestions.releaseStaleAccepts();
       if (released > 0) {
         this.logger.warn(`Put back ${released} AI suggestions left mid-accept`);
