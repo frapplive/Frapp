@@ -47,12 +47,20 @@ export function toggleRole(
  * roles, such as a role deleted mid-save (#4830). None is fixed by trying
  * again from the same list. `name` is set when the officer
  * has already moved on to someone else, so the alert says whose change it was.
+ *
+ * `refusal` is what the refusal itself says, in the chapter's words
+ * (`serverCopyOf`), when the API named its reason: a rank rule it refused
+ * by (#5730) says which, rather than the bare 403's guess.
  */
 export function rolesSaveFailedBody(
   status: number | undefined,
   name: string | null = null,
+  refusal: string | null = null,
 ): string {
   const change = name ? `Your change to ${name}'s roles` : "The change";
+  if (status === 403 && refusal) {
+    return `${change} was put back. ${refusal}`;
+  }
   if (status === 400) {
     return `One of those roles was just deleted. ${change} was put back and the list refreshed.`;
   }

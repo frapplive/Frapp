@@ -1,6 +1,6 @@
 "use client";
 
-import { describeLoadFailure } from "@repo/hooks/error-copy";
+import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   InviteGlyph,
@@ -90,6 +90,7 @@ import {
   tierPositionsOf,
   directoryNoSearchMatches,
   matchesPhoneReachFilter,
+  permissionsNotGivable,
   PHONE_REACH_FILTER_OPTIONS,
   PHONE_REACH_LABEL,
   phoneReachCountLineFor,
@@ -326,10 +327,25 @@ export function MembersDirectory() {
   // through Transfer presidency, so offering it would guarantee a failing
   // action. It stays in the filter dropdown (filtering by President is valid);
   // only assignment excludes it.
-  const assignableRoleOptions = useMemo(
-    () => roleOptions.filter((role) => !role.locked),
-    [roleOptions],
-  );
+  //
+  // Nor a role carrying a permission the viewer lacks (#5730): the API
+  // refuses it for every member, so it is left out once the viewer's
+  // permissions are read (`permissionsNotGivable`, as the "+ Add" list).
+  const myPermissions = useMyPermissions();
+  const viewerPermissions = myPermissions.data?.permissions;
+  const assignableRoleOptions = useMemo(() => {
+    const caller = viewerPermissions && {
+      wildcard: viewerPermissions.includes("*"),
+      held: new Set(viewerPermissions),
+    };
+    return roleOptions.filter(
+      (role) =>
+        !role.locked &&
+        (!caller ||
+          permissionsNotGivable(caller, role.permissions, allRoles).length ===
+            0),
+    );
+  }, [roleOptions, allRoles, viewerPermissions]);
   // The filters offer what the list on screen can hold (#2484). Outside a
   // search that is actives only, so the Alumni role is left out of the role
   // filter, where it could only match nothing; a search spans both tabs, so it
@@ -348,7 +364,6 @@ export function MembersDirectory() {
   // Whoever can give roles also gets "No base role" first (#5802): the
   // members holding none of New Member, Actives and Alumni, as the dashed
   // chip on their profile says. Only in a chapter that has base roles.
-  const myPermissions = useMyPermissions();
   const canGiveRoles = can("roles:manage", myPermissions.data?.permissions);
   const offersNoBaseRole = canGiveRoles && allRoles.some(isBaseRole);
   const filterRoleChipOptions = useMemo(
@@ -816,7 +831,12 @@ export function MembersDirectory() {
     } else {
       toast({
         title: "Some assignments failed",
-        description: `${roleName}: ${succeeded} updated, ${failed} failed. Retry the rest.`,
+        // Why the first one failed (#5730), so a refusal a retry can't fix
+        // doesn't read as one to retry.
+        description: `${roleName}: ${succeeded} updated, ${failed} failed. ${errorCopy(
+          results.find((r) => r.status === "rejected")?.reason,
+          "Retry the rest.",
+        )}`,
         variant: "destructive",
       });
       // Narrow the selection to exactly "the rest", which is what the toast

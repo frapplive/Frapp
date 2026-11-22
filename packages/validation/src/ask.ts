@@ -654,6 +654,9 @@ export const askSuggestionText = {
 /** The words Ask shows, shared so web and mobile cannot drift. */
 export const ASK_COPY = {
   name: "Ask Frapp",
+  /** A long question's bubble, folded and open (`askQuestionShown`). */
+  question_more: "Show more",
+  question_less: "Show less",
   close: "Close Ask Frapp",
   placeholder: "Ask Frapp anything",
   /** A step that ended without finding anything (`ask-steps.ts`, #5427). */
@@ -949,4 +952,30 @@ export function askUnavailableLine(reason: string | null): string {
  */
 export function askUnavailableOffersRetry(reason: string | null): boolean {
   return askUnavailableLine(reason) === ASK_COPY.unavailable.not_available;
+}
+
+/**
+ * A question as its bubble draws it (Paul, 2026-11-22: a pasted email filled
+ * the whole conversation in one block). Runs of blank lines a paste brings
+ * become one, and a question longer than `ASK_QUESTION_FOLD_LINES` lines or
+ * `ASK_QUESTION_FOLD_CHARS` characters is folded behind Show more on both
+ * apps. What is sent is the member's text as typed.
+ */
+export const ASK_QUESTION_FOLD_LINES = 6;
+export const ASK_QUESTION_FOLD_CHARS = 420;
+
+export function askQuestionShown(text: string): {
+  text: string;
+  long: boolean;
+} {
+  const shown = text
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const lines = shown.split("\n").length;
+  return {
+    text: shown,
+    long:
+      lines > ASK_QUESTION_FOLD_LINES || shown.length > ASK_QUESTION_FOLD_CHARS,
+  };
 }

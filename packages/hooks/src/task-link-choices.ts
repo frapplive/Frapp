@@ -1,5 +1,5 @@
 import { formatDueLabel } from "@repo/formatting";
-import type { TaskProofKind } from "@repo/validation";
+import { TASK_NO_DUE_DATE_LABEL, type TaskProofKind } from "@repo/validation";
 import { taskStatusLabel } from "./task-card";
 import { compareTasksByDue } from "./task-views";
 import type { TaskStatus } from "./use-tasks";
@@ -9,7 +9,8 @@ export interface TaskLinkSource {
   id: string;
   title: string;
   status: TaskStatus;
-  due_date: string;
+  /** Null for a task with no due date (#5761). */
+  due_date: string | null;
   due_at?: string | null;
   assignee_id: string;
   points_awarded?: boolean;
@@ -61,8 +62,10 @@ export function taskLinkChoices(
     const isDone = task.status === "COMPLETED";
     const when = isDone
       ? taskStatusLabel({ ...task, points_awarded: !!task.points_awarded })
-      : (formatDueLabel(task.due_at ?? task.due_date, now) ??
-        taskStatusLabel({ ...task, points_awarded: false }));
+      : !task.due_at && !task.due_date
+        ? TASK_NO_DUE_DATE_LABEL
+        : (formatDueLabel(task.due_at ?? task.due_date, now) ??
+          taskStatusLabel({ ...task, points_awarded: false }));
     return {
       id: task.id,
       title: task.title,

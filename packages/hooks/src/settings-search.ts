@@ -516,6 +516,18 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     phone: { screen: "/chapter-roles" },
   },
   {
+    // The phone's Chapter settings row (#5296); web adds a role in its tier
+    // on the Roles tab.
+    id: "new-role",
+    label: "New role",
+    area: "chapter",
+    section: "Roles and groups",
+    keywords: ["create role", "add role", "make a role", "new position"],
+    requires: ["roles:manage"],
+    web: { page: "roles" },
+    phone: { screen: "/chapter-settings", anchor: "new-role" },
+  },
+  {
     id: "default-invite-role",
     label: "Default invite role",
     area: "chapter",
@@ -621,6 +633,18 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: ["channels:manage"],
     web: { page: "chat" },
+  },
+  {
+    // The phone's Chapter settings row (#5296); web makes a channel from the
+    // channel list, which the Channels entry opens.
+    id: "new-channel",
+    label: "New channel",
+    area: "chapter",
+    section: "Chat",
+    keywords: ["create channel", "add channel", "make a channel"],
+    requires: ["channels:create", "channels:manage"],
+    web: { page: "chat" },
+    phone: { screen: "/chapter-settings", anchor: "new-channel" },
   },
   {
     id: "discord-import",

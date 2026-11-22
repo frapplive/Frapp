@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { Check, Copy, Download, Lightbulb, LoaderCircle } from "lucide-react";
 import {
@@ -10,6 +17,7 @@ import {
   type AskExchange,
   type AskCardEnd,
   type AskProposalResolution,
+  useSmoothText,
 } from "@repo/hooks";
 import {
   ASK_COPY,
@@ -26,6 +34,7 @@ import {
   type AskEntity,
   type AskPostedAnswer,
   type AskSource,
+  askQuestionShown,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { FOCUS_RING } from "@/components/ui/focus";
@@ -40,6 +49,7 @@ import { AskMarkdown, AskPreviewMarkdown } from "@/components/ask/ask-markdown";
 import { askPlainWords, type AskMarker } from "@repo/chat-core/ask-markdown";
 import { AskAnswerCards, AskProposal } from "@/components/ask/ask-proposal";
 import { AskSteps } from "@/components/ask/ask-steps";
+import { prefersReducedMotion } from "@/components/chat/use-rail-flip";
 import {
   askSourceBackworkId,
   askSourceHref,
@@ -59,10 +69,42 @@ import {
  * the member's words.
  */
 export function AskQuestionBubble({ children }: { children: string }) {
+  const { text, long } = askQuestionShown(children);
+  const [open, setOpen] = useState(false);
+  // Whether the six-line clamp hides anything at this width: a 430-character
+  // paragraph fits six lines in a wide bubble, and Show more must then not
+  // be offered for nothing.
+  const words = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(true);
+  useLayoutEffect(() => {
+    const element = words.current;
+    if (!long || open || !element) return;
+    setCut(element.scrollHeight > element.clientHeight + 1);
+  }, [long, open, text]);
+  const folded = long && !open;
   return (
-    <h3 className="ml-auto w-fit max-w-[85%] whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-primary px-3.5 py-2 text-sm font-normal text-primary-foreground">
-      {children}
-    </h3>
+    <div className="ml-auto flex w-fit max-w-[85%] flex-col items-end gap-1">
+      {/* The clamp is on the words, inside the bubble's padding, so a
+          seventh line never peeks into it. */}
+      <h3 className="whitespace-pre-wrap break-words rounded-[18px] rounded-br-[6px] bg-primary px-3.5 py-2 text-sm font-normal text-primary-foreground">
+        <span ref={words} className={cn("block", folded && "line-clamp-6")}>
+          {text}
+        </span>
+      </h3>
+      {long && (open || cut) ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((was) => !was)}
+          className={cn(
+            "rounded px-1 text-caption text-muted-foreground hover:text-foreground",
+            FOCUS_RING,
+          )}
+        >
+          {open ? ASK_COPY.question_less : ASK_COPY.question_more}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -205,7 +247,7 @@ export function AskReply({
       />
       {exchange.phase === "working" && exchange.preview ? (
         <div className="whitespace-pre-wrap text-sm text-foreground">
-          <AskPreviewMarkdown text={exchange.preview} />
+          <AskStreamingText text={exchange.preview} />
         </div>
       ) : null}
       {exchange.phase === "failed" && exchange.failure ? (
@@ -269,6 +311,16 @@ export function AskReply({
       ) : null}
     </div>
   );
+}
+
+/**
+ * The streamed preview, paced so it flows rather than lands in bursts
+ * (`useSmoothText`; Paul, 2026-11-22). With Reduce Motion on it is drawn as
+ * it arrives.
+ */
+function AskStreamingText({ text }: { text: string }) {
+  const [paced] = useState(() => !prefersReducedMotion());
+  return <AskPreviewMarkdown text={useSmoothText(text, paced)} />;
 }
 
 const NO_CARDS_ENDED: Readonly<Record<string, AskCardEnd>> = {};

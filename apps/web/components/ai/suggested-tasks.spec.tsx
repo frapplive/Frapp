@@ -202,7 +202,7 @@ describe("SuggestedTasks (#4313)", () => {
     });
   });
 
-  it("asks who and when on Accept when the minutes named neither, and sends nothing", () => {
+  it("asks who on Accept when the minutes named no one, and sends nothing; a due date is optional (#5761)", () => {
     mocks.items.current = [
       suggestion("1", { assignee_id: null, due_date: null }),
     ];
@@ -215,14 +215,22 @@ describe("SuggestedTasks (#4313)", () => {
     fireEvent.click(acceptButtons()[0]!);
 
     expect(screen.getByText("Pick who this is for.")).toBeTruthy();
-    // The date chip turns to the warning tone, and the card says why, with
-    // the chip's popover closed.
+    // No due date is fine: the date chip isn't flagged.
     const dueChip = screen.getByRole("button", { name: "Due date for Task 1" });
-    expect(dueChip.getAttribute("aria-invalid")).toBe("true");
-    expect(screen.getByText("Pick a due date.").id).toBe(
-      dueChip.getAttribute("aria-describedby"),
-    );
+    expect(dueChip.getAttribute("aria-invalid")).not.toBe("true");
+    expect(screen.queryByText("Pick a due date.")).toBeNull();
     expect(mocks.accept).not.toHaveBeenCalled();
+  });
+
+  it("accepts a suggestion with no due date as it is (#5761)", async () => {
+    mocks.items.current = [suggestion("1", { due_date: null })];
+    render(
+      <SuggestedTasks source={{ type: "meeting", id: "m-1" }} headingId="s" />,
+    );
+
+    fireEvent.click(acceptButtons()[0]!);
+
+    await waitFor(() => expect(mocks.accept).toHaveBeenCalledTimes(1));
   });
 
   it("sends the day the officer typed in place", async () => {

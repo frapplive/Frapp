@@ -24,12 +24,11 @@ import { FOCUS_RING, FOCUS_RING_OFFSET } from "@/components/ui/focus"
  * underline would be the only cue a keyboard user got. The offset ring is
  * unambiguous against both states.
  *
- * Inactive labels take `--muted-foreground` rather than §6's drawn `#78716A`.
- * `--muted` measured 3.3–4.0:1 on this ladder when this was written, under
- * README §6's 4.5:1 release gate, so §1's rounding rule ("lift a drawn tone
- * that fails the gate one step up the §4 ladder") applied, and the hover lift
- * moved up with it to `--foreground` so the two stay distinct. The 2026-11-09
- * text ladder lifted `--muted` over the gate; the labels keep the step.
+ * Until 2026-11-22 inactive labels took `--muted-foreground`, one step up
+ * from §6's `--muted`, because `--muted` measured 3.3–4.0:1 on the old ladder,
+ * under README §6's 4.5:1 gate. The 2026-11-09 text ladder put `--muted` over
+ * the gate on every step (foundations §4), so the labels are back on the
+ * spec'd tone and the hover lift is back to `--muted-foreground` (#5666).
  *
  * Two numbers are rounded onto the locked maps instead of transcribed:
  * §6 draws the item gap at 22 and the vertical padding at 11, which are off
@@ -50,7 +49,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex w-full items-center justify-start gap-6 border-b border-border text-muted-foreground",
+      "inline-flex w-full items-center justify-start gap-6 border-b border-border text-muted",
       className
     )}
     {...props}
@@ -68,7 +67,7 @@ const TabsTrigger = React.forwardRef<
       // `-mb-px` pulls the item's own bottom border over the list's hairline so
       // the active underline replaces the rule rather than stacking under it.
       "-mb-px inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-t-xs border-b-2 border-transparent px-1 py-1.5 text-sm pointer-coarse:min-h-11 font-normal transition-colors",
-      "enabled:hover:text-foreground",
+      "enabled:hover:text-muted-foreground",
       // `enabled:`-scoped so `disabled:text-disabled` below is not competing
       // with an equal-specificity `data-[state]` rule that Tailwind emits later.
       "enabled:data-[state=active]:border-primary enabled:data-[state=active]:font-semibold enabled:data-[state=active]:text-foreground",

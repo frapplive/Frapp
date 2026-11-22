@@ -7,6 +7,7 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
 } from "./field-limits";
+import { TASK_NO_DUE_DATE_LABEL } from "./task-due";
 import { TASK_FOLLOWER_COPY } from "./task-follower";
 
 /**
@@ -162,7 +163,6 @@ export const ACT_COPY = {
   field_task_proof: "Proof to mark it done",
   no_task_name: "Give the task a name.",
   need_assignee: "Pick who this is for.",
-  need_due: "Pick when it is due.",
   gone: "No longer waiting. Ask again to redo it.",
   cancelled: "Dismissed. Nothing was changed.",
   failed: "That didn't go through. Try again.",
@@ -216,7 +216,8 @@ export const ACT_COPY = {
   remove_member: "Remove",
   add_member: "Add a member",
   pick_member: "Pick who",
-  pick_due: "Pick a due date",
+  /** A task card with no due date (#5761): it may be confirmed as it is. */
+  pick_due: TASK_NO_DUE_DATE_LABEL,
   pick_event: "Which event?",
   no_recent_events: "There are no recent events to pick from.",
   former_member: "A former member",
