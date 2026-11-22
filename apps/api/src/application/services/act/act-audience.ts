@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { Role, RoleTier } from '#domain/entities/role.entity';
-import { ChapterGroupService, type ChapterGroupView } from '../chapter-group.service';
+import {
+  ChapterGroupService,
+  type ChapterGroupView,
+} from '../chapter-group.service';
 import { MemberService } from '../member.service';
 import { RbacService } from '../rbac.service';
 import { RoleTierService } from '../role-tier.service';
@@ -114,15 +117,18 @@ export function entriesNamed(
     candidates.filter((entry) => entry.name.trim().toLowerCase() === want),
   );
   if (exact.length > 0) return exact;
-  const same = byKind(candidates.filter((entry) => key(entry.name) === wantKey));
+  const same = byKind(
+    candidates.filter((entry) => key(entry.name) === wantKey),
+  );
   if (same.length > 0) return same;
   const typedWords = wantKey.split(' ');
   return byKind(
     candidates.filter((entry) => {
       const have = key(entry.name).split(' ');
       return (
-        typedWords.every((word) => have.some((other) => other.startsWith(word))) &&
-        have.length <= typedWords.length + 1
+        typedWords.every((word) =>
+          have.some((other) => other.startsWith(word)),
+        ) && have.length <= typedWords.length + 1
       );
     }),
   );
@@ -229,7 +235,11 @@ export function resolveAudience(
       ? [
           ...options.tiers.flatMap((tier) => tier.roles),
           ...options.untiered,
-        ].map((role) => ({ kind: 'role' as const, id: role.id, name: role.name }))
+        ].map((role) => ({
+          kind: 'role' as const,
+          id: role.id,
+          name: role.name,
+        }))
       : []),
     ...(kinds.includes('tier')
       ? options.tiers.map((tier) => ({

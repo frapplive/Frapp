@@ -10320,6 +10320,20 @@ export interface components {
             audience_role_id: string | null;
             /** Format: uuid */
             audience_group_id: string | null;
+            /**
+             * Format: uuid
+             * @description With `audience`: only the members holding a role in this tier (2026-11-22).
+             */
+            audience_tier_id?: string;
+            /** @description Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them. */
+            point_reward?: number;
+            /**
+             * @description What Mark done needs, when it is more than nothing (2026-11-22).
+             * @enum {string}
+             */
+            proof_kind?: "none" | "photo" | "link";
+            /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`. */
+            followed_by?: string;
             /** Format: date */
             due_date: string | null;
             /** Format: date-time */
@@ -10368,6 +10382,17 @@ export interface components {
             kind: "type" | "event";
             name: string;
         };
+        NewEventAttendanceDto: {
+            /**
+             * @description What the event asks of a member set apart by no entry.
+             * @enum {string}
+             */
+            everyone: "required" | "optional" | "not_invited";
+            /** @description Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status. */
+            roles: {
+                [key: string]: "required" | "optional" | "not_invited";
+            };
+        };
         NewEventSuggestionDto: {
             name: string;
             description: string | null;
@@ -10385,7 +10410,14 @@ export interface components {
              * @description The chapter event type the event is one of, when one matched.
              */
             event_type_id: string | null;
+            /** @description Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must. */
             is_mandatory: boolean;
+            /** @description Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says. */
+            attendance: components["schemas"]["NewEventAttendanceDto"] | null;
+            /** @description One line for who is invited, in the chapter's names when the card was made ("Cabinet required, nobody else invited"). */
+            attendance_line: string | null;
+            /** @description The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one. */
+            attendance_from: components["schemas"]["NewEventPointsFromDto"] | null;
             /** @description The repeat the series is made with (the `recurrence_rule` format of `POST /v1/events`), or null for one event. */
             recurrence_rule: string | null;
         };
@@ -10454,6 +10486,20 @@ export interface components {
              * @description With `audience`: only this chapter group’s members (2026-11-18).
              */
             audience_group_id?: string | null;
+            /**
+             * Format: uuid
+             * @description With `audience`: only the members holding a role in this tier (#5473, 2026-11-22).
+             */
+            audience_tier_id?: string | null;
+            /** @description Points awarded on completion (2026-11-22); null or 0 for none. */
+            point_reward?: number | null;
+            /**
+             * @description What Mark done needs (2026-11-22).
+             * @enum {string|null}
+             */
+            proof_kind?: "none" | "photo" | "link" | null;
+            /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, or null for none. The officer accepting must be in it. */
+            followed_by?: string | null;
             /** @description Due date (YYYY-MM-DD). Required to accept when none was suggested. */
             due_date?: string | null;
             /**

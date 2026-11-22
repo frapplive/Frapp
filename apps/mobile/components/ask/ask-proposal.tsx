@@ -57,8 +57,12 @@ import {
   actPointsHeadline,
   actPointsTotalLine,
   actWhenLine,
+  actTaskFactLines,
   meetingDueLabel,
+  taskWhoOf,
 } from "@repo/validation";
+import { followerName, whoLabel } from "@repo/hooks/task-who-picker";
+import { useWhoDirectory } from "@/lib/tasks/use-who-directory";
 import type { useAiReport } from "@/components/ai/report-ai-sheet";
 import { CloseGlyph } from "@/components/control-glyphs";
 import { OverflowGlyph } from "@/components/chat/overflow-glyph";
@@ -349,6 +353,7 @@ function CardDetails({
             {dueLine(task)}
           </Fact>
         ) : null}
+        <TaskFacts task={task} fromName={null} styles={styles} />
       </>
     );
   }
@@ -370,6 +375,41 @@ function CardDetails({
 }
 
 /** One detail on a card: its mark, then the words, with a quieter line under. */
+const TASK_FACT_GLYPHS: Record<
+  ReturnType<typeof actTaskFactLines>[number]["kind"],
+  AskCardGlyphName
+> = {
+  points: "points",
+  proof: "done",
+  steps: "task",
+  from: "people",
+};
+
+/**
+ * A proposed task's points, proof, steps and the group it is from
+ * (2026-11-22), one fact each and only what was set, in the New task form's
+ * order. The web card says the same words.
+ */
+function TaskFacts({
+  task,
+  fromName,
+  styles,
+}: {
+  task: NonNullable<AiSuggestion["task"]>;
+  fromName: string | null;
+  styles: Styles;
+}) {
+  return (
+    <>
+      {actTaskFactLines(task, fromName).map((line) => (
+        <Fact key={line.kind} glyph={TASK_FACT_GLYPHS[line.kind]} styles={styles}>
+          {line.text}
+        </Fact>
+      ))}
+    </>
+  );
+}
+
 function Fact({
   glyph,
   under,
@@ -888,6 +928,12 @@ function ActCard({
       })),
     [rosterQuery.data],
   );
+  const { task: proposedTask } = suggestion;
+  // Who a task card is for, in the Who picker's words: one person, several,
+  // or everyone or someone in a role, tier or group (2026-11-22).
+  const whoRead = useWhoDirectory({ groups: !!proposedTask });
+  const taskWho = proposedTask ? taskWhoOf(proposedTask) : null;
+  const taskWhoLine = whoLabel(taskWho, whoRead.directory);
   const nameOf = (userId: string) => {
     const member = roster.find((row) => row.userId === userId);
     if (member) return member.name ?? memberFallbackLabel(userId);
@@ -1131,18 +1177,22 @@ function ActCard({
   const seed: TaskSuggestionSeed | undefined = task
     ? {
         title: task.title,
-        who: task.assignee_id
-          ? { kind: "person", userId: task.assignee_id }
-          : null,
+        // One person, several, or everyone or someone in a role, tier or
+        // group (2026-11-22), as the New task form picks it.
+        who: taskWhoOf(task),
         dueDay: task.due_date,
         dueAt: task.due_at,
         subtasks: task.subtasks,
+        full: true,
+        pointReward: task.point_reward ?? null,
+        proofKind: task.proof_kind ?? null,
+        followedBy: task.followed_by ?? null,
         accept: async (form) => {
           setDeciding(true);
           try {
             await accept.mutateAsync({
               id: suggestion.id,
-              task: suggestionEdits(task, form),
+              task: suggestionEdits(task, form, { full: true }),
             });
           } finally {
             setDeciding(false);
@@ -1367,19 +1417,15 @@ function ActCard({
               pressed ? styles.pressed : null,
             ]}
           >
-            <View
-              style={[styles.chipRow, task.assignee_id ? null : styles.ask]}
-            >
+            <View style={[styles.chipRow, taskWhoLine ? null : styles.ask]}>
               <View style={styles.factGlyph}>
                 <AskCardGlyph
-                  name="person"
+                  name={taskWho && taskWho.kind !== "person" ? "people" : "person"}
                   color={tokens.color.text.mutedForeground}
                 />
               </View>
-              <Text style={task.assignee_id ? styles.factText : styles.missing}>
-                {task.assignee_id
-                  ? nameOf(task.assignee_id)
-                  : ACT_COPY.pick_member}
+              <Text style={taskWhoLine ? styles.factText : styles.missing}>
+                {taskWhoLine ?? ACT_COPY.pick_member}
               </Text>
             </View>
             <View style={[styles.chipRow, task.due_date ? null : styles.ask]}>
@@ -1394,6 +1440,11 @@ function ActCard({
               </Text>
             </View>
           </Pressable>
+          <TaskFacts
+            task={task}
+            fromName={followerName(task.followed_by, whoRead.directory)}
+            styles={styles}
+          />
         </>
       ) : null}
 
@@ -1483,6 +1534,7 @@ function ActCard({
         <NewTaskSheet
           ref={formRef}
           suggestion={seed}
+          offerGroups
           onClosed={() => setFormOpen(false)}
         />
       ) : null}

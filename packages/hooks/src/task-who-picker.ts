@@ -51,6 +51,7 @@ import {
   TASK_AUDIENCE_COPY,
   isEveryoneRole,
   normalizeTaskWho,
+  parseTaskFollower,
   type TaskWho,
   type TaskWhoTarget,
 } from "@repo/validation";
@@ -508,6 +509,18 @@ function firstNames(ids: readonly string[], directory: WhoDirectory): string[] {
     const name = personName(id, directory);
     return name.split(/\s+/)[0] || name;
   });
+}
+
+/**
+ * The name of the tier, role or group a task is from (`followed_by`, #5473),
+ * as the directory reads it, or null for none or an entry it can't parse.
+ */
+export function followerName(
+  entry: string | null | undefined,
+  directory: WhoDirectory,
+): string | null {
+  const parsed = parseTaskFollower(entry);
+  return parsed ? setName(parsed.kind, parsed.id, directory) : null;
 }
 
 /** A set's name, or the words for one the picker hasn't read. */

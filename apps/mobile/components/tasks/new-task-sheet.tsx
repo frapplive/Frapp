@@ -184,9 +184,10 @@ export interface NewTaskSheetProps {
    * Accept a suggested task through the form (#4313): the fields open on what
    * the minutes suggested, titled "Change before creating", and the button
    * creates it. Who it is for starts empty when the meeting named nobody, never
-   * on the viewer: a wrong owner is worse than none. Points are left out (a
-   * suggestion carries none). The host mounts one sheet per suggestion
-   * (`key` on its id).
+   * on the viewer: a wrong owner is worse than none. Points, proof and From
+   * are left out for a task suggested from minutes, which carries none, and
+   * offered for an Ask Frapp card (`full`, 2026-11-22), the officer's own
+   * request. The host mounts one sheet per suggestion (`key` on its id).
    */
   suggestion?: TaskSuggestionSeed;
   /**
@@ -249,6 +250,15 @@ export interface TaskSuggestionSeed {
   dueDay: string | null;
   dueAt: string | null;
   subtasks: readonly string[];
+  /**
+   * The rest of the task form, offered (2026-11-22): points, proof and
+   * From, opening on what the card proposed. Ask Frapp's cards set it; a
+   * task suggested from minutes doesn't.
+   */
+  full?: boolean;
+  pointReward?: number | null;
+  proofKind?: TaskProofKind | null;
+  followedBy?: string | null;
   /**
    * Accepts the suggestion as the form stands. Rejects with the server's
    * error, whose refusal codes the sheet puts into words.
@@ -316,7 +326,10 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       opening?.title ?? suggestion?.title ?? prefill?.title ?? "",
     );
     const [pointsInput, setPointsInput] = useState(
-      opening?.pointsInput ?? prefill?.pointsInput ?? "",
+      opening?.pointsInput ??
+        (suggestion?.pointReward ? String(suggestion.pointReward) : null) ??
+        prefill?.pointsInput ??
+        "",
     );
     // The chip as the draft holds it, resolved against today's below.
     const [due, setDue] = useState<DueChoice>(
@@ -347,7 +360,10 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     // and the proof control. A suggestion carries none, so its form leaves
     // them out.
     const [proofKind, setProofKind] = useState<TaskProofKind>(
-      opening?.proofKind ?? prefill?.proofKind ?? "none",
+      opening?.proofKind ??
+        suggestion?.proofKind ??
+        prefill?.proofKind ??
+        "none",
     );
     const [pickedPhotos, setPickedPhotos] = useState<PendingTaskPhoto[]>(
       () => opening?.pickedPhotos ?? [],
@@ -362,7 +378,11 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     );
     // From (#5473): a tier, role or group the officer is in, or just them.
     const [followedBy, setFollowedBy] = useState<string | null>(
-      () => opening?.followedBy ?? prefill?.followedBy ?? null,
+      () =>
+        opening?.followedBy ??
+        suggestion?.followedBy ??
+        prefill?.followedBy ??
+        null,
     );
     const kept = useKeptSheetDraft<KeptTask>(
       keptName,
@@ -494,7 +514,8 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     // actions: not a chat's card or a suggestion, whose routes carry none,
     // nor a task up for grabs, which is the claimer's own once claimed. A
     // repeating task can't have one yet; the field says so.
-    const fromOffered = offerGroups && !suggestion && !postToChannel;
+    const fullForm = !suggestion || suggestion.full === true;
+    const fromOffered = offerGroups && fullForm && !postToChannel;
     const followerChoices = fromOffered ? whoRead.followers : [];
     const repeating = !!(repeatRule?.ok && repeatRule.rule);
     // Only one of the officer's own (#5473): a Duplicate of a task from a
@@ -879,7 +900,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
                 />
               </View>
 
-              {suggestion ? null : (
+              {fullForm ? (
                 <PointsField
                   input={BottomSheetTextInput}
                   value={pointsInput}
@@ -887,7 +908,7 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
                   editable={!pending}
                   style={styles.splitField}
                 />
-              )}
+              ) : null}
             </View>
 
             <FilterChips
@@ -951,41 +972,40 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
               Web puts them under More options; this sheet has none, so they
               sit here, quiet until used. */}
             {suggestion ? null : (
-              <>
-                <View style={styles.group}>
-                  <Text style={styles.groupLabel}>Photos</Text>
-                  <Text style={styles.note}>
-                    {photosAllowed
-                      ? `What the job looks like (optional, up to ${TASK_PHOTOS_MAX}).`
-                      : upForGrabs
-                        ? `A task ${TASK_AUDIENCE_COPY.upForGrabs.toLowerCase()} can't carry photos yet.`
-                        : TASK_AUDIENCE_COPY.noPhotos}
-                  </Text>
-                  {!photosAllowed ? null : (
-                    <TaskPhotoPicker
-                      picked={pickedPhotos.map(({ image }) => image)}
-                      onRemovePicked={(index) =>
-                        setPickedPhotos((current) =>
-                          current.filter((_, i) => i !== index),
-                        )
-                      }
-                      onAdd={() => void addPhotos()}
-                      disabled={pending}
-                      adding={addingPhotos}
-                    />
-                  )}
-                  {photoProblem && photosAllowed ? (
-                    <Text style={styles.error}>{photoProblem}</Text>
-                  ) : null}
-                </View>
-
-                <ProofField
-                  value={proofKind}
-                  onChange={setProofKind}
-                  disabled={pending}
-                />
-              </>
+              <View style={styles.group}>
+                <Text style={styles.groupLabel}>Photos</Text>
+                <Text style={styles.note}>
+                  {photosAllowed
+                    ? `What the job looks like (optional, up to ${TASK_PHOTOS_MAX}).`
+                    : upForGrabs
+                      ? `A task ${TASK_AUDIENCE_COPY.upForGrabs.toLowerCase()} can't carry photos yet.`
+                      : TASK_AUDIENCE_COPY.noPhotos}
+                </Text>
+                {!photosAllowed ? null : (
+                  <TaskPhotoPicker
+                    picked={pickedPhotos.map(({ image }) => image)}
+                    onRemovePicked={(index) =>
+                      setPickedPhotos((current) =>
+                        current.filter((_, i) => i !== index),
+                      )
+                    }
+                    onAdd={() => void addPhotos()}
+                    disabled={pending}
+                    adding={addingPhotos}
+                  />
+                )}
+                {photoProblem && photosAllowed ? (
+                  <Text style={styles.error}>{photoProblem}</Text>
+                ) : null}
+              </View>
             )}
+            {fullForm ? (
+              <ProofField
+                value={proofKind}
+                onChange={setProofKind}
+                disabled={pending}
+              />
+            ) : null}
 
             <AssigneeRow
               label={assigneeLabel}
@@ -1057,7 +1077,6 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
           people={whoRead.people}
           sets={whoRead.sets}
           single={!offerGroups}
-          tiers={!suggestion}
         />
       </>
     );

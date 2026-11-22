@@ -850,7 +850,10 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   _(Changed in #5148 by pdcarlson, 2026-11-16: until then the card said "The chapter's usual amount" and the event was made with 10.)_
 - **What it can do** (three actions; each needs the permission and the module of the route it stands in for, and one the member lacks is not offered):
   - **Give or take away points** (`points:adjust`), for members named, for everyone who holds a role, or for everyone who came to an event.
-  - **Create a task** for one member (`tasks:manage`).
+  - **Create a task** (`tasks:manage`) for one member, several members, or a role, tier or group by the chapter's own name for it, where each of them does it (a copy each) or one of them claims it (up for grabs); with its points, what marking it done needs (a photo or a link), its steps, and the tier, role or group it is from, each only when the member or a source said it.
+    Ask reads the chapter's roles, tiers and groups (`chapter_roles` with `for_card task`) before it names one, and a name that is none of them, or could be two, leaves Who for the member to pick on the card. A From the member is not in is left off.
+    The card names everyone it reaches and its points, proof, steps and From; its Who is the task form's Who picker, and Edit opens the full task form (points, proof and From included) filled in from the card.
+    _(Changed by pdcarlson, 2026-11-22: until then a task card was for one member only, and its points, proof, steps and From could not be set from Ask.)_
   - **Put one event, or a repeating series, on the calendar** (`events:create`), open to the whole chapter.
     A series is weekly, every other week or monthly, on the first meeting's weekday or day of the month, as long as the event form's own default (13 meetings weekly or every other week, 7 monthly), and the card says so ("Every Sunday until February 7, 2027", with "13 times" under it).
     Who is invited by role, a longer or shorter series and anything else the card does not show are set through the card's Edit (and a check-in zone on web, whose event form is the only one with it).

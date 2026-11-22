@@ -1,3 +1,4 @@
+import type { TaskProofKind } from '@repo/validation';
 import { z } from 'zod';
 
 /**
@@ -81,8 +82,31 @@ export interface ActInvite {
   everyone_else: 'required' | 'optional' | 'not_invited' | null;
 }
 
+/** Who does a task given to a set or several people: each, or one of them. */
+export const ACT_TASK_WHO_DOES = ['each', 'one'] as const;
+export type ActTaskWhoDoes = (typeof ACT_TASK_WHO_DOES)[number];
+
+/**
+ * The rest of a task (2026-11-22, Paul: Ask sets every task field). Like
+ * {@link ActInvite}, only the tool loop writes it, after reading the
+ * chapter's roles, tiers and groups; the planning call never does.
+ */
+export interface ActTaskPlan {
+  /** A role, tier or group by its chapter name, or the chapter as a whole. */
+  for_set: string | null;
+  /** With `for_set` or several people: each does it, or one claims it. */
+  who_does: ActTaskWhoDoes | null;
+  points: number | null;
+  proof: TaskProofKind | null;
+  steps: string[];
+  /** The tier, role or group it is from, by name. */
+  from: string | null;
+}
+
 export type ActPlan = z.infer<typeof ActPlanSchema> & {
   invite?: ActInvite | null;
+  /** A task's who beyond `people`, and its other fields. */
+  task?: ActTaskPlan | null;
   /** The chapter's event type, by its name, when the loop picked one. */
   event_type?: string | null;
 };

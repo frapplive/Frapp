@@ -443,6 +443,7 @@ describe("Suggested tasks", () => {
         audience: null,
         audience_role_id: null,
         audience_group_id: null,
+        audience_tier_id: null,
       },
     });
   });
@@ -781,6 +782,7 @@ describe("suggestionEdits", () => {
     audience: null,
     audience_role_id: null,
     audience_group_id: null,
+    audience_tier_id: null,
   };
 
   it("sends nothing when the officer changed nothing", () => {

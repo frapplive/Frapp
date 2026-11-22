@@ -6,6 +6,9 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
   REPEAT_DEFAULT_COUNT,
+  TASK_PEOPLE_MAX,
+  TASK_SUBTASK_TITLE_MAX_LENGTH,
+  TASK_SUBTASKS_MAX,
   TASK_TITLE_MAX_LENGTH,
   WEEKDAY_CODES,
   attendanceFromEvent,
@@ -15,6 +18,7 @@ import {
   eventSetsRolesApart,
   formatRepeatRule,
   isModuleEnabled,
+  taskFollowerEntry,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
 } from '@repo/validation';
@@ -31,6 +35,7 @@ import { POINTS_SUGGESTION_MAX_MEMBERS } from '../ai-suggestion-points-kind';
 import { TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH } from '../ai-suggestion-task-kind';
 import { AttendanceService } from '../attendance.service';
 import { EventService } from '../event.service';
+import { TaskAudienceService } from '../task-audience.service';
 import { reportCaughtFailure } from '../../../infrastructure/observability/report-caught-failure';
 import { EventTypeService } from '../event-type.service';
 import {
@@ -103,7 +108,10 @@ const SAME_NAME_BACK_DAYS = 400;
  * name, or the one type whose name the event's words fit ("Chapter" is a
  * "Chapter meeting"). None when two types fit.
  */
-function matchingType(name: string, types: readonly EventType[]): EventType | null {
+function matchingType(
+  name: string,
+  types: readonly EventType[],
+): EventType | null {
   const lower = name.toLowerCase();
   const exact = types.find((type) => type.name.toLowerCase() === lower);
   if (exact) return exact;
@@ -116,9 +124,14 @@ function matchingType(name: string, types: readonly EventType[]): EventType | nu
 }
 
 /** A type the loop named from the chapter's list, as written or near it. */
-function typeNamed(typed: string, types: readonly EventType[]): EventType | null {
+function typeNamed(
+  typed: string,
+  types: readonly EventType[],
+): EventType | null {
   const lower = typed.trim().toLowerCase();
-  const exact = types.filter((type) => type.name.trim().toLowerCase() === lower);
+  const exact = types.filter(
+    (type) => type.name.trim().toLowerCase() === lower,
+  );
   if (exact.length === 1) return exact[0];
   const near = types.filter(
     (type) => words(type.name).join(' ') === words(typed).join(' '),
@@ -395,30 +408,63 @@ export class GivePointsActTool implements ActTool {
   }
 }
 
-/** Create a task for a member. Mirrors `POST /v1/tasks`. */
+/** A set name that means the whole chapter rather than a role or group. */
+const CHAPTER_NAMES = new Set([
+  'everyone',
+  'everybody',
+  'chapter',
+  'the chapter',
+  'all members',
+  'every member',
+  'the whole chapter',
+  'whole chapter',
+]);
+
+/** Who a drafted task is for, in the suggestion payload's own fields. */
+interface DraftedTaskWho {
+  assignee_id: string | null;
+  assignee_ids: string[] | null;
+  audience: 'everyone' | 'someone' | null;
+  audience_role_id: string | null;
+  audience_group_id: string | null;
+  audience_tier_id?: string;
+}
+
+const NOBODY: DraftedTaskWho = {
+  assignee_id: null,
+  assignee_ids: null,
+  audience: null,
+  audience_role_id: null,
+  audience_group_id: null,
+};
+
+/**
+ * Create a task: for one member, several, or a role, tier or group (each
+ * of them doing it, or one claiming it), with its points, proof, steps and
+ * who it is from (2026-11-22). Mirrors `POST /v1/tasks`.
+ */
 @Injectable()
 export class CreateTaskActTool implements ActTool {
   readonly name = 'create_task';
   readonly description =
-    'Create a task for one member to do. Uses title, people (the one member it is for), date (the day it is due), start_time (the time it is due, when one was said) and details.';
+    'Create a task for members to do. Uses title, people (the members it is for), date (the day it is due), start_time (the time it is due, when one was said) and details.';
   readonly permission = SystemPermissions.TASKS_MANAGE;
   readonly module = 'tasks';
   readonly effect = 'propose' as const;
   readonly kind = 'task' as const;
 
-  constructor(private readonly people: ActPeopleResolver) {}
+  constructor(
+    private readonly people: ActPeopleResolver,
+    private readonly audience: ActAudienceResolver,
+    private readonly taskAudience: TaskAudienceService,
+  ) {}
 
   async draft(plan: ActPlan, context: ActToolContext): Promise<ActDraft> {
     const title = titled(clean(plan.title, TASK_TITLE_MAX_LENGTH));
     if (!title) return { status: 'unclear', missing: 'title' };
+    const task = plan.task ?? null;
 
-    const resolved = await this.people.resolve(plan.people, context, {
-      roles: false,
-    });
-    // A task has one owner. More than one name, or none that could be
-    // placed, leaves "Who?" for the officer to pick on the card.
-    const assigneeId =
-      resolved.userIds.length === 1 ? resolved.userIds[0] : null;
+    const { who, notes } = await this.whoOf(plan, context);
 
     const dueDate = parseLocalDate(plan.date) ? plan.date : null;
     const dueAt =
@@ -429,6 +475,21 @@ export class CreateTaskActTool implements ActTool {
             context.timeZone,
           )?.toISOString() ?? null)
         : null;
+    const points =
+      task?.points !== null &&
+      task?.points !== undefined &&
+      Number.isInteger(task.points) &&
+      task.points > 0 &&
+      task.points <= POINTS_ADJUSTMENT_MAX
+        ? task.points
+        : null;
+    const steps = (task?.steps ?? [])
+      .map((step) => clean(step, TASK_SUBTASK_TITLE_MAX_LENGTH))
+      .filter((step): step is string => !!step)
+      .slice(0, TASK_SUBTASKS_MAX);
+    const followedBy = task?.from
+      ? await this.fromOf(task.from, context)
+      : null;
     return {
       status: 'draft',
       payload: {
@@ -437,13 +498,96 @@ export class CreateTaskActTool implements ActTool {
           plan.details,
           TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH,
         ),
-        assignee_id: assigneeId,
+        ...who,
         due_date: dueDate,
         due_at: dueAt,
-        subtasks: [],
+        subtasks: steps,
+        ...(points !== null ? { point_reward: points } : {}),
+        ...(task?.proof && task.proof !== 'none'
+          ? { proof_kind: task.proof }
+          : {}),
+        ...(followedBy ? { followed_by: followedBy } : {}),
+      },
+      notes,
+    };
+  }
+
+  /**
+   * A role, tier or group when one was named, else the people: one is the
+   * assignee, several each get a copy or one of them claims it. A name that
+   * is none of the chapter's, or could be two, leaves "Who?" for the
+   * officer to pick on the card.
+   */
+  private async whoOf(
+    plan: ActPlan,
+    context: ActToolContext,
+  ): Promise<{ who: DraftedTaskWho; notes: ActNote[] }> {
+    const task = plan.task ?? null;
+    const audience = task?.who_does === 'one' ? 'someone' : 'everyone';
+    const set = task?.for_set?.replace(/\s+/g, ' ').trim();
+    if (set) {
+      if (CHAPTER_NAMES.has(set.toLowerCase())) {
+        return { who: { ...NOBODY, audience }, notes: [] };
+      }
+      const resolved = await this.audience.resolve([set], context.chapterId, [
+        'role',
+        'tier',
+        'group',
+      ]);
+      const entry = resolved.entries.length === 1 ? resolved.entries[0] : null;
+      if (!entry) return { who: NOBODY, notes: resolved.notes };
+      return {
+        who: {
+          ...NOBODY,
+          audience,
+          audience_role_id: entry.kind === 'role' ? entry.id : null,
+          audience_group_id: entry.kind === 'group' ? entry.id : null,
+          ...(entry.kind === 'tier' ? { audience_tier_id: entry.id } : {}),
+        },
+        notes: [],
+      };
+    }
+    const resolved = await this.people.resolve(plan.people, context, {
+      roles: false,
+    });
+    const ids = resolved.userIds.slice(0, TASK_PEOPLE_MAX);
+    if (ids.length === 0) return { who: NOBODY, notes: resolved.notes };
+    if (ids.length === 1) {
+      return { who: { ...NOBODY, assignee_id: ids[0] }, notes: resolved.notes };
+    }
+    return {
+      who: {
+        ...NOBODY,
+        assignee_ids: ids,
+        audience: task?.who_does === 'one' ? 'someone' : null,
       },
       notes: resolved.notes,
     };
+  }
+
+  /**
+   * "From the Recruitment Committee": a tier, role or group the member
+   * asking is in, as the task form offers it (`TaskAudienceService
+   * .checkedFollower`). Any other name is left off; the officer can still
+   * set it on the card's Edit.
+   */
+  private async fromOf(
+    typed: string,
+    context: ActToolContext,
+  ): Promise<string | null> {
+    const resolved = await this.audience.resolve([typed], context.chapterId, [
+      'role',
+      'tier',
+      'group',
+    ]);
+    if (resolved.entries.length !== 1) return null;
+    const entry = resolved.entries[0];
+    const stored = taskFollowerEntry(entry.kind, entry.id);
+    const mine = await this.taskAudience.followEntriesOf(
+      context.chapterId,
+      context.userId,
+    );
+    return mine.includes(stored) ? stored : null;
   }
 }
 
@@ -611,9 +755,7 @@ export class CreateEventActTool implements ActTool {
         event_type_id: type?.id ?? null,
         is_mandatory: attendance.everyone === 'required',
         attendance,
-        attendance_line: describeAttendance(attendance, (id) =>
-          names?.get(id),
-        ),
+        attendance_line: describeAttendance(attendance, (id) => names?.get(id)),
         attendance_from: attendanceFrom,
         recurrence_rule: plan.repeats
           ? proposedRepeatRule(plan.repeats, plan.date, context.timeZone)

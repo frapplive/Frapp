@@ -12,7 +12,11 @@
  * the scripted loop proposes no card. `npm run ai:bake-off -- --task
  * ask.invites --models <id>` asks them of a real model, on the loop.
  */
-import { TERM_CHAPTER, TERM_EVENT_TYPES, type TermChapter } from '../synthetic-chapter/term';
+import {
+  TERM_CHAPTER,
+  TERM_EVENT_TYPES,
+  type TermChapter,
+} from '../synthetic-chapter/term';
 import type { RealQuestion } from './types';
 
 const EXEC = [

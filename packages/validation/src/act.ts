@@ -87,6 +87,42 @@ export const ACT_PROPOSAL_EXPIRY_DAYS = 1;
  * mobile cannot drift. What surrounds the card (the field, the empty state)
  * is `ASK_COPY`'s.
  */
+/**
+ * The rest of a proposed task, in the order the New task form asks for it
+ * (2026-11-22): its points, what Mark done needs, its steps and the group
+ * it is from. One fact each, only what was set, so a card for a plain task
+ * reads as it did. Web and the phone show these same words in this order.
+ */
+export function actTaskFactLines(
+  task: {
+    point_reward?: number | null;
+    proof_kind?: string | null;
+    subtasks?: readonly string[] | null;
+  },
+  fromName: string | null,
+): { kind: "points" | "proof" | "steps" | "from"; text: string }[] {
+  const lines: { kind: "points" | "proof" | "steps" | "from"; text: string }[] =
+    [];
+  const points = task.point_reward ?? 0;
+  if (points > 0) {
+    lines.push({
+      kind: "points",
+      text: points === 1 ? "1 point" : `${points.toLocaleString("en-US")} points`,
+    });
+  }
+  if (task.proof_kind === "photo") {
+    lines.push({ kind: "proof", text: "Needs a photo to mark done" });
+  } else if (task.proof_kind === "link") {
+    lines.push({ kind: "proof", text: "Needs a link to mark done" });
+  }
+  const steps = task.subtasks?.length ?? 0;
+  if (steps > 0) {
+    lines.push({ kind: "steps", text: steps === 1 ? "1 step" : `${steps} steps` });
+  }
+  if (fromName) lines.push({ kind: "from", text: `From ${fromName}` });
+  return lines;
+}
+
 export const ACT_COPY = {
   cancel: "Cancel",
   /**
@@ -113,6 +149,9 @@ export const ACT_COPY = {
   /** A task card's fields under its Edit on web (#5117). */
   field_task_name: "Task",
   field_details: "Details",
+  /** A task card's points and proof fields under Edit (2026-11-22). */
+  field_task_points: "Points",
+  field_task_proof: "Proof to mark it done",
   no_task_name: "Give the task a name.",
   need_assignee: "Pick who this is for.",
   need_due: "Pick when it is due.",
@@ -167,7 +206,7 @@ export const ACT_COPY = {
   hide_members: "Hide members",
   remove_member: "Remove",
   add_member: "Add a member",
-  pick_member: "Pick a member",
+  pick_member: "Pick who",
   pick_due: "Pick a due date",
   pick_event: "Which event?",
   no_recent_events: "There are no recent events to pick from.",

@@ -57,6 +57,10 @@ vi.mock("@/components/events/event-editor-dialog", () => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Who a task card is for reads the chapter as the task form does.
+  useRoles: () => ({ data: [] }),
+  useRoleTiers: () => ({ data: [] }),
+  useGroups: () => ({ data: [] }),
   useActEventAudience: () => ({
     mutateAsync: state.audience,
     isPending: false,

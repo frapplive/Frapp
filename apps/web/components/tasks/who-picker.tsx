@@ -125,8 +125,8 @@ export interface WhoPickerProps {
   guessed?: boolean;
   "aria-describedby"?: string;
   /**
-   * Offer a tier whole (#5473). Off for a suggested task, whose payload has
-   * no tier field yet, so a tier pick there would send nobody.
+   * Offer a tier whole (#5473). On everywhere a task's who is picked,
+   * suggested tasks included since their payload took a tier (2026-11-22).
    */
   tiers?: boolean;
 }

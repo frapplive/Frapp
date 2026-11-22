@@ -1382,7 +1382,8 @@ export function createTermWorld(
       roles: Record<string, 'required' | 'optional' | 'not_invited'>;
     } | null;
     const everyone =
-      draft?.everyone ?? (payload.is_mandatory === true ? 'required' : 'optional');
+      draft?.everyone ??
+      (payload.is_mandatory === true ? 'required' : 'optional');
     const by = (status: string) =>
       Object.entries(draft?.roles ?? {})
         .filter(([, value]) => value === status)
@@ -1407,8 +1408,12 @@ export function createTermWorld(
         typeof typeId === 'string'
           ? (typeRows.find((type) => type.id === typeId)?.name ?? null)
           : null,
-      points: typeof payload.point_value === 'number' ? payload.point_value : null,
-      line: typeof payload.attendance_line === 'string' ? payload.attendance_line : null,
+      points:
+        typeof payload.point_value === 'number' ? payload.point_value : null,
+      line:
+        typeof payload.attendance_line === 'string'
+          ? payload.attendance_line
+          : null,
     };
   };
   const suggestions = {
@@ -1439,7 +1444,11 @@ export function createTermWorld(
   );
   const acting = [
     new GivePointsActTool(people, events as never, attendance as never),
-    new CreateTaskActTool(people),
+    new CreateTaskActTool(
+      people,
+      held.ActAudienceResolver as ActAudienceResolver,
+      { followEntriesOf: async () => [] } as never,
+    ),
     new CreateEventActTool(
       events as never,
       eventTypes as never,

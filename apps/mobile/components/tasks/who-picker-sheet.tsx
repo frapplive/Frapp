@@ -65,7 +65,8 @@ export interface WhoPickerSheetProps {
   single?: boolean;
   /**
    * Offer a tier whole, "Everyone in Exec board" first under its heading
-   * (#5473). Off for a suggested task, whose payload has no tier field yet.
+   * (#5473). On everywhere a task's who is picked, suggested tasks
+   * included since their payload took a tier (2026-11-22).
    */
   tiers?: boolean;
   title?: string;

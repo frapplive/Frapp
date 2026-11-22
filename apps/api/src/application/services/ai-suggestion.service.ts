@@ -241,7 +241,9 @@ export class AiSuggestionService {
       const handler = this.kinds.get(proposal.kind);
       const payload =
         ordinal < AI_SUGGESTION_BATCH_MAX && handler
-          ? handler.normalizeProposal(proposal.payload)
+          ? handler.normalizeProposal(proposal.payload, {
+              sourceType: input.source.type,
+            })
           : null;
       if (
         !handler ||
@@ -319,7 +321,9 @@ export class AiSuggestionService {
       { payload: AiSuggestion['payload']; raw: unknown; quote: string | null }
     >();
     for (const proposal of input.proposals) {
-      const payload = handler.normalizeProposal(proposal.payload);
+      const payload = handler.normalizeProposal(proposal.payload, {
+        sourceType: input.source.type,
+      });
       if (!payload || wanted.has(proposal.dedupeKey)) continue;
       wanted.set(proposal.dedupeKey, {
         payload,

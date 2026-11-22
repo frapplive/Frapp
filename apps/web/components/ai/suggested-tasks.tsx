@@ -786,8 +786,6 @@ function SuggestedTaskRow({
           chip
           guessed={suggestedWho}
           allow="any"
-          // A suggestion's payload has no tier field yet (#5614).
-          tiers={false}
           label={
             suggestedWho
               ? `Assignee for ${task.title}, ${AI_SUGGESTION_COPY.suggestedWho.toLowerCase()}`

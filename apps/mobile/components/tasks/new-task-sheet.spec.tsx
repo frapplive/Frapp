@@ -1390,7 +1390,7 @@ describe("New task's From (#5473)", () => {
     act(() => tree.unmount());
   });
 
-  it("offers no From to a suggestion, which can't carry one", () => {
+  it("offers no From to a minutes suggestion, and its picker offers tiers (2026-11-22)", () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
@@ -1411,14 +1411,14 @@ describe("New task's From (#5473)", () => {
       );
     });
     expect(screenText(tree)).not.toContain("Just you");
-    // Nor a tier in its picker: its payload has no tier field yet.
+    // Its picker offers tiers: a suggestion carries one now.
     expect(
-      tree.root.find(
+      tree.root.findAll(
         (node) =>
           typeof node.props.onChange === "function" &&
-          node.props.tiers !== undefined,
-      ).props.tiers,
-    ).toBe(false);
+          node.props.tiers === false,
+      ),
+    ).toHaveLength(0);
     act(() => tree.unmount());
   });
 });
