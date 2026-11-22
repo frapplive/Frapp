@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowUp, SquarePen, X } from "lucide-react";
 import {
@@ -24,10 +30,7 @@ import {
 } from "@repo/validation";
 import { useAiConsentGate } from "@/components/ai/meet-frapp-ai";
 import { AskTurn } from "@/components/ask/ask-answer";
-import {
-  ASK_STARTER_STORE,
-  AskOpening,
-} from "@/components/ask/ask-opening";
+import { ASK_STARTER_STORE, AskOpening } from "@/components/ask/ask-opening";
 import { useSharedAskCardEdits } from "@/components/ask/ask-in-channel";
 import { FrappCrest } from "@/components/ask/frapp-crest";
 import {
@@ -40,6 +43,8 @@ import { DialogOverlay } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { JumpToLatestButton } from "@/components/chat/jump-to-latest-button";
+import { prefersReducedMotion } from "@/components/chat/use-rail-flip";
 import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
 
 /**
@@ -129,6 +134,21 @@ function onScreen(element: HTMLElement | null): element is HTMLElement {
 /** Within this of the bottom, the member is reading the newest words. */
 const FOLLOW_SLACK_PX = 80;
 
+/** The thread's bottom padding (`pb-4`), kept under the newest words. */
+const THREAD_PAD_BOTTOM = 16;
+
+/** Keys that scroll a focused view, so pressing one is the member's scroll. */
+const SCROLL_KEYS = new Set(["ArrowUp", "PageUp", "Home", " "]);
+
+/** Where `child` starts inside the scrolling `view`, in its scroll space. */
+function offsetIn(view: HTMLElement, child: HTMLElement): number {
+  return (
+    child.getBoundingClientRect().top -
+    view.getBoundingClientRect().top +
+    view.scrollTop
+  );
+}
+
 export function AskCard({
   open,
   onOpenChange,
@@ -176,10 +196,6 @@ export function AskCard({
   const [draft, setDraft] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  // Whether the member is reading the newest words: only then does the
-  // thread follow an answer as it grows.
-  const following = useRef(true);
 
   const savedUntil = status.data?.saved_until ?? null;
   // The server sends a date only while the window is open.
@@ -207,39 +223,118 @@ export function AskCard({
   // The field grows with what is typed.
   useGrowWithText(field, draft, shown);
 
-  // A new turn, or the card opening on a thread, shows the newest words.
-  useEffect(() => {
-    const element = scroller.current;
-    if (!shown || !element) return;
-    element.scrollTop = element.scrollHeight;
-    following.current = true;
-  }, [shown, last?.id]);
-
-  // The newest turn growing keeps its last line in view, unless the member
-  // scrolled up to read something else.
-  useEffect(() => {
-    const element = scroller.current;
-    if (!element || !following.current) return;
-    element.scrollTop = element.scrollHeight;
-  }, [last?.preview, last?.phase, last?.proposal, last?.resolution]);
-
-  // A card fills in after it lands (who it covers, the event it means), so
-  // the thread's own height is followed too, not only the turn changing.
-  // Only once there is a turn: the opening's rows arriving in a short window
-  // must not scroll the opening's own first lines out of view.
+  // Where the view sits (Paul, 2026-11-22: reopening landed at the start of
+  // the conversation, and the thread was "not smooth").
+  //
+  // - The end is the newest turn's last words, never the blank room under
+  //   them: `target()` puts that turn's question at the top when its answer
+  //   fits, and its last line at the bottom when it doesn't.
+  // - While the view is pinned it stays at that end as the turn grows or a
+  //   card fills in. It is pinned on opening, on a new question (which
+  //   scrolls its question to the top, as ChatGPT and Claude place a new
+  //   turn) and by Jump to latest; the member scrolling up unpins it, so
+  //   the line they are reading never moves under them.
+  // - Radix's portal draws nothing in the render that opens the dialog, so
+  //   an effect keyed on `open` found no scroller and the old reopen scroll
+  //   never ran. Everything here starts from the scroller's own ref.
+  // - An opening with no turn yet is never scrolled: it reads from the top.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [view, setView] = useState<HTMLDivElement | null>(null);
+  const attachScroller = useCallback((element: HTMLDivElement | null) => {
+    scroller.current = element;
+    setView(element);
+  }, []);
+  const newest = useRef<HTMLDivElement>(null);
+  const newestWords = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
-  const hasTurn = last !== undefined;
+  const pinned = useRef(true);
+  const placed = useRef<string | null>(null);
+  const [behind, setBehind] = useState(false);
+  // The view's height, which the newest turn fills at least, so its
+  // question can reach the top before there is an answer.
+  const [room, setRoom] = useState(0);
+
+  const target = useCallback((): number | null => {
+    const element = scroller.current;
+    const turn = newest.current;
+    const words = newestWords.current;
+    if (!element || !turn || !words) return null;
+    const top = offsetIn(element, turn);
+    const end = offsetIn(element, words) + words.offsetHeight;
+    return Math.max(top, end - element.clientHeight + THREAD_PAD_BOTTOM);
+  }, []);
+
+  const settle = useCallback(() => {
+    const element = scroller.current;
+    const words = newestWords.current;
+    if (!element) return;
+    if (pinned.current) {
+      const to = target();
+      if (to !== null) element.scrollTop = to;
+    }
+    setBehind(
+      words !== null &&
+        offsetIn(element, words) +
+          words.offsetHeight -
+          (element.scrollTop + element.clientHeight) >
+          FOLLOW_SLACK_PX,
+    );
+  }, [target]);
+
+  // The view and the thread changing size: the turn growing, a card filling
+  // in, the field growing under the view, the window resizing.
   useEffect(() => {
     const element = thread.current;
-    if (!shown || !hasTurn || !element || typeof ResizeObserver === "undefined")
-      return;
+    if (!view || !element || typeof ResizeObserver === "undefined") return;
+    pinned.current = true;
     const observer = new ResizeObserver(() => {
-      const view = scroller.current;
-      if (view && following.current) view.scrollTop = view.scrollHeight;
+      setRoom(view.clientHeight);
+      settle();
     });
+    observer.observe(view);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [shown, hasTurn]);
+  }, [view, settle]);
+
+  // Opening on a thread lands on its end at once, before the observer's
+  // first report.
+  useEffect(() => {
+    if (view) settle();
+  }, [view, settle]);
+
+  // A new question goes to the top of the view, smoothly. The turn the card
+  // opened on is placed by `settle` above.
+  const lastId = last?.id ?? null;
+  useEffect(() => {
+    if (!view || lastId === null) return;
+    const before = placed.current;
+    placed.current = lastId;
+    if (before === null || before === lastId) return;
+    pinned.current = true;
+    const to = target();
+    if (to === null) return;
+    view.scrollTo({
+      top: to,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }, [view, lastId, target]);
+
+  function jumpToLatest() {
+    const element = scroller.current;
+    const to = target();
+    if (!element || to === null) return;
+    pinned.current = true;
+    element.scrollTo({
+      top: to,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }
+
+  // Only the member moving the view unpins it: a smooth scroll of ours
+  // fires scroll events too.
+  function memberScrolled() {
+    pinned.current = false;
+  }
 
   function close() {
     onOpenChange(false);
@@ -356,15 +451,20 @@ export function AskCard({
               </IconButton>
             </div>
             <div
-              ref={scroller}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                following.current =
-                  element.scrollHeight -
-                    element.scrollTop -
-                    element.clientHeight <
-                  FOLLOW_SLACK_PX;
+              ref={attachScroller}
+              data-ask-thread-view=""
+              onWheel={(event) => {
+                if (event.deltaY < 0) memberScrolled();
               }}
+              onTouchMove={memberScrolled}
+              onKeyDown={(event) => {
+                if (
+                  SCROLL_KEYS.has(event.key) &&
+                  event.target === event.currentTarget
+                )
+                  memberScrolled();
+              }}
+              onScroll={settle}
               className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1"
             >
               <AskCardEditsContext.Provider value={cardEdits}>
@@ -389,31 +489,53 @@ export function AskCard({
                   }}
                 >
                   {exchanges.length > 0 ? (
-                    exchanges.map((exchange) => (
-                      <AskTurn
+                    exchanges.map((exchange, index) => (
+                      <div
                         key={exchange.id}
-                        exchange={exchange}
-                        busy={working && exchange.phase !== "working"}
-                        onRetry={() => void retry(exchange.id, options())}
-                        onThinkHarder={() =>
-                          void retry(exchange.id, {
-                            ...options(),
-                            effort: "more",
-                          })
+                        data-ask-turn={exchange.id}
+                        ref={
+                          index === exchanges.length - 1 ? newest : undefined
                         }
-                        onAnswerConsent={() =>
-                          void retry(exchange.id, options())
+                        // The newest turn fills the view at least, so its
+                        // question can sit at the top while it is answered.
+                        style={
+                          index === exchanges.length - 1 && exchanges.length > 1
+                            ? { minHeight: Math.max(room - 20, 0) }
+                            : undefined
                         }
-                        onProposal={(proposal) =>
-                          setProposal(exchange.id, proposal)
-                        }
-                        onResolved={(resolution) =>
-                          resolveProposal(exchange.id, resolution)
-                        }
-                        onCardEnded={(suggestionId, end) =>
-                          resolveCard(exchange.id, suggestionId, end)
-                        }
-                      />
+                      >
+                        <div
+                          ref={
+                            index === exchanges.length - 1
+                              ? newestWords
+                              : undefined
+                          }
+                        >
+                          <AskTurn
+                            exchange={exchange}
+                            busy={working && exchange.phase !== "working"}
+                            onRetry={() => void retry(exchange.id, options())}
+                            onThinkHarder={() =>
+                              void retry(exchange.id, {
+                                ...options(),
+                                effort: "more",
+                              })
+                            }
+                            onAnswerConsent={() =>
+                              void retry(exchange.id, options())
+                            }
+                            onProposal={(proposal) =>
+                              setProposal(exchange.id, proposal)
+                            }
+                            onResolved={(resolution) =>
+                              resolveProposal(exchange.id, resolution)
+                            }
+                            onCardEnded={(suggestionId, end) =>
+                              resolveCard(exchange.id, suggestionId, end)
+                            }
+                          />
+                        </div>
+                      </div>
                     ))
                   ) : (
                     <AskOpening
@@ -428,6 +550,11 @@ export function AskCard({
                 </div>
               </AskCardEditsContext.Provider>
             </div>
+            {behind && exchanges.length > 0 ? (
+              <div className="relative h-0 shrink-0">
+                <JumpToLatestButton hasNew={false} onJump={jumpToLatest} />
+              </div>
+            ) : null}
             <form
               className="shrink-0 border-t border-border px-4 py-3"
               onSubmit={(event) => {

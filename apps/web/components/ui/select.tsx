@@ -32,7 +32,7 @@ const SelectValue = SelectPrimitive.Value;
  * input's is, so a missing pick reads like a missing field beside it (#3983).
  */
 const SELECT_TRIGGER_CLASS = cn(
-  "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1",
+  "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted [&>span]:line-clamp-1",
   FOCUS_RING,
   "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
   "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",

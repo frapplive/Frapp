@@ -217,7 +217,9 @@ describe("AskCard", () => {
     it("draws nothing of the opening while this browser's record is read, so the greeting never flashes first", () => {
       window.localStorage.removeItem(STARTER_SEEN);
       open();
-      expect(screen.queryByText(/^Good (morning|afternoon|evening)/)).toBeNull();
+      expect(
+        screen.queryByText(/^Good (morning|afternoon|evening)/),
+      ).toBeNull();
       expect(screen.queryByText("Hey Marcus, I'm Frapp.")).toBeNull();
     });
 
@@ -255,6 +257,46 @@ describe("AskCard", () => {
         sent({ actions: true, suggested: false }),
       );
     });
+  });
+
+  it("opens on the newest words of the thread, not at its start (Paul, 2026-11-22)", () => {
+    state.exchanges = [DONE, { ...DONE, id: "turn-2" }];
+    // jsdom lays nothing out: each turn's words are 600px tall and the
+    // view shows 300px, so the end is the second turn's last line.
+    const height = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockReturnValue(600);
+    const client = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(300);
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const top = this.closest("[data-ask-turn='turn-2']") ? 600 : 0;
+        return {
+          top,
+          bottom: top,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: top,
+          toJSON: () => ({}),
+        };
+      });
+    try {
+      open();
+      const view = document.querySelector<HTMLElement>(
+        "[data-ask-thread-view]",
+      );
+      // 600 down, 600 tall, less the 300 shown, plus the 16px pad.
+      expect(view?.scrollTop).toBe(916);
+    } finally {
+      height.mockRestore();
+      client.mockRestore();
+      rect.mockRestore();
+    }
   });
 
   it("reads whether answers are being saved again each time it opens", () => {
@@ -428,7 +470,7 @@ describe("AskCard", () => {
       expect(dialog()!.querySelector("svg[aria-hidden]")).not.toBeNull();
     });
 
-        it("does not close on a click outside while its own question is being answered", async () => {
+    it("does not close on a click outside while its own question is being answered", async () => {
       state.exchanges = [{ ...DONE, phase: "working", answer: null }];
       const onOpenChange = vi.fn();
       render(
@@ -446,7 +488,7 @@ describe("AskCard", () => {
       expect(onOpenChange).toHaveBeenLastCalledWith(false);
     });
 
-      it("closes on Escape and by its close button, with the cursor starting in the field", async () => {
+    it("closes on Escape and by its close button, with the cursor starting in the field", async () => {
       const onOpenChange = vi.fn();
       render(<Card onOpenChange={onOpenChange} />);
       const user = userEvent.setup();
@@ -514,7 +556,10 @@ describe("AskCard", () => {
     it("skips an Ask bar the layout hides, opener or not, for one on screen (#5476)", async () => {
       // Below `lg` with a channel open, the Channels column's bar is in the
       // page but `display: none`; `checkVisibility` is how the card tells.
-      const tree = (isOpen: boolean, opener: { current: HTMLElement | null }) => (
+      const tree = (
+        isOpen: boolean,
+        opener: { current: HTMLElement | null },
+      ) => (
         <>
           <button data-ask-entry="" data-hidden="">
             Hidden bar
@@ -553,9 +598,7 @@ describe("AskCard", () => {
       const view = render(tree(true));
       view.rerender(tree(false));
       await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Ask Frapp" }),
-        ).toHaveFocus(),
+        expect(screen.getByRole("button", { name: "Ask Frapp" })).toHaveFocus(),
       );
     });
 

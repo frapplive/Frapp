@@ -35,10 +35,11 @@ import {
   SectionHeader,
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
-import { NewPickableRoleSheet } from "@/components/roles/new-pickable-role-sheet";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { PlusGlyph } from "@/components/control-glyphs";
 import { useRolesData } from "@/lib/roles/use-roles-data";
+import { newRolePlacements } from "@/lib/roles/new-role";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /** A list longer than this gets a search field, as web's does. */
@@ -54,14 +55,15 @@ const SEARCH_FROM = 8;
  *
  * Built for a chapter with a hundred roles, not five: the tiers carry the
  * permissions, so an officer changes five tiers rather than a hundred roles,
- * and a search field narrows the list once it passes eight roles. Making,
- * reordering and deleting tiers and roles stay on web (all but the one
- * exception below), where a chapter sets its structure up once; the phone
- * changes what they can do.
+ * and a search field narrows the list once it passes eight roles. Making
+ * tiers, and reordering and deleting tiers and roles, stay on web, where a
+ * chapter sets its structure up once; the phone changes what they can do, and
+ * makes a role (Chapter settings → New role, #5296, and the Non-chapter
+ * business Add role below).
  *
  * Roles members pick themselves (Non-chapter business, #4958) get their own
- * section after the roles outside the tiers, as on web, and the one place the
- * phone adds a role (#5736): an intramurals team or a study group is made
+ * section after the roles outside the tiers, as on web, with its own Add
+ * role (#5736): an intramurals team or a study group is made
  * during the season, not at setup, so its Add role opens a name sheet that
  * creates it already pickable, as web's does.
  *
@@ -94,6 +96,10 @@ export default function ChapterRolesScreen() {
   } = data;
   const newPickableRef = useRef<BottomSheetModal>(null);
   const canAddPickable = canManage && reach.known && reachesOutside(reach);
+  // Whether Chapter settings draws New role for this viewer (#5296), so the
+  // note below points there only when the row is there.
+  const canAddRole =
+    canManage && newRolePlacements(reach, tiers, words.plural).length > 0;
   const [query, setQuery] = useState("");
   const filtering = normalizeWords(query).length > 0;
   const permissions = usePermissionList();
@@ -333,14 +339,12 @@ export default function ChapterRolesScreen() {
           </>
         ) : null}
         <Text style={styles.note}>
-          Add, rename and reorder {words.plural}, roles and groups on the web
-          dashboard
-          {canAddPickable && canSeeRoles
-            ? "; roles members pick themselves can be added here too"
-            : ""}
-          . Put someone in a group from their profile.
+          {canAddRole
+            ? `Add ${words.plural} and groups, and rename and reorder ${words.plural}, roles and groups, on the web dashboard. Add a role from Chapter settings → New role.`
+            : `Add, rename and reorder ${words.plural}, roles and groups on the web dashboard.`}{" "}
+          Put someone in a group from their profile.
         </Text>
-        <NewPickableRoleSheet
+        <NewRoleSheet
           ref={newPickableRef}
           onCreated={(roleId) =>
             router.push({ pathname: "/role", params: { roleId } })

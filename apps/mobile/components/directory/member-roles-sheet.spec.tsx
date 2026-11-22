@@ -287,6 +287,23 @@ describe("MemberRolesSheet", () => {
     act(() => tree.unmount());
   });
 
+  it("says which rank rule refused a role save, from the refusal's code (#5730)", async () => {
+    state.mutateAsync.mockRejectedValueOnce({
+      statusCode: 403,
+      code: "role.assign_permission_not_held",
+      message:
+        "You can only give roles whose permissions you hold: backwork:upload.",
+    });
+    const tree = render();
+    await tap(tree, "r-cabinet");
+    const [title, body] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+    expect(title).toBe(ASSIGN_COPY.rolesFailed);
+    expect(body).toBe(
+      "The change was put back. This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.",
+    );
+    act(() => tree.unmount());
+  });
+
   it("reopened after the profile caught up, starts from the profile, not an old draft", async () => {
     const tree = render();
     await tap(tree, "r-cabinet");

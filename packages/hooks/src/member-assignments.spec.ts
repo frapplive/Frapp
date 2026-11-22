@@ -10,9 +10,15 @@ import {
   memberRoleChips,
   NO_BASE_ROLE_FILTER,
   needsBaseRole,
+  permissionNotHeldCaption,
 } from "./member-assignments";
 import type { ChapterGroup } from "./use-groups";
-import type { Reach, TierRow, TieredRole } from "./role-tiers";
+import {
+  callerReach,
+  type Reach,
+  type TierRow,
+  type TieredRole,
+} from "./role-tiers";
 
 function role(
   id: string,
@@ -141,6 +147,31 @@ describe("base roles (2026-11-21)", () => {
     );
   });
 
+  it("disables a base role whose pick would take away one ranked at or above the viewer (#5730)", () => {
+    // Picking a base role takes the member's other one away, which the API
+    // rank-checks too. A member holding one at or above the viewer ranks
+    // there themselves, so the member rule already disables every row.
+    // Grads sits in the top tier here, so the VP can't take it away.
+    const highGrads = withBase.map((r) =>
+      r.id === "r-alumni" ? { ...r, tier_id: "t-exec" } : r,
+    );
+    const rows = sections({ roles: highGrads, heldRoleIds: ["r-alumni"] })[0]!
+      .rows;
+    expect(rows.find((r) => r.name === "New Member")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.memberAbove,
+    );
+    // The member's own base role stays as it is.
+    expect(rows.find((r) => r.name === "Grads")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.memberAbove,
+    );
+    // A member holding a reachable base role: the pick is open.
+    const open = sections({ roles: withBase, heldRoleIds: ["r-actives"] })[0]!
+      .rows;
+    expect(
+      open.find((r) => r.name === "New Member")?.disabledReason,
+    ).toBeNull();
+  });
+
   it("says when a member holds no base role", () => {
     expect(needsBaseRole(withBase, ["r-rush", "r-everyone"])).toBe(true);
     expect(needsBaseRole(withBase, ["r-actives", "r-everyone"])).toBe(false);
@@ -160,6 +191,63 @@ describe("base roles (2026-11-21)", () => {
     expect(matchesRoleFilter(withBase, active, NO_BASE_ROLE_FILTER)).toBe(
       false,
     );
+  });
+});
+
+// #5730: a cabinet officer with roles:manage was offered New Member, then
+// refused by the API, because New Member's tier carries a permission the
+// officer's tier lacks (backwork:upload, after the 2026-11-12 backfill).
+describe("a role carrying a permission the viewer lacks (#5730)", () => {
+  const withNew = [
+    ...ROLES.filter((r) => r.id !== "r-everyone"),
+    role("r-new", "New Member", null, {
+      system_key: "NEW_MEMBER",
+      is_system: true,
+      permissions: ["members:view", "backwork:upload"],
+    }),
+    role("r-everyone", "Everyone", "t-chairs", {
+      system_key: "EVERYONE",
+      is_system: true,
+      permissions: ["members:view"],
+    }),
+  ];
+  const reasonFor = (
+    name: string,
+    overrides: Partial<Parameters<typeof memberAssignmentSections>[0]> = {},
+  ) =>
+    sections({ roles: withNew, heldRoleIds: [], ...overrides })
+      .flatMap((s) => s.rows)
+      .find((r) => r.name === name)?.disabledReason;
+
+  it("disables it and names the permission, as the API would refuse it", () => {
+    expect(reasonFor("New Member")).toBe(
+      permissionNotHeldCaption(["backwork:upload"]),
+    );
+    expect(permissionNotHeldCaption(["backwork:upload"])).toMatch(
+      /^Gives “Upload backwork”, which your role doesn't have$/,
+    );
+  });
+
+  it("exempts what the Everyone role carries, and counts several", () => {
+    // members:view comes with Everyone, so only backwork:upload is named.
+    expect(permissionNotHeldCaption(["a:b", "c:d"])).toBe(
+      "Gives 2 permissions your role doesn't have",
+    );
+  });
+
+  it("offers it once the viewer holds the permission, or holds *", () => {
+    const holds: Reach = {
+      ...VP_REACH,
+      held: new Set([...VP_REACH.held, "backwork:upload"]),
+    };
+    expect(reasonFor("New Member", { reach: holds })).toBeNull();
+    expect(
+      reasonFor("New Member", { reach: { ...VP_REACH, wildcard: true } }),
+    ).toBeNull();
+  });
+
+  it("still lets the viewer take it away: taking hands out nothing", () => {
+    expect(reasonFor("New Member", { heldRoleIds: ["r-new"] })).toBeNull();
   });
 });
 
@@ -405,5 +493,21 @@ describe("groupFollowsLabel", () => {
       "Follows graduation year",
       "Follows major",
     ]);
+  });
+});
+
+describe("callerReach: unknown until both reads land (#5730)", () => {
+  it("is unknown before the permissions read, so no row reads as refused", () => {
+    expect(callerReach(["r-vp"], null, ROLES, TIERS).known).toBe(false);
+    expect(callerReach(null, ["roles:manage"], ROLES, TIERS).known).toBe(false);
+    // Even for the President: `*` comes from the permissions read.
+    expect(callerReach(["r-pres"], null, ROLES, TIERS).wildcard).toBe(false);
+  });
+
+  it("is known once both land, holding what was read", () => {
+    const reach = callerReach(["r-vp"], ["roles:manage"], ROLES, TIERS);
+    expect(reach.known).toBe(true);
+    expect(reach.held.has("roles:manage")).toBe(true);
+    expect(callerReach(null, ["*"], ROLES, TIERS).known).toBe(true);
   });
 });

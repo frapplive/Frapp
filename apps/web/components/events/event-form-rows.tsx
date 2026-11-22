@@ -155,7 +155,7 @@ export const RowInput = React.forwardRef<
       ref={ref}
       className={cn(
         ROW_VALUE,
-        "truncate caret-primary placeholder:text-muted-foreground focus:bg-card",
+        "truncate caret-primary placeholder:text-muted focus:bg-card",
         "aria-[invalid=true]:text-destructive-text",
         className,
       )}
@@ -187,7 +187,7 @@ export const RowTextarea = React.forwardRef<
       onChange={onChange}
       className={cn(
         ROW_VALUE,
-        "h-auto resize-none py-2 leading-5 caret-primary placeholder:text-muted-foreground focus:bg-card",
+        "h-auto resize-none py-2 leading-5 caret-primary placeholder:text-muted focus:bg-card",
         className,
       )}
       {...props}

@@ -247,6 +247,9 @@ export {
 // The Repeat control's state, read and written the same way by the web
 // editor and the phone's New event sheet (#4488).
 export * from "./repeat-draft";
+// Giving a member a role: the "hold what you give" rule and its refusal
+// codes, shared by the API and both apps (#5730).
+export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
 export * from "./screen-copy";
