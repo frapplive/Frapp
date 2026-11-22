@@ -1,31 +1,32 @@
 import { forwardRef, useState } from "react";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
+  useCreateDocumentType,
   useDeleteDocumentType,
+  useTypeEditor,
   useUpdateDocumentType,
   type DocumentTypeRow,
+  type TypeEditorHandle,
 } from "@repo/hooks";
 import {
+  DOCUMENT_TYPE_DELETE_CONSEQUENCE,
   DOCUMENT_TYPE_NAME_MAX_LENGTH,
   DOCUMENT_TYPES_MAX,
   documentTypeKey,
   tidyTypeName,
+  TYPE_NAME_REQUIRED,
   typeToAdd,
 } from "@repo/validation";
-import {
-  TypeSheet,
-  TypeSheetEditPane,
-  useTypeSheetEditor,
-  type TypeSheetEditorHandle,
-} from "@/components/type-sheet";
+import { TypeSheet, TypeSheetEditPane } from "@/components/type-sheet";
 
 /**
  * The Upload document sheet's Type (`spec/behavior/chapter-docs.md`
  * § Document types): the chapter's document types in the shared Type sheet,
  * as web's upload panel draws them in the Type menu (Paul 2026-11-22). A name
  * typed that the chapter doesn't have is held, and the upload adds it to the
- * list, so an abandoned upload adds nothing. Rename and delete, from each
- * row's pencil, are for `chapter_docs:manage`.
+ * list, so an abandoned upload adds nothing; for `chapter_docs:manage` it is
+ * made at once, as web makes it. Rename and delete, from each row's pencil,
+ * are for `chapter_docs:manage` too.
  */
 export const DocumentTypeSheet = forwardRef<
   BottomSheetModal,
@@ -37,6 +38,7 @@ export const DocumentTypeSheet = forwardRef<
     canManage: boolean;
   }
 >(function DocumentTypeSheet({ types, value, onChange, canManage }, ref) {
+  const createType = useCreateDocumentType();
   const key = documentTypeKey(value);
   const onList =
     value !== "" && types.some((type) => documentTypeKey(type.name) === key);
@@ -54,7 +56,10 @@ export const DocumentTypeSheet = forwardRef<
           keyOf: documentTypeKey,
         })
       }
-      onCreate={(name) => onChange(name)}
+      onCreate={async (name) => {
+        if (canManage) await createType.mutateAsync({ name });
+        onChange(name);
+      }}
       renderEditor={
         canManage
           ? (type, handle) => (
@@ -80,7 +85,7 @@ function DocumentTypeEdit({
   onRenamed,
 }: {
   type: DocumentTypeRow;
-  handle: TypeSheetEditorHandle;
+  handle: TypeEditorHandle;
   held: boolean;
   onRenamed: (name: string) => void;
 }) {
@@ -88,11 +93,11 @@ function DocumentTypeEdit({
   const deleteType = useDeleteDocumentType();
   const [name, setName] = useState(type.name);
   const tidy = tidyTypeName(name);
-  const editor = useTypeSheetEditor({
+  const editor = useTypeEditor({
     handle,
     changed: tidy !== type.name,
     save: async () => {
-      if (documentTypeKey(tidy) === "") return "Give the type a name.";
+      if (documentTypeKey(tidy) === "") return TYPE_NAME_REQUIRED;
       await updateType.mutateAsync({ id: type.id, name: tidy });
       if (held) onRenamed(tidy);
       return null;
@@ -113,7 +118,7 @@ function DocumentTypeEdit({
       error={editor.error}
       saving={editor.saving}
       onLeave={editor.leave}
-      deleteBody="Its documents keep everything but the type."
+      deleteBody={DOCUMENT_TYPE_DELETE_CONSEQUENCE}
       deleting={editor.deleting}
       onDelete={editor.onDelete}
     />

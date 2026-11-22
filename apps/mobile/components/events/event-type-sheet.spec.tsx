@@ -80,6 +80,7 @@ function render(
   onPick: (type: unknown, made?: boolean) => void,
   canAdd = true,
   types = TYPES,
+  value: string | null = null,
 ): ReactTestRenderer {
   let tree!: ReactTestRenderer;
   act(() => {
@@ -88,7 +89,7 @@ function render(
         <EventTypeSheet
           ref={React.createRef()}
           types={types}
-          value={null}
+          value={value}
           showSets
           onPick={onPick}
           typeFromForm={canAdd ? fromForm : undefined}
@@ -289,6 +290,30 @@ describe("EventTypeSheet", () => {
       }),
     );
     expect(mockDelete).toHaveBeenCalledWith("t-2");
+  });
+
+  it("lets the form go of the type it holds when that type is deleted", async () => {
+    const onPick = vi.fn();
+    const tree = render(onPick, true, TYPES, "t-2");
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    await act(async () => pressable(tree, "Delete type").props.onPress());
+    expect(onPick).toHaveBeenCalledWith(null);
+  });
+
+  it("refuses points past a whole number in place", async () => {
+    const tree = render(vi.fn());
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    const points = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Points" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => points.props.onChangeText("99999999999999999999"));
+    await act(async () => pressable(tree, "Back to types").props.onPress());
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "Points must be a whole number of 0 or more.",
+    );
   });
 
   it("gives someone who can't make types no pencils", () => {

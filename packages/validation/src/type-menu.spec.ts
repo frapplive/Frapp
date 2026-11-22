@@ -3,6 +3,7 @@ import { documentTypeKey } from "./field-limits";
 import {
   addTypeLabel,
   editTypeLabel,
+  eventTypePoints,
   typeMatchesSearch,
   typeToAdd,
 } from "./type-menu";
@@ -47,5 +48,18 @@ describe("the Type menu's words", () => {
     expect(typeMatchesSearch("Chapter meeting", "MEET")).toBe(true);
     expect(typeMatchesSearch("Social", "  ")).toBe(true);
     expect(typeMatchesSearch("Social", "form")).toBe(false);
+  });
+});
+
+describe("eventTypePoints", () => {
+  it("reads blank as 0 and a whole number as itself", () => {
+    expect(eventTypePoints("  ")).toBe(0);
+    expect(eventTypePoints(" 12 ")).toBe(12);
+  });
+
+  it("refuses a decimal, a sign, or a number past the safe range", () => {
+    expect(eventTypePoints("1.5")).toBeUndefined();
+    expect(eventTypePoints("-3")).toBeUndefined();
+    expect(eventTypePoints("99999999999999999999")).toBeUndefined();
   });
 });

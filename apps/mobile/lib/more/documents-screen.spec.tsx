@@ -56,6 +56,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDocumentAccessOptions: () => accessQuery,
   // The upload sheet's Type (Paul 2026-11-22).
   useDocumentTypes: () => ({ data: [] }),
+  useCreateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDocuments: (...args: unknown[]) => {

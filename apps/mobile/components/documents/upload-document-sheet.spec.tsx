@@ -42,6 +42,12 @@ const accessQuery = vi.hoisted(() => ({
   isError: false,
 }));
 
+const { mockCreateType, mockUpdateType, permissionsState } = vi.hoisted(() => ({
+  mockCreateType: vi.fn(),
+  mockUpdateType: vi.fn(),
+  permissionsState: { list: [] as string[] },
+}));
+
 const typesState = vi.hoisted(() => ({
   data: [
     {
@@ -69,8 +75,15 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDocumentAccessOptions: () => accessQuery,
   // Type (Paul 2026-11-22): the chapter's list, picked in the Type sheet.
   useDocumentTypes: () => ({ data: typesState.data }),
-  usePermissionList: () => [],
-  useUpdateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePermissionList: () => permissionsState.list,
+  useCreateDocumentType: () => ({
+    mutateAsync: mockCreateType,
+    isPending: false,
+  }),
+  useUpdateDocumentType: () => ({
+    mutateAsync: mockUpdateType,
+    isPending: false,
+  }),
   useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -225,6 +238,9 @@ async function pressUpload(tree: ReactTestRenderer) {
 }
 
 beforeEach(() => {
+  permissionsState.list = [];
+  mockCreateType.mockReset();
+  mockUpdateType.mockReset();
   pickDocumentPhoto.mockReset();
   pickDocumentFile.mockReset();
   canPickFiles.mockReset();
@@ -353,6 +369,58 @@ describe("UploadDocumentSheet (#3399)", () => {
       expect.any(Object),
       undefined,
     );
+  });
+
+  it("keeps a member to picking: no pencils, and Create only holds the name", async () => {
+    const tree = render();
+    await choose(tree);
+    expect(
+      tree.root.findAll(
+        (node) => node.props.accessibilityLabel === "Edit Contract",
+      ),
+    ).toHaveLength(0);
+    expect(mockCreateType).not.toHaveBeenCalled();
+  });
+
+  it("lets a document manager make a type at once and rename the one held", async () => {
+    permissionsState.list = ["chapter_docs:manage"];
+    mockCreateType.mockResolvedValue({});
+    mockUpdateType.mockResolvedValue({});
+    const tree = render();
+    await choose(tree);
+    const search = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Find or add a type" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => search.props.onChangeText("Accreditation"));
+    await act(async () => {
+      pressable(tree, "Create \u201cAccreditation\u201d").props.onPress();
+    });
+    expect(mockCreateType).toHaveBeenCalledWith({ name: "Accreditation" });
+    expect(pressable(tree, "Type: Accreditation")).toBeDefined();
+
+    // Contract held, then renamed from its pencil: the upload follows.
+    act(() => {
+      pressable(tree, "Contract").props.onPress();
+    });
+    act(() => {
+      pressable(tree, "Edit Contract").props.onPress();
+    });
+    const name = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Name" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => name.props.onChangeText("Contracts"));
+    await act(async () => {
+      pressable(tree, "Back to types").props.onPress();
+    });
+    expect(mockUpdateType).toHaveBeenCalledWith({
+      id: "t-2",
+      name: "Contracts",
+    });
+    expect(pressable(tree, "Type: Contracts")).toBeDefined();
   });
 
   it("starts on s12's folder, and None files at the root", async () => {

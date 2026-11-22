@@ -1,12 +1,5 @@
-import {
-  forwardRef,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { forwardRef, useMemo, useRef, useState, type ReactNode } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   BottomSheetModal,
   BottomSheetTextInput,
@@ -14,7 +7,7 @@ import {
 } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SignetTokens } from "@repo/theme/signet";
-import { errorCopy } from "@repo/hooks";
+import { errorCopy, type TypeEditorHandle } from "@repo/hooks";
 import {
   addTypeLabel,
   editTypeLabel,
@@ -69,21 +62,14 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
  * - Someone who can manage the list has a pencil at each row's end, which
  *   turns the sheet into that type's edit view: back, its name, the caller's
  *   other fields, and Delete type, confirmed by the platform alert. Back,
- *   return, and closing the sheet save what changed.
+ *   return, and closing the sheet save what changed; a save refused as the
+ *   sheet closes is said in an alert, since the sheet is gone.
  */
 
 /** What every type in the sheet carries. */
 export interface TypeSheetItem {
   id: string;
   name: string;
-}
-
-/** What the sheet hands the caller's edit view. */
-export interface TypeSheetEditorHandle {
-  /** Back to the list, with nothing left to save. */
-  done: () => void;
-  /** The view hands the sheet its save-and-leave, run when the sheet closes. */
-  setLeave: (leave: (() => void) | null) => void;
 }
 
 type Row<T> =
@@ -110,7 +96,7 @@ export interface TypeSheetProps<T extends TypeSheetItem> {
   /** A muted line at a type's end ("10 points · Required"). */
   describe?: (type: T) => string;
   /** One type's edit view; absent when the list can't be managed here. */
-  renderEditor?: (type: T, handle: TypeSheetEditorHandle) => ReactNode;
+  renderEditor?: (type: T, handle: TypeEditorHandle) => ReactNode;
 }
 
 function TypeSheetInner<T extends TypeSheetItem>(
@@ -121,15 +107,17 @@ function TypeSheetInner<T extends TypeSheetItem>(
   const close = useSheetClose(ref);
   const { tokens } = useFrappTheme();
   const insets = useSafeAreaInsets();
-  const leaveRef = useRef<(() => void) | null>(null);
+  const leaveRef = useRef<(() => Promise<string | null>) | null>(null);
   // One row more than the types at most (No type while the search is empty,
-  // or Create while it offers, never both), plus a held new name. Held for
-  // the sheet's life, so a type made here can't resize it as it closes.
-  const [fits] = useState(
-    () =>
-      props.types.length + 1 + (props.heldNewName ? 1 : 0) <=
-      MAX_ROWS_SIZED_TO_CONTENT,
-  );
+  // or Create while it offers, never both), plus a held new name. Read from
+  // the list as it stands until the sheet opens (it may load after the form
+  // mounts), then held while it is open, so a type made here can't resize it
+  // as it closes.
+  const [openFits, setOpenFits] = useState<boolean | null>(null);
+  const fits =
+    openFits ??
+    props.types.length + 1 + (props.heldNewName ? 1 : 0) <=
+      MAX_ROWS_SIZED_TO_CONTENT;
   const [sheetKey, setSheetKey] = useState(0);
   return (
     <BottomSheetModal
@@ -142,11 +130,18 @@ function TypeSheetInner<T extends TypeSheetItem>(
       backgroundStyle={backgroundStyle}
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
+      onChange={(index) => {
+        if (index >= 0 && openFits === null) setOpenFits(fits);
+      }}
       onDismiss={() => {
         // An open edit saves on the way out; the next open starts on the list.
-        leaveRef.current?.();
+        const leave = leaveRef.current;
         leaveRef.current = null;
+        setOpenFits(null);
         setSheetKey((key) => key + 1);
+        void leave?.().then((refused) => {
+          if (refused) Alert.alert("Type not saved", refused);
+        });
       }}
     >
       <SheetBackToClose onClose={close} />
@@ -190,7 +185,7 @@ function TypeSheetBody<T extends TypeSheetItem>({
   onDone,
 }: TypeSheetProps<T> & {
   fits: boolean;
-  setLeave: (leave: (() => void) | null) => void;
+  setLeave: (leave: (() => Promise<string | null>) | null) => void;
   onCreated: () => void;
   onDone: () => void;
 }) {
@@ -509,70 +504,6 @@ export function TypeSheetEditPane({
       </Pressable>
     </View>
   );
-}
-
-/**
- * The state every caller's edit view keeps: a save-and-leave that skips an
- * unchanged draft and says a refused save in place, and a delete that leaves
- * once it lands. The phone twin of web's `useTypeEditor`.
- */
-export function useTypeSheetEditor({
-  handle,
-  changed,
-  save,
-  remove,
-}: {
-  handle: TypeSheetEditorHandle;
-  changed: boolean;
-  /** Saves the draft; returns an inline refusal, or null once saved. */
-  save: () => Promise<string | null>;
-  remove: () => Promise<unknown>;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  async function leave() {
-    if (saving) return;
-    if (!changed) {
-      handle.done();
-      return;
-    }
-    setSaving(true);
-    try {
-      const refused = await save();
-      if (refused) setError(refused);
-      else handle.done();
-    } catch (cause) {
-      setError(errorCopy(cause, "Couldn't save the type. Try again."));
-    } finally {
-      setSaving(false);
-    }
-  }
-  useEffect(() => {
-    handle.setLeave(() => void leave());
-  });
-
-  async function onDelete() {
-    setDeleting(true);
-    try {
-      await remove();
-      handle.done();
-    } catch (cause) {
-      setError(errorCopy(cause, "Couldn't delete the type. Try again."));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return {
-    error,
-    clearError: () => setError(null),
-    saving,
-    deleting,
-    leave: () => void leave(),
-    onDelete: () => void onDelete(),
-  };
 }
 
 function createStyles(tokens: SignetTokens, accent?: string) {

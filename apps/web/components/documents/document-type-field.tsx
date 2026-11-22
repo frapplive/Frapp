@@ -2,23 +2,23 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  useCreateDocumentType,
   useDeleteDocumentType,
+  useTypeEditor,
   useUpdateDocumentType,
   type DocumentTypeRow,
+  type TypeEditorHandle,
 } from "@repo/hooks";
 import {
+  DOCUMENT_TYPE_DELETE_CONSEQUENCE,
   DOCUMENT_TYPE_NAME_MAX_LENGTH,
   DOCUMENT_TYPES_MAX,
   documentTypeKey,
   tidyTypeName,
+  TYPE_NAME_REQUIRED,
   typeToAdd,
 } from "@repo/validation";
-import {
-  TypeEditPane,
-  TypeMenu,
-  useTypeEditor,
-  type TypeEditorHandle,
-} from "@/components/shared/type-menu";
+import { TypeEditPane, TypeMenu } from "@/components/shared/type-menu";
 import { SelectFieldButton } from "@/components/ui/select";
 
 /**
@@ -28,12 +28,12 @@ import { SelectFieldButton } from "@/components/ui/select";
  * replaced a row of chips, a "New type" chip and an "Edit types" popover
  * (Paul 2026-11-22: "yo what is this?").
  *
- * A name typed that the chapter doesn't have is held, not made: the upload
- * adds it to the list (the API registers it, as it registers a new folder),
- * so a type typed into an upload that is then abandoned never joins the list,
- * and an uploader without `chapter_docs:manage` can still add one by
- * uploading, as before. Rename and delete, from each row's edit button, are
- * for `chapter_docs:manage` (`canManage`).
+ * `Create “…”` makes the type at once for `chapter_docs:manage`
+ * (`canManage`), as the event form makes an event type. For anyone else the
+ * name is held, not made: the upload adds it to the list (the API registers
+ * it, as it registers a new folder), so an uploader who can't manage types can
+ * still add one by uploading, and one whose upload is abandoned adds nothing.
+ * Rename and delete, from each row's edit button, are for `canManage`.
  */
 export function DocumentTypeField({
   id,
@@ -66,6 +66,7 @@ export function DocumentTypeField({
       ),
     [typeRows, typeOptions],
   );
+  const createType = useCreateDocumentType();
   const key = documentTypeKey(value);
   const onList =
     value !== "" && types.some((t) => documentTypeKey(t.name) === key);
@@ -85,7 +86,11 @@ export function DocumentTypeField({
           keyOf: documentTypeKey,
         })
       }
-      onCreate={(name) => onChange(name, true)}
+      onCreate={async (name) => {
+        if (canManage && typeRows) await createType.mutateAsync({ name });
+        // Held as typed, so it isn't let go before the list refetches.
+        onChange(name, true);
+      }}
       renderEditor={
         canManage && typeRows
           ? (type, handle) => (
@@ -135,7 +140,7 @@ function DocumentTypeEdit({
     handle,
     changed: tidy !== type.name,
     save: async () => {
-      if (documentTypeKey(tidy) === "") return "Give the type a name.";
+      if (documentTypeKey(tidy) === "") return TYPE_NAME_REQUIRED;
       await updateType.mutateAsync({ id: type.id, name: tidy });
       if (held) onRenamed(tidy);
       return null;
@@ -157,7 +162,7 @@ function DocumentTypeEdit({
       error={editor.error}
       saving={editor.saving}
       onLeave={editor.leave}
-      deleteConsequence="Its documents keep everything but the type."
+      deleteConsequence={DOCUMENT_TYPE_DELETE_CONSEQUENCE}
       deletePending={editor.deleting}
       onDelete={editor.onDelete}
     />

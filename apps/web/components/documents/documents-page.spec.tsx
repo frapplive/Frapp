@@ -39,6 +39,8 @@ const {
   typesQuery,
   manageGate,
   mockUpdateType,
+  mockCreateType,
+  mockDeleteType,
   accessQuery,
   mockSetAccess,
 } = vi.hoisted(() => ({
@@ -65,6 +67,8 @@ const {
   mockSetStar: vi.fn().mockResolvedValue(undefined),
   mockSetPin: vi.fn().mockResolvedValue(undefined),
   mockUpdateType: vi.fn().mockResolvedValue({}),
+  mockCreateType: vi.fn().mockResolvedValue({}),
+  mockDeleteType: vi.fn().mockResolvedValue({}),
   mockCurrentChapter: vi.fn(),
   mockDeleteDoc: vi.fn().mockResolvedValue({}),
   mockRefetch: vi.fn(),
@@ -142,9 +146,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   },
   useDocumentFolders: () => foldersQuery,
   useDocumentTypes: () => typesQuery,
-  useCreateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateDocumentType: () => ({ mutateAsync: mockCreateType, isPending: false }),
   useUpdateDocumentType: () => ({ mutateAsync: mockUpdateType, isPending: false }),
-  useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteDocumentType: () => ({ mutateAsync: mockDeleteType, isPending: false }),
   // The folder import's batch routes (#2242); its own spec covers them.
   useRequestDocumentUploadUrls: () => ({ mutateAsync: vi.fn() }),
   useConfirmDocumentUploads: () => ({ mutateAsync: vi.fn() }),
@@ -823,6 +827,52 @@ describe("DocumentsPage upload metadata", () => {
     expect(mockConfirmUpload).toHaveBeenCalledWith(
       expect.objectContaining({ document_type: "Accreditation" }),
     );
+  });
+
+  it("makes a typed type at once for a document manager", async () => {
+    typesQuery.data = [
+      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+    ];
+    typesQuery.isSuccess = true;
+    manageGate.granted = true;
+    render(<DocumentsPage />);
+    await userEvent.click(uploadTrigger());
+    const dialog = screen.getByRole("dialog");
+    pickFile(dialog, "fsl-program.pdf");
+
+    await userEvent.click(typeField(dialog));
+    await userEvent.type(
+      screen.getByPlaceholderText("Find or add a type"),
+      "Accreditation",
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "Create “Accreditation”" }),
+    );
+    expect(mockCreateType).toHaveBeenCalledWith({ name: "Accreditation" });
+    await waitFor(() => expectType(dialog, "Accreditation"));
+  });
+
+  it("deletes a type after a confirm in place and lets the upload go of it", async () => {
+    typesQuery.data = [
+      { id: "t-1", chapter_id: "chap-1", name: "Bylaws", sort_order: 1, created_at: "" },
+    ];
+    typesQuery.isSuccess = true;
+    manageGate.granted = true;
+    render(<DocumentsPage />);
+    await userEvent.click(uploadTrigger());
+    const dialog = screen.getByRole("dialog");
+    pickFile(dialog, "bylaws.pdf");
+    expectType(dialog, "Bylaws");
+
+    await userEvent.click(typeField(dialog));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Bylaws" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete type" }));
+    expect(
+      screen.getByText("Its documents keep everything but the type."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(mockDeleteType).toHaveBeenCalledWith("t-1"));
+    await waitFor(() => expect(typeField(dialog)).toHaveAccessibleName("Type: none"));
   });
 
   it("edits a type from its row in the Type menu, for a document manager", async () => {

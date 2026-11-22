@@ -76,3 +76,30 @@ export function typeToAdd(
   if (key === "") return null;
   return types.some((type) => keyOf(type.name) === key) ? null : name;
 }
+
+/** The edit view's refusal for a name left empty. */
+export const TYPE_NAME_REQUIRED = "Give the type a name.";
+
+/** What deleting a document type does, said while it is confirmed. */
+export const DOCUMENT_TYPE_DELETE_CONSEQUENCE =
+  "Its documents keep everything but the type.";
+
+/** What deleting an event type does, said while it is confirmed. */
+export const EVENT_TYPE_DELETE_CONSEQUENCE =
+  "Its events keep their points and lose the type.";
+
+/** The edit view's refusal for points that aren't a whole number. */
+export const EVENT_TYPE_POINTS_INVALID =
+  "Points must be a whole number of 0 or more.";
+
+/**
+ * An event type's points from its edit view's field: blank is 0, otherwise a
+ * safe whole number of 0 or more, or `undefined` for anything else.
+ */
+export function eventTypePoints(draft: string): number | undefined {
+  const trimmed = draft.trim();
+  if (trimmed === "") return 0;
+  if (!/^\d+$/.test(trimmed)) return undefined;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : undefined;
+}

@@ -10,14 +10,20 @@ import {
 import {
   useCreateEventType,
   useDeleteEventType,
+  useTypeEditor,
   useUpdateEventType,
   type EventType,
+  type TypeEditorHandle,
 } from "@repo/hooks";
 import {
   describeEventTypeSets,
+  EVENT_TYPE_DELETE_CONSEQUENCE,
   EVENT_TYPE_NAME_MAX_LENGTH,
+  EVENT_TYPE_POINTS_INVALID,
   EVENT_TYPES_MAX,
+  eventTypePoints,
   tidyTypeName,
+  TYPE_NAME_REQUIRED,
   typeToAdd,
   type EventTypeDraft,
 } from "@repo/validation";
@@ -25,12 +31,7 @@ import { Frame, paint } from "@/components/glyph-recipe";
 import { ForwardGlyph } from "@/components/control-glyphs";
 import { Segmented } from "@/components/segmented";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
-import {
-  TypeSheet,
-  TypeSheetEditPane,
-  useTypeSheetEditor,
-  type TypeSheetEditorHandle,
-} from "@/components/type-sheet";
+import { TypeSheet, TypeSheetEditPane } from "@/components/type-sheet";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
 
@@ -197,7 +198,13 @@ export const EventTypeSheet = forwardRef<
       renderEditor={
         canManage
           ? (type, handle) => (
-              <EventTypeEdit key={type.id} type={type} handle={handle} />
+              <EventTypeEdit
+                key={type.id}
+                type={type}
+                handle={handle}
+                held={type.id === value}
+                onDeleted={() => onPick(null)}
+              />
             )
           : undefined
       }
@@ -217,9 +224,14 @@ const ATTENDANCE_OPTIONS = [
 function EventTypeEdit({
   type,
   handle,
+  held,
+  onDeleted,
 }: {
   type: EventType;
-  handle: TypeSheetEditorHandle;
+  handle: TypeEditorHandle;
+  /** Whether the form holds this type. */
+  held: boolean;
+  onDeleted: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const brand = useChapterBranding();
@@ -230,26 +242,28 @@ function EventTypeEdit({
   const [points, setPoints] = useState(String(type.point_value));
   const [required, setRequired] = useState(type.is_mandatory);
   const tidy = tidyTypeName(name);
-  const editor = useTypeSheetEditor({
+  const editor = useTypeEditor({
     handle,
     changed:
       tidy !== type.name ||
       points.trim() !== String(type.point_value) ||
       required !== type.is_mandatory,
     save: async () => {
-      if (!tidy) return "Give the type a name.";
-      const trimmed = points.trim();
-      const pointValue = trimmed === "" ? 0 : Number(trimmed);
-      if (!Number.isInteger(pointValue) || pointValue < 0) {
-        return "Points must be a whole number of 0 or more.";
-      }
+      if (!tidy) return TYPE_NAME_REQUIRED;
+      const pointValue = eventTypePoints(points);
+      if (pointValue === undefined) return EVENT_TYPE_POINTS_INVALID;
       await updateType.mutateAsync({
         id: type.id,
         body: { name: tidy, point_value: pointValue, is_mandatory: required },
       });
       return null;
     },
-    remove: () => deleteType.mutateAsync(type.id),
+    remove: async () => {
+      await deleteType.mutateAsync(type.id);
+      // The form holding it lets it go, so its save doesn't send a type
+      // that is gone.
+      if (held) onDeleted();
+    },
   });
   return (
     <TypeSheetEditPane
@@ -262,7 +276,7 @@ function EventTypeEdit({
       error={editor.error}
       saving={editor.saving}
       onLeave={editor.leave}
-      deleteBody="Its events keep their points and lose the type."
+      deleteBody={EVENT_TYPE_DELETE_CONSEQUENCE}
       deleting={editor.deleting}
       onDelete={editor.onDelete}
     >

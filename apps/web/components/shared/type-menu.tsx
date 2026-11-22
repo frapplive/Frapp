@@ -1,7 +1,6 @@
 "use client";
 
 import React, {
-  useEffect,
   useRef,
   useState,
   type ReactElement,
@@ -17,7 +16,9 @@ import {
   TYPE_NO_MATCH,
   TYPE_NONE,
   TYPE_SEARCH_FROM,
+  typeMatchesSearch,
 } from "@repo/validation";
+import type { TypeEditorHandle } from "@repo/hooks";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -64,17 +65,6 @@ export interface TypeMenuItem {
   name: string;
 }
 
-/** What the menu hands the caller's edit view. */
-export interface TypeEditorHandle {
-  /** Back to the list, with nothing left to save. */
-  done: () => void;
-  /**
-   * The view hands the menu its own save-and-leave, so the menu can save what
-   * changed when it is closed or Escape is pressed with the view open.
-   */
-  setLeave: (leave: (() => void) | null) => void;
-}
-
 export function TypeMenu<T extends TypeMenuItem>({
   trigger,
   label,
@@ -117,7 +107,7 @@ export function TypeMenu<T extends TypeMenuItem>({
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const leaveRef = useRef<(() => void) | null>(null);
+  const leaveRef = useRef<(() => Promise<string | null>) | null>(null);
   const canAdd = toAdd !== undefined && onCreate !== undefined;
   const showSearch = canAdd || types.length > TYPE_SEARCH_FROM;
   const adding = canAdd ? toAdd(search) : null;
@@ -125,6 +115,10 @@ export function TypeMenu<T extends TypeMenuItem>({
     editingId === null
       ? null
       : (types.find((type) => type.id === editingId) ?? null);
+  // Filtered here, by name only, as the phone's sheet filters: cmdk's own
+  // fuzzy match would also match letters in each type's id.
+  const searching = search.trim() !== "";
+  const shown = types.filter((type) => typeMatchesSearch(type.name, search));
 
   function reset() {
     setSearch("");
@@ -134,7 +128,17 @@ export function TypeMenu<T extends TypeMenuItem>({
   }
 
   function setMenuOpen(next: boolean) {
-    if (!next && editing) leaveRef.current?.();
+    const leave = editing ? leaveRef.current : null;
+    if (!next && leave) {
+      // An open edit saves first; a refused or failed save keeps the menu
+      // open on the edit view, saying why, rather than closing on a loss.
+      void leave().then((refused) => {
+        if (refused !== null) return;
+        setOpen(false);
+        reset();
+      });
+      return;
+    }
     setOpen(next);
     if (!next) reset();
   }
@@ -180,7 +184,7 @@ export function TypeMenu<T extends TypeMenuItem>({
           // Escape steps back out of an edit view before it closes the menu.
           if (editing) {
             event.preventDefault();
-            leaveRef.current?.();
+            void leaveRef.current?.();
           }
         }}
       >
@@ -188,7 +192,7 @@ export function TypeMenu<T extends TypeMenuItem>({
           // eslint-disable-next-line react-hooks/refs -- `handle.setLeave` writes the ref from the editor's effect; the menu reads it on close or Escape, never during render
           renderEditor(editing, handle)
         ) : (
-          <Command label={label}>
+          <Command label={label} shouldFilter={false}>
             {showSearch ? (
               <CommandInput
                 placeholder={canAdd ? TYPE_FIND_OR_ADD : TYPE_FIND}
@@ -202,20 +206,23 @@ export function TypeMenu<T extends TypeMenuItem>({
             <CommandList className="max-h-72">
               {adding ? null : <CommandEmpty>{TYPE_NO_MATCH}</CommandEmpty>}
               <CommandGroup>
-                <CommandItem
-                  value={TYPE_NONE}
-                  onSelect={() => pick(null)}
-                  className={cn(ROW, "text-muted-foreground")}
-                >
-                  <HeldMark
-                    held={
-                      heldNewName === null &&
-                      !types.some((type) => isHeld(type))
-                    }
-                  />
-                  {TYPE_NONE}
-                </CommandItem>
-                {heldNewName !== null ? (
+                {searching ? null : (
+                  <CommandItem
+                    value={TYPE_NONE}
+                    onSelect={() => pick(null)}
+                    className={cn(ROW, "text-muted-foreground")}
+                  >
+                    <HeldMark
+                      held={
+                        heldNewName === null &&
+                        !types.some((type) => isHeld(type))
+                      }
+                    />
+                    {TYPE_NONE}
+                  </CommandItem>
+                )}
+                {heldNewName !== null &&
+                typeMatchesSearch(heldNewName, search) ? (
                   <CommandItem
                     value={`held ${heldNewName}`}
                     onSelect={() => setMenuOpen(false)}
@@ -230,11 +237,10 @@ export function TypeMenu<T extends TypeMenuItem>({
                     </span>
                   </CommandItem>
                 ) : null}
-                {types.map((type) => (
+                {shown.map((type) => (
                   <CommandItem
                     key={type.id}
-                    value={`${type.name} ${type.id}`}
-                    keywords={[type.name]}
+                    value={type.id}
                     onSelect={() => pick(type)}
                     className={cn(ROW, "group")}
                   >
@@ -252,6 +258,14 @@ export function TypeMenu<T extends TypeMenuItem>({
                           "-my-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
                         )}
                         onPointerDown={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          // cmdk takes Enter at its root to pick the selected
+                          // row; on this button Enter opens the type instead.
+                          if (event.key !== "Enter") return;
+                          event.stopPropagation();
+                          event.preventDefault();
+                          setEditingId(type.id);
+                        }}
                         onClick={(event) => {
                           // The row picks the type; this button opens it instead.
                           event.stopPropagation();
@@ -266,11 +280,8 @@ export function TypeMenu<T extends TypeMenuItem>({
                 ))}
               </CommandGroup>
               {adding ? (
-                // Its own group, drawn whatever the search: cmdk hides an item
-                // that matches nothing typed.
-                <CommandGroup forceMount>
+                <CommandGroup>
                   <CommandItem
-                    forceMount
                     value={`create ${adding}`}
                     disabled={creating}
                     onSelect={() => void create(adding)}
@@ -444,70 +455,4 @@ export function TypeEditPane({
       </div>
     </form>
   );
-}
-
-/**
- * The state every caller's edit view keeps: a save-and-leave that skips an
- * unchanged draft, says a refused save in place (staying in the view), and a
- * delete that leaves once it lands.
- */
-export function useTypeEditor({
-  handle,
-  changed,
-  save,
-  remove,
-}: {
-  handle: TypeEditorHandle;
-  /** Whether the draft differs from the type. */
-  changed: boolean;
-  /** Saves the draft; returns an inline refusal, or null once saved. */
-  save: () => Promise<string | null>;
-  remove: () => Promise<unknown>;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  async function leave() {
-    if (saving) return;
-    if (!changed) {
-      handle.done();
-      return;
-    }
-    setSaving(true);
-    try {
-      const refused = await save();
-      if (refused) setError(refused);
-      else handle.done();
-    } catch (cause) {
-      setError(getErrorMessage(cause, "Couldn't save the type. Try again."));
-    } finally {
-      setSaving(false);
-    }
-  }
-  // The menu calls the latest save when it closes, or on Escape.
-  useEffect(() => {
-    handle.setLeave(() => void leave());
-  });
-
-  async function onDelete() {
-    setDeleting(true);
-    try {
-      await remove();
-      handle.done();
-    } catch (cause) {
-      setError(getErrorMessage(cause, "Couldn't delete the type. Try again."));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return {
-    error,
-    clearError: () => setError(null),
-    saving,
-    deleting,
-    leave: () => void leave(),
-    onDelete: () => void onDelete(),
-  };
 }

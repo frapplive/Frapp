@@ -5,25 +5,26 @@ import {
   useCreateEventType,
   useDeleteEventType,
   useEventTypes,
+  useTypeEditor,
   useUpdateEventType,
   type EventType,
+  type TypeEditorHandle,
 } from "@repo/hooks";
 import {
   describeEventTypeSets,
   EVENT_FORM_PLACEHOLDERS,
   EVENT_FORM_ROW_LABELS,
+  EVENT_TYPE_DELETE_CONSEQUENCE,
   EVENT_TYPE_NAME_MAX_LENGTH,
+  EVENT_TYPE_POINTS_INVALID,
   EVENT_TYPES_MAX,
+  eventTypePoints,
   tidyTypeName,
+  TYPE_NAME_REQUIRED,
   typeToAdd,
   type EventTypeDraft,
 } from "@repo/validation";
-import {
-  TypeEditPane,
-  TypeMenu,
-  useTypeEditor,
-  type TypeEditorHandle,
-} from "@/components/shared/type-menu";
+import { TypeEditPane, TypeMenu } from "@/components/shared/type-menu";
 import { Input } from "@/components/ui/input";
 import {
   PropertyRow,
@@ -31,7 +32,7 @@ import {
 } from "@/components/events/event-form-rows";
 import { Label } from "@/components/ui/label";
 import { SegmentedChoice } from "@/components/ui/segmented";
-import { guardIntDraft, parseGuardedInt } from "@/lib/utils";
+import { guardIntDraft } from "@/lib/utils";
 
 /**
  * The Type row of the event form (`spec/behavior/events.md` § Event types,
@@ -117,7 +118,13 @@ export function EventTypeRow({
         renderEditor={
           canManage
             ? (type, handle) => (
-                <EventTypeEdit key={type.id} type={type} handle={handle} />
+                <EventTypeEdit
+                  key={type.id}
+                  type={type}
+                  handle={handle}
+                  held={type.id === value}
+                  onDeleted={() => onPick(null)}
+                />
               )
             : undefined
         }
@@ -150,9 +157,14 @@ const ATTENDANCE_OPTIONS = [
 function EventTypeEdit({
   type,
   handle,
+  held,
+  onDeleted,
 }: {
   type: EventType;
   handle: TypeEditorHandle;
+  /** Whether the form holds this type. */
+  held: boolean;
+  onDeleted: () => void;
 }) {
   const updateType = useUpdateEventType();
   const deleteType = useDeleteEventType();
@@ -167,18 +179,21 @@ function EventTypeEdit({
       points.trim() !== String(type.point_value) ||
       required !== type.is_mandatory,
     save: async () => {
-      if (!tidy) return "Give the type a name.";
-      const pointValue = points.trim() === "" ? 0 : parseGuardedInt(points);
-      if (pointValue === undefined) {
-        return "Points must be a whole number of 0 or more.";
-      }
+      if (!tidy) return TYPE_NAME_REQUIRED;
+      const pointValue = eventTypePoints(points);
+      if (pointValue === undefined) return EVENT_TYPE_POINTS_INVALID;
       await updateType.mutateAsync({
         id: type.id,
         body: { name: tidy, point_value: pointValue, is_mandatory: required },
       });
       return null;
     },
-    remove: () => deleteType.mutateAsync(type.id),
+    remove: async () => {
+      await deleteType.mutateAsync(type.id);
+      // The form holding it lets it go, so its save doesn't send a type
+      // that is gone.
+      if (held) onDeleted();
+    },
   });
   const idBase = `event-type-${type.id}`;
 
@@ -194,7 +209,7 @@ function EventTypeEdit({
       error={editor.error}
       saving={editor.saving}
       onLeave={editor.leave}
-      deleteConsequence="Its events keep their points and lose the type."
+      deleteConsequence={EVENT_TYPE_DELETE_CONSEQUENCE}
       deletePending={editor.deleting}
       onDelete={editor.onDelete}
     >

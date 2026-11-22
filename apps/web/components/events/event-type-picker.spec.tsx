@@ -233,6 +233,57 @@ describe("EventTypeRow on the shared Type menu", () => {
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith("t-2"));
   });
 
+  it("narrows the list by name as typed, without No type", async () => {
+    renderRow();
+    await openMenu();
+    await userEvent.type(
+      screen.getByPlaceholderText("Find or add a type"),
+      "soc",
+    );
+    expect(screen.getByRole("option", { name: /^Social/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /^Chapter meeting/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("option", { name: /^No type/ })).toBeNull();
+  });
+
+  it("opens a type's edit view with Enter on its edit button", async () => {
+    const { onPick } = renderRow();
+    await openMenu();
+    screen.getByRole("button", { name: "Edit Social" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Name")).toHaveValue("Social");
+  });
+
+  it("lets the form go of the type it holds when that type is deleted", async () => {
+    const { onPick } = renderRow({ value: "t-2" });
+    await openMenu();
+    await userEvent.click(screen.getByRole("button", { name: "Edit Social" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete type" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith(null));
+  });
+
+  it("stays open on the edit view when closing it can't save", async () => {
+    mockUpdate.mockRejectedValueOnce(
+      new MemberFacingError("A type called Social already exists."),
+    );
+    renderRow();
+    await openMenu();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Edit Chapter meeting" }),
+    );
+    const name = screen.getByLabelText("Name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Social");
+    await userEvent.click(document.body);
+    expect(
+      await screen.findByText("A type called Social already exists."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Social");
+  });
+
   it("saves an open edit when the menu is closed", async () => {
     renderRow();
     await openMenu();
