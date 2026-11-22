@@ -1,9 +1,10 @@
 import { AskPage } from "@/components/ask/ask-page";
 
-// The root layout appends " · Frapp" (#2147), so the tab reads
-// "Ask · Frapp"; "Ask Frapp" here would name the product twice.
+// The feature's name holds the product's, so the root layout's " · Frapp"
+// template (#2147) would name it twice: `absolute` keeps the tab to
+// "Ask Frapp", the same words as the page's heading.
 export const metadata = {
-  title: "Ask",
+  title: { absolute: "Ask Frapp" },
 };
 
 /**

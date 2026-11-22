@@ -140,18 +140,25 @@ export function AskPage() {
   if (entry) return <AskConversation />;
   // Not yet known (a reload of `/ask`, or a read being retried): the field's
   // place, so the page never stands empty under its title.
-  if (pending) {
-    return (
-      <PageSkeleton
-        label="Loading Ask Frapp"
-        className="mx-auto mt-auto w-full max-w-[720px]"
-      >
-        <Skeleton className="h-10 w-full rounded-md" />
-      </PageSkeleton>
-    );
-  }
+  if (pending) return <AskPageSkeleton />;
   // No Ask: `AskHost` is taking the member to chat.
   return null;
+}
+
+/**
+ * The Ask page's loading shape: the field's place at the foot of the reading
+ * column. The route's `loading.tsx` draws it too, so a navigation and a read
+ * of whether the member has Ask look the same.
+ */
+export function AskPageSkeleton() {
+  return (
+    <PageSkeleton
+      label="Loading Ask Frapp"
+      className="mx-auto mt-auto w-full max-w-[720px]"
+    >
+      <Skeleton className="h-10 w-full rounded-md" />
+    </PageSkeleton>
+  );
 }
 
 export function AskConversation() {
