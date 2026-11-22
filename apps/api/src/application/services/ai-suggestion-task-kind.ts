@@ -549,7 +549,9 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
             audience: TASK_AUDIENCE_EVERYONE,
             audience_role_id: task.audience_role_id,
             audience_group_id: task.audience_group_id,
-            audience_tier_id: task.audience_tier_id ?? null,
+            ...(task.audience_tier_id
+              ? { audience_tier_id: task.audience_tier_id }
+              : {}),
           }
         : {
             assignee_id: task.assignee_ids?.length ? null : task.assignee_id,
@@ -557,17 +559,17 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
             audience: null,
             audience_role_id: null,
             audience_group_id: null,
-            audience_tier_id: null,
           }),
       created_by: input.userId,
       due_date: task.due_date,
       due_at: task.due_at,
       subtasks: task.subtasks,
       // Points only when the officer set them (Ask's card, or an edit);
-      // never a chat card (no `channel_id`).
+      // never a chat card (no `channel_id`). Proof and From are sent only
+      // when set, as the task form leaves them out (#4313).
       point_reward: task.point_reward ?? null,
-      proof_kind: task.proof_kind ?? 'none',
-      followed_by: task.followed_by ?? null,
+      ...(task.proof_kind ? { proof_kind: task.proof_kind } : {}),
+      ...(task.followed_by ? { followed_by: task.followed_by } : {}),
       ...(meetingId ? { meeting_id: meetingId } : {}),
     });
     return { resultId: created.id };
