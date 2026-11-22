@@ -1,11 +1,14 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View, type ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   useAiChapterSettings,
   useAiConsent,
+  useCategories,
+  useChannelAccessOptions,
   useChapterChatBackground,
+  useCreateChannel,
   useCurrentChapter,
   useGeofences,
   useOrgConfig,
@@ -13,6 +16,8 @@ import {
   usePermissionList,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
+import { errorCopy } from "@repo/hooks/error-copy";
+import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_SETTINGS_COPY,
@@ -39,6 +44,19 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
+import { PlusGlyph } from "@/components/control-glyphs";
+import {
+  ChannelFormSheet,
+  type ChannelFormMode,
+} from "@/components/chat/channel-form-sheet";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import {
+  CREATE_CHANNEL_FAILED,
+  createChannelBody,
+} from "@/lib/chat/create-channel";
+import { selectCategories } from "@/lib/chat/channel-list";
+import { newRolePlacements } from "@/lib/roles/new-role";
+import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { chapterSettingsAccess } from "@/lib/more/chapter-settings";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -320,18 +338,17 @@ export default function ChapterSettingsScreen() {
               </SettingAnchor>
             ) : null}
 
+            {access.newChannel ? <ChatSection /> : null}
+
             {access.roles ? (
-              <>
-                <SectionHeader>People</SectionHeader>
-                <ListSection>
-                  <ListRow
-                    label="Roles and groups"
-                    accessibilityHint="Opens the chapter's tiers, roles and groups."
-                    onPress={() => router.push("/chapter-roles")}
-                  />
-                </ListSection>
-              </>
+              <PeopleSection canAddRole={access.newRole} />
             ) : null}
+
+            {/* Where the phone stops (Shawn, 2026-11-22): permissions, channel
+                access, reordering, the chapter profile and the rest are web's
+                Settings, which an officer sets up once, at a desk. One quiet
+                line, as iOS Settings ends a group with its footnote. */}
+            <Text style={styles.footnote}>{MORE_ON_THE_WEB}</Text>
           </>
         )}
       </SettingJumpProvider>
@@ -343,6 +360,137 @@ export default function ChapterSettingsScreen() {
         </>
       ) : null}
     </ScreenShell>
+  );
+}
+
+/** The screen's last line: what isn't here is on the web (#5296). */
+const MORE_ON_THE_WEB = "More settings are on the web dashboard.";
+
+/**
+ * Chat → New channel (#5296): the sheet Chat home's "+" opens (#3838), here
+ * too, so an officer setting the chapter up finds it where Discord mobile's
+ * Server Settings and Slack's Create a channel put it. Name, category,
+ * private or not, and who can see and post; then the channel opens, as it
+ * does from Chat home.
+ */
+function ChatSection() {
+  const router = useRouter();
+  const { tokens } = useFrappTheme();
+  const createChannel = useCreateChannel();
+  const categoriesQuery = useCategories();
+  const categories = useMemo(
+    () => selectCategories(categoriesQuery.data),
+    [categoriesQuery.data],
+  );
+  const sheetRef = useRef<BottomSheetModal>(null);
+  // Mounted fresh for each opening, as on Chat home, so a Cancel's draft
+  // never comes back.
+  const [formKey, setFormKey] = useState<number | null>(null);
+  const accessOptionsQuery = useChannelAccessOptions(formKey !== null);
+  const accessOptions = useMemo(
+    () => selectChannelAccessOptions(accessOptionsQuery.data),
+    [accessOptionsQuery.data],
+  );
+  useEffect(() => {
+    if (formKey !== null) sheetRef.current?.present?.();
+  }, [formKey]);
+  const mode: ChannelFormMode = { kind: "create", categoryId: null };
+
+  return (
+    <>
+      <SectionHeader>Chat</SectionHeader>
+      <ListSection>
+        <ListRow
+          label="New channel"
+          leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
+          accessibilityHint="Opens the form for a new channel."
+          onPress={() => setFormKey((key) => (key ?? 0) + 1)}
+        />
+      </ListSection>
+      {formKey !== null ? (
+        <ChannelFormSheet
+          key={formKey}
+          ref={sheetRef}
+          mode={mode}
+          categories={categories}
+          accessOptions={accessOptions}
+          accessOptionsState={
+            accessOptionsQuery.isSuccess
+              ? "ready"
+              : accessOptionsQuery.isError
+                ? "error"
+                : "loading"
+          }
+          onSubmit={async (values) => {
+            let created: { id?: unknown } | undefined;
+            try {
+              created = (await createChannel.mutateAsync(
+                createChannelBody(values),
+              )) as { id?: unknown } | undefined;
+            } catch (error) {
+              throw new Error(errorCopy(error, CREATE_CHANNEL_FAILED));
+            }
+            if (typeof created?.id === "string") {
+              router.push({
+                pathname: "/chat-thread",
+                params: { channelId: created.id },
+              });
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * People: Roles and groups, then New role for a `roles:manage` holder
+ * (#5296): a name, a tier and a color, then the role's page, where what it
+ * can do is switched. Mounted only for whoever sees People, so the roles
+ * reads aren't spent on anyone else.
+ */
+function PeopleSection({ canAddRole }: { canAddRole: boolean }) {
+  const router = useRouter();
+  const { tokens } = useFrappTheme();
+  const { tiers, reach, words } = useRolesData();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const placements = useMemo(
+    () =>
+      canAddRole
+        ? newRolePlacements(reach, tiers, `Outside the ${words.plural}`)
+        : [],
+    [canAddRole, reach, tiers, words.plural],
+  );
+  const showNewRole = placements.length > 0;
+
+  return (
+    <>
+      <SectionHeader>People</SectionHeader>
+      <ListSection>
+        <ListRow
+          label="Roles and groups"
+          accessibilityHint="Opens the chapter's tiers, roles and groups."
+          onPress={() => router.push("/chapter-roles")}
+        />
+        {showNewRole ? (
+          <ListRow
+            label="New role"
+            leading={<PlusGlyph color={tokens.color.text.mutedForeground} />}
+            accessibilityHint="Opens the form for a new role."
+            onPress={() => sheetRef.current?.present()}
+          />
+        ) : null}
+      </ListSection>
+      {showNewRole ? (
+        <NewRoleSheet
+          ref={sheetRef}
+          chapterRole={{ placements, tierLabel: words.Singular }}
+          onCreated={(roleId) =>
+            router.push({ pathname: "/role", params: { roleId } })
+          }
+        />
+      ) : null}
+    </>
   );
 }
 

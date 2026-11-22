@@ -24,14 +24,14 @@ vi.mock("@/lib/chapter-branding", () => ({
 
 vi.mock("@/lib/haptics", () => ({ successHaptic: vi.fn() }));
 
-import { NewPickableRoleSheet } from "./new-pickable-role-sheet";
+import { NewRoleSheet } from "./new-role-sheet";
 
 function render(onCreated: (roleId: string) => void): ReactTestRenderer {
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
       <FrappThemeProvider>
-        <NewPickableRoleSheet onCreated={onCreated} />
+        <NewRoleSheet onCreated={onCreated} />
       </FrappThemeProvider>,
     );
   });
@@ -97,6 +97,91 @@ describe("New Non-chapter business role sheet (#5736)", () => {
     expect(onCreated).not.toHaveBeenCalled();
     expect(nameField(tree).props.value).toBe("Intramural soccer");
     expect(screenText(tree)).toContain(NEW_PICKABLE_ROLE_COPY.failed);
+    act(() => tree.unmount());
+  });
+});
+
+describe("New role sheet from Chapter settings (#5296)", () => {
+  const chapterRole = {
+    tierLabel: "Tier",
+    placements: [
+      { value: "t-chairs", label: "Chairs" },
+      { value: "t-members", label: "Members" },
+      { value: null, label: "Outside the tiers" },
+    ],
+  };
+
+  function renderChapter(onCreated: (roleId: string) => void) {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <NewRoleSheet onCreated={onCreated} chapterRole={chapterRole} />
+        </FrappThemeProvider>,
+      );
+    });
+    return tree;
+  }
+
+  const swatch = (tree: ReactTestRenderer, label: string) =>
+    tree.root.find(
+      (node) =>
+        node.props.accessibilityRole === "radio" &&
+        node.props.accessibilityLabel === label &&
+        typeof node.props.onPress === "function",
+    );
+
+  const tierSheet = (tree: ReactTestRenderer) =>
+    tree.root.find(
+      (node) =>
+        node.props.title === "Tier" &&
+        typeof node.props.onSelect === "function",
+    );
+
+  it("starts in the bottom place the officer reaches, with no color", () => {
+    const tree = renderChapter(vi.fn());
+    expect(screenText(tree)).toContain("New role");
+    expect(tierSheet(tree).props.selected).toBeNull();
+    expect(swatch(tree, "No color").props.accessibilityState.checked).toBe(
+      true,
+    );
+    act(() => tree.unmount());
+  });
+
+  it("creates it in the picked tier, with its tier's permissions and the picked color, then opens it", async () => {
+    state.createRole.mockResolvedValue({ id: "new-role" });
+    const onCreated = vi.fn();
+    const tree = renderChapter(onCreated);
+    act(() => nameField(tree).props.onChangeText(" Philanthropy chair "));
+    act(() => tierSheet(tree).props.onSelect("t-chairs"));
+    act(() => swatch(tree, "Teal").props.onPress());
+    await act(async () => {
+      addButton(tree).props.onPress();
+    });
+    expect(state.createRole).toHaveBeenCalledWith({
+      name: "Philanthropy chair",
+      permissions: [],
+      tier_id: "t-chairs",
+      color: "#3DD6C4",
+    });
+    expect(onCreated).toHaveBeenCalledWith("new-role");
+    // Ready for the next one: the default place and no color again.
+    expect(tierSheet(tree).props.selected).toBeNull();
+    act(() => tree.unmount());
+  });
+
+  it("sends no color when none is picked, and never marks it pickable", async () => {
+    state.createRole.mockResolvedValue({ id: "r" });
+    const tree = renderChapter(vi.fn());
+    act(() => nameField(tree).props.onChangeText("Scholarship"));
+    await act(async () => {
+      addButton(tree).props.onPress();
+    });
+    expect(state.createRole).toHaveBeenCalledWith({
+      name: "Scholarship",
+      permissions: [],
+      tier_id: null,
+    });
     act(() => tree.unmount());
   });
 });

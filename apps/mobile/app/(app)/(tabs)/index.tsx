@@ -101,6 +101,10 @@ import {
 } from "@/components/chat/channel-form-sheet";
 import { DeleteChannelSheet } from "@/components/chat/delete-channel-sheet";
 import {
+  CREATE_CHANNEL_FAILED,
+  createChannelBody,
+} from "@/lib/chat/create-channel";
+import {
   ChannelFilterButton,
   ChannelFilterMenu,
   useChannelFilterMenu,
@@ -340,13 +344,9 @@ export default function ChatHomeScreen() {
       if (!mode) return;
       try {
         if (mode.kind === "create") {
-          const created = (await createChannel.mutateAsync({
-            name: values.name,
-            description: values.description || undefined,
-            type: values.isPrivate ? "PRIVATE" : "PUBLIC",
-            category_id: values.categoryId ?? undefined,
-            ...values.access,
-          })) as { id?: unknown } | undefined;
+          const created = (await createChannel.mutateAsync(
+            createChannelBody(values),
+          )) as { id?: unknown } | undefined;
           // Open it, as Discord does, so the first message is one tap away.
           if (typeof created?.id === "string") openChannel(created.id);
           return;
@@ -372,7 +372,7 @@ export default function ChatHomeScreen() {
           errorCopy(
             error,
             mode.kind === "create"
-              ? "Couldn't create the channel. Check your connection and try again."
+              ? CREATE_CHANNEL_FAILED
               : "Couldn't save the channel. Check your connection and try again.",
           ),
         );

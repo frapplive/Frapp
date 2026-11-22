@@ -19,7 +19,20 @@ import { SELF_ASSIGNABLE_SECTION_CAPTION } from "@repo/validation";
  */
 const h = vi.hoisted(() => ({
   // What the screen hands the Add role sheet (#5736), so a test can finish it.
-  pickableSheet: null as null | { onCreated: (roleId: string) => void },
+  pickableSheet: null as null | {
+    onCreated: (roleId: string) => void;
+    chapterRole?: {
+      placements: { value: string | null; label: string }[];
+      tierLabel: string;
+    };
+  },
+  newRolePresent: vi.fn(),
+  // What Chapter settings hands the New channel sheet (#5296).
+  channelSheet: null as null | {
+    mode: unknown;
+    onSubmit: (values: unknown) => Promise<void>;
+  },
+  createChannel: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   permissions: [] as string[],
   roles: [] as unknown[],
   rolesUpdatedAt: 0,
@@ -85,6 +98,12 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useOrgConfig: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.config),
     usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
+    useCategories: () => ok([]),
+    useChannelAccessOptions: () => ok([]),
+    useCreateChannel: () => ({
+      mutateAsync: h.createChannel,
+      isPending: false,
+    }),
     useUpdateAiChapterSettings: () => ({
       mutate: h.updateAi,
       isPending: h.aiSaving,
@@ -118,14 +137,28 @@ vi.mock("@/components/settings/chat-background-sheet", async () => {
   };
 });
 
-vi.mock("@/components/roles/new-pickable-role-sheet", async () => {
+vi.mock("@/components/roles/new-role-sheet", async () => {
   const React = await import("react");
   return {
-    NewPickableRoleSheet: React.forwardRef(function NewPickableRoleSheet(
-      props: { onCreated: (roleId: string) => void },
+    NewRoleSheet: React.forwardRef(function NewRoleSheet(
+      props: NonNullable<typeof h.pickableSheet>,
       ref: React.Ref<{ present: () => void }>,
     ) {
       h.pickableSheet = props;
+      React.useImperativeHandle(ref, () => ({ present: h.newRolePresent }));
+      return null;
+    }),
+  };
+});
+
+vi.mock("@/components/chat/channel-form-sheet", async () => {
+  const React = await import("react");
+  return {
+    ChannelFormSheet: React.forwardRef(function ChannelFormSheet(
+      props: NonNullable<typeof h.channelSheet>,
+      ref: React.Ref<{ present: () => void }>,
+    ) {
+      h.channelSheet = props;
       React.useImperativeHandle(ref, () => ({ present: vi.fn() }));
       return null;
     }),
@@ -327,6 +360,76 @@ describe("Chapter settings (#4074)", () => {
             node.props.accessibilityLabel === "Chat background"),
       ),
     ).toHaveLength(0);
+  });
+
+  // #5296 (Shawn, 2026-11-22): the phone makes channels and roles, simply.
+  it("offers New channel to whoever can make one, opening the channel it made", async () => {
+    h.permissions = ["channels:create", "channels:manage"];
+    h.channelSheet = null;
+    h.createChannel.mockClear().mockResolvedValue({ id: "c-new" });
+    const tree = render(<ChapterSettingsScreen />);
+    expect(h.channelSheet).toBeNull();
+    act(() => pressable(tree, "New channel").props.onPress());
+    expect(h.channelSheet!.mode).toEqual({ kind: "create", categoryId: null });
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    await act(async () => {
+      await h.channelSheet!.onSubmit({
+        name: "rush-2027",
+        description: "",
+        categoryId: null,
+        isPrivate: false,
+        access: {},
+      });
+    });
+    expect(h.createChannel).toHaveBeenCalledWith({
+      name: "rush-2027",
+      description: undefined,
+      type: "PUBLIC",
+      category_id: undefined,
+    });
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/chat-thread",
+      params: { channelId: "c-new" },
+    });
+  });
+
+  it("offers no New channel without both channel permissions", () => {
+    h.permissions = ["chapter-config:view", "channels:create"];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).not.toContain("New channel");
+  });
+
+  it("offers New role in the tiers the officer ranks above, and opens the role it made", () => {
+    // "me" is Treasurer (Officers, position 1): Brothers and outside only.
+    h.permissions = ["roles:manage", "members:view"];
+    h.pickableSheet = null;
+    h.newRolePresent.mockClear();
+    const tree = render(<ChapterSettingsScreen />);
+    act(() => pressable(tree, "New role").props.onPress());
+    expect(h.newRolePresent).toHaveBeenCalled();
+    expect(h.pickableSheet!.chapterRole).toEqual({
+      tierLabel: "Tier",
+      placements: [
+        { value: "t-bro", label: "Brothers" },
+        { value: null, label: "Outside the tiers" },
+      ],
+    });
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => h.pickableSheet!.onCreated("r-new"));
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/role",
+      params: { roleId: "r-new" },
+    });
+  });
+
+  it("offers no New role without roles:manage, and ends on the web line", () => {
+    h.permissions = ["chapter-config:view"];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).toContain("Roles and groups");
+    expect(text).not.toContain("New role");
+    expect(text).toContain("More settings are on the web dashboard.");
   });
 
   it("shows a roles manager only Roles and groups, which opens that screen", () => {

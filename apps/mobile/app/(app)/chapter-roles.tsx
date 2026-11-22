@@ -35,7 +35,7 @@ import {
   SectionHeader,
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
-import { NewPickableRoleSheet } from "@/components/roles/new-pickable-role-sheet";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { PlusGlyph } from "@/components/control-glyphs";
 import { useRolesData } from "@/lib/roles/use-roles-data";
@@ -54,10 +54,11 @@ const SEARCH_FROM = 8;
  *
  * Built for a chapter with a hundred roles, not five: the tiers carry the
  * permissions, so an officer changes five tiers rather than a hundred roles,
- * and a search field narrows the list once it passes eight roles. Making,
- * reordering and deleting tiers and roles stay on web (all but the one
- * exception below), where a chapter sets its structure up once; the phone
- * changes what they can do.
+ * and a search field narrows the list once it passes eight roles. Making
+ * tiers, and reordering and deleting tiers and roles, stay on web, where a
+ * chapter sets its structure up once; the phone changes what they can do, and
+ * makes a role (Chapter settings → New role, #5296, and the one exception
+ * below).
  *
  * Roles members pick themselves (Non-chapter business, #4958) get their own
  * section after the roles outside the tiers, as on web, and the one place the
@@ -333,14 +334,14 @@ export default function ChapterRolesScreen() {
           </>
         ) : null}
         <Text style={styles.note}>
-          Add, rename and reorder {words.plural}, roles and groups on the web
+          Rename and reorder {words.plural}, roles and groups on the web
           dashboard
-          {canAddPickable && canSeeRoles
-            ? "; roles members pick themselves can be added here too"
+          {canManage && canSeeRoles
+            ? "; add a role from Chapter settings → New role"
             : ""}
           . Put someone in a group from their profile.
         </Text>
-        <NewPickableRoleSheet
+        <NewRoleSheet
           ref={newPickableRef}
           onCreated={(roleId) =>
             router.push({ pathname: "/role", params: { roleId } })
