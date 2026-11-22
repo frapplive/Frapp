@@ -25,6 +25,7 @@ import {
   useEvent,
   useMyPermissions,
   useRequiredOfViewer,
+  useRoleTiers,
   useRoles,
   useViewerUserId,
   useNow,
@@ -54,7 +55,7 @@ import { EventMeetingLists } from "@/components/events/event-agenda";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { Can } from "@/components/shared/can";
 import { PermissionsOfflineSurface } from "@/components/shared/async-states";
-import { toRoleOptions } from "@repo/hooks/chapter-roles";
+import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
 import { formatDayTime, formatDayTimeRange } from "@repo/formatting";
 import { pointsLabel, recurrenceLabel } from "@/components/events/event-labels";
 import { EVENT_HUE } from "@/components/events/event-kind";
@@ -290,15 +291,16 @@ export function EventDetailSheet({
       ? resolvedEvent.check_in_zone_name.trim()
       : "";
 
-  const roleNameById = useMemo(
+  // A tier's key reads its name (`tier:<id>`, Paul 2026-11-22).
+  const tiersQuery = useRoleTiers();
+  const attendanceName = useMemo(
     () =>
-      new Map(
-        toRoleOptions(rolesQuery.data, "keep").map((role) => [
-          role.id,
-          role.name,
-        ]),
+      attendanceNamesFrom(
+        rolesQuery.data,
+        tiersQuery.data,
+        rolesQuery.isSuccess,
       ),
-    [rolesQuery.data],
+    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess],
   );
 
   async function handleDelete() {
@@ -535,12 +537,7 @@ export function EventDetailSheet({
                   glyph="attendance"
                   label={EVENT_FORM_ROW_LABELS.attendance}
                 >
-                  {describeAttendance(
-                    attendance,
-                    (id) =>
-                      roleNameById.get(id) ??
-                      (rolesQuery.isSuccess ? "Removed role" : undefined),
-                  )}
+                  {describeAttendance(attendance, attendanceName)}
                 </DetailRow>
                 {points ? (
                   <DetailRow

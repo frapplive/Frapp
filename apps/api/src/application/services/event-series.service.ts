@@ -362,6 +362,7 @@ export class EventSeriesService {
       optional_role_ids: parent.optional_role_ids,
       excluded_role_ids: parent.excluded_role_ids,
       others_invited: parent.others_invited,
+      attendance_picks: parent.attendance_picks,
       notes: parent.notes,
       // The zone is part of "where this event is", so every occurrence needs
       // it — without this a weekly meeting's check-in geofence applied only to

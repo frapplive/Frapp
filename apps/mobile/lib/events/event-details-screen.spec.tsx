@@ -112,6 +112,7 @@ const checkIn = vi.fn();
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   useActiveChapterId: () => chapterId,
   usePermissionList: () => permissions,
   useRoles: () => ({ data: [], isPending: false, isError: false }),

@@ -7,7 +7,9 @@ import {
   normalizeAgendaText,
   normalizeAttachmentUrl,
   readAgendaTabledFrom,
+  splitAttendancePicks,
   type EventAgendaItem,
+  type EventAttendancePicks,
   type EventAgendaTabledFrom,
   type EventAttachment,
 } from '@repo/validation';
@@ -84,6 +86,11 @@ export interface UpdateEventInput {
   optional_role_ids?: string[] | null;
   excluded_role_ids?: string[] | null;
   others_invited?: boolean;
+  /**
+   * Never from a request: {@link attendanceUpdate} derives it from the role
+   * lists, so a series edit carries it to every meeting it rewrites.
+   */
+  attendance_picks?: EventAttendancePicks | null;
   notes?: string | null;
   /** This meeting's agenda, whole (#4934); omitted leaves it. */
   agenda?: EventAgendaItem[];
@@ -106,6 +113,79 @@ export type SeriesUpdateInput = Omit<
   UpdateEventInput,
   'agenda' | 'attachments'
 >;
+
+type AttendanceLists = Pick<
+  Event,
+  'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
+>;
+
+/**
+ * A create's attendance columns (`spec/behavior/events.md` § Attendance by
+ * role): a list may name a tier as `tier:<id>` beside role ids. Such an
+ * event keeps the lists as sent in `attendance_picks` and its role lists hold
+ * only role ids, which the database tops up with every tier's roles
+ * (`events_expand_attendance_picks`). An event naming no tier is written
+ * exactly as before, with `attendance_picks` null.
+ */
+export function attendanceCreate(
+  input: Pick<
+    CreateEventInput,
+    'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
+  >,
+): AttendanceLists & { attendance_picks: EventAttendancePicks | null } {
+  return splitAttendancePicks({
+    required_role_ids: input.required_role_ids ?? null,
+    optional_role_ids: input.optional_role_ids ?? null,
+    excluded_role_ids: input.excluded_role_ids ?? null,
+  });
+}
+
+/**
+ * An update's attendance columns, or `{}` when it sends no list. A list the
+ * update leaves out keeps what the event picked (its picks when it names a
+ * tier, else its role list), so a hand-made request that sends one list
+ * neither drops a tier nor flattens the others. Sent by a build that predates
+ * tiers (no `tier:` entry anywhere), the lists are written as role lists and
+ * the picks cleared: the event keeps the roles it was showing that build.
+ */
+export function attendanceUpdate(
+  input: Pick<
+    UpdateEventInput,
+    'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
+  >,
+  existing: Pick<Event, keyof AttendanceLists | 'attendance_picks'>,
+): Partial<AttendanceLists> & {
+  attendance_picks?: EventAttendancePicks | null;
+} {
+  const sent =
+    input.required_role_ids !== undefined ||
+    input.optional_role_ids !== undefined ||
+    input.excluded_role_ids !== undefined;
+  if (!sent) return {};
+  const picks = existing.attendance_picks;
+  const kept = (
+    given: string[] | null | undefined,
+    picked: string[] | undefined,
+    stored: string[] | null,
+  ) => (given !== undefined ? given : (picked ?? stored));
+  return splitAttendancePicks({
+    required_role_ids: kept(
+      input.required_role_ids,
+      picks?.required,
+      existing.required_role_ids,
+    ),
+    optional_role_ids: kept(
+      input.optional_role_ids,
+      picks?.optional,
+      existing.optional_role_ids,
+    ),
+    excluded_role_ids: kept(
+      input.excluded_role_ids,
+      picks?.not_invited,
+      existing.excluded_role_ids,
+    ),
+  });
+}
 
 /**
  * Which occurrences of a recurring event a write applies to.

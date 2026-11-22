@@ -454,6 +454,7 @@ export function createTermWorld(
     optional_role_ids: null,
     excluded_role_ids: null,
     others_invited: null,
+    attendance_picks: null,
     notes: null,
     check_in_zone: null,
     check_in_zone_name: null,

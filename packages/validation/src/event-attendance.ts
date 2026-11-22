@@ -45,6 +45,97 @@ export interface EventAttendanceFields {
   excluded_role_ids?: readonly string[] | null;
   /** Absent on a row written before the column: read as `true`. */
   others_invited?: boolean | null;
+  /**
+   * What the officer picked, tiers included (Paul, 2026-11-22: "THE MAIN
+   * POINT IS TO BE ABLE TO ADD TIERS HERE"), or `null` when the event names
+   * no tier. The `*_role_ids` columns are always the effective role ids, so
+   * every check reads only them; the editors read this to show a tier row.
+   */
+  attendance_picks?: EventAttendancePicks | null;
+}
+
+/**
+ * An event's picks per answer (`events.attendance_picks`), each entry a role
+ * id or a tier as {@link attendanceTierEntry} spells it. The database
+ * expands them into the `*_role_ids` columns (`events_expand_attendance_picks`):
+ * a tier stands for every role in it, now and after a role joins or leaves
+ * it, until the event ends.
+ */
+export interface EventAttendancePicks {
+  required: string[];
+  optional: string[];
+  not_invited: string[];
+}
+
+const TIER_ENTRY_PREFIX = "tier:";
+
+/** A tier as an attendance list and a draft key spell it: `tier:<id>`. */
+export function attendanceTierEntry(tierId: string): string {
+  return `${TIER_ENTRY_PREFIX}${tierId.toLowerCase()}`;
+}
+
+/** The tier id an entry names, or `null` for a role id. */
+export function attendanceTierIdOf(entry: string): string | null {
+  return entry.startsWith(TIER_ENTRY_PREFIX)
+    ? entry.slice(TIER_ENTRY_PREFIX.length)
+    : null;
+}
+
+/**
+ * Request lists as the API stores them: `attendance_picks` holds them as sent
+ * when any names a tier (else `null`), and each `*_role_ids` keeps only its
+ * role ids, which the database tops up with the tiers' roles.
+ */
+export function splitAttendancePicks(lists: {
+  required_role_ids: readonly string[] | null;
+  optional_role_ids: readonly string[] | null;
+  excluded_role_ids: readonly string[] | null;
+}): {
+  attendance_picks: EventAttendancePicks | null;
+  required_role_ids: string[] | null;
+  optional_role_ids: string[] | null;
+  excluded_role_ids: string[] | null;
+} {
+  const picks: EventAttendancePicks = {
+    required: [...new Set(lists.required_role_ids ?? [])],
+    optional: [...new Set(lists.optional_role_ids ?? [])],
+    not_invited: [...new Set(lists.excluded_role_ids ?? [])],
+  };
+  const namesTier = [
+    ...picks.required,
+    ...picks.optional,
+    ...picks.not_invited,
+  ].some((entry) => attendanceTierIdOf(entry) !== null);
+  const rolesOf = (
+    list: readonly string[] | null,
+    entries: string[],
+  ): string[] | null => {
+    if (list === null) return null;
+    const roles = entries.filter((entry) => attendanceTierIdOf(entry) === null);
+    return roles.length > 0 || !namesTier ? roles : null;
+  };
+  return {
+    attendance_picks: namesTier ? picks : null,
+    required_role_ids: rolesOf(lists.required_role_ids, picks.required),
+    optional_role_ids: rolesOf(lists.optional_role_ids, picks.optional),
+    excluded_role_ids: rolesOf(lists.excluded_role_ids, picks.not_invited),
+  };
+}
+
+function readPicks(value: unknown): EventAttendancePicks | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const list = (key: string) =>
+    Array.isArray(record[key])
+      ? (record[key] as unknown[]).filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [];
+  return {
+    required: list("required"),
+    optional: list("optional"),
+    not_invited: list("not_invited"),
+  };
 }
 
 export interface EventAttendance {
@@ -162,6 +253,7 @@ export function attendanceFieldsOf(
     excluded_role_ids: ids(event.excluded_role_ids),
     others_invited:
       typeof event.others_invited === "boolean" ? event.others_invited : null,
+    attendance_picks: readPicks(event.attendance_picks),
   };
 }
 
@@ -179,7 +271,10 @@ export function eventRequiresAnyone(event: EventAttendanceFields): boolean {
  */
 export interface EventAttendanceDraft {
   everyone: EventAttendanceStatus;
-  /** Role id to its status. A role whose status equals `everyone` is dropped. */
+  /**
+   * Role id, or tier entry ({@link attendanceTierEntry}), to its status. One
+   * whose status equals `everyone` is dropped.
+   */
   roles: Record<string, EventAttendanceStatus>;
 }
 
@@ -219,10 +314,19 @@ export function attendanceFromEvent(
 ): EventAttendanceDraft {
   const everyone = eventDefaultAttendance(event);
   const roles: Record<string, EventAttendanceStatus> = {};
+  // The picks, tiers and all, when the event names a tier; the role lists
+  // otherwise (they hold every tier's roles, not the tier).
+  const picks = event.attendance_picks;
   // Lowest precedence first, so a role listed twice keeps the stronger status.
-  for (const id of event.excluded_role_ids ?? []) roles[id] = "not_invited";
-  for (const id of event.optional_role_ids ?? []) roles[id] = "optional";
-  for (const id of event.required_role_ids ?? []) roles[id] = "required";
+  for (const id of picks?.not_invited ?? event.excluded_role_ids ?? []) {
+    roles[id] = "not_invited";
+  }
+  for (const id of picks?.optional ?? event.optional_role_ids ?? []) {
+    roles[id] = "optional";
+  }
+  for (const id of picks?.required ?? event.required_role_ids ?? []) {
+    roles[id] = "required";
+  }
   for (const [id, status] of Object.entries(roles)) {
     if (status === everyone) delete roles[id];
   }
@@ -322,12 +426,41 @@ export function alumniRoleIdOf(roles: unknown): string | undefined {
 /** The line under the Alumni row while it follows Everyone else. */
 export const ALUMNI_FOLLOWING_NOTE = "Left out unless set here";
 
-/** A role's answer under a draft: its own when set apart, else the default. */
+/**
+ * A row's answer under a draft: its own when set apart, else its tier's when
+ * `tierEntry` (the role's tier, {@link attendanceTierEntry}) is set apart,
+ * else the default. A member gets the strongest answer of all they hold, so a
+ * role that follows its tier answers as the tier does.
+ */
 export function attendanceOfRole(
   draft: EventAttendanceDraft,
   roleId: string,
+  tierEntry?: string | null,
 ): EventAttendanceStatus {
-  return draft.roles[roleId] ?? draft.everyone;
+  return (
+    draft.roles[roleId] ??
+    (tierEntry ? draft.roles[tierEntry] : undefined) ??
+    draft.everyone
+  );
+}
+
+/**
+ * The name for a draft key: a role's, or a tier's for a tier entry. Feeds
+ * {@link describeAttendance}, so "Cabinet required, nobody else invited"
+ * reads the same on every surface.
+ */
+export function attendanceEntryName(
+  roles: readonly { id: string; name: string }[],
+  tiers: readonly { id: string; name: string }[],
+): (entry: string) => string | undefined {
+  const roleNames = new Map(roles.map((role) => [role.id, role.name]));
+  const tierNames = new Map(
+    tiers.map((tier) => [tier.id.toLowerCase(), tier.name]),
+  );
+  return (entry) => {
+    const tierId = attendanceTierIdOf(entry);
+    return tierId === null ? roleNames.get(entry) : tierNames.get(tierId);
+  };
 }
 
 /**

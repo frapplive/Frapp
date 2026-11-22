@@ -70,6 +70,7 @@ function event(overrides: Partial<Event> = {}): Event {
     optional_role_ids: null,
     excluded_role_ids: null,
     others_invited: null,
+    attendance_picks: null,
     notes: 'Officer-only notes',
     check_in_zone: null,
     check_in_zone_name: null,

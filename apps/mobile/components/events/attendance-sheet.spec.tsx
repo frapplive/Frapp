@@ -13,8 +13,10 @@ import { screenText } from "@/test/screen-text";
  * scale an imported chapter brings (a hundred roles).
  */
 
+const CABINET = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const TIERS = [{ id: CABINET, name: "Cabinet", position: 1, permissions: [] }];
 const ROLES = [
-  { id: "role-officers", name: "Officers" },
+  { id: "role-officers", name: "Officers", tier_id: CABINET },
   { id: "role-new", name: "New Members" },
   { id: "role-alumni", name: "Alumni", system_key: "ALUMNI" },
   ...Array.from({ length: 100 }, (_, i) => ({
@@ -25,7 +27,13 @@ const ROLES = [
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
-  useRoles: () => ({ data: ROLES, isPending: false, isError: false }),
+  useRoles: () => ({
+    data: ROLES,
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+  }),
+  useRoleTiers: () => ({ data: TIERS, isSuccess: true }),
 }));
 
 vi.mock("@/lib/chapter-branding", () => ({
@@ -96,7 +104,7 @@ function list(tree: ReactTestRenderer) {
     data: { id: string; name: string }[];
     ListHeaderComponent: React.ReactElement;
     renderItem: (info: {
-      item: { id: string; name: string };
+      item: { id: string; name: string; tierEntry?: string; detail?: string };
     }) => React.ReactElement;
   };
   let header!: ReactTestRenderer;
@@ -124,12 +132,17 @@ function pressIn(tree: ReactTestRenderer, group: string, label: string) {
 }
 
 /** A role's row, drawn the way the list would draw it. */
-function row(tree: ReactTestRenderer, id: string, name: string) {
+function row(
+  tree: ReactTestRenderer,
+  id: string,
+  name: string,
+  extra: { tierEntry?: string; detail?: string } = {},
+) {
   let drawn!: ReactTestRenderer;
   act(() => {
     drawn = create(
       <FrappThemeProvider>
-        {list(tree).props.renderItem({ item: { id, name } })}
+        {list(tree).props.renderItem({ item: { id, name, ...extra } })}
       </FrappThemeProvider>,
     );
   });
@@ -146,12 +159,14 @@ describe("Who's coming", () => {
   it("lists every role as a row, Everyone else first, with a search at scale", () => {
     const tree = render();
     const { props, header } = list(tree);
-    expect(props.data).toHaveLength(ROLES.length);
+    // The Cabinet tier, then every role.
+    expect(props.data).toHaveLength(ROLES.length + 1);
+    expect(props.data[0]?.name).toBe("Cabinet");
     expect(screenText(header)).toContain("Everyone else");
     expect(screenText(header)).toContain("Optional for everyone");
     expect(
       header.root.findAll(
-        (each) => each.props.accessibilityLabel === "Search roles",
+        (each) => each.props.accessibilityLabel === "Search tiers and roles",
       ),
     ).not.toHaveLength(0);
     act(() => tree.unmount());
@@ -161,7 +176,7 @@ describe("Who's coming", () => {
     const tree = render();
     const { header } = list(tree);
     const search = header.root.find(
-      (each) => each.props.accessibilityLabel === "Search roles",
+      (each) => each.props.accessibilityLabel === "Search tiers and roles",
     );
     act(() => search.props.onChangeText("new mem"));
     expect(list(tree).props.data.map((role) => role.name)).toEqual([
@@ -215,14 +230,15 @@ describe("Who's coming", () => {
       everyone: "optional",
       roles: { "role-officers": "required" },
     });
-    expect(list(tree).props.data[0]!.id).toBe("role-officers");
+    // Tiers lead, then the roles set apart.
+    expect(list(tree).props.data[1]!.id).toBe("role-officers");
     pressIn(
       row(tree, "role-new", "New Members"),
       "Attendance for New Members",
       "Required",
     );
     // New Members is set apart now, but stays where it was this visit.
-    expect(list(tree).props.data[1]!.id).toBe("role-alumni");
+    expect(list(tree).props.data[2]!.id).toBe("role-alumni");
     act(() => tree.unmount());
   });
 
@@ -285,3 +301,38 @@ function screenTextOf(node: { children: unknown[] }): string {
     )
     .join("");
 }
+
+describe("Who's coming by tier", () => {
+  it("finds a tier by name, sets it whole, and its roles follow it", () => {
+    const tree = render({ everyone: "not_invited", roles: {} });
+    const search = list(tree).header.root.find(
+      (each) => each.props.accessibilityLabel === "Search tiers and roles",
+    );
+    act(() => search.props.onChangeText("cabinet"));
+    const rows = list(tree).props.data as {
+      id: string;
+      name: string;
+      detail?: string;
+    }[];
+    expect(rows.map((each) => each.name)).toEqual(["Cabinet"]);
+    expect(rows[0]?.detail).toBe("Tier · 1 role");
+    const entry = `tier:${CABINET}`;
+    pressIn(
+      row(tree, entry, "Cabinet", { detail: "Tier · 1 role" }),
+      "Attendance for Cabinet",
+      "Required",
+    );
+    expect(latest).toEqual({
+      everyone: "not_invited",
+      roles: { [entry]: "required" },
+    });
+    expect(screenText(list(tree).header)).toContain(
+      "Cabinet required, nobody else invited",
+    );
+    const officers = row(tree, "role-officers", "Officers", {
+      tierEntry: entry,
+    });
+    expect(screenText(officers)).toContain("Follows Cabinet");
+    act(() => tree.unmount());
+  });
+});

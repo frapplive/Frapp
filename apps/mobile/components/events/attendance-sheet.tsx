@@ -2,7 +2,11 @@ import { forwardRef, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
-import { useRoles } from "@repo/hooks";
+import { useRoleTiers, useRoles } from "@repo/hooks";
+import {
+  attendanceTargets,
+  type AttendanceTargetRow,
+} from "@repo/hooks/attendance-targets";
 import {
   ALUMNI_FOLLOWING_NOTE,
   ATTENDANCE_SEARCH_FROM,
@@ -10,7 +14,6 @@ import {
   alumniRoleIdOf,
   attendanceChoices,
   attendanceOfRole,
-  attendanceRows,
   describeAttendance,
   withEveryone,
   withRole,
@@ -31,15 +34,19 @@ import {
   SHEET_STACK_BEHAVIOR,
 } from "@/components/sheet-scaffold";
 import { Segmented } from "@/components/segmented";
-import { toRoleOptions } from "@repo/hooks/chapter-roles";
 import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
 
 /**
- * "Who's coming": an event's attendance by role (`spec/behavior/events.md`
- * § Attendance by role), a step stacked over the New event sheet (#3706).
+ * "Who's coming": an event's attendance by tier and role
+ * (`spec/behavior/events.md` § Attendance by role), a step stacked over the
+ * New event sheet (#3706).
  *
- * One row per role, each with the same three answers, and "Everyone else"
- * first: the answer for anyone whose roles aren't set apart. A role that only
+ * "Everyone else" first (the answer for anyone whose roles aren't set
+ * apart), then one row per tier (Paul, 2026-11-22: a tier like Cabinet is
+ * picked whole, and stays current as roles join it), then one per role, each
+ * with the same three answers, in the order web's editor lists them
+ * (`attendanceTargets`). A role in a tier that is set apart follows the
+ * tier's answer. A role that only
  * follows Everyone else holds its answer in neutral ink; a role set apart is
  * lit in the accent, so what was changed reads at a glance. One line at the
  * top says the whole rule in words. Comparable: Discord's channel permission
@@ -100,8 +107,7 @@ export const AttendanceSheet = forwardRef<
   );
 });
 
-/** One row of the list, as `attendanceRows` draws it. */
-type AttendanceRow = { id: string; name: string };
+type AttendanceRow = AttendanceTargetRow;
 
 interface AttendanceBodyProps {
   value: EventAttendanceDraft;
@@ -120,26 +126,24 @@ function AttendanceBody({
   const brand = useChapterBranding();
   const styles = createStyles(tokens, brand.accent);
   const rolesQuery = useRoles();
+  const tiersQuery = useRoleTiers();
   const [search, setSearch] = useState("");
-  // The roles set apart as the sheet opens lead the list for this visit.
+  // The tiers and roles set apart as the sheet opens lead the list for this
+  // visit.
   const [pinned] = useState(() => Object.keys(value.roles));
 
-  const options = useMemo(
-    () => toRoleOptions(rolesQuery.data, "hide"),
-    [rolesQuery.data],
-  );
   // Until the roles load, a set-apart id can't be told from a deleted one.
-  const missingName = rolesQuery.isSuccess ? "Removed role" : "Role";
-  const nameOf = useMemo(() => {
-    const byId = new Map(options.map((role) => [role.id, role.name]));
-    return (id: string) => byId.get(id) ?? missingName;
-  }, [options, missingName]);
-  const rows = useMemo(
-    () => attendanceRows(options, pinned, search, missingName),
-    [options, pinned, search, missingName],
+  const loaded = rolesQuery.isSuccess;
+  const { rows, total, nameOf } = useMemo(
+    () =>
+      attendanceTargets(rolesQuery.data, tiersQuery.data, pinned, search, {
+        missingRole: loaded ? "Removed role" : "Role",
+        missingTier: loaded ? "Removed tier" : "Tier",
+      }),
+    [rolesQuery.data, tiersQuery.data, pinned, search, loaded],
   );
   const alumniId = alumniRoleIdOf(rolesQuery.data);
-  const searchable = options.length > ATTENDANCE_SEARCH_FROM;
+  const searchable = total > ATTENDANCE_SEARCH_FROM;
   const choices = (current: EventAttendanceStatus) =>
     attendanceChoices(current, allowRequired).map((status) => ({
       value: status,
@@ -186,9 +190,9 @@ function AttendanceBody({
         <BottomSheetTextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search roles"
+          placeholder="Search tiers and roles"
           placeholderTextColor={tokens.color.text.muted}
-          accessibilityLabel="Search roles"
+          accessibilityLabel="Search tiers and roles"
           autoCapitalize="none"
           autoCorrect={false}
           style={styles.field}
@@ -213,18 +217,25 @@ function AttendanceBody({
             ? "Loading roles…"
             : rolesQuery.isError
               ? "Couldn't load your chapter's roles."
-              : options.length === 0
+              : total === 0
                 ? "Your chapter has no roles yet."
-                : "No roles match that search."}
+                : "No tiers or roles match that search."}
         </Text>
       }
       renderItem={({ item }: { item: AttendanceRow }) => {
         const setApart = item.id in value.roles;
-        const current = attendanceOfRole(value, item.id);
+        const followsTier =
+          !setApart && !!item.tierEntry && item.tierEntry in value.roles;
+        const current = attendanceOfRole(value, item.id, item.tierEntry);
         const note =
-          item.id === alumniId && !setApart && value.everyone !== "not_invited"
-            ? ALUMNI_FOLLOWING_NOTE
-            : null;
+          item.detail ??
+          (followsTier && item.tierEntry
+            ? `Follows ${nameOf(item.tierEntry)}`
+            : item.id === alumniId &&
+                !setApart &&
+                value.everyone !== "not_invited"
+              ? ALUMNI_FOLLOWING_NOTE
+              : null);
         return (
           <View style={[styles.row, styles.roleRow]}>
             <View style={styles.nameColumn}>

@@ -40,6 +40,7 @@ import {
   type EventAgendaItem,
   type EventAgendaTabledFrom,
   type EventAttachment,
+  type EventAttendancePicks,
 } from '@repo/validation';
 import { IsRepeatRule } from '../decorators/is-repeat-rule.decorator';
 import type { Event } from '#domain/entities/event.entity';
@@ -253,7 +254,7 @@ export class CreateEventDto {
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
     description:
-      'Roles that must attend. See `others_invited` for members holding none of the listed roles.',
+      'Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles.',
   })
   @IsOptional()
   @IsArray()
@@ -405,6 +406,27 @@ export class CreateEventDto {
  * type drift, and the `AssertNever<Exclude<…>>` aliases at the end of this file for
  * key drift.
  */
+/** `Event.attendance_picks`: Who's coming as picked, tiers included. */
+export class EventAttendancePicksDto implements EventAttendancePicks {
+  @ApiProperty({
+    type: [String],
+    description: 'Role ids and `tier:<role tier id>` entries that must attend.',
+  })
+  required: string[];
+
+  @ApiProperty({
+    type: [String],
+    description: 'Role ids and tier entries invited, not required.',
+  })
+  optional: string[];
+
+  @ApiProperty({
+    type: [String],
+    description: 'Role ids and tier entries not invited.',
+  })
+  not_invited: string[];
+}
+
 export class EventResponseDto implements Event {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -455,6 +477,14 @@ export class EventResponseDto implements Event {
       'Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`).',
   })
   others_invited: boolean | null;
+
+  @ApiProperty({
+    type: EventAttendancePicksDto,
+    nullable: true,
+    description:
+      'What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this.',
+  })
+  attendance_picks: EventAttendancePicks | null;
 
   @ApiProperty({ type: String, nullable: true })
   notes: string | null;
@@ -612,7 +642,7 @@ export class UpdateEventDto {
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
     description:
-      'Roles that must attend. See `others_invited` for members holding none of the listed roles.',
+      'Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles.',
   })
   @IsOptional()
   @IsArray()

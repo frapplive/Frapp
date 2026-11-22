@@ -61,6 +61,7 @@ let permissions: string[] = ["*"];
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   // The chapter, for the Notes field's name (#4934).
   useCurrentChapter: () => ({
     data: { id: "chapter-1", enabled_modules: {} },

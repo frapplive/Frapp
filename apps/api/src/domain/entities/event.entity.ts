@@ -1,5 +1,9 @@
 import type { GeofenceCoordinate } from './study.entity';
-import type { EventAgendaItem, EventAttachment } from '@repo/validation';
+import type {
+  EventAgendaItem,
+  EventAttachment,
+  EventAttendancePicks,
+} from '@repo/validation';
 
 export interface Event {
   id: string;
@@ -26,6 +30,13 @@ export interface Event {
    * `is_mandatory` says whether they must attend.
    */
   others_invited: boolean | null;
+  /**
+   * What the officer picked when the event names a tier (`tier:<id>` entries
+   * beside role ids), else `null`. The database rewrites the three role lists
+   * from it (`events_expand_attendance_picks`), so they always hold the
+   * effective role ids and nothing else reads this but the editors.
+   */
+  attendance_picks: EventAttendancePicks | null;
   notes: string | null;
   /**
    * Optional check-in geofence: the polygon a member must be standing inside for

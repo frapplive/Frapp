@@ -16,6 +16,7 @@ import {
   useDeleteEvent,
   useEventTypes,
   usePermissionList,
+  useRoleTiers,
   useRoles,
   useUpdateEvent,
 } from "@repo/hooks";
@@ -72,7 +73,7 @@ import { AttendanceSheet } from "@/components/events/attendance-sheet";
 import { WhenTimes } from "@/components/events/when-times";
 import { AgendaDraftList } from "@/components/events/event-agenda";
 import { RepeatOptions } from "@/components/repeat-options";
-import { toRoleOptions } from "@repo/hooks/chapter-roles";
+import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
 import {
   applyEventType,
   emptyEventDraft,
@@ -357,15 +358,17 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
     const typesQuery = useEventTypes();
     const eventTypes = useMemo(() => typesQuery.data ?? [], [typesQuery.data]);
     const typeRef = useRef<BottomSheetModal>(null);
-    const roleName = useMemo(() => {
-      const byId = new Map(
-        toRoleOptions(rolesQuery.data, "hide").map((role) => [
-          role.id,
-          role.name,
-        ]),
-      );
-      return (id: string) => byId.get(id);
-    }, [rolesQuery.data]);
+    // A tier's key reads its name (`tier:<id>`, Paul 2026-11-22).
+    const tiersQuery = useRoleTiers();
+    const roleName = useMemo(
+      () =>
+        attendanceNamesFrom(
+          rolesQuery.data,
+          tiersQuery.data,
+          rolesQuery.isSuccess,
+        ),
+      [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess],
+    );
 
     const at = useMemo(() => now ?? new Date(), [now]);
     const freshDraft = useCallback(

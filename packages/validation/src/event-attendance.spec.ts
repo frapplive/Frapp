@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendanceEntryName,
+  attendanceFieldsOf,
   attendanceFromEvent,
   attendanceInvitesNobody,
+  attendanceTierEntry,
+  attendanceTierIdOf,
+  splitAttendancePicks,
   attendanceToWire,
   attendanceChoices,
   attendanceOfRole,
@@ -321,5 +326,98 @@ describe("eventInvitedRoleNames (#5562)", () => {
         roles,
       ),
     ).toBeNull();
+  });
+});
+
+describe("tiers in Who's coming (Paul, 2026-11-22)", () => {
+  const TIER = "11111111-2222-3333-4444-555555555555";
+  const cabinet = attendanceTierEntry(TIER);
+
+  it("spells a tier as an entry and reads it back", () => {
+    expect(cabinet).toBe(`tier:${TIER}`);
+    expect(attendanceTierIdOf(cabinet)).toBe(TIER);
+    expect(attendanceTierIdOf("role-1")).toBeNull();
+  });
+
+  it("keeps the picks only when a list names a tier", () => {
+    expect(
+      splitAttendancePicks({
+        required_role_ids: ["r1"],
+        optional_role_ids: [],
+        excluded_role_ids: null,
+      }),
+    ).toEqual({
+      attendance_picks: null,
+      required_role_ids: ["r1"],
+      optional_role_ids: [],
+      excluded_role_ids: null,
+    });
+    expect(
+      splitAttendancePicks({
+        required_role_ids: [cabinet, "r1"],
+        optional_role_ids: [cabinet],
+        excluded_role_ids: null,
+      }),
+    ).toEqual({
+      attendance_picks: {
+        required: [cabinet, "r1"],
+        optional: [cabinet],
+        not_invited: [],
+      },
+      required_role_ids: ["r1"],
+      optional_role_ids: null,
+      excluded_role_ids: null,
+    });
+  });
+
+  it("opens the editor on the picks, not the expanded roles", () => {
+    const fields = attendanceFieldsOf({
+      others_invited: false,
+      required_role_ids: ["r-president", "r-treasurer"],
+      attendance_picks: { required: [cabinet], optional: [], not_invited: [] },
+    });
+    expect(attendanceFromEvent(fields)).toEqual({
+      everyone: "not_invited",
+      roles: { [cabinet]: "required" },
+    });
+  });
+
+  it("names a tier in the summary", () => {
+    const nameOf = attendanceEntryName(
+      [{ id: "r1", name: "Treasurer" }],
+      [{ id: TIER.toUpperCase(), name: "Cabinet" }],
+    );
+    expect(
+      describeAttendance(
+        { everyone: "not_invited", roles: { [cabinet]: "required" } },
+        nameOf,
+      ),
+    ).toBe("Cabinet required, nobody else invited");
+    expect(nameOf("r1")).toBe("Treasurer");
+  });
+
+  it("answers a role that follows its tier as the tier does", () => {
+    const draft = {
+      everyone: "optional" as const,
+      roles: { [cabinet]: "required" as const },
+    };
+    expect(attendanceOfRole(draft, "r1", cabinet)).toBe("required");
+    expect(attendanceOfRole(draft, "r1", null)).toBe("optional");
+    expect(
+      attendanceOfRole(
+        { ...draft, roles: { ...draft.roles, r1: "not_invited" } },
+        "r1",
+        cabinet,
+      ),
+    ).toBe("not_invited");
+  });
+
+  it("sends a tier through the wire as an entry", () => {
+    expect(
+      attendanceToWire({
+        everyone: "not_invited",
+        roles: { [cabinet]: "required" },
+      }),
+    ).toMatchObject({ others_invited: false, required_role_ids: [cabinet] });
   });
 });

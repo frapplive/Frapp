@@ -8,27 +8,28 @@ import {
   alumniRoleIdOf,
   attendanceChoices,
   attendanceOfRole,
-  attendanceRows,
   describeAttendance,
   withEveryone,
   withRole,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
 } from "@repo/validation";
-import { useRoles } from "@repo/hooks";
+import { attendanceTargets } from "@repo/hooks/attendance-targets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedChoice } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
-import type { RoleOption } from "@repo/hooks/chapter-roles";
 
 /**
- * Who's coming, by role (`spec/behavior/events.md` § Attendance by role): the
- * web editor's half of the mobile Who's coming sheet, on the same moves from
- * `@repo/validation`, so the two set a rule the same way (#3706).
+ * Who's coming, by tier and role (`spec/behavior/events.md` § Attendance by
+ * role): the web editor's half of the mobile Who's coming sheet, on the same
+ * moves from `@repo/validation` and the same rows from `attendanceTargets`
+ * (`@repo/hooks`), so the two set a rule the same way (#3706).
  *
- * One line says the whole rule; then "Everyone else" and one row per role,
- * each with the same three answers. A role that only follows Everyone else
+ * One line says the whole rule; then "Everyone else", one row per tier (Paul,
+ * 2026-11-22: a tier like Cabinet is picked whole, and stays current as roles
+ * join it), then one row per role, each with the same three answers. A role
+ * in a tier that is set apart follows the tier's answer. A role that only follows Everyone else
  * holds its answer in neutral ink, a role set apart is lit in the accent.
  * Comparable: Discord's channel permission overrides, a row per role with the
  * same three-way switch and @everyone first.
@@ -43,14 +44,18 @@ import type { RoleOption } from "@repo/hooks/chapter-roles";
 export function AttendanceEditor({
   value,
   onChange,
-  roles,
+  rolesData,
+  tiersData,
   rolesState,
   disabled = false,
   allowRequired = true,
 }: {
   value: EventAttendanceDraft;
   onChange: (next: EventAttendanceDraft) => void;
-  roles: readonly RoleOption[];
+  /** The `GET /v1/roles` payload, Everyone included (offered only where set). */
+  rolesData: unknown;
+  /** The `GET /v1/role-tiers` payload. */
+  tiersData: unknown;
   rolesState: "loading" | "error" | "ready";
   disabled?: boolean;
   /**
@@ -76,15 +81,15 @@ export function AttendanceEditor({
     onChange(next);
   };
 
-  const alumniId = alumniRoleIdOf(useRoles().data);
-  const missingName = rolesState === "ready" ? "Removed role" : "Role";
-  const nameOf = useMemo(() => {
-    const byId = new Map(roles.map((role) => [role.id, role.name]));
-    return (id: string) => byId.get(id) ?? missingName;
-  }, [roles, missingName]);
-  const rows = useMemo(
-    () => attendanceRows(roles, pinned, search, missingName),
-    [roles, pinned, search, missingName],
+  const alumniId = alumniRoleIdOf(rolesData);
+  const ready = rolesState === "ready";
+  const { rows, total, nameOf } = useMemo(
+    () =>
+      attendanceTargets(rolesData, tiersData, pinned, search, {
+        missingRole: ready ? "Removed role" : "Role",
+        missingTier: ready ? "Removed tier" : "Tier",
+      }),
+    [rolesData, tiersData, pinned, search, ready],
   );
   const searching = search.trim() !== "";
   const collapsedCount = Math.max(ATTENDANCE_SEARCH_FROM, pinned.length);
@@ -123,32 +128,37 @@ export function AttendanceEditor({
           />
         </AttendanceRow>
 
-        {roles.length > ATTENDANCE_SEARCH_FROM ? (
+        {total > ATTENDANCE_SEARCH_FROM ? (
           <div className="border-t border-border px-3 py-2">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search roles"
-              aria-label="Search roles"
+              placeholder="Search tiers and roles"
+              aria-label="Search tiers and roles"
             />
           </div>
         ) : null}
 
-        <ul aria-label="Roles">
+        <ul aria-label="Tiers and roles">
           {shown.map((role) => {
             const setApart = role.id in value.roles;
-            const current = attendanceOfRole(value, role.id);
+            const followsTier =
+              !setApart && !!role.tierEntry && role.tierEntry in value.roles;
+            const current = attendanceOfRole(value, role.id, role.tierEntry);
             return (
               <li key={role.id} className="border-t border-border">
                 <AttendanceRow
                   name={role.name}
                   muted={!setApart}
                   note={
-                    role.id === alumniId &&
-                    !setApart &&
-                    value.everyone !== "not_invited"
-                      ? ALUMNI_FOLLOWING_NOTE
-                      : undefined
+                    role.detail ??
+                    (followsTier && role.tierEntry
+                      ? `Follows ${nameOf(role.tierEntry)}`
+                      : role.id === alumniId &&
+                          !setApart &&
+                          value.everyone !== "not_invited"
+                        ? ALUMNI_FOLLOWING_NOTE
+                        : undefined)
                   }
                 >
                   <SegmentedChoice
@@ -173,7 +183,7 @@ export function AttendanceEditor({
               size="sm"
               onClick={() => setShowAll(true)}
             >
-              Show all {rows.length} roles
+              Show all {rows.length}
             </Button>
           </div>
         ) : null}
@@ -183,9 +193,9 @@ export function AttendanceEditor({
               ? "Loading roles…"
               : rolesState === "error"
                 ? "Couldn't load your chapter's roles."
-                : roles.length === 0
+                : total === 0
                   ? "Your chapter has no roles yet."
-                  : "No roles match that search."}
+                  : "No tiers or roles match that search."}
           </p>
         ) : null}
       </div>

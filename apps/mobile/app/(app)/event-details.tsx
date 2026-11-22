@@ -31,10 +31,11 @@ import {
   useNowDate,
   usePermissionList,
   useRequiredOfViewer,
+  useRoleTiers,
   useRoles,
   useViewerUserId,
 } from "@repo/hooks";
-import { toRoleOptions } from "@repo/hooks/chapter-roles";
+import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
 import {
   ExcuseReviewSection,
   MyExcuse,
@@ -670,16 +671,17 @@ function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
       ) ?? null
     );
   }, [rows, event, now]);
-  const roleName = useMemo(() => {
-    const byId = new Map(
-      toRoleOptions(rolesQuery.data, "keep").map((role) => [
-        role.id,
-        role.name,
-      ]),
-    );
-    return (id: string) =>
-      byId.get(id) ?? (rolesQuery.isSuccess ? "Removed role" : undefined);
-  }, [rolesQuery.data, rolesQuery.isSuccess]);
+  // A tier's key reads its name (`tier:<id>`, Paul 2026-11-22).
+  const tiersQuery = useRoleTiers();
+  const roleName = useMemo(
+    () =>
+      attendanceNamesFrom(
+        rolesQuery.data,
+        tiersQuery.data,
+        rolesQuery.isSuccess,
+      ),
+    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess],
+  );
 
   return (
     <View style={styles.section} accessibilityLabel="Details">
