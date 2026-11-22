@@ -109,17 +109,36 @@ vi.mock("./bookmarks-popover", () => ({
 vi.mock("./notification-level-popover", () => ({
   NotificationLevelPanel: ({
     onChange,
+    fromChapterLevel,
   }: {
     onChange: (level: "all" | "mentions" | "off") => void;
+    fromChapterLevel?: boolean;
   }) => (
     <button
       type="button"
       data-testid="notifications-panel"
+      data-from-chapter-level={String(Boolean(fromChapterLevel))}
       onClick={() => onChange("off")}
     >
       mute
     </button>
   ),
+}));
+
+// The Links panel reads Activity's own query (#5779); its rendering is
+// `channel-links-panel.spec.tsx`'s. The stub keeps that read out of this file
+// and lets a test set what the row counts.
+const linkState = vi.hoisted(() => ({
+  count: undefined as number | undefined,
+}));
+vi.mock("./channel-links-panel", () => ({
+  ChannelLinksPanel: ({ channelId }: { channelId: string }) => (
+    <div data-testid="links-panel" data-channel={channelId}>
+      links panel
+    </div>
+  ),
+  useChannelLinkCount: (channelId: string | null) =>
+    channelId ? linkState.count : undefined,
 }));
 
 import { ChannelMenu } from "./channel-menu";
@@ -317,6 +336,17 @@ describe("ChannelMenu (#2142)", () => {
     ).toHaveFocus();
   });
 
+  it("tells the panel when Settings decided the level (#4124)", async () => {
+    const user = userEvent.setup();
+    renderMenu({ notificationFromChapterLevel: true });
+    await openMenu(user);
+    await user.click(screen.getByRole("button", { name: /Notifications/ }));
+    expect(screen.getByTestId("notifications-panel")).toHaveAttribute(
+      "data-from-chapter-level",
+      "true",
+    );
+  });
+
   it("closes when a notification level is picked", async () => {
     // The deleted popover dismissed itself on change. Holding it open to watch
     // the write is what froze the old menu when TanStack paused the mutation
@@ -330,6 +360,41 @@ describe("ChannelMenu (#2142)", () => {
 
     expect(props.onChangeNotificationLevel).toHaveBeenCalledWith("off");
     expect(screen.queryByTestId("notifications-panel")).not.toBeInTheDocument();
+  });
+
+  it("opens this channel's Links from its own row, with their count (#5779)", async () => {
+    // Activity listed every channel's sign-up links until #5779 moved them
+    // here, so the row names the open channel to the panel.
+    linkState.count = 2;
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+
+    await user.click(screen.getByRole("button", { name: "Links, 2" }));
+    expect(screen.getByTestId("links-panel")).toHaveAttribute(
+      "data-channel",
+      "chan-1",
+    );
+  });
+
+  it("states no Links count until Activity's read is in (#5779)", async () => {
+    linkState.count = undefined;
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+
+    expect(screen.getByRole("button", { name: "Links" })).toBeInTheDocument();
+  });
+
+  it("offers no Links row with no channel open (#5779)", async () => {
+    linkState.count = 1;
+    const user = userEvent.setup();
+    renderMenu({ activeChannelId: null });
+    await openMenu(user);
+
+    expect(
+      screen.queryByRole("button", { name: /^Links/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("stays usable with no channel open, because two panels are chapter-wide", async () => {
@@ -420,6 +485,32 @@ describe("ChannelMenu hide conversation", () => {
   });
 });
 
+describe("ChannelMenu catch me up (#3946)", () => {
+  it("offers no row without `catchUp`", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+
+    expect(
+      screen.queryByRole("button", { name: "Catch me up" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts the summary and closes the menu", async () => {
+    const user = userEvent.setup();
+    const onStart = vi.fn();
+    renderMenu({ catchUp: { onStart } });
+    await openMenu(user);
+
+    await user.click(screen.getByRole("button", { name: "Catch me up" }));
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Catch me up" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("ChannelMenu pin to top (#2877)", () => {
   it("offers no row without `pinToTop`", async () => {
     const user = userEvent.setup();
@@ -450,9 +541,13 @@ describe("ChannelMenu pin to top (#2877)", () => {
     renderMenu({ pinToTop: { pinned: true, onToggle: vi.fn() } });
     await openMenu(user);
 
-    expect(
-      screen.getByRole("button", { name: "Unpin from top" }),
-    ).toBeInTheDocument();
+    const unpin = screen.getByRole("button", { name: "Unpin from top" });
+    expect(unpin).toBeInTheDocument();
+    // The pin reads as on: solid, not the outline (#4292).
+    expect(unpin.querySelector("svg path")).toHaveAttribute(
+      "fill-opacity",
+      "1",
+    );
   });
 
   describe("search pickers (#3958)", () => {
