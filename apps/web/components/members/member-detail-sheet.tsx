@@ -79,6 +79,8 @@ function formatCustomValue(
   if (field.type === "boolean") {
     return field.value === "true" ? "Yes" : "No";
   }
+  // A chapter's own phone field reads like the member's Phone row (#5798).
+  if (field.type === "phone") return formatPhone(field.value);
   return field.value;
 }
 

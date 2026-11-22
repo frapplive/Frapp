@@ -432,6 +432,14 @@ describe("MemberDetailSheet custom fields", () => {
           visibility: "exec",
           value: "true",
         },
+        {
+          field_id: "f4",
+          key: "emergency_phone",
+          label: "Emergency contact",
+          type: "phone",
+          visibility: "exec",
+          value: "518.555.0199",
+        },
       ],
     });
 
@@ -444,6 +452,8 @@ describe("MemberDetailSheet custom fields", () => {
     expect(screen.getByText("Computer Science")).toBeInTheDocument();
     expect(screen.getByText("Dues Paid")).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
+    // A phone field reads formatted, like the Phone row (#5798).
+    expect(screen.getByText("(518) 555-0199")).toBeInTheDocument();
     // An unset field is left out (#1749).
     expect(screen.queryByText("Hometown")).not.toBeInTheDocument();
   });
