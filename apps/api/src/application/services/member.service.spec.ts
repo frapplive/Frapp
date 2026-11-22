@@ -1211,6 +1211,51 @@ describe('MemberService', () => {
       expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
     });
 
+    // #5730: Shawn, a cabinet officer with roles:manage, was refused New
+    // Member with a bare 403. His chapter's New members tier carries
+    // backwork:upload, which the 2026-11-12 backfill left off tiers above
+    // when the Member role lacked it. The refusal names its rule by code.
+    it('refuses a floor role carrying a permission the officer lacks, by a code the clients word (#5730)', async () => {
+      const newMember = {
+        ...roles.find((role) => role.id === ROLE.pledge)!,
+        id: 'role-new-member',
+        name: 'New Member',
+        permissions: ['members:view', 'backwork:upload'],
+      };
+      const withNewMember = [...roles, newMember];
+      mockRepo.findById.mockResolvedValue(memberRow(TIERED_MEMBER.brother));
+      mockRoleRepo.findByChapter.mockResolvedValue(withNewMember);
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(USER.vicePresident),
+      );
+      const refusal = await service
+        .updateRoles(
+          TIERED_MEMBER.brother,
+          [ROLE.brother, newMember.id],
+          CHAPTER_ID,
+          USER.vicePresident,
+        )
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ForbiddenException);
+      expect((refusal as ForbiddenException).getResponse()).toEqual({
+        code: 'role.assign_permission_not_held',
+        message:
+          'You can only give roles whose permissions you hold: backwork:upload.',
+      });
+      expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+    });
+
+    it('names the rank refusal by code (#5730)', async () => {
+      const refusal = await save(
+        TIERED_MEMBER.brother,
+        [ROLE.brother, ROLE.socialChair],
+        USER.riskChair,
+      ).catch((error: unknown) => error);
+      expect((refusal as ForbiddenException).getResponse()).toMatchObject({
+        code: 'role.assign_out_of_reach',
+      });
+    });
+
     // #5725 (Paul, 2026-11-20): `roles:assign_own_level` reaches the
     // caller's own rank too, for the roles and for the member.
     describe('with roles:assign_own_level', () => {
