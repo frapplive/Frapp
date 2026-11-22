@@ -1,4 +1,4 @@
-import { AskPage } from "@/components/ask/ask-card";
+import { AskPage } from "@/components/ask/ask-page";
 
 export const metadata = {
   title: "Ask Frapp",
@@ -6,7 +6,7 @@ export const metadata = {
 
 /**
  * Ask Frapp's page (Paul's pick of 2026-11-22): the conversation in the main
- * area, chat beside it. `components/ask/ask-card.tsx` says how it is drawn;
+ * area, chat beside it. `components/ask/ask-page.tsx` says how it is drawn;
  * `ask-host.tsx` owns the conversation and who may have it.
  */
 export default function AskRoute() {

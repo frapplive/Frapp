@@ -463,6 +463,7 @@ Decided 2026-11-13 by Paul (no Ask and Do tabs, and "all proposed cards show up 
 - **A question still being answered when Ask closes is dropped.**
   The turns before it stay.
   Changed in #4713 by pdcarlson, 2026-11-13: a question asked from a channel is left to finish, because its answer is drawn in the channel and closing Ask is not walking away from it.
+  Changed for the web by pdcarlson, 2026-11-22 (Ask as a page): leaving or closing the Ask page drops nothing; the question goes on being answered and is there when the member comes back. The phone sheet still drops it.
 - **A request has already been searched for.**
   Frapp reads what was typed as a question and as a request at the same moment, so a question waits on nothing.
   When it turns out to be a request, the search has already run and is thrown away: nothing it found is shown, no live data is read and no answer is written.

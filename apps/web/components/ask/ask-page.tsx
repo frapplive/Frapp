@@ -30,8 +30,15 @@ import {
   type AskCardEditsStore,
 } from "@/components/ask/ask-proposal";
 import { Button } from "@/components/ui/button";
-import { ASK_FIELD_ATTRIBUTE, useAskEntry } from "@/components/ask/ask-host";
+import {
+  ASK_FIELD_ATTRIBUTE,
+  useAskEntry,
+  useAskPending,
+} from "@/components/ask/ask-host";
+import { Skeleton } from "@/components/shared/async-states";
+import { PageSkeleton } from "@/components/shared/page-skeletons";
 import { PageActions } from "@/components/layout/page-actions";
+import { ESCAPE_LEAVES_ATTRIBUTE } from "@/components/layout/shell-layout";
 import { NewButton } from "@/components/ui/new-button";
 import { PANEL_HOST_ATTRIBUTE } from "@/components/shared/panel";
 import { Textarea } from "@/components/ui/textarea";
@@ -128,7 +135,23 @@ function offsetIn(view: HTMLElement, child: HTMLElement): number {
  * lost Ask to chat).
  */
 export function AskPage() {
-  return useAskEntry() ? <AskConversation /> : null;
+  const entry = useAskEntry();
+  const pending = useAskPending();
+  if (entry) return <AskConversation />;
+  // Not yet known (a reload of `/ask`, or a read being retried): the field's
+  // place, so the page never stands empty under its title.
+  if (pending) {
+    return (
+      <PageSkeleton
+        label="Loading Ask Frapp"
+        className="mx-auto mt-auto w-full max-w-[720px]"
+      >
+        <Skeleton className="h-10 w-full rounded-md" />
+      </PageSkeleton>
+    );
+  }
+  // No Ask: `AskHost` is taking the member to chat.
+  return null;
 }
 
 export function AskConversation() {
@@ -164,8 +187,17 @@ export function AskConversation() {
   // shared with the same card drawn in a channel it was asked from.
   const sharedEdits = useSharedAskCardEdits();
   const [ownEdits] = useState<AskCardEditsStore>(() => new Map());
+  // The shared store always exists on the Ask page (`AskHost` turns the
+  // channel bridge on with Ask); the page's own only stands in for a render
+  // outside a host, which keeps nothing across a visit.
   const cardEdits = sharedEdits ?? ownEdits;
-  const [draft, setDraft] = useState("");
+  // What is typed survives leaving the page (`AskHost`'s holder).
+  const entry = useAskEntry();
+  const [draft, setDraftState] = useState(() => entry?.keptDraft() ?? "");
+  const setDraft = (text: string) => {
+    setDraftState(text);
+    entry?.keepDraft(text);
+  };
   const field = useRef<HTMLTextAreaElement>(null);
 
   const savedUntil = status.data?.saved_until ?? null;
@@ -177,6 +209,21 @@ export function AskConversation() {
   useEffect(() => {
     void refetchStatus({ cancelRefetch: false });
   }, [refetchStatus]);
+
+  // Whether a form an answer opened is docked over the page. New
+  // conversation, in the page's header beside it, would clear the turn the
+  // form belongs to and take the form with it, so it waits.
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    if (!host || typeof MutationObserver === "undefined") return;
+    const check = () =>
+      setDocked(host.querySelector(":scope > [data-docked-panel]") !== null);
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(host, { childList: true });
+    return () => observer.disconnect();
+  }, [host]);
 
   // The field takes focus when the page opens, as ChatGPT's and Claude's do.
   useEffect(() => {
@@ -227,14 +274,15 @@ export function AskConversation() {
     return Math.max(top, end - element.clientHeight + THREAD_PAD_BOTTOM);
   }, []);
 
-  const settle = useCallback(() => {
+  // Where the view was at the last scroll event, so a move up, however the
+  // member made it (wheel, keys, the scrollbar, find in page), unpins it.
+  const lastTop = useRef(0);
+
+  // Whether the newest words are out of view, for Jump to latest.
+  const measure = useCallback(() => {
     const element = scroller.current;
     const words = newestWords.current;
     if (!element) return;
-    if (pinned.current) {
-      const to = target();
-      if (to !== null) element.scrollTop = to;
-    }
     setBehind(
       words !== null &&
         offsetIn(element, words) +
@@ -242,7 +290,31 @@ export function AskConversation() {
           (element.scrollTop + element.clientHeight) >
           FOLLOW_SLACK_PX,
     );
-  }, [target]);
+  }, []);
+
+  // While pinned, the view sits at the newest words. Run when something
+  // changes size, never from a scroll event: snapping there undid every
+  // scroll up but a wheel's, and cut a smooth scroll short.
+  const settle = useCallback(() => {
+    const element = scroller.current;
+    if (!element) return;
+    if (pinned.current) {
+      const to = target();
+      if (to !== null) element.scrollTop = to;
+    }
+    lastTop.current = element.scrollTop;
+    measure();
+  }, [target, measure]);
+
+  function scrolled() {
+    const element = scroller.current;
+    if (!element) return;
+    // A move up is the member's: our own scrolls only ever go down to the
+    // newest words.
+    if (element.scrollTop < lastTop.current - 1) pinned.current = false;
+    lastTop.current = element.scrollTop;
+    measure();
+  }
 
   // The view and the thread changing size: the turn growing, a card filling
   // in, the field growing under the view, the window resizing.
@@ -326,7 +398,7 @@ export function AskConversation() {
 
   return (
     <>
-      {exchanges.length > 0 ? (
+      {exchanges.length > 0 && !docked ? (
         <PageActions>
           {/* The app's one New button (Paul, 2026-11-19), beside the X. */}
           <NewButton
@@ -347,6 +419,7 @@ export function AskConversation() {
         over this page.
       */}
       <div
+        ref={setHost}
         {...{ [PANEL_HOST_ATTRIBUTE]: "" }}
         className="relative -mx-4 -my-4 flex min-h-0 flex-1 flex-col sm:-mx-6"
       >
@@ -364,7 +437,7 @@ export function AskConversation() {
             )
               memberScrolled();
           }}
-          onScroll={settle}
+          onScroll={scrolled}
           className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4 sm:px-6"
         >
           <AskCardEditsContext.Provider value={cardEdits}>
@@ -457,6 +530,10 @@ export function AskConversation() {
               <Textarea
                 ref={field}
                 {...{ [ASK_FIELD_ATTRIBUTE]: "" }}
+                // Escape in the empty field leaves the page, as Escape
+                // anywhere else on it does; with words typed it is the
+                // field's (`dashboard-shell.tsx`).
+                {...(draft === "" ? { [ESCAPE_LEAVES_ATTRIBUTE]: "" } : {})}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -16,10 +17,13 @@ import {
   useActiveChapterId,
   useAiChapterSettings,
   useAiConsent,
+  useAskStatus,
   useMyPermissions,
 } from "@repo/hooks";
 import type { AskAccess } from "@repo/validation";
 import { AskInChannelBridge } from "@/components/ask/ask-in-channel";
+import { ASK_ROUTE, isAskRoute } from "@/components/layout/shell-layout";
+import { PANEL_HOST_ATTRIBUTE } from "@/components/shared/panel";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 
 /**
@@ -55,24 +59,33 @@ export interface AskEntry {
   open: boolean;
   /** Opens the Ask page, or puts focus in its field when it is open. */
   openAsk: () => void;
+  /**
+   * What is typed in the Ask page's field, kept here so it is still there
+   * when the member leaves the page (following a source, say) and comes
+   * back. Kept outside state: the field owns the value while it is up.
+   */
+  keptDraft: () => string;
+  keepDraft: (text: string) => void;
 }
-
-/** The Ask page's route. */
-export const ASK_ROUTE = "/ask";
 
 /** The Ask page's field carries it, so the bar can hand it focus. */
 export const ASK_FIELD_ATTRIBUTE = "data-ask-field";
-
-/** Whether `pathname` is the Ask page. */
-export function isAskRoute(pathname: string | null): boolean {
-  return pathname === ASK_ROUTE || !!pathname?.startsWith(`${ASK_ROUTE}/`);
-}
 
 const AskEntryContext = createContext<AskEntry | null>(null);
 
 /** The way into Ask, or null for a member without it (or outside a host). */
 export function useAskEntry(): AskEntry | null {
   return useContext(AskEntryContext);
+}
+
+const AskPendingContext = createContext(false);
+
+/**
+ * Whether it is not yet known if this member has Ask: the reads are out, or
+ * one failed and is being retried. The Ask page shows it is loading.
+ */
+export function useAskPending(): boolean {
+  return useContext(AskPendingContext);
 }
 
 export function AskHost({ children }: { children: ReactNode }) {
@@ -92,6 +105,15 @@ export function AskHost({ children }: { children: ReactNode }) {
         permissions,
       });
   const has = access === "yes";
+  // Read whether answers are being saved as soon as Ask is known, so the
+  // saved line is in place when the page opens rather than arriving under
+  // the field after the first question could already have gone.
+  useAskStatus({ enabled: has });
+  const draft = useRef("");
+  const keptDraft = useCallback(() => draft.current, []);
+  const keepDraft = useCallback((text: string) => {
+    draft.current = text;
+  }, []);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -106,13 +128,17 @@ export function AskHost({ children }: { children: ReactNode }) {
       router.push(ASK_ROUTE);
       return;
     }
+    // Not under a form an answer docked over the page: typing would go
+    // into a field the member can't see.
+    if (document.querySelector(`[${PANEL_HOST_ATTRIBUTE}] [data-docked-panel]`))
+      return;
     document
       .querySelector<HTMLElement>(`[${ASK_FIELD_ATTRIBUTE}]`)
       ?.focus({ preventScroll: true });
   }, [open, router]);
   const entry = useMemo<AskEntry | null>(
-    () => (has ? { open, openAsk } : null),
-    [has, open, openAsk],
+    () => (has ? { open, openAsk, keptDraft, keepDraft } : null),
+    [has, open, openAsk, keptDraft, keepDraft],
   );
 
   return (
@@ -120,7 +146,9 @@ export function AskHost({ children }: { children: ReactNode }) {
     <AskConversationProvider scope={chapterId}>
       <AskInChannelBridge access={access}>
         <AskEntryContext.Provider value={entry}>
-          {children}
+          <AskPendingContext.Provider value={access === "unknown"}>
+            {children}
+          </AskPendingContext.Provider>
         </AskEntryContext.Provider>
       </AskInChannelBridge>
     </AskConversationProvider>

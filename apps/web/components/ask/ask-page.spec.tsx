@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ASK_COPY, ASK_STARTER, askSavedLine } from "@repo/validation";
@@ -67,7 +67,7 @@ vi.mock("@/components/ai/meet-frapp-ai", () => ({
   }),
 }));
 
-const { AskConversation } = await import("./ask-card");
+const { AskConversation } = await import("./ask-page");
 
 /** The conversation as the Ask page renders it. */
 function Card() {
@@ -280,6 +280,12 @@ describe("AskConversation", () => {
       );
       // 600 down, 600 tall, less the 300 shown, plus the 16px pad.
       expect(view?.scrollTop).toBe(916);
+      // Reading back up is the member's: a scroll never snaps the view down.
+      if (view) {
+        view.scrollTop = 100;
+        fireEvent.scroll(view);
+        expect(view.scrollTop).toBe(100);
+      }
     } finally {
       height.mockRestore();
       client.mockRestore();
@@ -476,14 +482,28 @@ describe("AskConversation", () => {
       expect(state.reset).not.toHaveBeenCalled();
     });
 
-    it("leaves a link in the thread an ordinary link: following it is leaving the page, not starting over", async () => {
+    it("leaves Escape to the page from an empty field, and keeps it once the member has typed", async () => {
+      open();
+      const field = screen.getByRole("textbox", { name: ASK_COPY.placeholder });
+      expect(field).toHaveAttribute("data-escape-leaves");
+      await userEvent.setup().type(field, "When");
+      expect(field).not.toHaveAttribute("data-escape-leaves");
+    });
+
+    it("offers no new conversation while a form docked from an answer covers the page", async () => {
       state.exchanges = [DONE];
       open();
-      const source = screen.getByRole("link", { name: /Chapter meeting/ });
-      source.addEventListener("click", (event) => event.preventDefault());
-      await userEvent.setup().click(source);
-      expect(state.reset).not.toHaveBeenCalled();
-      expect(state.stop).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: ASK_COPY.new_conversation }),
+      ).toBeInTheDocument();
+      const docked = document.createElement("div");
+      docked.setAttribute("data-docked-panel", "");
+      document.querySelector("[data-panel-host]")?.appendChild(docked);
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: ASK_COPY.new_conversation }),
+        ).toBeNull(),
+      );
     });
   });
 });

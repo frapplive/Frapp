@@ -45,6 +45,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useMyPermissions: () => ({
     data: who.permissions ? { permissions: who.permissions } : undefined,
   }),
+  useAskStatus: () => ({ data: null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/stores/role-preview-store", () => ({
   useIsRolePreviewActive: () => who.previewing,
@@ -70,7 +71,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace }),
 }));
 
-const { AskHost, isAskRoute, useAskEntry } = await import("./ask-host");
+const { AskHost, useAskEntry } = await import("./ask-host");
+const { isAskRoute } = await import("@/components/layout/shell-layout");
 
 /** A page with an entry on it, as `ask-bar.tsx` reaches Ask. */
 function Page({ name = "chat" }: { name?: string }) {
@@ -238,6 +240,25 @@ describe("the way in", () => {
     await userEvent.setup().click(entry()!);
     expect(nav.push).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "field" })).toHaveFocus();
+  });
+
+  it("leaves the cursor where it is while a form docked from an answer covers the page", async () => {
+    nav.pathname = "/ask";
+    render(
+      <AskHost>
+        <Page />
+        <div data-panel-host="">
+          <textarea data-ask-field="" aria-label="field" />
+          <div data-docked-panel="">
+            <input aria-label="title" />
+          </div>
+        </div>
+      </AskHost>,
+    );
+    screen.getByRole("textbox", { name: "title" }).focus();
+    await userEvent.setup().click(entry()!);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "field" })).not.toHaveFocus();
   });
 
   it("takes a member who loses Ask on the Ask page to chat", () => {

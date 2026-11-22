@@ -16,6 +16,8 @@ import { SKIP_LINK_CLASSES } from "@/components/ui/focus";
 import { AppNav } from "@/components/layout/app-nav";
 import { NavColumn } from "@/components/layout/nav-column";
 import {
+  ESCAPE_LEAVES_ATTRIBUTE,
+  isAskRoute,
   isChatRoute,
   isFullWidthToolRoute,
   PANE_FLOOR,
@@ -60,7 +62,7 @@ import { WelcomeGate } from "@/components/onboarding/welcome-gate";
 import { WhatsNewHost } from "@/components/whats-new/whats-new-host";
 import { GetTheAppCard } from "@/components/layout/get-the-app-card";
 import { AskBar } from "@/components/ask/ask-bar";
-import { isAskRoute, useAskEntry } from "@/components/ask/ask-host";
+import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
@@ -358,7 +360,8 @@ export function DashboardShell({
   /*
     Escape inside the tool page closes it, from the side-by-side width up.
     Not from a field, where Escape means "stop typing" and closing would throw
-    the draft away, and not when something inside already used the key: a
+    the draft away (unless the field says Escape is the page's: Ask's, while
+    empty), and not when something inside already used the key: a
     Radix dialog, menu or popover handles Escape first and marks it handled.
   */
   const onToolKeyDown = useCallback(
@@ -369,7 +372,8 @@ export function DashboardShell({
       if (
         target.closest(
           "input, textarea, select, [contenteditable=''], [contenteditable='true']",
-        )
+        ) &&
+        !target.closest(`[${ESCAPE_LEAVES_ATTRIBUTE}]`)
       ) {
         return;
       }

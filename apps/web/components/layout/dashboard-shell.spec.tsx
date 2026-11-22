@@ -199,10 +199,7 @@ vi.mock("@/components/onboarding/welcome-gate", () => ({
 const askEntry = vi.hoisted(() => ({
   current: null as { open: boolean; openAsk: () => void } | null,
 }));
-vi.mock("@/components/ask/ask-host", async (importOriginal) => ({
-  isAskRoute: (
-    await importOriginal<typeof import("@/components/ask/ask-host")>()
-  ).isAskRoute,
+vi.mock("@/components/ask/ask-host", () => ({
   useAskEntry: () => askEntry.current,
 }));
 vi.mock("@/components/layout/notifications-popover", () => ({
@@ -1046,6 +1043,20 @@ describe("DashboardShell", () => {
           key: "Escape",
         });
         expect(routerPush).not.toHaveBeenCalled();
+      });
+
+      it("closes on Escape from a field that leaves Escape to the page: Ask's, while empty (2026-11-22)", () => {
+        setWindowWidth(1440);
+        mockPathname.value = "/ask";
+        render(
+          <DashboardShell>
+            <textarea aria-label="Ask field" data-escape-leaves="" />
+          </DashboardShell>,
+        );
+        fireEvent.keyDown(screen.getByRole("textbox", { name: "Ask field" }), {
+          key: "Escape",
+        });
+        expect(routerPush).toHaveBeenCalledWith("/chat");
       });
 
       it("closes the page when the divider is let go at the left edge", () => {

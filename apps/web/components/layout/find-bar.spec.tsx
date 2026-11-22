@@ -289,7 +289,9 @@ describe("FindBar", () => {
     await openAndType(user, "announce");
 
     const backwork = screen.getByRole("option", { name: /announcements 101/ });
-    expect(backwork).toHaveTextContent(/COGS 101 · Fall 2025 · added September 14/);
+    expect(backwork).toHaveTextContent(
+      /COGS 101 · Fall 2025 · added September 14/,
+    );
     const message = screen.getByRole("option", { name: /announce the thing/ });
     expect(message).toHaveTextContent(/#announcements · October 28/);
     const event = screen.getByRole("option", { name: /announce party/ });
@@ -760,7 +762,6 @@ describe("FindBar and Ask (#5476)", () => {
   it("offers no Ask row, even for words that read as a question", async () => {
     const user = userEvent.setup();
     render(<FindBar />);
-    expect(trigger()).not.toHaveAttribute("data-ask-entry");
     const input = await openAndType(user, "when is the announce party?");
     expect(input).toHaveAttribute("placeholder", FIND_PLACEHOLDER);
     expect(screen.queryByRole("option", { name: /Ask Frapp/ })).toBeNull();

@@ -1,3 +1,4 @@
+import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import {
   DASHBOARD_NAV_ITEMS,
   type NavItem,
@@ -49,7 +50,7 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/settings": "Chapter settings",
   "/whats-new": "What's new",
   // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
-  "/ask": "Ask Frapp",
+  [ASK_ROUTE]: "Ask Frapp",
 };
 
 /**

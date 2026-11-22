@@ -7,12 +7,15 @@ import { ASK_COPY } from "@repo/validation";
 /**
  * The real host, the Ask bar and the Ask page together (the bar since
  * #5476, the page since Paul's pick of 2026-11-22). `ask-host.spec.tsx` and
- * `ask-card.spec.tsx` each stand the other in, so neither sees what passes
+ * `ask-page.spec.tsx` each stand the other in, so neither sees what passes
  * between them: the bar opening the page, focus landing in its field, and
  * what the page does when Ask itself comes and goes under it.
  */
 
-const who = vi.hoisted(() => ({ previewing: false }));
+const who = vi.hoisted(() => ({
+  previewing: false,
+  permissions: ["ai:use"] as string[] | undefined,
+}));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -22,7 +25,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useAiConsent: () => ({ data: null }),
   aiAvailableFrom: () => true,
   useAiChapterSettings: () => ({ data: { ask: true } }),
-  useMyPermissions: () => ({ data: { permissions: ["ai:use"] } }),
+  useMyPermissions: () => ({
+    data: who.permissions ? { permissions: who.permissions } : undefined,
+  }),
   useViewerUserId: () => null,
   useViewerDisplayName: () => null,
   useAsk: () => ({
@@ -82,9 +87,10 @@ vi.mock("@/components/ai/meet-frapp-ai", () => ({
   }),
 }));
 
-const { AskHost, isAskRoute } = await import("./ask-host");
+const { AskHost } = await import("./ask-host");
+const { isAskRoute } = await import("@/components/layout/shell-layout");
 const { AskBar } = await import("./ask-bar");
-const { AskPage } = await import("./ask-card");
+const { AskPage } = await import("./ask-page");
 const { usePathname } = await import("next/navigation");
 
 /** The shell, cut down: the bar, and the route's page. */
@@ -113,6 +119,7 @@ const field = () =>
 
 beforeEach(() => {
   who.previewing = false;
+  who.permissions = ["ai:use"];
   nav.go("/events");
 });
 
@@ -164,5 +171,25 @@ describe("the entry and the Ask page together", () => {
     view.rerender(<Page />);
     expect(entry()).toBeInTheDocument();
     expect(nav.pathname).toBe("/chat");
+  });
+
+  it("keeps what the member had typed when they leave the page and come back", async () => {
+    const user = userEvent.setup();
+    render(<Page />);
+    await user.click(entry());
+    await user.type(field()!, "Who is driving");
+    nav.go("/events");
+    await waitFor(() => expect(field()).toBeNull());
+    await user.click(entry());
+    expect(field()).toHaveValue("Who is driving");
+  });
+
+  it("holds the page in its loading shape while whether the member has Ask is read", () => {
+    who.permissions = undefined;
+    nav.go("/ask");
+    render(<Page />);
+    expect(field()).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Ask Frapp");
+    expect(nav.pathname).toBe("/ask");
   });
 });
