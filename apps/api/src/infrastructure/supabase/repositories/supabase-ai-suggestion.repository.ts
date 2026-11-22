@@ -11,6 +11,7 @@ import type {
   IAiSuggestionRepository,
   ListPendingAiSuggestionsQuery,
   NewAiSuggestion,
+  NewAiSuggestionChange,
 } from '#domain/repositories/ai-suggestion.repository.interface';
 import { SupabaseQueryError } from '../supabase-query-error';
 
@@ -19,6 +20,7 @@ const NO_TEXT = {
   payload: {},
   quote: null,
   quote_author_id: null,
+  request_sealed: null,
 } as const satisfies TablesUpdate<'ai_suggestions'>;
 
 /** An accept that didn't finish, back to waiting with its text. */
@@ -278,9 +280,16 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
     return (data ?? []).length;
   }
 
-  async expireDue(
-    now: string,
-  ): Promise<{ chapter_id: string; kind: AiSuggestion['kind'] }[]> {
+  async expireDue(now: string): Promise<
+    {
+      id: string;
+      chapter_id: string;
+      kind: AiSuggestion['kind'];
+      source_type: AiSuggestion['source_type'];
+      requested_for: string | null;
+      ask_id: string | null;
+    }[]
+  > {
     // Cross-chapter by design: the hourly sweep serves the whole database.
     const update: TablesUpdate<'ai_suggestions'> = {
       ...NO_TEXT,
@@ -291,7 +300,7 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
       .update(update)
       .eq('status', 'pending')
       .lte('expires_at', now)
-      .select('chapter_id, kind');
+      .select('id, chapter_id, kind, source_type, requested_for, ask_id');
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
   }
@@ -308,6 +317,50 @@ export class SupabaseAiSuggestionRepository implements IAiSuggestionRepository {
       .update(update)
       .eq('quote_author_id', userId)
       .select('id');
+    if (error) throw new SupabaseQueryError(error);
+    return data?.length ?? 0;
+  }
+
+  async recordChanges(rows: readonly NewAiSuggestionChange[]): Promise<void> {
+    if (rows.length === 0) return;
+    const inserts: TablesInsert<'ai_suggestion_changes'>[] = rows.map(
+      (row) => ({ ...row }),
+    );
+    const { error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .upsert(inserts, {
+        onConflict: 'suggestion_id',
+        ignoreDuplicates: true,
+      });
+    if (error) throw new SupabaseQueryError(error);
+  }
+
+  async deleteChangesForUser(userId: string): Promise<number> {
+    // Cross-chapter by design, as `dropQuotesBy`. The id goes into a filter
+    // string, so anything but a uuid is refused rather than escaped.
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      throw new Error('deleteChangesForUser: not a user id');
+    }
+    const { data, error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .delete()
+      .or(`decided_by.eq.${userId},requested_for.eq.${userId}`)
+      .select('suggestion_id');
+    if (error) throw new SupabaseQueryError(error);
+    return data?.length ?? 0;
+  }
+
+  async deleteExpiredChanges(now: string): Promise<number> {
+    // Cross-chapter by design: the hourly sweep serves the whole database.
+    const { data, error } = await this.supabase
+      .from('ai_suggestion_changes')
+      .delete()
+      .lte('expires_at', now)
+      .select('suggestion_id');
     if (error) throw new SupabaseQueryError(error);
     return data?.length ?? 0;
   }

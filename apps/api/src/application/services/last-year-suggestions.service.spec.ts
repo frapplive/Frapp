@@ -46,6 +46,8 @@ class FakeRows {
     const written = rows.map((row): AiSuggestion => ({
       ...row,
       dedupe_key: row.dedupe_key ?? null,
+      ask_id: row.ask_id ?? null,
+      request_sealed: row.request_sealed ?? null,
       id: `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`,
       chapter_id: chapterId,
       status: 'pending',

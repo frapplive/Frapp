@@ -11,7 +11,14 @@ import {
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
-import type { AiSuggestionKindHandler } from './ai-suggestion-kinds';
+import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type {
+  AiSuggestionChangeLog,
+  AiSuggestionKindHandler,
+} from './ai-suggestion-kinds';
 import { TaskService } from './task.service';
 import { OpenTaskService } from './open-task.service';
 import type { TaskAudienceTarget } from './task-audience.service';
@@ -227,6 +234,43 @@ function toPayload(task: TaskSuggestionPayload): AiSuggestionPayload {
  * (#5562, "Already a task"), or null when the accept makes a new one. Only an
  * officer's accept sets it, never a proposal.
  */
+/** What the change log compares for a suggested task (Paul, 2026-11-22). */
+const TASK_CHANGE_FIELDS: ChangeFieldSpec = {
+  title: 'text',
+  description: 'text',
+  // Who: one person and several people read as one set.
+  assignee_ids: 'ids',
+  audience: 'text',
+  audience_role_id: 'id',
+  audience_group_id: 'id',
+  due_date: 'date',
+  due_at: 'instant',
+  subtasks: 'text',
+  subtask_count: 'number',
+};
+
+/** A stored proposal as the change log's fields. */
+export function taskChangeView(payload: AiSuggestionPayload): ChangeView {
+  const task = readTaskPayload(payload);
+  const people = task.assignee_ids?.length
+    ? task.assignee_ids
+    : task.assignee_id
+      ? [task.assignee_id]
+      : null;
+  return {
+    title: task.title,
+    description: task.description,
+    assignee_ids: people,
+    audience: task.audience,
+    audience_role_id: task.audience_role_id,
+    audience_group_id: task.audience_group_id,
+    due_date: task.due_date,
+    due_at: task.due_at,
+    subtasks: task.subtasks.length > 0 ? task.subtasks.join('\n') : null,
+    subtask_count: task.subtasks.length,
+  };
+}
+
 function existingTaskIdOf(payload: AiSuggestionPayload): string | null {
   return uuidOrNull(payload.existing_task_id);
 }
@@ -249,6 +293,28 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
   readonly module = 'tasks';
   readonly expiresAfterDays = TASK_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'tasks';
+
+  /**
+   * An accept that names a task the chapter already has ("Already a task")
+   * is compared with that task as it stands, on the fields one task shows
+   * for itself; who it went to is left out, since a group's copies each
+   * name one member.
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: TASK_CHANGE_FIELDS,
+    view: taskChangeView,
+    readSaved: async ({ chapterId, payload }) => {
+      const existingId = existingTaskIdOf(payload);
+      if (!existingId) return null;
+      const task = await this.tasks.findById(existingId, chapterId);
+      return {
+        title: task.title,
+        description: task.description,
+        due_date: task.due_date,
+        due_at: task.due_at,
+      };
+    },
+  };
 
   constructor(
     private readonly tasks: TaskService,

@@ -55,6 +55,13 @@ export interface AgentToolContext {
   /** The chapter's module switches, as `ChapterGuard` read them. */
   enabledModules: Record<string, boolean> | null;
   signal?: AbortSignal;
+  /** The turn's id (`ai_ask_traces.id`), for a card a propose tool makes. */
+  askId?: string;
+  /**
+   * The member's question, for a propose tool to keep sealed on its card
+   * for the change log (Paul, 2026-11-22). No read tool uses it.
+   */
+  question?: string;
 }
 
 /**

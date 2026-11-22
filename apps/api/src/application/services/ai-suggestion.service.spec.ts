@@ -1,3 +1,9 @@
+import { parseAiTextKeyRing, openAiText } from '#domain/utils/ai-text-cipher';
+import {
+  AiSuggestionChangeLogService,
+  aiSuggestionChangeContext,
+  type AiSuggestionChangeWords,
+} from './ai-suggestion-change-log.service';
 import {
   BadRequestException,
   ConflictException,
@@ -8,6 +14,7 @@ import type { AiSuggestion } from '#domain/entities/ai-suggestion.entity';
 import type {
   IAiSuggestionRepository,
   NewAiSuggestion,
+  NewAiSuggestionChange,
 } from '#domain/repositories/ai-suggestion.repository.interface';
 import {
   AI_SUGGESTION_LIST_LIMIT,
@@ -84,6 +91,8 @@ class FakeRepo implements IAiSuggestionRepository {
         const stored: AiSuggestion = {
           ...row,
           dedupe_key: row.dedupe_key ?? null,
+          ask_id: row.ask_id ?? null,
+          request_sealed: row.request_sealed ?? null,
           id: `00000000-0000-4000-8000-${String(++this.seq).padStart(12, '0')}`,
           chapter_id: chapterId,
           status: 'pending',
@@ -248,7 +257,38 @@ class FakeRepo implements IAiSuggestionRepository {
     for (const row of due) {
       Object.assign(row, NO_TEXT, { status: 'expired' });
     }
-    return due.map((r) => ({ chapter_id: r.chapter_id, kind: r.kind }));
+    return due.map((r) => ({
+      id: r.id,
+      chapter_id: r.chapter_id,
+      kind: r.kind,
+      source_type: r.source_type,
+      requested_for: r.requested_for,
+      ask_id: r.ask_id,
+    }));
+  });
+
+  changes: NewAiSuggestionChange[] = [];
+
+  recordChanges = jest.fn(async (rows: readonly NewAiSuggestionChange[]) => {
+    for (const row of rows) {
+      if (!this.changes.some((c) => c.suggestion_id === row.suggestion_id)) {
+        this.changes.push(row);
+      }
+    }
+  });
+
+  deleteChangesForUser = jest.fn(async (userId: string) => {
+    const before = this.changes.length;
+    this.changes = this.changes.filter(
+      (c) => c.decided_by !== userId && c.requested_for !== userId,
+    );
+    return before - this.changes.length;
+  });
+
+  deleteExpiredChanges = jest.fn(async (now: string) => {
+    const before = this.changes.length;
+    this.changes = this.changes.filter((c) => c.expires_at > now);
+    return before - this.changes.length;
   });
 
   dropQuotesBy = jest.fn(async (userId: string) => {
@@ -260,7 +300,12 @@ class FakeRepo implements IAiSuggestionRepository {
   });
 }
 
-const NO_TEXT = { payload: {}, quote: null, quote_author_id: null };
+const NO_TEXT = {
+  payload: {},
+  quote: null,
+  quote_author_id: null,
+  request_sealed: null,
+};
 const BACK_TO_WAITING = {
   status: 'pending' as const,
   decided_by: null,
@@ -273,6 +318,8 @@ function build(
     permissions?: Record<string, string[]>;
     openable?: string[];
     chapterModules?: Record<string, boolean>;
+    /** The change log, with this consent answer and key (Paul, 2026-11-22). */
+    changeLog?: { consent: 'yes' | 'no' | null; key: boolean };
   } = {},
 ) {
   const repo = new FakeRepo();
@@ -316,6 +363,23 @@ function build(
       enabled_modules: options.chapterModules ?? {},
     })),
   };
+  let changeLog: AiSuggestionChangeLogService | undefined;
+  if (options.changeLog) {
+    const answer = options.changeLog.consent;
+    changeLog = new AiSuggestionChangeLogService(
+      repo,
+      {
+        findByUserAndChapter: jest.fn(async (userId: string) => ({
+          id: `member-of-${userId}`,
+        })),
+      } as never,
+      {
+        getConsentState: jest.fn(async () => ({ answer })),
+      } as never,
+    );
+    const ring = options.changeLog.key ? TEST_KEY_RING : null;
+    changeLog.keyRing = () => ring;
+  }
   const service = new AiSuggestionService(
     repo,
     [new TaskSuggestionKind(tasks as never, {} as never)],
@@ -324,6 +388,7 @@ function build(
     notifications as never,
     analytics as never,
     chapters as never,
+    changeLog,
   );
   service.now = () => NOW;
   return {
@@ -366,6 +431,9 @@ async function proposeTen(service: AiSuggestionService) {
 }
 
 const enabledModules = null;
+const TEST_KEY_RING = parseAiTextKeyRing(
+  `test:${Buffer.alloc(32, 7).toString('base64')}`,
+);
 
 describe('AiSuggestionService (#4309)', () => {
   describe('proposeBatch', () => {
@@ -1423,5 +1491,168 @@ describe('verifiedQuote', () => {
     expect(verifiedQuote('', NOTES)).toBeNull();
     expect(verifiedQuote('book the venue', null)).toBeNull();
     expect(verifiedQuote('x'.repeat(1001), 'x'.repeat(2000))).toBeNull();
+  });
+});
+
+describe('AiSuggestionService change log (Paul, 2026-11-22)', () => {
+  async function proposeOne(
+    service: AiSuggestionService,
+    request: string | null = 'make a task to book the venue',
+  ) {
+    const { created } = await service.proposeBatch({
+      chapterId: CHAPTER,
+      batchId: BATCH,
+      requestedFor: OFFICER,
+      askId: '99999999-9999-4999-8999-999999999999',
+      request,
+      source: { type: 'meeting', id: MEETING, title: 'Chapter meeting' },
+      proposals: [
+        taskProposal('Book the venue', { description: 'Call the hall' }),
+      ],
+    });
+    return created[0];
+  }
+
+  it('logs, field by field, what the officer changed, linked to the Ask turn', async () => {
+    const { service, repo, analytics } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    expect(suggestion.request_sealed).toMatch(/^v1\.test\./);
+
+    await service.accept(CHAPTER, OFFICER, suggestion.id, {
+      edits: {
+        kind: 'task',
+        fields: { title: 'Book the venue by Friday', due_date: '2026-11-16' },
+      },
+      enabledModules,
+    });
+
+    expect(repo.changes).toHaveLength(1);
+    const change = repo.changes[0];
+    expect(change).toMatchObject({
+      suggestion_id: suggestion.id,
+      chapter_id: CHAPTER,
+      decided_by: OFFICER,
+      member_id: `member-of-${OFFICER}`,
+      ask_id: '99999999-9999-4999-8999-999999999999',
+      decision: 'accepted',
+      via: 'card',
+    });
+    expect(change.fields).toMatchObject({
+      title: { verdict: 'changed' },
+      description: { verdict: 'kept' },
+      assignee_ids: {
+        verdict: 'kept',
+        proposed: [ASSIGNEE],
+        saved: [ASSIGNEE],
+      },
+      due_date: { verdict: 'changed', delta_minutes: 2 * 24 * 60 },
+    });
+    // No words outside the sealed column.
+    expect(JSON.stringify(change.fields)).not.toContain('venue');
+
+    const words = JSON.parse(
+      openAiText(
+        TEST_KEY_RING,
+        change.words_sealed!,
+        aiSuggestionChangeContext(suggestion.id),
+      ),
+    ) as AiSuggestionChangeWords;
+    expect(words).toEqual({
+      request: 'make a task to book the venue',
+      proposed: expect.objectContaining({
+        title: 'Book the venue',
+        description: 'Call the hall',
+      }),
+      saved: expect.objectContaining({
+        title: 'Book the venue by Friday',
+        description: 'Call the hall',
+      }),
+    });
+
+    expect(analytics.track).toHaveBeenCalledWith(
+      'ai-suggestion-accepted',
+      OFFICER,
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          changed_fields: 'title,due_date',
+          changed_field_count: 2,
+        }),
+      }),
+    );
+  });
+
+  it('keeps no words for a decider who has not said yes to Frapp AI', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: null, key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules });
+    expect(repo.changes[0].words_sealed).toBeNull();
+    expect(repo.changes[0].fields).toMatchObject({
+      title: { verdict: 'kept' },
+    });
+  });
+
+  it('keeps no words, and seals no question, without a key', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: false },
+    });
+    const suggestion = await proposeOne(service);
+    expect(suggestion.request_sealed).toBeNull();
+    await service.dismiss(CHAPTER, OFFICER, suggestion.id);
+    expect(repo.changes[0]).toMatchObject({
+      decision: 'dismissed',
+      via: null,
+      fields: {},
+      words_sealed: null,
+    });
+  });
+
+  it('logs a dismissal with the proposal sealed, and empties the question on the card', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    await service.dismiss(CHAPTER, OFFICER, suggestion.id);
+    const stored = repo.rows.find((r) => r.id === suggestion.id)!;
+    expect(stored.request_sealed).toBeNull();
+    const words = JSON.parse(
+      openAiText(
+        TEST_KEY_RING,
+        repo.changes[0].words_sealed!,
+        aiSuggestionChangeContext(suggestion.id),
+      ),
+    ) as AiSuggestionChangeWords;
+    expect(words.saved).toEqual({});
+    expect(words.proposed.title).toBe('Book the venue');
+  });
+
+  it('logs an expired suggestion, and forgets change logs after 90 days', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    const suggestion = await proposeOne(service);
+    service.now = () => new Date(NOW.getTime() + 30 * 24 * 60 * 60 * 1000);
+    await service.expireDue();
+    expect(repo.changes[0]).toMatchObject({
+      suggestion_id: suggestion.id,
+      decision: 'expired',
+      decided_by: null,
+    });
+    service.now = () => new Date(NOW.getTime() + 200 * 24 * 60 * 60 * 1000);
+    expect(await service.deleteExpiredChanges()).toBe(1);
+  });
+
+  it('never fails an accept when the log cannot be written', async () => {
+    const { service, repo } = build({
+      changeLog: { consent: 'yes', key: true },
+    });
+    repo.recordChanges.mockRejectedValueOnce(new Error('db down'));
+    const suggestion = await proposeOne(service);
+    await expect(
+      service.accept(CHAPTER, OFFICER, suggestion.id, { enabledModules }),
+    ).resolves.toMatchObject({ result: { kind: 'task' } });
   });
 });

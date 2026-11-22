@@ -37,6 +37,11 @@ export class AiSuggestionExpiryService {
       if (expired > 0) {
         this.logger.log(`Expired ${expired} AI suggestions`);
       }
+      // What people changed in suggestions is kept 90 days (Paul, 2026-11-22).
+      const forgotten = await this.suggestions.deleteExpiredChanges();
+      if (forgotten > 0) {
+        this.logger.log(`Deleted ${forgotten} AI suggestion change logs`);
+      }
       // Items sent to the next meeting's agenda (#5790): place the waiting
       // ones a series edit's new meetings can take (that adds meetings
       // without a create), drop the ones no meeting took in 30 days, and

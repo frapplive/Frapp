@@ -9,6 +9,7 @@ describe('AiSuggestionExpiryService (#4309)', () => {
         order.push('release');
         return 1;
       }),
+      deleteExpiredChanges: jest.fn(async () => 0),
       expireDue: jest.fn(async () => {
         order.push('expire');
         return 0;

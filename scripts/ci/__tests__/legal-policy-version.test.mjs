@@ -84,7 +84,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const REPO_ROOT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+);
 
 const POLICY_VERSION_SOURCE = "apps/api/src/domain/constants/legal.ts";
 
@@ -110,7 +115,7 @@ export const PINNED_PAGES = {
   privacy: {
     path: "apps/landing/app/privacy/page.tsx",
     lastUpdated: "November 2026",
-    fingerprint: "98e31cdc03fa1ed4",
+    fingerprint: "2aa2ee999eb5bd62",
   },
   ferpa: {
     path: "apps/landing/app/ferpa/page.tsx",
@@ -141,7 +146,9 @@ function readRepo(rel) {
 /** The one `LEGAL_POLICY_VERSION` assignment's value. Throws on zero or several. */
 export function readPolicyVersion(source) {
   const matches = [
-    ...source.matchAll(/^export const LEGAL_POLICY_VERSION\s*=\s*(["'`])([^"'`]*)\1;?$/gm),
+    ...source.matchAll(
+      /^export const LEGAL_POLICY_VERSION\s*=\s*(["'`])([^"'`]*)\1;?$/gm,
+    ),
   ];
   const mentions = source.match(/\bLEGAL_POLICY_VERSION\s*=/g) ?? [];
   if (matches.length !== 1 || mentions.length !== 1) {
@@ -154,7 +161,9 @@ export function readPolicyVersion(source) {
 
 /** The one `lastUpdated="…"` prop's value. Throws on zero or several. */
 export function readLastUpdated(source) {
-  const matches = [...source.matchAll(/\blastUpdated\s*=\s*(?:\{\s*)?(["'`])([^"'`]*)\1/g)];
+  const matches = [
+    ...source.matchAll(/\blastUpdated\s*=\s*(?:\{\s*)?(["'`])([^"'`]*)\1/g),
+  ];
   const mentions = source.match(/\blastUpdated\s*=/g) ?? [];
   if (matches.length !== 1 || mentions.length !== 1) {
     throw new Error(
@@ -169,7 +178,9 @@ export function monthOf(lastUpdated) {
   const match = /^([A-Z][a-z]+) (\d{4})$/.exec(lastUpdated);
   const index = match ? MONTHS.indexOf(match[1]) : -1;
   if (index === -1) {
-    throw new Error(`lastUpdated must read "<Month> <YYYY>", got ${JSON.stringify(lastUpdated)}`);
+    throw new Error(
+      `lastUpdated must read "<Month> <YYYY>", got ${JSON.stringify(lastUpdated)}`,
+    );
   }
   return `${match[2]}-${String(index + 1).padStart(2, "0")}`;
 }
@@ -183,7 +194,9 @@ export function textFingerprint(source) {
   const title = /\btitle\s*=\s*"([^"]*)"/.exec(source);
   const sections = /^const sections = (\[[\s\S]*?^\]);$/m.exec(source);
   if (!title || !sections) {
-    throw new Error("expected a literal title=\"…\" prop and a top-level `const sections = [ … ];`");
+    throw new Error(
+      'expected a literal title="…" prop and a top-level `const sections = [ … ];`',
+    );
   }
   const served = `${title[1]}\n${sections[1]}`.replace(/\s+/g, " ");
   return createHash("sha256").update(served).digest("hex").slice(0, 16);
@@ -191,25 +204,37 @@ export function textFingerprint(source) {
 
 /** `2026-09` or `2026-09.2` → `{ month: "2026-09", revision: 2 }`; null otherwise. */
 export function parsePolicyVersion(version) {
-  const match = /^(\d{4}-(?:0[1-9]|1[0-2]))(?:\.([2-9]|[1-9]\d+))?$/.exec(version);
-  return match ? { month: match[1], revision: match[2] ? Number(match[2]) : 1 } : null;
+  const match = /^(\d{4}-(?:0[1-9]|1[0-2]))(?:\.([2-9]|[1-9]\d+))?$/.exec(
+    version,
+  );
+  return match
+    ? { month: match[1], revision: match[2] ? Number(match[2]) : 1 }
+    : null;
 }
 
 /** The month the pages' dates require of the constant: the newer accepted page's. */
 export function requiredPolicyVersion(datesByPage) {
-  return ACCEPTED_PAGES.map((page) => monthOf(datesByPage[page])).sort().at(-1);
+  return ACCEPTED_PAGES.map((page) => monthOf(datesByPage[page]))
+    .sort()
+    .at(-1);
 }
 
 function readPages() {
   return Object.fromEntries(
-    Object.entries(PINNED_PAGES).map(([page, pin]) => [page, readRepo(pin.path)]),
+    Object.entries(PINNED_PAGES).map(([page, pin]) => [
+      page,
+      readRepo(pin.path),
+    ]),
   );
 }
 
 test("LEGAL_POLICY_VERSION is the month of the newer Terms or Privacy date", () => {
   const version = readPolicyVersion(readRepo(POLICY_VERSION_SOURCE));
   const parsed = parsePolicyVersion(version);
-  assert.ok(parsed, `LEGAL_POLICY_VERSION must be YYYY-MM, or YYYY-MM.N (N ≥ 2) for a later revision in the same month; got ${JSON.stringify(version)}`);
+  assert.ok(
+    parsed,
+    `LEGAL_POLICY_VERSION must be YYYY-MM, or YYYY-MM.N (N ≥ 2) for a later revision in the same month; got ${JSON.stringify(version)}`,
+  );
   const pages = readPages();
   const dates = Object.fromEntries(
     ACCEPTED_PAGES.map((page) => [page, readLastUpdated(pages[page])]),
@@ -265,17 +290,43 @@ for (const [page, pin] of Object.entries(PINNED_PAGES)) {
 
 test("the rules fail on the drifts they exist for", () => {
   // The #2306 case: Privacy dated September, the constant still March.
-  assert.equal(requiredPolicyVersion({ terms: "March 2026", privacy: "September 2026" }), "2026-09");
-  assert.notEqual(requiredPolicyVersion({ terms: "March 2026", privacy: "September 2026" }), "2026-03");
+  assert.equal(
+    requiredPolicyVersion({ terms: "March 2026", privacy: "September 2026" }),
+    "2026-09",
+  );
+  assert.notEqual(
+    requiredPolicyVersion({ terms: "March 2026", privacy: "September 2026" }),
+    "2026-03",
+  );
   // A year boundary compares by year first.
-  assert.equal(requiredPolicyVersion({ terms: "December 2026", privacy: "January 2027" }), "2027-01");
+  assert.equal(
+    requiredPolicyVersion({ terms: "December 2026", privacy: "January 2027" }),
+    "2027-01",
+  );
   assert.throws(() => monthOf("Sept 2026"), /<Month> <YYYY>/);
 
   // A second material revision in a month already used takes a suffix.
-  assert.deepEqual(parsePolicyVersion("2026-09"), { month: "2026-09", revision: 1 });
-  assert.deepEqual(parsePolicyVersion("2026-09.2"), { month: "2026-09", revision: 2 });
-  assert.deepEqual(parsePolicyVersion("2026-09.10"), { month: "2026-09", revision: 10 });
-  for (const bad of ["2026-09.1", "2026-09.0", "2026-09.02", "2026-09b", "2026-13", "2026-9", "2026-09-27"]) {
+  assert.deepEqual(parsePolicyVersion("2026-09"), {
+    month: "2026-09",
+    revision: 1,
+  });
+  assert.deepEqual(parsePolicyVersion("2026-09.2"), {
+    month: "2026-09",
+    revision: 2,
+  });
+  assert.deepEqual(parsePolicyVersion("2026-09.10"), {
+    month: "2026-09",
+    revision: 10,
+  });
+  for (const bad of [
+    "2026-09.1",
+    "2026-09.0",
+    "2026-09.02",
+    "2026-09b",
+    "2026-13",
+    "2026-9",
+    "2026-09-27",
+  ]) {
     assert.equal(parsePolicyVersion(bad), null, bad);
   }
   assert.throws(() => monthOf("2026-09"), /<Month> <YYYY>/);
@@ -284,7 +335,10 @@ test("the rules fail on the drifts they exist for", () => {
   const page = (paragraph) =>
     `const sections = [\n  { heading: "1. A", paragraphs: ["${paragraph}"] },\n];\n` +
     `export default function P() { return <LegalDocument title="T" lastUpdated="March 2026" sections={sections} />; }\n`;
-  assert.notEqual(textFingerprint(page("old wording")), textFingerprint(page("new wording")));
+  assert.notEqual(
+    textFingerprint(page("old wording")),
+    textFingerprint(page("new wording")),
+  );
   // Reformatting isn't an edit.
   assert.equal(
     textFingerprint(page("same")),
@@ -292,12 +346,21 @@ test("the rules fail on the drifts they exist for", () => {
   );
 
   // A second or computed date can't slip past the reader.
-  assert.throws(() => readLastUpdated(`lastUpdated="March 2026" lastUpdated="May 2026"`), /exactly one/);
+  assert.throws(
+    () => readLastUpdated(`lastUpdated="March 2026" lastUpdated="May 2026"`),
+    /exactly one/,
+  );
   assert.throws(() => readLastUpdated(`lastUpdated={DATE}`), /exactly one/);
   assert.equal(readLastUpdated(`lastUpdated={"May 2026"}`), "May 2026");
   assert.throws(
-    () => readPolicyVersion(`export const LEGAL_POLICY_VERSION = "2026-09";\nLEGAL_POLICY_VERSION = "x";`),
+    () =>
+      readPolicyVersion(
+        `export const LEGAL_POLICY_VERSION = "2026-09";\nLEGAL_POLICY_VERSION = "x";`,
+      ),
     /exactly one/,
   );
-  assert.throws(() => readPolicyVersion(`export const LEGAL_POLICY_VERSION = VERSION;`), /exactly one/);
+  assert.throws(
+    () => readPolicyVersion(`export const LEGAL_POLICY_VERSION = VERSION;`),
+    /exactly one/,
+  );
 });

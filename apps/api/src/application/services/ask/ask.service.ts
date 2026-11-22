@@ -750,6 +750,8 @@ export class AskService {
       permissions: held,
       enabledModules: input.enabledModules,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
+      askId,
+      question: input.question,
     };
     // What the member had open, each looked up as them (`AskFromService`).
     const openAt = await this.from.read(input.from, toolContext);

@@ -14,7 +14,9 @@ import {
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
+import type { ChangeFieldSpec } from '#domain/utils/ai-suggestion-changes';
 import type {
+  AiSuggestionChangeLog,
   AiSuggestionCommitResult,
   AiSuggestionKindHandler,
 } from './ai-suggestion-kinds';
@@ -96,6 +98,14 @@ function memberIds(value: unknown): string[] {
   return [...new Set(ids.map((id) => id.toLowerCase()))];
 }
 
+const POINTS_CHANGE_FIELDS: ChangeFieldSpec = {
+  amount: 'number',
+  reason: 'text',
+  target_user_ids: 'ids',
+  target_count: 'number',
+  event_id: 'id',
+};
+
 /** Reads a stored payload back; the shape `normalizeProposal` wrote. */
 export function readPointsPayload(
   payload: AiSuggestionPayload,
@@ -155,6 +165,21 @@ export class PointsSuggestionKind implements AiSuggestionKindHandler {
   readonly module = 'points';
   readonly expiresAfterDays = POINTS_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'points';
+
+  /** What the change log compares (Paul, 2026-11-22). */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: POINTS_CHANGE_FIELDS,
+    view: (payload) => {
+      const points = readPointsPayload(payload);
+      return {
+        amount: points.amount === 0 ? null : points.amount,
+        reason: points.reason,
+        target_user_ids: points.target_user_ids,
+        target_count: points.target_user_ids.length,
+        event_id: points.event_id,
+      };
+    },
+  };
 
   constructor(private readonly points: PointsService) {}
 

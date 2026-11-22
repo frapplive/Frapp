@@ -95,7 +95,46 @@ export interface AiSuggestion {
    */
   dedupe_key: string | null;
   /** When its batch push went out; null while it is still owed. */
+  /**
+   * The Ask turn (`ai_ask_traces.id`) that proposed it, when Ask did, so
+   * what the member changed can be read beside that turn's trace.
+   */
+  ask_id: string | null;
+  /**
+   * The member's question, sealed with `AI_STORED_TEXT_KEY`, held only
+   * while the card waits (Paul, 2026-11-22). Never sent to a client.
+   */
+  request_sealed: string | null;
   notified_at: string | null;
   expires_at: string;
   created_at: string;
+}
+
+export const AI_SUGGESTION_DECISIONS = [
+  'accepted',
+  'dismissed',
+  'expired',
+] as const;
+export type AiSuggestionDecision = (typeof AI_SUGGESTION_DECISIONS)[number];
+
+/**
+ * What a person changed when they decided on a suggestion
+ * (`ai_suggestion_changes`, `spec/behavior/ai.md` § Stored AI text). Codes,
+ * ids and numbers in `fields`; the words only in `words_sealed`.
+ */
+export interface AiSuggestionChange {
+  suggestion_id: string;
+  chapter_id: string;
+  member_id: string | null;
+  decided_by: string | null;
+  requested_for: string | null;
+  ask_id: string | null;
+  kind: string;
+  source_type: string;
+  decision: AiSuggestionDecision;
+  via: 'card' | 'form' | null;
+  fields: Record<string, unknown>;
+  words_sealed: string | null;
+  decided_at: string;
+  expires_at: string;
 }
