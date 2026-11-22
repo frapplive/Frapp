@@ -46,6 +46,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The event's Now pill (#5777) runs for real.
   eventNowPill: (await importOriginal<typeof import("@repo/hooks")>())
     .eventNowPill,
+  // The roster's pure rules (counts, the people shown) run for real.
+  ...(await import("@repo/hooks/event-roster")),
   useNow: () => Date.now(),
   useEvent: () => ({
     data: eventQueryState.data,
@@ -783,7 +785,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     // do this" on the member's sheet.
     expect(screen.queryByTestId("attendance-roster")).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit event" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
   });
 
   it("tells a member on a lapsed chapter nothing about editing events", () => {
@@ -825,7 +829,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     renderLive();
 
     expect(screen.queryByRole("button", { name: "Edit event" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
   });
 
   it("keeps them when the permissions read failed offline", () => {
@@ -974,6 +980,42 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     expect(within(people).getByText("Marcus Lee")).toBeInTheDocument();
   });
 
+  it("gives an officer the roster while check-in is open, with check-in leading the page", () => {
+    permissionsState.value = ["members:view", "events:update"];
+    eventQueryState.data = liveEvent;
+    renderLive(liveEvent);
+
+    expect(screen.getByTestId("attendance-roster")).toBeInTheDocument();
+    const checkIn = screen.getByTestId("my-check-in");
+    const when = screen.getByText("When");
+    expect(
+      Boolean(
+        checkIn.compareDocumentPosition(when) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
+  it("puts check-in after the details before it opens", () => {
+    const later = {
+      ...baseEvent,
+      start_time: "2099-07-01T18:00:00.000Z",
+      end_time: "2099-07-01T19:00:00.000Z",
+    };
+    permissionsState.value = ["members:view"];
+    eventQueryState.data = later;
+    renderLive(later);
+
+    const checkIn = screen.getByTestId("my-check-in");
+    const when = screen.getByText("When");
+    expect(
+      Boolean(
+        when.compareDocumentPosition(checkIn) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
   it("counts only the people the event invites", () => {
     permissionsState.value = ["members:view"];
     renderLive({
@@ -1062,7 +1104,9 @@ describe("EventDetailSheet for a live event, by role (#3855)", () => {
     expect(
       screen.getByRole("button", { name: "Edit event" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete event" })).toBeNull();
+    // Delete lives in the header's ⋯, which only an `events:delete`
+    // holder gets.
+    expect(screen.queryByRole("button", { name: /^More for / })).toBeNull();
     // The roster is `events:update`'s, not `events:delete`'s.
     expect(screen.getByTestId("attendance-roster")).toBeInTheDocument();
   });

@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 import { EVENT_PAGE_COPY, type EventAttendanceFields } from "@repo/validation";
-import { useEventInvitees } from "@repo/hooks";
+import {
+  EVENT_PEOPLE_SHOWN,
+  useEventInvitees,
+  useMembers,
+} from "@repo/hooks";
 import { memberLabel } from "@repo/hooks/display-names";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SectionSkeleton } from "@/components/shared/page-skeletons";
 import { SkeletonText } from "@/components/shared/async-states";
+import { NestedError } from "@/components/shared/nested-states";
 import { cn, initials } from "@/lib/utils";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
-
-/** How many people the list shows before "Show all". */
-const PEOPLE_SHOWN = 8;
 
 /**
  * Who's coming, as people: the event page's side list before check-in
@@ -22,7 +24,23 @@ const PEOPLE_SHOWN = 8;
  */
 export function EventPeople({ audience }: { audience: EventAttendanceFields }) {
   const invitees = useEventInvitees(audience);
+  // The same cached read `useEventInvitees` makes, for its failure: `null`
+  // there is loading or failed alike.
+  const membersQuery = useMembers();
   const [showAll, setShowAll] = useState(false);
+
+  if (invitees === null && membersQuery.isError) {
+    return (
+      <section aria-label="Who's coming" className="grid gap-2">
+        <h3 className="text-sm font-semibold">Who&apos;s coming</h3>
+        <NestedError
+          title="Who's coming unavailable"
+          description="Couldn't load the chapter's members. Retry in a moment."
+          onRetry={() => void membersQuery.refetch()}
+        />
+      </section>
+    );
+  }
 
   if (invitees === null) {
     return (
@@ -32,7 +50,7 @@ export function EventPeople({ audience }: { audience: EventAttendanceFields }) {
     );
   }
 
-  const shown = showAll ? invitees : invitees.slice(0, PEOPLE_SHOWN);
+  const shown = showAll ? invitees : invitees.slice(0, EVENT_PEOPLE_SHOWN);
   return (
     <section aria-label="Who's coming" className="grid gap-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -64,7 +82,7 @@ export function EventPeople({ audience }: { audience: EventAttendanceFields }) {
           })}
         </ul>
       ) : null}
-      {invitees.length > PEOPLE_SHOWN ? (
+      {invitees.length > EVENT_PEOPLE_SHOWN ? (
         <button
           type="button"
           aria-expanded={showAll}
@@ -74,7 +92,7 @@ export function EventPeople({ audience }: { audience: EventAttendanceFields }) {
             FOCUS_RING_OFFSET,
           )}
         >
-          {showAll ? "Show fewer" : EVENT_PAGE_COPY.showAll(invitees.length)}
+          {showAll ? EVENT_PAGE_COPY.showFewer : EVENT_PAGE_COPY.showAll(invitees.length)}
         </button>
       ) : null}
     </section>

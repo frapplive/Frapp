@@ -225,7 +225,12 @@ export function EventDetailSheet({
       ? resolvedEvent.name
       : "Untitled event";
   // Who's coming, by role (`spec/behavior/events.md` § Attendance by role).
-  const audience = attendanceFieldsOf(resolvedEvent ?? {});
+  // Memoized: `attendanceFieldsOf` returns fresh role arrays, and the
+  // invitee and roster memos below key on them.
+  const audience = useMemo(
+    () => attendanceFieldsOf(resolvedEvent ?? {}),
+    [resolvedEvent],
+  );
   const attendance = attendanceFromEvent(audience);
   // The page follows the event's clock (Paul 2026-11-22): before check-in
   // opens it is who's coming, while it's open the roster fills, and after it
@@ -481,6 +486,10 @@ export function EventDetailSheet({
                       icon: Trash2,
                       destructive: true,
                       disabled: deleteControl.disabled,
+                      // The gate's reason (offline, a lapsed chapter) rides
+                      // the item, as it rode the icon button before.
+                      title: deleteControl.title,
+                      describedBy: deleteControl["aria-describedby"],
                       onSelect: () => void handleDelete(),
                     },
                   ]}
@@ -748,9 +757,17 @@ export function EventDetailSheet({
                       canUpdateEvents={canTakeAttendance}
                     />
                   ) : null}
-                  {showRoster && canTakeAttendance ? (
+                  {/*
+                    The roster once check-in opens, for an officer; Who's
+                    coming for everyone else, and for an officer while their
+                    permissions are still being read. Offline with no answer,
+                    the officer is told the roster is there.
+                  */}
+                  {showRoster ? (
                     <Can
                       permission="events:update"
+                      fallback={<EventPeople audience={audience} />}
+                      deniedFallback={<EventPeople audience={audience} />}
                       offlineFallback={(retry) => (
                         <PermissionsOfflineSurface
                           description="Reconnect to see who checked in to this event."
@@ -764,7 +781,6 @@ export function EventDetailSheet({
                         key={eventId}
                         eventId={eventId}
                         eventStart={resolvedEvent?.start_time}
-                        eventEnd={resolvedEvent?.end_time}
                         audience={audience}
                         phase={phase}
                       />

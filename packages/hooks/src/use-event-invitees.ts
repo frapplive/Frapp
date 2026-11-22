@@ -21,14 +21,19 @@ export function useEventInvitees(
     excluded_role_ids,
     others_invited,
   } = audience;
+  // The role lists come in as fresh arrays each render (`attendanceFieldsOf`
+  // filters them), so the memo keys on their contents.
+  const required = required_role_ids?.join(",");
+  const optional = optional_role_ids?.join(",");
+  const excluded = excluded_role_ids?.join(",");
   return useMemo(() => {
     if (!membersQuery.data) return null;
     const invited = eventInvitees(
       {
         is_mandatory,
-        required_role_ids,
-        optional_role_ids,
-        excluded_role_ids,
+        required_role_ids: required?.split(",").filter(Boolean),
+        optional_role_ids: optional?.split(",").filter(Boolean),
+        excluded_role_ids: excluded?.split(",").filter(Boolean),
         others_invited,
       },
       membersQuery.data.filter((member) => !!member.user_id),
@@ -41,9 +46,9 @@ export function useEventInvitees(
   }, [
     membersQuery.data,
     is_mandatory,
-    required_role_ids,
-    optional_role_ids,
-    excluded_role_ids,
+    required,
+    optional,
+    excluded,
     others_invited,
   ]);
 }

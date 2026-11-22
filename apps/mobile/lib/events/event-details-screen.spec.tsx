@@ -113,7 +113,15 @@ const checkIn = vi.fn();
 const roster = vi.hoisted(() => ({
   value: [] as { user_id: string; status: string; check_in_time?: string }[],
 }));
-const markStatus = vi.hoisted(() => vi.fn(async () => undefined));
+const markRow = vi.hoisted(() => vi.fn(async () => undefined));
+const autoAbsent = vi.hoisted(() => vi.fn(async () => undefined));
+// The glass menu a roster row opens, caught so a test can pick an answer.
+const menus = vi.hoisted(() => ({
+  last: null as null | {
+    title: string;
+    actions: { key: string; label: string; run: () => void }[];
+  },
+}));
 const invitees = vi.hoisted(() => ({
   value: [
     { user_id: "u-1", display_name: "Ava Brooks", avatar_url: null },
@@ -128,8 +136,12 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // members by the event's role rule.
   useEventInvitees: () => invitees.value,
   // The officer's roster, once check-in opens.
-  useAttendance: () => ({ data: roster.value }),
-  useUpdateAttendanceStatus: () => ({ mutateAsync: markStatus }),
+  useAttendance: () => ({
+    data: roster.value,
+    refetch: vi.fn(async () => ({})),
+  }),
+  useMarkEventRosterRow: () => markRow,
+  useAutoAbsent: () => ({ mutateAsync: autoAbsent, isPending: false }),
   usePermissionList: () => permissions,
   useRoles: () => ({ data: [], isPending: false, isError: false }),
   useEventTypes: () => ({ data: [] }),
@@ -212,6 +224,13 @@ vi.mock("@/lib/connection/use-connection", () => ({
 }));
 
 // The minutes row has its own spec (`components/minutes/event-minutes-row.spec.tsx`).
+vi.mock("@/components/item-actions-menu", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/item-actions-menu")>()),
+  openItemMenu: (menu: NonNullable<typeof menus.last>) => {
+    menus.last = menu;
+  },
+}));
+
 vi.mock("@/components/minutes/event-minutes-row", () => ({
   EventMinutesRow: () => null,
 }));
@@ -437,6 +456,64 @@ describe("Event details layout", () => {
     expect(text).toContain("1 present · 1 not here yet");
     expect(text).toContain("Not here");
     expect(text).not.toContain("WHO'S COMING");
+    roster.value = [];
+  });
+
+  it("marks someone who hasn't checked in from their row's menu", async () => {
+    permissions = ["members:view", "events:update"];
+    roster.value = [];
+    markRow.mockClear();
+    const tree = render();
+    const [row] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityLabel === "Marcus Lee, Not here" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row!.props.onPress({ nativeEvent: {} }));
+    // No row yet, so no Absent: the by-hand route records who was there.
+    expect(menus.last?.actions.map((action) => action.label)).toEqual([
+      "Present",
+      "Late",
+      "Excused",
+    ]);
+    await act(async () => {
+      menus.last!.actions[0]!.run();
+    });
+    expect(markRow).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "u-2", attendanceId: null }),
+      "PRESENT",
+    );
+  });
+
+  it("reads who came after the event, and offers to mark the no-shows", async () => {
+    permissions = ["members:view", "events:update"];
+    event = {
+      ...EVENT,
+      start_time: new Date(START.getTime() - 2 * 86_400_000).toISOString(),
+      end_time: new Date(
+        START.getTime() - 2 * 86_400_000 + 3_600_000,
+      ).toISOString(),
+    };
+    roster.value = [
+      { user_id: "u-1", status: "PRESENT", check_in_time: START.toISOString() },
+    ];
+    autoAbsent.mockClear();
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("ATTENDANCE · 1 OF 2 CAME");
+    // Who didn't come reads first.
+    expect(text.indexOf("Marcus Lee")).toBeLessThan(text.indexOf("Ava Brooks"));
+    const [button] = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === "button" &&
+        typeof node.props.onPress === "function" &&
+        node.findAll((t) => t.props.children === "Mark no-shows absent")
+          .length > 0,
+    );
+    await act(async () => {
+      button!.props.onPress();
+    });
+    expect(autoAbsent).toHaveBeenCalledWith(EVENT.id);
     roster.value = [];
   });
 

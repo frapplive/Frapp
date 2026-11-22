@@ -43,22 +43,28 @@ export function eventPagePhase(
 export interface EventInviteCandidate {
   user_id: string;
   role_ids?: readonly string[] | null;
+  /** An alumnus is held to an event only when one of their roles is named. */
+  is_alumni?: boolean | null;
 }
 
 /**
  * The members an event invites (required or optional by the role rule,
- * `eventAttendanceFor`), in the order given. The page's Who's coming list and
- * headcount, and the roster's rows, read this one list, so "15 people" on the
- * page and the roster under it never disagree.
+ * `eventAttendanceFor`), in the order given, with the server's alumni rule
+ * (`holdsTo` in the API's attendance service): an alumnus counts only when a
+ * role of theirs is set apart, since the event's default doesn't reach them
+ * (they can't check in, and the sweep never marks them). The page's Who's
+ * coming list and headcount, and the roster's rows, read this one list, so
+ * "15 people" on the page and the roster under it never disagree.
  */
 export function eventInvitees<T extends EventInviteCandidate>(
   event: EventAttendanceFields,
   members: readonly T[],
 ): T[] {
-  return members.filter(
-    (member) =>
-      eventAttendanceFor(event, member.role_ids ?? []).status !== "not_invited",
-  );
+  return members.filter((member) => {
+    const attendance = eventAttendanceFor(event, member.role_ids ?? []);
+    if (attendance.status === "not_invited") return false;
+    return attendance.byRole || member.is_alumni !== true;
+  });
 }
 
 /**
@@ -83,4 +89,5 @@ export const EVENT_PAGE_COPY = {
     phase === "past" ? "Didn't come" : "Not here",
   notHere: "Not here",
   showAll: (count: number) => `Show all ${count}`,
+  showFewer: "Show fewer",
 } as const;

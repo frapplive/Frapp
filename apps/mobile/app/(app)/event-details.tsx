@@ -321,18 +321,22 @@ export default function EventDetailsScreen() {
         {/* Details first, then the agenda, then attendance (Paul
             2026-11-19: "details should come first, followed by the agenda
             and the attendance"), web's event page in the same order. */}
-        <DetailsSection event={event} now={now} />
-
-        {/* "You're required · Can't make it?" under who's coming, as web's
-            Who's coming row has it (Paul 2026-11-22). */}
-        <MyExcuse
-          eventId={event.id}
-          required={requiredOfViewer}
-          start={event.start_time}
-          end={event.end_time}
-          opensMinutes={event.check_in_opens_minutes}
+        {/* "You're required · Can't make it?" rides the Who's coming row,
+            under its headcount, as web's has it (Paul 2026-11-22). */}
+        <DetailsSection
+          event={event}
           now={now}
-          startWriting={startExcuse}
+          excuse={
+            <MyExcuse
+              eventId={event.id}
+              required={requiredOfViewer}
+              start={event.start_time}
+              end={event.end_time}
+              opensMinutes={event.check_in_opens_minutes}
+              now={now}
+              startWriting={startExcuse}
+            />
+          }
         />
 
         {phase !== "live" ? (
@@ -669,7 +673,16 @@ export function EventDetailSkeleton() {
  * when I click on one"): the calendar holds the rest. Read from the cached
  * chapter events (`useEvents`), which already hold every occurrence.
  */
-function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
+function DetailsSection({
+  event,
+  now,
+  excuse,
+}: {
+  event: EventDetail;
+  now: Date;
+  /** The viewer's own "Can't make it?", under the headcount. */
+  excuse?: ReactNode;
+}) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const router = useRouter();
@@ -753,6 +766,7 @@ function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
                 {EVENT_PAGE_COPY.people(invitees.length)}
               </Text>
             ) : null}
+            {excuse}
           </View>
         </DetailRow>
         {event.description ? (

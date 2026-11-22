@@ -50,6 +50,21 @@ describe("eventInvitees", () => {
     expect(eventInvitees({ is_mandatory: true }, members)).toHaveLength(4);
   });
 
+  it("leaves an alumnus out unless one of their roles is named", () => {
+    const alumnus = { user_id: "e", role_ids: ["alumni"], is_alumni: true };
+    // The default doesn't reach them: they can't check in and aren't swept.
+    expect(
+      eventInvitees({ is_mandatory: true }, [...members, alumnus]),
+    ).toHaveLength(4);
+    // A role of theirs set apart does.
+    expect(
+      eventInvitees(
+        { is_mandatory: true, optional_role_ids: ["alumni"] },
+        [...members, alumnus],
+      ).map((m) => m.user_id),
+    ).toContain("e");
+  });
+
   it("keeps only the listed roles when nobody else is invited", () => {
     const event = {
       required_role_ids: ["exec"],

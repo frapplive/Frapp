@@ -1,4 +1,12 @@
+import {
+  EVENT_PAGE_COPY,
+  statusLabel,
+  type EventPagePhase,
+} from "@repo/validation";
 import { memberFallbackLabel, memberLabel } from "./display-names";
+
+/** People the event page lists before "Show all", both apps. */
+export const EVENT_PEOPLE_SHOWN = 8;
 
 /** The four states the server stores, plus "no row yet". */
 export type EventRosterStatus =
@@ -147,4 +155,29 @@ export function eventRosterTally(
       label: phase === "past" ? "not marked" : "not here yet",
     },
   ].filter((entry) => entry.count > 0);
+}
+
+/**
+ * The answers an officer can mark a row with, in roll-call order. Absent
+ * needs a row to change: a member with none is marked through the by-hand
+ * route, which records who was there and refuses Absent (that is what the
+ * no-shows sweep after the event is for).
+ */
+export function eventRosterMarks(row: {
+  attendanceId: string | null;
+}): Exclude<EventRosterStatus, "UNRECORDED">[] {
+  return row.attendanceId
+    ? ["PRESENT", "LATE", "EXCUSED", "ABSENT"]
+    : ["PRESENT", "LATE", "EXCUSED"];
+}
+
+/** A row's status in words, as both apps' chips say it. */
+export function eventRosterStatusText(
+  status: EventRosterStatus,
+  phase: Exclude<EventPagePhase, "upcoming">,
+): string {
+  if (status === "UNRECORDED" && phase === "live") {
+    return EVENT_PAGE_COPY.notHere;
+  }
+  return statusLabel("attendance", status);
 }

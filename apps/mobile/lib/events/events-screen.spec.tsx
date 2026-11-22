@@ -1823,10 +1823,10 @@ describe("Calendar day screen", () => {
     expect(style.top).toBe(17 * 48);
   });
 
-  it("says when a block's event is mandatory", () => {
+  it("says when a block's event is required", () => {
     events = [{ ...EVENT, is_mandatory: true }];
     const tree = renderDay(new Date(EVENT.start_time));
     const [block] = blocks(tree);
-    expect(block!.props.accessibilityLabel).toMatch(/, mandatory$/);
+    expect(block!.props.accessibilityLabel).toMatch(/, required$/);
   });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   eventRosterCounts,
+  eventRosterMarks,
   eventRosterRows,
+  eventRosterStatusText,
   eventRosterTally,
   orderEventRoster,
 } from "./event-roster";
@@ -59,5 +61,20 @@ describe("orderEventRoster and the tally", () => {
       { count: 1, label: "not here yet" },
     ]);
     expect(eventRosterTally(counts, "past")[1]?.label).toBe("not marked");
+  });
+
+  it("offers Absent only on a row that exists", () => {
+    expect(eventRosterMarks({ attendanceId: "att-1" })).toContain("ABSENT");
+    expect(eventRosterMarks({ attendanceId: null })).toEqual([
+      "PRESENT",
+      "LATE",
+      "EXCUSED",
+    ]);
+  });
+
+  it("reads a missing row as Not here while live, and Not marked after", () => {
+    expect(eventRosterStatusText("UNRECORDED", "live")).toBe("Not here");
+    expect(eventRosterStatusText("UNRECORDED", "past")).not.toBe("Not here");
+    expect(eventRosterStatusText("PRESENT", "live")).toBe("Present");
   });
 });

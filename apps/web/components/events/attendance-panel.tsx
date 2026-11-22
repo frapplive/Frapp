@@ -1,7 +1,7 @@
 "use client";
 
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Loader2, Search, UserX } from "lucide-react";
 import {
   ATTENDANCE_SEARCH_FROM,
@@ -12,14 +12,16 @@ import {
 } from "@repo/validation";
 import {
   eventRosterCounts,
+  eventRosterMarks,
   eventRosterRows,
+  eventRosterStatusText,
   eventRosterTally,
   orderEventRoster,
   useAttendance,
   useAutoAbsent,
+  useMarkEventRosterRow,
   useMembers,
-  useNow,
-  useUpdateAttendanceStatus,
+  type EventRosterRow,
 } from "@repo/hooks";
 import { Badge, type BadgeKind } from "@/components/ui/badge";
 import {
@@ -46,22 +48,10 @@ import {
 } from "@/components/events/attendance-status";
 import type { AttendanceStatus } from "@/components/events/attendance-status";
 import { checkInLabel } from "@/components/events/event-labels";
-import { checkInClosesAt } from "@/components/events/check-in-close";
 import { InlineNote } from "@/components/shared/inline-note";
 
 /** The roster's view: everyone, those who came (present or late), the rest. */
 type AttendanceFilter = "ALL" | "IN" | "OUT";
-
-/** The four answers an officer marks, in the order a roll call goes. */
-const STATUS_OPTIONS: {
-  value: AttendanceStatus | "UNRECORDED";
-  label: string;
-}[] = [
-  { value: "PRESENT", label: "Present" },
-  { value: "LATE", label: "Late" },
-  { value: "EXCUSED", label: "Excused" },
-  { value: "ABSENT", label: "Absent" },
-];
 
 type AttendanceRow = {
   id?: string;
@@ -75,7 +65,6 @@ type AttendanceRow = {
 export function AttendancePanel({
   eventId,
   eventStart,
-  eventEnd,
   audience,
   phase = "live",
 }: {
@@ -93,40 +82,20 @@ export function AttendancePanel({
    * time alone ("Checked in 5:03 PM") and one on another day names the day.
    */
   eventStart?: unknown;
-  /**
-   * The event's `end_time`. Auto-absent is refused (400) until check-in
-   * closes, so the button waits for the same instant. Without it the button
-   * is offered and the server's answer stands.
-   */
-  eventEnd?: unknown;
 }) {
   const { toast } = useToast();
   const attendanceQuery = useAttendance(eventId);
   const membersQuery = useMembers();
-  const updateStatus = useUpdateAttendanceStatus();
+  const markRow = useMarkEventRosterRow(eventId);
   const autoAbsent = useAutoAbsent();
   // `PATCH /v1/events/:eventId/attendance/:userId` and the auto-absent POST
   // carry no `@FreeTier`, so both are paid-ops and mirror the gate (#841).
   // Reading attendance stays live — `enforceSubscription` returns early for
   // GET, so a lapsed chapter can still see who showed up.
   const gate = useSubscriptionGate();
-  const now = useNow();
-  const closesAt = checkInClosesAt(eventEnd, now);
-  const autoAbsentGateProps = gate.controlProps(
-    autoAbsent.isPending || closesAt !== null,
-  );
-  /*
-    Why the button waits, said in visible text: a disabled Button takes no
-    pointer events, so a `title` alone is never seen. Only when the gate
-    allows writes: a lapsed chapter's button stays disabled past the close,
-    and its own notice says why, so a promise about the close would be false.
-  */
-  const waitingNoticeId = useId();
-  const waitingForClose = closesAt !== null && gate.allowed;
-  const autoAbsentControlProps = {
-    ...autoAbsentGateProps,
-    ...(waitingForClose ? { "aria-describedby": waitingNoticeId } : {}),
-  };
+  // Auto-absent is refused until check-in closes, which is when the page
+  // turns past, so the button is only offered then (`eventPagePhase`).
+  const autoAbsentControlProps = gate.controlProps(autoAbsent.isPending);
 
   const [statusFilter, setStatusFilter] = useState<AttendanceFilter>("ALL");
   const [search, setSearch] = useState("");
@@ -184,7 +153,8 @@ export function AttendancePanel({
         row.email.toLowerCase().includes(needle)),
   );
 
-  async function changeStatus(userId: string, next: AttendanceStatus) {
+  async function changeStatus(row: EventRosterRow, next: AttendanceStatus) {
+    const { userId } = row;
     setMarked((current) => ({ ...current, [userId]: next }));
     const sent = (by: number) =>
       setSending((current) => {
@@ -196,11 +166,7 @@ export function AttendancePanel({
       });
     sent(1);
     try {
-      await updateStatus.mutateAsync({
-        eventId,
-        userId,
-        body: { status: next },
-      });
+      await markRow(row, next);
     } catch (error) {
       setMarked((current) => {
         const rest = { ...current };
@@ -396,10 +362,7 @@ export function AttendancePanel({
               (row.status === "EXCUSED" && row.excuseReason
                 ? row.excuseReason
                 : null);
-            const statusText =
-              row.status === "UNRECORDED" && phase === "live"
-                ? EVENT_PAGE_COPY.notHere
-                : attendanceStatusLabel(row.status);
+            const statusText = eventRosterStatusText(row.status, phase);
             return (
               <li
                 key={row.userId}
@@ -434,7 +397,7 @@ export function AttendancePanel({
                     value={row.status === "UNRECORDED" ? "" : row.status}
                     disabled={rowGate.disabled}
                     onValueChange={(next) =>
-                      void changeStatus(row.userId, next as AttendanceStatus)
+                      void changeStatus(row, next as AttendanceStatus)
                     }
                   >
                     <SelectTrigger
@@ -448,9 +411,9 @@ export function AttendancePanel({
                       <span>{statusText}</span>
                     </SelectTrigger>
                     <SelectContent align="end">
-                      {STATUS_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                      {eventRosterMarks(row).map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {attendanceStatusLabel(status)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -478,10 +441,7 @@ export function AttendancePanel({
               )}
               Mark no-shows absent
             </Button>
-            <p
-              id={waitingNoticeId}
-              className="text-caption text-muted-foreground"
-            >
+            <p className="text-caption text-muted-foreground">
               Members this event requires who didn&apos;t check in and
               aren&apos;t excused.
             </p>

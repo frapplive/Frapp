@@ -79,6 +79,7 @@ export * from "./use-ask-post";
 export * from "./use-attendance";
 export * from "./event-roster";
 export * from "./use-event-invitees";
+export * from "./use-mark-event-roster";
 export * from "./use-backwork";
 export * from "./use-billing";
 export * from "./use-calendar-feed";

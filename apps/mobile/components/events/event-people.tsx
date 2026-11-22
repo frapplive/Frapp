@@ -7,17 +7,22 @@ import {
   type EventPagePhase,
 } from "@repo/validation";
 import {
+  EVENT_PEOPLE_SHOWN,
   eventRosterCounts,
+  eventRosterMarks,
   eventRosterRows,
+  eventRosterStatusText,
   eventRosterTally,
   orderEventRoster,
   rosterRowCame,
   useAttendance,
+  useAutoAbsent,
   useEventInvitees,
-  useUpdateAttendanceStatus,
+  useMarkEventRosterRow,
   type EventRosterRow,
   type EventRosterStatus,
 } from "@repo/hooks";
+import { memberLabel } from "@repo/hooks/display-names";
 import { formatTimeOfDay } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import { MemberAvatar } from "@/components/member-avatar";
@@ -26,19 +31,9 @@ import { ListPanel, PressableRow } from "@/components/list-section";
 import { eyebrowStyle } from "@/components/eyebrow";
 import { openItemMenu, pressAt } from "@/components/item-actions-menu";
 import { alertFailure } from "@/lib/failure-alert";
+import { TextAction } from "@/components/events/event-excuses";
 import { initialsFor } from "@/lib/more/narrow";
 import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
-
-/** Rows shown before "Show all", the same on web. */
-const PEOPLE_SHOWN = 8;
-
-/** The four answers an officer marks, in the order a roll call goes. */
-const MARKS: Exclude<EventRosterStatus, "UNRECORDED">[] = [
-  "PRESENT",
-  "LATE",
-  "EXCUSED",
-  "ABSENT",
-];
 
 /**
  * The people half of the event page (Paul, 2026-11-22), web's side list in
@@ -74,7 +69,7 @@ function EventPeople({ audience }: { audience: EventAttendanceFields }) {
   const invitees = useEventInvitees(audience);
   const [showAll, setShowAll] = useState(false);
   if (invitees === null || invitees.length === 0) return null;
-  const shown = showAll ? invitees : invitees.slice(0, PEOPLE_SHOWN);
+  const shown = showAll ? invitees : invitees.slice(0, EVENT_PEOPLE_SHOWN);
   return (
     <View style={styles.section} accessibilityLabel="Who's coming">
       <Text style={styles.label}>
@@ -82,7 +77,7 @@ function EventPeople({ audience }: { audience: EventAttendanceFields }) {
       </Text>
       <ListPanel>
         {shown.map((member, index) => {
-          const name = member.display_name || "Member";
+          const name = memberLabel(member.display_name, member.user_id);
           return (
             <View
               key={member.user_id}
@@ -131,12 +126,24 @@ function EventRoster({
   const attendanceQuery = useAttendance(eventId, {
     refetchInterval: phase === "live" ? 15_000 : false,
   });
-  const update = useUpdateAttendanceStatus();
+  const markRow = useMarkEventRosterRow(eventId);
+  const autoAbsent = useAutoAbsent();
   const [marked, setMarked] = useState<Record<string, EventRosterStatus>>({});
   const [showAll, setShowAll] = useState(false);
 
-  if (invitees === null || attendanceQuery.data === undefined) {
-    return null;
+  if (invitees === null) return null;
+  if (attendanceQuery.data === undefined) {
+    if (!attendanceQuery.isError) return null;
+    return (
+      <View style={styles.section} accessibilityLabel="Attendance">
+        <Text style={styles.label}>ATTENDANCE</Text>
+        <Text style={styles.tally}>{"Couldn't load attendance."}</Text>
+        <TextAction
+          label="Try again"
+          onPress={() => void attendanceQuery.refetch()}
+        />
+      </View>
+    );
   }
   const attendance = Array.isArray(attendanceQuery.data)
     ? attendanceQuery.data
@@ -151,29 +158,47 @@ function EventRoster({
   const tally = eventRosterTally(counts, phase)
     .map((entry) => `${entry.count} ${entry.label}`)
     .join(" · ");
-  const shown = showAll ? rows : rows.slice(0, PEOPLE_SHOWN);
+  const shown = showAll ? rows : rows.slice(0, EVENT_PEOPLE_SHOWN);
 
-  const mark = async (row: EventRosterRow, status: EventRosterStatus) => {
-    if (status === "UNRECORDED") return;
+  const clear = (userId: string) =>
+    setMarked((current) => {
+      const rest = { ...current };
+      delete rest[userId];
+      return rest;
+    });
+
+  // The answer shows at once and stays until the roster reads it back, so
+  // the row doesn't flick to its old status while the read is in flight.
+  const mark = async (
+    row: EventRosterRow,
+    status: Exclude<EventRosterStatus, "UNRECORDED">,
+  ) => {
     setMarked((current) => ({ ...current, [row.userId]: status }));
     try {
-      await update.mutateAsync({
-        eventId,
-        userId: row.userId,
-        body: { status },
-      });
+      await markRow(row, status);
     } catch (error) {
+      clear(row.userId);
       alertFailure({
         title: "Couldn't update attendance",
         error,
         fallback: "Your change hasn't been saved. Try again in a moment.",
         retry: () => mark(row, status),
       });
-    } finally {
-      setMarked((current) => {
-        const rest = { ...current };
-        delete rest[row.userId];
-        return rest;
+      return;
+    }
+    await attendanceQuery.refetch();
+    clear(row.userId);
+  };
+
+  const runAutoAbsent = async () => {
+    try {
+      await autoAbsent.mutateAsync(eventId);
+    } catch (error) {
+      alertFailure({
+        title: "Couldn't mark no-shows absent",
+        error,
+        fallback: "Try again in a moment.",
+        retry: runAutoAbsent,
       });
     }
   };
@@ -189,7 +214,7 @@ function EventRoster({
       {tally ? <Text style={styles.tally}>{tally}</Text> : null}
       <ListPanel>
         {shown.map((row, index) => {
-          const text = rosterStatusText(row.status, phase);
+          const text = eventRosterStatusText(row.status, phase);
           const detail =
             rosterRowCame(row) && row.checkInTime
               ? formatTimeOfDay(row.checkInTime)
@@ -206,7 +231,7 @@ function EventRoster({
                 openItemMenu(
                   {
                     title: row.displayName,
-                    actions: MARKS.map((status) => ({
+                    actions: eventRosterMarks(row).map((status) => ({
                       key: status,
                       label: statusLabel("attendance", status),
                       run: () => void mark(row, status),
@@ -252,19 +277,16 @@ function EventRoster({
           styles={styles}
         />
       </ListPanel>
+      {phase === "past" ? (
+        <TextAction
+          label="Mark no-shows absent"
+          hint="Marks members this event requires who didn't check in and aren't excused."
+          disabled={autoAbsent.isPending}
+          onPress={() => void runAutoAbsent()}
+        />
+      ) : null}
     </View>
   );
-}
-
-/** A row's status in words, as web's chip says it. */
-function rosterStatusText(
-  status: EventRosterStatus,
-  phase: Exclude<EventPagePhase, "upcoming">,
-): string {
-  if (status === "UNRECORDED" && phase === "live") {
-    return EVENT_PAGE_COPY.notHere;
-  }
-  return statusLabel("attendance", status);
 }
 
 /** The status hues web's badges use; excused and unmarked stay hairline. */
@@ -295,7 +317,7 @@ function ShowAllRow({
   onToggle: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  if (total <= PEOPLE_SHOWN) return null;
+  if (total <= EVENT_PEOPLE_SHOWN) return null;
   return (
     <PressableRow
       accessibilityRole="button"
@@ -304,7 +326,7 @@ function ShowAllRow({
       style={[styles.row, styles.divider]}
     >
       <Text style={styles.more}>
-        {showAll ? "Show fewer" : EVENT_PAGE_COPY.showAll(total)}
+        {showAll ? EVENT_PAGE_COPY.showFewer : EVENT_PAGE_COPY.showAll(total)}
       </Text>
     </PressableRow>
   );

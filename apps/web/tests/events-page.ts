@@ -104,6 +104,7 @@ export async function eventsPageHooks(overrides: Record<string, unknown> = {}) {
     useMembers: loadedEmpty,
     useUpdateAttendanceStatus: idleMutation,
     useAutoAbsent: idleMutation,
+    useMarkEventRosterRow: () => async () => undefined,
     useMyPermissions: () => ({
       data: { permissions: ["events:update", "events:create", "members:view"] },
     }),

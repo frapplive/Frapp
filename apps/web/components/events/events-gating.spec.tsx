@@ -9,6 +9,8 @@ const { mockCurrentChapter } = vi.hoisted(() => ({
 
 const MEMBERS = [
   { user_id: "u-1", display_name: "Alice Adams", email: "alice@example.edu" },
+  // No attendance row: a no-show once the event is over.
+  { user_id: "u-2", display_name: "Ben Cole", email: "ben@example.edu" },
 ];
 
 const ATTENDANCE = [
@@ -247,10 +249,30 @@ describe("AttendancePanel auto-absent (FRAPP-WEB-7)", () => {
     expect(rowStatusSelect()).toBeEnabled();
   });
 
+  it("reads who came after the event, with who didn't first", () => {
+    chapter.active();
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
+
+    expect(screen.getByText("1 of 2 came")).toBeInTheDocument();
+    const [first] = screen.getAllByRole("combobox");
+    expect(first).toHaveAccessibleName(/^Attendance for Ben Cole/);
+  });
+
+  it("keeps name order and says checked in while check-in is open", () => {
+    chapter.active();
+    render(<AttendancePanel eventId="evt-1" phase="live" />);
+
+    expect(screen.getByText("1 of 2 checked in")).toBeInTheDocument();
+    const [first] = screen.getAllByRole("combobox");
+    expect(first).toHaveAccessibleName(/^Attendance for Alice Adams/);
+    expect(
+      screen.getByRole("combobox", { name: /ben cole: not here/i }),
+    ).toBeInTheDocument();
+  });
+
   it("offers it once check-in has closed", () => {
     chapter.active();
-    const end = new Date(Date.now() - 20 * 60_000).toISOString();
-    render(<AttendancePanel eventId="evt-1" eventEnd={end} phase="past" />);
+    render(<AttendancePanel eventId="evt-1" phase="past" />);
 
     expect(autoAbsentButton()).toBeEnabled();
   });
