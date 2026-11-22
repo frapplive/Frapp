@@ -150,7 +150,12 @@ describe('the cards the tool loop may propose', () => {
         name: 'Study night',
         date: '2026-11-20',
         start_time: '19:00',
-        required: true,
+        invite: {
+          required: ['Exec board'],
+          optional: ['Social Chair'],
+          everyone_else: 'not_invited',
+        },
+        event_type: 'Officer development',
         points: 2,
         repeats: 'weekly',
       }),
@@ -174,7 +179,15 @@ describe('the cards the tool loop may propose', () => {
         title: 'Study night',
         date: '2026-11-20',
         start_time: '19:00',
-        required: true,
+        // Who is invited, by the chapter's names, for the action to look
+        // up (#5853): never ids from the model.
+        invite: {
+          required: ['Exec board'],
+          optional: ['Social Chair'],
+          not_invited: [],
+          everyone_else: 'not_invited',
+        },
+        event_type: 'Officer development',
         amount: 2,
         // "every Tuesday" read by the model reaches the card (#5117).
         repeats: 'weekly',

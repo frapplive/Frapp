@@ -12,7 +12,6 @@ import {
   POINTS_ADJUSTMENT_MAX,
   attendanceToWire,
   isRepeatRule,
-  othersInvitedForCreate,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
 } from '@repo/validation';
@@ -367,7 +366,6 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
     // Who it invites, as the event form would send it. A card from before
     // #5853 has no list: everyone, as `is_mandatory` says.
     const wire = event.attendance ? attendanceToWire(event.attendance) : null;
-    const others = wire ? othersInvitedForCreate(wire) : undefined;
     const created = await this.events.create({
       chapter_id: input.chapterId,
       created_by: input.userId,
@@ -382,7 +380,8 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
             required_role_ids: wire.required_role_ids,
             optional_role_ids: wire.optional_role_ids,
             excluded_role_ids: wire.excluded_role_ids,
-            ...(others === undefined ? {} : { others_invited: others }),
+            // Always said: the server and its event service ship together.
+            others_invited: wire.others_invited,
           }
         : {}),
       ...(event.point_value === null ? {} : { point_value: event.point_value }),

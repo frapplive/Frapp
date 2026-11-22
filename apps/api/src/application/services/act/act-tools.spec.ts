@@ -9,12 +9,14 @@ import type { EventService } from '../event.service';
 import type { EventTypeService } from '../event-type.service';
 import type { ActPlan } from './act-prompt';
 import type { ActPeopleResolver } from './act-people';
+import type { AudienceOptions } from './act-audience';
 import {
   CHAPTER,
   JACOB,
   JORDAN,
   NOW,
   OFFICER,
+  audienceOver,
   plan,
   toolContext,
 } from './act-test-kit';
@@ -431,7 +433,13 @@ describe('CreateEventActTool', () => {
       is_mandatory: false,
     },
   ];
-  function buildEvent(options: { types?: unknown[]; events?: Event[] } = {}) {
+  function buildEvent(
+    options: {
+      types?: unknown[];
+      events?: Event[];
+      audience?: AudienceOptions;
+    } = {},
+  ) {
     const events = {
       findByChapter: jest.fn().mockResolvedValue(options.events ?? []),
     };
@@ -442,6 +450,7 @@ describe('CreateEventActTool', () => {
       tool: new CreateEventActTool(
         events as unknown as EventService,
         eventTypes as unknown as EventTypeService,
+        audienceOver(options.audience),
       ),
       events,
       eventTypes,
@@ -467,7 +476,10 @@ describe('CreateEventActTool', () => {
         end_time: '2026-11-18T01:00:00.000Z',
         point_value: null,
         points_from: null,
-        event_type_id: null,
+        attendance: { everyone: 'optional', roles: {} },
+          attendance_from: null,
+          attendance_line: 'Optional for everyone',
+          event_type_id: null,
         is_mandatory: false,
         recurrence_rule: null,
       },
@@ -591,7 +603,7 @@ describe('CreateEventActTool', () => {
       expect(viewer).toBe(context.userId);
       expect(window).toEqual({
         endsAfter: new Date(
-          context.now.getTime() - 180 * 86_400_000,
+          context.now.getTime() - 400 * 86_400_000,
         ).toISOString(),
         startsBefore: context.now.toISOString(),
       });
@@ -605,6 +617,7 @@ describe('CreateEventActTool', () => {
         {
           list: jest.fn().mockRejectedValue(new Error('down')),
         } as unknown as EventTypeService,
+        audienceOver(),
       );
       expect(
         await failing.draft(said({ title: 'Study hours' }), context),
@@ -702,6 +715,176 @@ describe('CreateEventActTool', () => {
     expect(await tool.draft(plan(said), context)).toEqual({
       status: 'unclear',
       missing,
+    });
+  });
+});
+
+describe('CreateEventActTool: who it invites (#5853)', () => {
+  const EXEC = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1';
+  const CHAIRS = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2';
+  const PRESIDENT = 'ffffffff-ffff-4fff-8fff-fffffffffff1';
+  const TREASURER = 'ffffffff-ffff-4fff-8fff-fffffffffff2';
+  const SOCIAL = 'ffffffff-ffff-4fff-8fff-fffffffffff3';
+  const MEMBER = 'ffffffff-ffff-4fff-8fff-fffffffffff4';
+  const role = (id: string, name: string) => ({
+    id,
+    name,
+    holders: 1,
+    systemKey: null,
+  });
+  const audience: AudienceOptions = {
+    tiers: [
+      {
+        id: EXEC,
+        name: 'Cabinet',
+        roles: [role(PRESIDENT, 'President'), role(TREASURER, 'Treasurer')],
+      },
+      { id: CHAIRS, name: 'Committee Chairs', roles: [role(SOCIAL, 'Social Chair')] },
+    ],
+    untiered: [role(MEMBER, 'Actives')],
+    groups: [],
+  };
+  const FSL = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9',
+    name: 'FSL',
+    point_value: 5,
+    is_mandatory: false,
+  };
+  const build = (events: Event[] = []) =>
+    new CreateEventActTool(
+      {
+        findByChapter: jest.fn().mockResolvedValue(events),
+      } as unknown as EventService,
+      { list: jest.fn().mockResolvedValue([FSL]) } as unknown as EventTypeService,
+      audienceOver(audience),
+    );
+  const officer = toolContext(['events:create', 'events:update']);
+  const reception = (overrides: Partial<ActPlan> = {}) =>
+    plan({
+      title: 'FSL Leaders Reception',
+      date: '2027-01-19',
+      start_time: '17:00',
+      end_time: '18:00',
+      ...overrides,
+    });
+
+  it('invites a tier by name and nobody else, and says so on the card', async () => {
+    const draft = await build().draft(
+      reception({
+        invite: {
+          required: ['cabinet'],
+          optional: [],
+          not_invited: [],
+          everyone_else: 'not_invited',
+        },
+        event_type: 'FSL',
+      }),
+      officer,
+    );
+    expect(draft).toMatchObject({
+      status: 'draft',
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [`tier:${EXEC}`]: 'required' },
+        },
+        attendance_line: 'Cabinet required, nobody else invited',
+        attendance_from: null,
+        is_mandatory: false,
+        // The type the loop named, with its points.
+        event_type_id: FSL.id,
+        point_value: 5,
+      },
+    });
+  });
+
+  it('sends a name that is no role or tier back, rather than guess', async () => {
+    expect(
+      await build().draft(
+        reception({
+          invite: {
+            required: ['Officers'],
+            optional: [],
+            not_invited: [],
+            everyone_else: 'not_invited',
+          },
+        }),
+        officer,
+      ),
+    ).toEqual({ status: 'unclear', missing: 'invitees' });
+  });
+
+  it('sends an event type that is not the chapter\'s back', async () => {
+    expect(
+      await build().draft(reception({ event_type: 'Council' }), officer),
+    ).toEqual({ status: 'unclear', missing: 'event_type' });
+  });
+
+  it('refuses a list that invites nobody', async () => {
+    expect(
+      await build().draft(
+        reception({
+          invite: {
+            required: [],
+            optional: [],
+            not_invited: [],
+            everyone_else: 'not_invited',
+          },
+        }),
+        officer,
+      ),
+    ).toEqual({ status: 'unclear', missing: 'invitees' });
+  });
+
+  it('copies the last event of the same name when nobody chose a list', async () => {
+    const lastYear = {
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      name: 'FSL Leaders Reception',
+      start_time: '2026-01-20T22:00:00.000Z',
+      end_time: '2026-01-20T23:00:00.000Z',
+      point_value: 5,
+      is_mandatory: false,
+      required_role_ids: [PRESIDENT, TREASURER],
+      optional_role_ids: null,
+      excluded_role_ids: null,
+      others_invited: false,
+    } as unknown as Event;
+    expect(
+      await build([lastYear]).draft(reception(), officer),
+    ).toMatchObject({
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [PRESIDENT]: 'required', [TREASURER]: 'required' },
+        },
+        attendance_line: 'President and Treasurer required, nobody else invited',
+        attendance_from: { kind: 'event', name: 'FSL Leaders Reception' },
+      },
+    });
+  });
+
+  it('makes nobody required for a member who may not set requirements', async () => {
+    const member = toolContext(['events:create']);
+    expect(
+      await build().draft(
+        reception({
+          invite: {
+            required: ['Cabinet'],
+            optional: ['Social Chair'],
+            not_invited: [],
+            everyone_else: 'not_invited',
+          },
+        }),
+        member,
+      ),
+    ).toMatchObject({
+      payload: {
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [`tier:${EXEC}`]: 'optional', [SOCIAL]: 'optional' },
+        },
+        point_value: 0,
+      },
     });
   });
 });

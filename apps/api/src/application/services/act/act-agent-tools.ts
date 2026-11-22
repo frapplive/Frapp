@@ -105,7 +105,13 @@ const InviteArgs = z
       ),
   })
   .describe(
-    "Who is invited. Decide it from what the event is, in this chapter's own roles and tiers. An event for the chapter's leaders, officers, executive board, cabinet or a committee (a leadership reception, an officer training or transition, an exec or committee meeting, a council or FSL event for officers) invites that tier or those roles and nobody else. A chapter meeting requires everyone. A social, a philanthropy event or anything casual is optional for everyone. When a recent event of the same kind invited a set list, follow it. Make a role required only when the member said so, a source says attendance is expected, or that kind of event requires it.",
+    [
+      "Who is invited. Decide it from what the event is, in this chapter's own roles and tiers, never by inviting everyone out of habit.",
+      "An event for the chapter's leaders (a leadership or leaders reception, an FSL, council or national event for officers, an officer training or transition, an exec board meeting) is for the top tier, the executive board or cabinet, and nobody else; add the chairs' tier only when the member or a source names chairs too. A committee's meeting is for that committee's roles. Those it is for are expected there: make them required, and everyone else not invited.",
+      'A chapter meeting requires everyone. A social, a philanthropy event, study hours or anything casual is optional for everyone. When the whole chapter is meant, set only everyone_else and name no roles or tiers.',
+      'An event for alumni invites their role or tier.',
+      'When a recent event of the same name or kind invited a set list, follow it over these defaults.',
+    ].join(' '),
   );
 
 const EventArgs = z.object({

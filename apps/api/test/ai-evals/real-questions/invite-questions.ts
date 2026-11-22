@@ -110,10 +110,10 @@ export const INVITE_QUESTIONS: readonly RealQuestion[] = [
     "One event card that follows September's Officer training: Exec board and Chairs required, nobody else invited.",
   ),
   ask(
-    'alumni-tailgate',
-    'Add the homecoming tailgate on Saturday, November 21 at 11 AM in Lot C. Alumni are welcome too.',
-    { everyone: 'optional', required: [], optional: ['Alumni'] },
-    'One event card, optional for everyone, with the Alumni tier or role invited as optional, since alumni are left out unless invited.',
+    'alumni-dinner',
+    'Host the alumni dinner on Saturday, November 21 at 6 PM in the dining hall. It is for our alumni, and both the alumni and the exec board are expected there.',
+    { everyone: 'not_invited', required: ['Alumni', ...EXEC] },
+    'One event card inviting the Alumni and the Exec board (required) and nobody else.',
   ),
   ask(
     'study-hours',
@@ -123,7 +123,7 @@ export const INVITE_QUESTIONS: readonly RealQuestion[] = [
   ),
   ask(
     'risk-training',
-    'Risk management training for every officer and chair is mandatory: Thursday, November 19 at 7 PM in the chapter room.',
+    'Put risk management training on the calendar for Thursday, November 19 at 7 PM in the chapter room. It is mandatory for every officer and chair.',
     { everyone: 'not_invited', required: [...EXEC, ...CHAIRS] },
     'One event card: Exec board and Chairs tiers required, nobody else invited.',
   ),
@@ -132,5 +132,37 @@ export const INVITE_QUESTIONS: readonly RealQuestion[] = [
     'Set up a chairs meeting Tuesday, November 17 at 9 PM on Zoom.',
     { everyone: 'not_invited', required: CHAIRS },
     'One event card for the Chairs tier, required, nobody else invited.',
+  ),
+  // Written after the prompt was tuned on the ten above, and never tuned
+  // on: whether the rules carry to requests they were not shaped by.
+  ask(
+    'consultant-visit',
+    'Our national consultant visits on Wednesday, December 2. Set up a 4 PM meeting with him in the chapter room for the exec board.',
+    { everyone: 'not_invited', required: EXEC },
+    'One event card for the Exec board, required, nobody else invited.',
+  ),
+  ask(
+    'bonfire',
+    'Brotherhood bonfire on Friday, December 4 at 8 PM at the lake. Can you add it?',
+    { everyone: 'optional', required: [] },
+    'One event card, optional for everyone.',
+  ),
+  ask(
+    'house-walkthrough',
+    'Book a house walkthrough for the house manager and the treasurer on Thursday, December 3 at 5 PM at the chapter house.',
+    { everyone: 'not_invited', required: ['House Manager', 'Treasurer'] },
+    'One event card for the House Manager and Treasurer roles, required, nobody else invited.',
+  ),
+  ask(
+    'composites-retake',
+    'Add a composite photos retake on Tuesday, December 1 at 6 PM in the chapter room.',
+    { everyone: 'optional', required: [] },
+    'One event card, optional for everyone, as the first composite photos were.',
+  ),
+  ask(
+    'mandatory-run',
+    'Put the winter philanthropy run on the calendar for Sunday, December 6 at 9 AM at the college track. It is mandatory for the whole chapter.',
+    { everyone: 'required', required: [], type: 'Philanthropy' },
+    'One event card, the Philanthropy type, required for everyone.',
   ),
 ];

@@ -32664,6 +32664,36 @@
           "name"
         ]
       },
+      "NewEventAttendanceDto": {
+        "type": "object",
+        "properties": {
+          "everyone": {
+            "type": "string",
+            "enum": [
+              "required",
+              "optional",
+              "not_invited"
+            ],
+            "description": "What the event asks of a member set apart by no entry."
+          },
+          "roles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "required",
+                "optional",
+                "not_invited"
+              ]
+            },
+            "description": "Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status."
+          }
+        },
+        "required": [
+          "everyone",
+          "roles"
+        ]
+      },
       "NewEventSuggestionDto": {
         "type": "object",
         "properties": {
@@ -32708,7 +32738,33 @@
             "description": "The chapter event type the event is one of, when one matched."
           },
           "is_mandatory": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must."
+          },
+          "attendance": {
+            "nullable": true,
+            "description": "Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewEventAttendanceDto"
+              }
+            ]
+          },
+          "attendance_line": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line for who is invited, in the chapter's names when the card was made (\"Cabinet required, nobody else invited\")."
+          },
+          "attendance_from": {
+            "nullable": true,
+            "description": "The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewEventPointsFromDto"
+              }
+            ]
           },
           "recurrence_rule": {
             "type": "string",
@@ -32726,6 +32782,9 @@
           "points_from",
           "event_type_id",
           "is_mandatory",
+          "attendance",
+          "attendance_line",
+          "attendance_from",
           "recurrence_rule"
         ]
       },
