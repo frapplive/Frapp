@@ -142,6 +142,7 @@ export * from "./use-search";
 export * from "./use-self-assignable-roles";
 export * from "./use-semesters";
 export * from "./use-service-entries";
+export * from "./use-smooth-text";
 export * from "./use-study";
 export * from "./use-tasks";
 export * from "./use-user";

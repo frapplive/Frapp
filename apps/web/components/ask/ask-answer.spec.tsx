@@ -95,6 +95,9 @@ vi.mock("@/components/ai/report-ai", async (importOriginal) => ({
 }));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // The pacing is `use-smooth-text.spec.ts`'s; here a preview is drawn as
+  // it arrives.
+  useSmoothText: (text: string) => text,
   // The reader has #rush-week and not #exec.
   useChannels: () => {
     channelList.reads += 1;
