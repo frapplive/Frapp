@@ -295,12 +295,16 @@ export function EventDetailSheet({
   const tiersQuery = useRoleTiers();
   const attendanceName = useMemo(
     () =>
-      attendanceNamesFrom(
-        rolesQuery.data,
-        tiersQuery.data,
-        rolesQuery.isSuccess,
-      ),
-    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess],
+      attendanceNamesFrom(rolesQuery.data, tiersQuery.data, {
+        rolesLoaded: rolesQuery.isSuccess,
+        tiersLoaded: tiersQuery.isSuccess,
+      }),
+    [
+      rolesQuery.data,
+      tiersQuery.data,
+      rolesQuery.isSuccess,
+      tiersQuery.isSuccess,
+    ],
   );
 
   async function handleDelete() {

@@ -266,7 +266,8 @@ export class CreateEventDto {
   @ApiPropertyOptional({
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
-    description: 'Roles invited but not required.',
+    description:
+      'Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.',
   })
   @IsOptional()
   @IsArray()
@@ -279,7 +280,7 @@ export class CreateEventDto {
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
     description:
-      'Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.',
+      'Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.',
   })
   @IsOptional()
   @IsArray()
@@ -395,17 +396,6 @@ export class CreateEventDto {
   client_message_id?: string;
 }
 
-/**
- * The event row as the API serves it: the shared body of the create, list and
- * read responses.
- *
- * These routes once declared no response schema, which openapi-typescript
- * renders as `content?: never` (or no content at all), so callers cast the
- * fields they read (#1717, #4867). Drift between this class and the event row
- * is caught the same way as `AdjustPointsResponseDto`: `implements Event` for
- * type drift, and the `AssertNever<Exclude<…>>` aliases at the end of this file for
- * key drift.
- */
 /** `Event.attendance_picks`: Who's coming as picked, tiers included. */
 export class EventAttendancePicksDto implements EventAttendancePicks {
   @ApiProperty({
@@ -427,6 +417,17 @@ export class EventAttendancePicksDto implements EventAttendancePicks {
   not_invited: string[];
 }
 
+/**
+ * The event row as the API serves it: the shared body of the create, list and
+ * read responses.
+ *
+ * These routes once declared no response schema, which openapi-typescript
+ * renders as `content?: never` (or no content at all), so callers cast the
+ * fields they read (#1717, #4867). Drift between this class and the event row
+ * is caught the same way as `AdjustPointsResponseDto`: `implements Event` for
+ * type drift, and the `AssertNever<Exclude<…>>` aliases at the end of this file for
+ * key drift.
+ */
 export class EventResponseDto implements Event {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -654,7 +655,8 @@ export class UpdateEventDto {
   @ApiPropertyOptional({
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
-    description: 'Roles invited but not required.',
+    description:
+      'Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.',
   })
   @IsOptional()
   @IsArray()
@@ -667,7 +669,7 @@ export class UpdateEventDto {
     type: [String],
     maxItems: EVENT_ROLE_IDS_MAX,
     description:
-      'Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.',
+      'Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.',
   })
   @IsOptional()
   @IsArray()

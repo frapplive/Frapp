@@ -7,6 +7,7 @@ import {
   EVENT_ATTENDANCE_LABELS,
   alumniRoleIdOf,
   attendanceChoices,
+  attendanceFloorOf,
   attendanceOfRole,
   describeAttendance,
   withEveryone,
@@ -46,6 +47,7 @@ export function AttendanceEditor({
   onChange,
   rolesData,
   tiersData,
+  tiersLoaded = true,
   rolesState,
   disabled = false,
   allowRequired = true,
@@ -56,6 +58,8 @@ export function AttendanceEditor({
   rolesData: unknown;
   /** The `GET /v1/role-tiers` payload. */
   tiersData: unknown;
+  /** False until the tiers load, so a set tier never reads "Removed tier". */
+  tiersLoaded?: boolean;
   rolesState: "loading" | "error" | "ready";
   disabled?: boolean;
   /**
@@ -87,15 +91,18 @@ export function AttendanceEditor({
     () =>
       attendanceTargets(rolesData, tiersData, pinned, search, {
         missingRole: ready ? "Removed role" : "Role",
-        missingTier: ready ? "Removed tier" : "Tier",
+        missingTier: tiersLoaded ? "Removed tier" : "Tier",
       }),
-    [rolesData, tiersData, pinned, search, ready],
+    [rolesData, tiersData, pinned, search, ready, tiersLoaded],
   );
   const searching = search.trim() !== "";
   const collapsedCount = Math.max(ATTENDANCE_SEARCH_FROM, pinned.length);
   const shown = showAll || searching ? rows : rows.slice(0, collapsedCount);
-  const options = (current: EventAttendanceStatus) =>
-    attendanceChoices(current, allowRequired).map((status) => ({
+  const options = (
+    current: EventAttendanceStatus,
+    floor?: EventAttendanceStatus,
+  ) =>
+    attendanceChoices(current, allowRequired, floor).map((status) => ({
       value: status,
       label: EVENT_ATTENDANCE_LABELS[status],
     }));
@@ -164,9 +171,14 @@ export function AttendanceEditor({
                   <SegmentedChoice
                     dense
                     label={`Attendance for ${role.name}`}
-                    options={options(current)}
+                    options={options(
+                      current,
+                      attendanceFloorOf(value, role.tierEntry),
+                    )}
                     value={current}
-                    onChange={(next) => emit(withRole(value, role.id, next))}
+                    onChange={(next) =>
+                      emit(withRole(value, role.id, next, role.tierEntry))
+                    }
                     disabled={disabled}
                     quiet={!setApart}
                   />

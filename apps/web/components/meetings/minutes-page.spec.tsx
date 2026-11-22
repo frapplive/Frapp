@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@repo/hooks", () => ({
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   useMeetingNotes: () => ({ isPending: false, data: mocks.notes.current }),
   useSaveMeetingNotes: () => ({
     mutateAsync: mocks.saveNotes,

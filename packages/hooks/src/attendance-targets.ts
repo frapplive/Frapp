@@ -36,8 +36,6 @@ export type AttendanceTargets = {
   total: number;
   /** The name for any draft key; a key nothing names reads `missing`. */
   nameOf: (key: string) => string;
-  /** A role's tier as a draft key, or `undefined`. */
-  tierEntryOf: (roleId: string) => string | undefined;
 };
 
 function rolesLabel(count: number): string {
@@ -103,31 +101,32 @@ export function attendanceTargets(
     total:
       tierOptions.length + roleOptions.filter((role) => !role.hidden).length,
     nameOf: (key) => named(key) ?? (isTier(key) ? missingTier : missingRole),
-    tierEntryOf: (roleId) => tierOfRole.get(roleId),
   };
 }
 
 /**
  * The name for a Who's coming key (a role id, or `tier:<id>`) as every
  * summary line reads it, on web and the phone: "Cabinet required, nobody
- * else invited" (`describeAttendance`). Once the roles have `loaded`, a key
- * nothing names reads "Removed role" or "Removed tier"; before, it reads as
- * unknown, so a summary never calls a loading role removed.
+ * else invited" (`describeAttendance`). A role key nothing names reads
+ * "Removed role" once the roles have loaded, and a tier key "Removed tier"
+ * once the tiers have; before (or when a list failed to load), it reads as
+ * unknown, so a summary never calls a live role or tier removed.
  */
 export function attendanceNamesFrom(
   rolesData: unknown,
   tiersData: unknown,
-  loaded: boolean,
+  { rolesLoaded, tiersLoaded }: { rolesLoaded: boolean; tiersLoaded: boolean },
 ): (key: string) => string | undefined {
   const named = attendanceEntryName(
     toRoleOptions(rolesData, "keep"),
     normalizeTiers(tiersData),
   );
-  return (key) =>
-    named(key) ??
-    (loaded
-      ? attendanceTierIdOf(key) === null
-        ? "Removed role"
-        : "Removed tier"
-      : undefined);
+  return (key) => {
+    const name = named(key);
+    if (name !== undefined) return name;
+    if (attendanceTierIdOf(key) === null) {
+      return rolesLoaded ? "Removed role" : undefined;
+    }
+    return tiersLoaded ? "Removed tier" : undefined;
+  };
 }

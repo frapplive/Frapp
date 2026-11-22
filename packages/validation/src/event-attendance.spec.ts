@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   attendanceEntryName,
   attendanceFieldsOf,
+  attendanceFloorOf,
+  withRole,
   attendanceFromEvent,
   attendanceInvitesNobody,
   attendanceTierEntry,
@@ -396,6 +398,52 @@ describe("tiers in Who's coming (Paul, 2026-11-22)", () => {
     expect(nameOf("r1")).toBe("Treasurer");
   });
 
+  it("never lets a role off its tier: only answers at or above it", () => {
+    const draft = {
+      everyone: "optional" as const,
+      roles: { [cabinet]: "optional" as const },
+    };
+    expect(attendanceFloorOf(draft, cabinet)).toBe("optional");
+    expect(attendanceChoices("optional", true, "optional")).toEqual([
+      "required",
+      "optional",
+    ]);
+    // Raised above the tier, it is set apart; back to the tier's, it follows.
+    const raised = withRole(draft, "r1", "required", cabinet);
+    expect(raised.roles.r1).toBe("required");
+    expect(withRole(raised, "r1", "optional", cabinet).roles).toEqual({
+      [cabinet]: "optional",
+    });
+  });
+
+  it("names a tier invited by its name in the minutes line", () => {
+    expect(
+      eventInvitedRoleNames(
+        {
+          others_invited: false,
+          required_role_ids: ["r-pres", "r-vp"],
+          attendance_picks: {
+            required: [cabinet],
+            optional: [],
+            not_invited: [],
+          },
+        },
+        [{ id: "r-pres", name: "President" }],
+        [{ id: TIER, name: "Cabinet" }],
+      ),
+    ).toBe("Cabinet");
+  });
+
+  it("lowercases a tier sent in another case", () => {
+    expect(
+      splitAttendancePicks({
+        required_role_ids: [`TIER:${TIER.toUpperCase()}`],
+        optional_role_ids: null,
+        excluded_role_ids: null,
+      }).attendance_picks?.required,
+    ).toEqual([cabinet]);
+  });
+
   it("answers a role that follows its tier as the tier does", () => {
     const draft = {
       everyone: "optional" as const,
@@ -409,7 +457,7 @@ describe("tiers in Who's coming (Paul, 2026-11-22)", () => {
         "r1",
         cabinet,
       ),
-    ).toBe("not_invited");
+    ).toBe("required");
   });
 
   it("sends a tier through the wire as an entry", () => {

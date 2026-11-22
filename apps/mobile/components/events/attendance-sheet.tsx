@@ -13,6 +13,7 @@ import {
   EVENT_ATTENDANCE_LABELS,
   alumniRoleIdOf,
   attendanceChoices,
+  attendanceFloorOf,
   attendanceOfRole,
   describeAttendance,
   withEveryone,
@@ -138,14 +139,24 @@ function AttendanceBody({
     () =>
       attendanceTargets(rolesQuery.data, tiersQuery.data, pinned, search, {
         missingRole: loaded ? "Removed role" : "Role",
-        missingTier: loaded ? "Removed tier" : "Tier",
+        missingTier: tiersQuery.isSuccess ? "Removed tier" : "Tier",
       }),
-    [rolesQuery.data, tiersQuery.data, pinned, search, loaded],
+    [
+      rolesQuery.data,
+      tiersQuery.data,
+      pinned,
+      search,
+      loaded,
+      tiersQuery.isSuccess,
+    ],
   );
   const alumniId = alumniRoleIdOf(rolesQuery.data);
   const searchable = total > ATTENDANCE_SEARCH_FROM;
-  const choices = (current: EventAttendanceStatus) =>
-    attendanceChoices(current, allowRequired).map((status) => ({
+  const choices = (
+    current: EventAttendanceStatus,
+    floor?: EventAttendanceStatus,
+  ) =>
+    attendanceChoices(current, allowRequired, floor).map((status) => ({
       value: status,
       label: EVENT_ATTENDANCE_LABELS[status],
     }));
@@ -253,10 +264,13 @@ function AttendanceBody({
             </View>
             <View style={styles.choice}>
               <Segmented
-                options={choices(current)}
+                options={choices(
+                  current,
+                  attendanceFloorOf(value, item.tierEntry),
+                )}
                 value={current}
                 onChange={(next: EventAttendanceStatus) =>
-                  onChange(withRole(value, item.id, next))
+                  onChange(withRole(value, item.id, next, item.tierEntry))
                 }
                 quiet={!setApart}
                 dense

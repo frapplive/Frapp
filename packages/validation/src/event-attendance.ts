@@ -77,7 +77,7 @@ export function attendanceTierEntry(tierId: string): string {
 /** The tier id an entry names, or `null` for a role id. */
 export function attendanceTierIdOf(entry: string): string | null {
   return entry.startsWith(TIER_ENTRY_PREFIX)
-    ? entry.slice(TIER_ENTRY_PREFIX.length)
+    ? entry.slice(TIER_ENTRY_PREFIX.length).toLowerCase()
     : null;
 }
 
@@ -96,10 +96,20 @@ export function splitAttendancePicks(lists: {
   optional_role_ids: string[] | null;
   excluded_role_ids: string[] | null;
 } {
+  // A tier entry is matched against `tier:` plus the lowercase uuid, so one
+  // sent in another case is spelled that way rather than matching nothing.
+  const entries = (list: readonly string[] | null) => [
+    ...new Set(
+      (list ?? []).map((entry) => {
+        const tierId = attendanceTierIdOf(entry.toLowerCase());
+        return tierId === null ? entry : attendanceTierEntry(tierId);
+      }),
+    ),
+  ];
   const picks: EventAttendancePicks = {
-    required: [...new Set(lists.required_role_ids ?? [])],
-    optional: [...new Set(lists.optional_role_ids ?? [])],
-    not_invited: [...new Set(lists.excluded_role_ids ?? [])],
+    required: entries(lists.required_role_ids),
+    optional: entries(lists.optional_role_ids),
+    not_invited: entries(lists.excluded_role_ids),
   };
   const namesTier = [
     ...picks.required,
@@ -177,14 +187,19 @@ export function eventOthersInvited(event: EventAttendanceFields): boolean {
 export function eventInvitedRoleNames(
   event: EventAttendanceFields,
   roles: readonly { id: string; name: string }[],
+  tiers: readonly { id: string; name: string }[] = [],
 ): string | null {
   if (eventOthersInvited(event)) return null;
-  const byId = new Map(roles.map((role) => [role.id, role.name]));
+  // As picked, so a tier reads "Cabinet" rather than each of its roles.
+  const picks = event.attendance_picks;
+  const nameOf = attendanceEntryName(roles, tiers);
   const names = [
-    ...(event.required_role_ids ?? []),
-    ...(event.optional_role_ids ?? []),
+    ...new Set([
+      ...(picks?.required ?? event.required_role_ids ?? []),
+      ...(picks?.optional ?? event.optional_role_ids ?? []),
+    ]),
   ]
-    .map((id) => byId.get(id))
+    .map((id) => nameOf(id))
     .filter((name): name is string => !!name);
   return names.length > 0 ? names.join(", ") : null;
 }
@@ -396,11 +411,33 @@ export const ATTENDANCE_SEARCH_FROM = 8;
 export function attendanceChoices(
   current: EventAttendanceStatus,
   allowRequired: boolean,
+  floor?: EventAttendanceStatus,
 ): EventAttendanceStatus[] {
   return EVENT_ATTENDANCE_STATUSES.filter(
     (status) =>
-      allowRequired || status !== "required" || current === "required",
+      (allowRequired || status !== "required" || current === "required") &&
+      (!floor || STRENGTH[status] >= STRENGTH[floor]),
   );
+}
+
+const STRENGTH: Record<EventAttendanceStatus, number> = {
+  required: 2,
+  optional: 1,
+  not_invited: 0,
+};
+
+/**
+ * The weakest answer a role row may take: its tier's, when the tier is set
+ * apart. A member gets the strongest answer of everything they hold, and the
+ * database lists the role under its tier's answer too, so a role can be
+ * raised above its tier but never let off it; the editors offer only the
+ * answers at or above it.
+ */
+export function attendanceFloorOf(
+  draft: EventAttendanceDraft,
+  tierEntry?: string | null,
+): EventAttendanceStatus | undefined {
+  return tierEntry ? draft.roles[tierEntry] : undefined;
 }
 
 /**
@@ -437,11 +474,10 @@ export function attendanceOfRole(
   roleId: string,
   tierEntry?: string | null,
 ): EventAttendanceStatus {
-  return (
-    draft.roles[roleId] ??
-    (tierEntry ? draft.roles[tierEntry] : undefined) ??
-    draft.everyone
-  );
+  const own = draft.roles[roleId];
+  const tier = attendanceFloorOf(draft, tierEntry);
+  if (own && tier) return STRENGTH[own] >= STRENGTH[tier] ? own : tier;
+  return own ?? tier ?? draft.everyone;
 }
 
 /**
@@ -515,13 +551,20 @@ export function withEveryone(
   return { everyone, roles };
 }
 
+/**
+ * The draft after one row's answer changes. A row whose answer now equals
+ * what it would follow anyway (its tier's, when `tierEntry` is set apart,
+ * else Everyone else's) leaves the list.
+ */
 export function withRole(
   draft: EventAttendanceDraft,
   roleId: string,
   status: EventAttendanceStatus | null,
+  tierEntry?: string | null,
 ): EventAttendanceDraft {
   const roles = { ...draft.roles };
-  if (status === null || status === draft.everyone) delete roles[roleId];
+  const follows = attendanceFloorOf(draft, tierEntry) ?? draft.everyone;
+  if (status === null || status === follows) delete roles[roleId];
   else roles[roleId] = status;
   return { ...draft, roles };
 }

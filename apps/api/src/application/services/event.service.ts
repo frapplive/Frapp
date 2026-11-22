@@ -466,9 +466,12 @@ export class EventService {
       recurrence_rule: input.recurrence_rule ?? null,
       parent_event_id: null,
       // A tier in a list is kept in `attendance_picks`; the database fills the
-      // role lists from it (`attendanceCreate`).
-      ...attendanceCreate(input),
-      others_invited,
+      // role lists from it, and `others_invited` is written out
+      // (`attendanceCreate`).
+      ...attendanceCreate({
+        ...input,
+        others_invited: others_invited ?? undefined,
+      }),
       notes: input.notes ?? null,
       // This first meeting's own; the series' other meetings start with
       // none (#4934).

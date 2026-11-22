@@ -8026,9 +8026,9 @@ export interface components {
             recurrence_rule?: string;
             /** @description Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles. */
             required_role_ids?: string[];
-            /** @description Roles invited but not required. */
+            /** @description Roles invited but not required, each a role id or a tier as `tier:<role tier id>`. */
             optional_role_ids?: string[];
-            /** @description Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
+            /** @description Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
             excluded_role_ids?: string[];
             /** @description Whether a member holding none of the listed roles is invited (then `is_mandatory` says whether they must attend). Omitted on create, it is stored as null, which reads as true unless `required_role_ids` is non-empty: the older "only these roles" meaning, for a caller that predates this field. Omitted on update, it is left as stored. */
             others_invited?: boolean;
@@ -8114,9 +8114,9 @@ export interface components {
             recurrence_rule?: string;
             /** @description Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles. */
             required_role_ids?: string[];
-            /** @description Roles invited but not required. */
+            /** @description Roles invited but not required, each a role id or a tier as `tier:<role tier id>`. */
             optional_role_ids?: string[];
-            /** @description Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
+            /** @description Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
             excluded_role_ids?: string[];
             /** @description Whether a member holding none of the listed roles is invited (then `is_mandatory` says whether they must attend). Omitted, it is left as stored. A stored null reads as true unless `required_role_ids` is non-empty, the older "only these roles" meaning. */
             others_invited?: boolean;

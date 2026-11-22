@@ -7,6 +7,8 @@ import {
   normalizeAgendaText,
   normalizeAttachmentUrl,
   readAgendaTabledFrom,
+  attendanceTierIdOf,
+  eventOthersInvited,
   splitAttendancePicks,
   type EventAgendaItem,
   type EventAttendancePicks,
@@ -119,6 +121,11 @@ type AttendanceLists = Pick<
   'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
 >;
 
+type AttendanceColumns = Partial<AttendanceLists> & {
+  attendance_picks?: EventAttendancePicks | null;
+  others_invited?: boolean | null;
+};
+
 /**
  * A create's attendance columns (`spec/behavior/events.md` § Attendance by
  * role): a list may name a tier as `tier:<id>` beside role ids. Such an
@@ -126,49 +133,94 @@ type AttendanceLists = Pick<
  * only role ids, which the database tops up with every tier's roles
  * (`events_expand_attendance_picks`). An event naming no tier is written
  * exactly as before, with `attendance_picks` null.
+ *
+ * An event that names a tier always stores `others_invited`: left null, it
+ * would read through `required_role_ids` (`eventOthersInvited`), and a tier
+ * with no roles expands to none, which would open "Cabinet required, nobody
+ * else invited" to the whole chapter.
  */
 export function attendanceCreate(
   input: Pick<
     CreateEventInput,
-    'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
+    | 'required_role_ids'
+    | 'optional_role_ids'
+    | 'excluded_role_ids'
+    | 'others_invited'
   >,
-): AttendanceLists & { attendance_picks: EventAttendancePicks | null } {
-  return splitAttendancePicks({
+): AttendanceLists & {
+  attendance_picks: EventAttendancePicks | null;
+  others_invited: boolean | null;
+} {
+  const split = splitAttendancePicks({
     required_role_ids: input.required_role_ids ?? null,
     optional_role_ids: input.optional_role_ids ?? null,
     excluded_role_ids: input.excluded_role_ids ?? null,
   });
+  const others_invited =
+    input.others_invited ??
+    (split.attendance_picks
+      ? eventOthersInvited({ required_role_ids: input.required_role_ids })
+      : null);
+  return { ...split, others_invited };
 }
 
 /**
- * An update's attendance columns, or `{}` when it sends no list. A list the
- * update leaves out keeps what the event picked (its picks when it names a
- * tier, else its role list), so a hand-made request that sends one list
- * neither drops a tier nor flattens the others. Sent by a build that predates
- * tiers (no `tier:` entry anywhere), the lists are written as role lists and
- * the picks cleared: the event keeps the roles it was showing that build.
+ * An update's attendance columns, or `{}` when it sends no list.
+ *
+ * - Naming no tier, on an event that names none, it writes just the lists
+ *   sent, as before tiers.
+ * - Otherwise a list the update leaves out keeps what the event picked (its
+ *   picks when it names a tier, else its role list), so a request that sends
+ *   one list neither drops a tier nor flattens the others.
+ * - Sent by a build that predates tiers (no `tier:` entry anywhere), the
+ *   lists are written as role lists and the picks cleared: the event keeps
+ *   the roles it was showing that build.
+ * - Naming a tier, `others_invited` is written out (as on create) when the
+ *   update doesn't send it and the row holds none.
  */
 export function attendanceUpdate(
   input: Pick<
     UpdateEventInput,
-    'required_role_ids' | 'optional_role_ids' | 'excluded_role_ids'
+    | 'required_role_ids'
+    | 'optional_role_ids'
+    | 'excluded_role_ids'
+    | 'others_invited'
   >,
-  existing: Pick<Event, keyof AttendanceLists | 'attendance_picks'>,
-): Partial<AttendanceLists> & {
-  attendance_picks?: EventAttendancePicks | null;
-} {
+  existing: Pick<
+    Event,
+    keyof AttendanceLists | 'attendance_picks' | 'others_invited'
+  >,
+): AttendanceColumns {
   const sent =
     input.required_role_ids !== undefined ||
     input.optional_role_ids !== undefined ||
     input.excluded_role_ids !== undefined;
   if (!sent) return {};
   const picks = existing.attendance_picks;
+  const namesTier = [
+    ...(input.required_role_ids ?? []),
+    ...(input.optional_role_ids ?? []),
+    ...(input.excluded_role_ids ?? []),
+  ].some((entry) => attendanceTierIdOf(entry) !== null);
+  if (!picks && !namesTier) {
+    const only: AttendanceColumns = {};
+    if (input.required_role_ids !== undefined) {
+      only.required_role_ids = input.required_role_ids;
+    }
+    if (input.optional_role_ids !== undefined) {
+      only.optional_role_ids = input.optional_role_ids;
+    }
+    if (input.excluded_role_ids !== undefined) {
+      only.excluded_role_ids = input.excluded_role_ids;
+    }
+    return only;
+  }
   const kept = (
     given: string[] | null | undefined,
     picked: string[] | undefined,
     stored: string[] | null,
   ) => (given !== undefined ? given : (picked ?? stored));
-  return splitAttendancePicks({
+  const lists = {
     required_role_ids: kept(
       input.required_role_ids,
       picks?.required,
@@ -184,7 +236,18 @@ export function attendanceUpdate(
       picks?.not_invited,
       existing.excluded_role_ids,
     ),
-  });
+  };
+  const split: AttendanceColumns = splitAttendancePicks(lists);
+  if (
+    split.attendance_picks &&
+    input.others_invited === undefined &&
+    existing.others_invited === null
+  ) {
+    split.others_invited = eventOthersInvited({
+      required_role_ids: lists.required_role_ids,
+    });
+  }
+  return split;
 }
 
 /**

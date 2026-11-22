@@ -25988,7 +25988,7 @@
           },
           "optional_role_ids": {
             "maxItems": 200,
-            "description": "Roles invited but not required.",
+            "description": "Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.",
             "type": "array",
             "items": {
               "type": "string"
@@ -25996,7 +25996,7 @@
           },
           "excluded_role_ids": {
             "maxItems": 200,
-            "description": "Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
+            "description": "Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
             "type": "array",
             "items": {
               "type": "string"
@@ -26270,7 +26270,7 @@
           },
           "optional_role_ids": {
             "maxItems": 200,
-            "description": "Roles invited but not required.",
+            "description": "Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.",
             "type": "array",
             "items": {
               "type": "string"
@@ -26278,7 +26278,7 @@
           },
           "excluded_role_ids": {
             "maxItems": 200,
-            "description": "Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
+            "description": "Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
             "type": "array",
             "items": {
               "type": "string"

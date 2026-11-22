@@ -675,12 +675,16 @@ function DetailsSection({ event, now }: { event: EventDetail; now: Date }) {
   const tiersQuery = useRoleTiers();
   const roleName = useMemo(
     () =>
-      attendanceNamesFrom(
-        rolesQuery.data,
-        tiersQuery.data,
-        rolesQuery.isSuccess,
-      ),
-    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess],
+      attendanceNamesFrom(rolesQuery.data, tiersQuery.data, {
+        rolesLoaded: rolesQuery.isSuccess,
+        tiersLoaded: tiersQuery.isSuccess,
+      }),
+    [
+      rolesQuery.data,
+      tiersQuery.data,
+      rolesQuery.isSuccess,
+      tiersQuery.isSuccess,
+    ],
   );
 
   return (

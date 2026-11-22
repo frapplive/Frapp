@@ -31,6 +31,7 @@ import {
   useEvent,
   useEvents,
   useMyPermissions,
+  useRoleTiers,
   useRoles,
   useUpdateEvent,
   type EventType,
@@ -113,7 +114,7 @@ import {
   SubscriptionNotice,
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
-import { toRoleOptions } from "@repo/hooks/chapter-roles";
+import { attendanceNamesFrom } from "@repo/hooks/attendance-targets";
 import {
   cn,
   getErrorMessage,
@@ -917,21 +918,19 @@ export function EventEditorDialog({
   const isSubmitting =
     createEventMutation.isPending || updateEventMutation.isPending;
 
-  const roleOptions = useMemo(
+  // A role or tier set on the event but missing from the list (deleted
+  // since, or the list still loading) stays a removable row reading "Removed
+  // role" in the editor, so an unseen id is never saved back without the
+  // officer seeing it. A tier's key is `tier:<id>` (Paul, 2026-11-22).
+  const tiersQuery = useRoleTiers();
+  const roleName = useMemo(
     () =>
-      toRoleOptions(rolesQuery.data, "hide").sort((first, second) =>
-        first.name.localeCompare(second.name),
-      ),
-    [rolesQuery.data],
+      attendanceNamesFrom(rolesQuery.data, tiersQuery.data, {
+        rolesLoaded: rolesQuery.isSuccess,
+        tiersLoaded: tiersQuery.isSuccess,
+      }),
+    [rolesQuery.data, tiersQuery.data, rolesQuery.isSuccess, tiersQuery.isSuccess],
   );
-
-  // A role set on the event but missing from the list (deleted since, or the
-  // list still loading) stays a removable row reading "Removed role" in the
-  // editor, so an unseen id is never saved back without the officer seeing it.
-  const roleName = useMemo(() => {
-    const byId = new Map(roleOptions.map((role) => [role.id, role.name]));
-    return (id: string) => byId.get(id);
-  }, [roleOptions]);
 
   const takeKept = kept.take;
   /* eslint-disable react-hooks/set-state-in-effect -- hydrate or reset the form when the dialog opens on a different event */
@@ -1726,7 +1725,9 @@ export function EventEditorDialog({
                     value={attendance}
                     onChange={setAttendance}
                     allowRequired={canSetRequirements}
-                    roles={roleOptions}
+                    rolesData={rolesQuery.data}
+                    tiersData={tiersQuery.data}
+                    tiersLoaded={tiersQuery.isSuccess}
                     rolesState={
                       rolesQuery.isError
                         ? "error"
