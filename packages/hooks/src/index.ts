@@ -70,6 +70,7 @@ export * from "./use-ai";
 export * from "./use-ai-report";
 export * from "./use-ai-suggestions";
 export * from "./use-ask";
+export * from "./use-smooth-text";
 export * from "./use-ask-cards";
 export * from "./use-ask-dictation";
 export * from "./use-ask-feedback";

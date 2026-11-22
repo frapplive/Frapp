@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  askQuestionShown,
   ASK_COPY,
   ASK_DICTATION_MAX_LENGTH,
   ASK_STEPS,
@@ -541,5 +542,19 @@ describe("a thread reply that names @Frapp (#4713)", () => {
 describe("ASK_DICTATION_MAX_LENGTH", () => {
   it("takes as many words as a question, since they become one", () => {
     expect(ASK_DICTATION_MAX_LENGTH).toBe(ASK_QUESTION_MAX_LENGTH);
+  });
+});
+
+describe("askQuestionShown", () => {
+  it("squeezes a paste's blank-line runs to one blank line", () => {
+    expect(askQuestionShown("Tasks:\n\n\n\nOne\n \n\n\nTwo  ").text).toBe(
+      "Tasks:\n\nOne\n\nTwo",
+    );
+  });
+
+  it("folds a question past six lines or 420 characters", () => {
+    expect(askQuestionShown("When is the next meeting?").long).toBe(false);
+    expect(askQuestionShown("a\nb\nc\nd\ne\nf\ng").long).toBe(true);
+    expect(askQuestionShown("x".repeat(421)).long).toBe(true);
   });
 });
