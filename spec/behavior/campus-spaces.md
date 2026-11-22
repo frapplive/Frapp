@@ -2,6 +2,8 @@
 
 **Status: Proposed, pending Paul.** Nothing here is built. Asked by Winston (`whewitt-frapp`), 2026-11-11, for [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Until Paul accepts it, the specs listed in [§ 10](#10-specs-this-would-change) describe the system, and this doc changes none of them.
 
+GitHub hides `whewitt-frapp`'s issues and PRs since 2026-11-11, including #4192 and this doc's first PR, #4276. The visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
+
 This doc is one part of #4192's design. It covers everything at a school that isn't recruitment: the campus feed, campus channels, messages between chapters, the school directory, campus events, how campus activity reaches people, and who moderates it all. Four parts are decided elsewhere, and this doc builds on them rather than restating them:
 
 - **URLs and tenant context:** ADR-27 (PR [#4213](https://github.com/pdcarlson/Frapp/pull/4213)). Campus pages live at `/s/<school>`, carry `x-school-id` to a `SchoolGuard` that checks for a `school_members` row, and read only what chapters push up. Unread counts span every space through a per-user `GET /v1/me/unread`.
