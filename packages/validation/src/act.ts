@@ -7,6 +7,7 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
 } from "./field-limits";
+import { TASK_FOLLOWER_COPY } from "./task-follower";
 
 /**
  * Asking Frapp to do something (#718, `spec/behavior/ai.md` § Asking Frapp to
@@ -65,6 +66,7 @@ export const ACT_MISSING = [
   "too_many_members",
   "invitees",
   "event_type",
+  "audience",
   "request",
 ] as const;
 export type ActMissing = (typeof ACT_MISSING)[number];
@@ -82,11 +84,6 @@ export type ActNoteType = (typeof ACT_NOTE_TYPES)[number];
 /** A proposal the member asked for waits this long, then is gone. */
 export const ACT_PROPOSAL_EXPIRY_DAYS = 1;
 
-/**
- * The words a proposal in the Ask conversation shows, shared so web and
- * mobile cannot drift. What surrounds the card (the field, the empty state)
- * is `ASK_COPY`'s.
- */
 /**
  * The rest of a proposed task, in the order the New task form asks for it
  * (2026-11-22): its points, what Mark done needs, its steps and the group
@@ -107,7 +104,8 @@ export function actTaskFactLines(
   if (points > 0) {
     lines.push({
       kind: "points",
-      text: points === 1 ? "1 point" : `${points.toLocaleString("en-US")} points`,
+      // The same words a made task's points read in (`formatPoints`).
+      text: points === 1 ? "1 point" : `${points} points`,
     });
   }
   if (task.proof_kind === "photo") {
@@ -117,12 +115,22 @@ export function actTaskFactLines(
   }
   const steps = task.subtasks?.length ?? 0;
   if (steps > 0) {
-    lines.push({ kind: "steps", text: steps === 1 ? "1 step" : `${steps} steps` });
+    lines.push({
+      kind: "steps",
+      text: steps === 1 ? "1 step" : `${steps} steps`,
+    });
   }
-  if (fromName) lines.push({ kind: "from", text: `From ${fromName}` });
+  if (fromName) {
+    lines.push({ kind: "from", text: TASK_FOLLOWER_COPY.chip(fromName) });
+  }
   return lines;
 }
 
+/**
+ * The words a proposal in the Ask conversation shows, shared so web and
+ * mobile cannot drift. What surrounds the card (the field, the empty state)
+ * is `ASK_COPY`'s.
+ */
 export const ACT_COPY = {
   cancel: "Cancel",
   /**
@@ -190,6 +198,7 @@ export const ACT_COPY = {
       "That is more members than one points change can hold. Split it up.",
     invitees: "Say which roles or tiers are invited.",
     event_type: "Say which event type it is.",
+    audience: "Say which role, tier or group it is for.",
     request:
       "I couldn't work out what to do from that. Try saying it another way.",
   } satisfies Record<ActMissing, string>,

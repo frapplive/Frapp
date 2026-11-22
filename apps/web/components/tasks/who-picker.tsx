@@ -124,11 +124,6 @@ export interface WhoPickerProps {
   chip?: boolean;
   guessed?: boolean;
   "aria-describedby"?: string;
-  /**
-   * Offer a tier whole (#5473). On everywhere a task's who is picked,
-   * suggested tasks included since their payload took a tier (2026-11-22).
-   */
-  tiers?: boolean;
 }
 
 /**
@@ -159,7 +154,6 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
       chip = false,
       guessed = false,
       "aria-describedby": describedBy,
-      tiers = true,
     },
     ref,
   ) {
@@ -228,9 +222,9 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
           onOpenAutoFocus={(event) => {
             // The search field takes focus, not the first row.
             event.preventDefault();
-            const field = (event.currentTarget as HTMLElement | null)?.querySelector(
-              "input",
-            );
+            const field = (
+              event.currentTarget as HTMLElement | null
+            )?.querySelector("input");
             field?.focus();
           }}
         >
@@ -241,7 +235,6 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
               if (allow !== "any") setOpen(false);
             }}
             allow={allow}
-            tiers={tiers}
             directory={directory}
             loading={loading}
             failed={failed}
@@ -279,7 +272,6 @@ export function WhoPickerBody({
   value,
   onChange,
   allow,
-  tiers = true,
   directory,
   loading,
   failed,
@@ -289,8 +281,6 @@ export function WhoPickerBody({
   value: TaskWho | null;
   onChange: (next: TaskWho | null) => void;
   allow: WhoPickerAllow;
-  /** Offer a tier whole (#5473); see {@link WhoPickerProps.tiers}. */
-  tiers?: boolean;
   directory: WhoDirectory;
   loading: boolean;
   failed: boolean;
@@ -328,7 +318,9 @@ export function WhoPickerBody({
     [value, directory],
   );
   const chapterPicked =
-    value !== null && value.kind !== "person" && value.target.kind === "chapter";
+    value !== null &&
+    value.kind !== "person" &&
+    value.target.kind === "chapter";
 
   function pick(next: TaskWho | null, from: WhoSet | null = null) {
     setNarrowedFrom(from);
@@ -352,18 +344,16 @@ export function WhoPickerBody({
   const allSets = [
     // A tier whole, as its tab row reads it: only one of two roles or more
     // (one of one role is that role), named "Everyone in Exec board".
-    ...(tiers
-      ? directory.tiers.flatMap((tier) =>
-          tier.set && tier.roles.length > 1
-            ? [
-                {
-                  ...tier.set,
-                  name: TASK_AUDIENCE_COPY.everyoneIn(tier.set.name),
-                },
-              ]
-            : [],
-        )
-      : []),
+    ...directory.tiers.flatMap((tier) =>
+      tier.set && tier.roles.length > 1
+        ? [
+            {
+              ...tier.set,
+              name: TASK_AUDIENCE_COPY.everyoneIn(tier.set.name),
+            },
+          ]
+        : [],
+    ),
     ...allRoles(directory),
     ...directory.groups,
   ];
@@ -466,7 +456,10 @@ export function WhoPickerBody({
         }
         leading={
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-1">
-            <Users className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+            <Users
+              className="h-3.5 w-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
           </span>
         }
         name={EVERYONE_IN_CHAPTER}
@@ -484,7 +477,11 @@ export function WhoPickerBody({
 
   let list: ReactNode;
   if (loading) {
-    list = <p className="px-3 py-4 text-sm text-muted-foreground">Loading members…</p>;
+    list = (
+      <p className="px-3 py-4 text-sm text-muted-foreground">
+        Loading members…
+      </p>
+    );
   } else if (failed) {
     list = (
       <div className="grid gap-2 px-3 py-4 text-sm text-muted-foreground">
@@ -544,7 +541,10 @@ export function WhoPickerBody({
             )}
           >
             <ChevronRight
-              className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")}
+              className={cn(
+                "h-3.5 w-3.5 transition-transform",
+                isOpen && "rotate-90",
+              )}
               aria-hidden="true"
             />
             {title}
@@ -575,7 +575,7 @@ export function WhoPickerBody({
             tier.name,
             tier.roles,
             // A tier of one role is that role: no second row for it.
-            tiers && tier.roles.length > 1 ? tier.set : null,
+            tier.roles.length > 1 ? tier.set : null,
           ),
         )}
         {section(GROUPS_KEY, GROUPS_HEADING, directory.groups)}
@@ -586,7 +586,10 @@ export function WhoPickerBody({
   return (
     <div className="grid">
       <div className="flex items-center gap-2 border-b border-border px-3">
-        <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Search
+          className="h-4 w-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
         <input
           id={`${ids}-search`}
           value={query}
@@ -598,8 +601,12 @@ export function WhoPickerBody({
               setQuery("");
             }
           }}
-          aria-label={many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople}
-          placeholder={many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople}
+          aria-label={
+            many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople
+          }
+          placeholder={
+            many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople
+          }
           className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -618,7 +625,9 @@ export function WhoPickerBody({
       <div className="max-h-[min(22rem,50vh)] overflow-y-auto py-1">{list}</div>
       {many && count > 1 ? (
         <div className="grid gap-2 border-t border-border px-3 py-3">
-          <p className="truncate text-sm font-semibold text-foreground">{summary}</p>
+          <p className="truncate text-sm font-semibold text-foreground">
+            {summary}
+          </p>
           <SegmentedChoice
             label="How it's given"
             options={MODE_OPTIONS}
@@ -630,8 +639,15 @@ export function WhoPickerBody({
             fill
             dense
           />
-          {hint ? <p className="text-caption text-muted-foreground">{hint}</p> : null}
-          <Button type="button" size="sm" className="justify-self-end" onClick={onDone}>
+          {hint ? (
+            <p className="text-caption text-muted-foreground">{hint}</p>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            className="justify-self-end"
+            onClick={onDone}
+          >
             Done
           </Button>
         </div>
@@ -739,4 +755,3 @@ function PersonFace({
     </Avatar>
   );
 }
-

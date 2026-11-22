@@ -357,8 +357,8 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
       opening ? keptWho(opening) : (suggestion?.who ?? prefill?.who ?? null),
     );
     // Photos and proof (#4635): the ones picked here, which go up on Create,
-    // and the proof control. A suggestion carries none, so its form leaves
-    // them out.
+    // and the proof control. A suggestion carries no photos; only an Ask
+    // card's (`full`) offers proof, opening on what it proposed.
     const [proofKind, setProofKind] = useState<TaskProofKind>(
       opening?.proofKind ??
         suggestion?.proofKind ??
@@ -510,10 +510,11 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     );
     const repeatRule =
       showRepeat && firstDue ? taskRepeatRuleOf(repeat, firstDue) : null;
-    // From (#5473), for a task made from the Tasks screen or the quick
-    // actions: not a chat's card or a suggestion, whose routes carry none,
-    // nor a task up for grabs, which is the claimer's own once claimed. A
-    // repeating task can't have one yet; the field says so.
+    // From (#5473), for a task made from the Tasks screen, the quick
+    // actions or an Ask card (`full`, 2026-11-22): not a chat's card or a
+    // minutes suggestion, whose routes carry none, nor a task up for grabs,
+    // which is the claimer's own once claimed. A repeating task can't have
+    // one yet; the field says so.
     const fullForm = !suggestion || suggestion.full === true;
     const fromOffered = offerGroups && fullForm && !postToChannel;
     const followerChoices = fromOffered ? whoRead.followers : [];
@@ -521,9 +522,13 @@ export const NewTaskSheet = forwardRef<BottomSheetModal, NewTaskSheetProps>(
     // Only one of the officer's own (#5473): a Duplicate of a task from a
     // group they aren't in, or one deleted since, would only be refused, so
     // it opens on Just you; so does a kept draft until the choices are read.
+    // A card's proposed From is kept while the choices are still being read,
+    // so a Create pressed before they arrive doesn't clear it; the server
+    // checks it either way.
     const ownFollower =
       followedBy &&
-      followerChoices.some((choice) => choice.entry === followedBy)
+      (followerChoices.some((choice) => choice.entry === followedBy) ||
+        (whoRead.sets !== "ready" && followedBy === suggestion?.followedBy))
         ? followedBy
         : null;
     const sentFollower =

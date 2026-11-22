@@ -785,6 +785,34 @@ describe("suggestionEdits", () => {
     audience_tier_id: null,
   };
 
+  it("sends points, proof and From only from an Ask card's full form (2026-11-22)", () => {
+    const asked = {
+      ...task,
+      point_reward: 10,
+      proof_kind: "photo",
+      followed_by: "role:exec",
+    };
+    const same = form({
+      point_reward: 10,
+      proof_kind: "photo",
+      followed_by: "role:exec",
+    });
+    expect(
+      suggestionEdits(asked as never, same, { full: true }),
+    ).toBeUndefined();
+    expect(
+      suggestionEdits(
+        asked as never,
+        form({ point_reward: 25, proof_kind: "none" }),
+        { full: true },
+      ),
+    ).toEqual({ point_reward: 25, proof_kind: "none", followed_by: null });
+    // A minutes suggestion's form shows none of them, so it clears none.
+    expect(
+      suggestionEdits(asked as never, form({ point_reward: 25 })),
+    ).toBeUndefined();
+  });
+
   it("sends nothing when the officer changed nothing", () => {
     expect(suggestionEdits(task as never, form())).toBeUndefined();
   });

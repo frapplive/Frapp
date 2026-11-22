@@ -341,6 +341,7 @@ function CardDetails({
   styles: Styles;
 }) {
   const { points, task, new_event: event } = suggestion;
+  const whoRead = useWhoDirectory({ groups: !!task?.followed_by });
   if (event) return <EventFacts event={event} styles={styles} />;
   if (task) {
     return (
@@ -353,7 +354,11 @@ function CardDetails({
             {dueLine(task)}
           </Fact>
         ) : null}
-        <TaskFacts task={task} fromName={null} styles={styles} />
+        <TaskFacts
+          task={task}
+          fromName={followerName(task.followed_by, whoRead.directory)}
+          styles={styles}
+        />
       </>
     );
   }
@@ -374,7 +379,7 @@ function CardDetails({
   return null;
 }
 
-/** One detail on a card: its mark, then the words, with a quieter line under. */
+/** The mark beside each of a task's facts. */
 const TASK_FACT_GLYPHS: Record<
   ReturnType<typeof actTaskFactLines>[number]["kind"],
   AskCardGlyphName
@@ -402,7 +407,11 @@ function TaskFacts({
   return (
     <>
       {actTaskFactLines(task, fromName).map((line) => (
-        <Fact key={line.kind} glyph={TASK_FACT_GLYPHS[line.kind]} styles={styles}>
+        <Fact
+          key={line.kind}
+          glyph={TASK_FACT_GLYPHS[line.kind]}
+          styles={styles}
+        >
           {line.text}
         </Fact>
       ))}
@@ -410,6 +419,7 @@ function TaskFacts({
   );
 }
 
+/** One detail on a card: its mark, then the words, with a quieter line under. */
 function Fact({
   glyph,
   under,
@@ -1026,8 +1036,9 @@ function ActCard({
       if (changed) changes.target_user_ids = targets;
       if (Object.keys(changes).length > 0) edits = { points: changes };
     }
-    if (task && (!task.assignee_id || !task.due_date)) {
-      // A task needs who and when; the form is where the officer says them.
+    if (task && (!taskWhoOf(task) || !task.due_date)) {
+      // A task needs who (a person, several, or a role, tier or group) and
+      // when; the form is where the officer says them.
       setFormOpen(true);
       return;
     }
@@ -1420,7 +1431,9 @@ function ActCard({
             <View style={[styles.chipRow, taskWhoLine ? null : styles.ask]}>
               <View style={styles.factGlyph}>
                 <AskCardGlyph
-                  name={taskWho && taskWho.kind !== "person" ? "people" : "person"}
+                  name={
+                    taskWho && taskWho.kind !== "person" ? "people" : "person"
+                  }
                   color={tokens.color.text.mutedForeground}
                 />
               </View>

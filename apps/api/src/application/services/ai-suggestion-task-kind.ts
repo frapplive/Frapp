@@ -31,7 +31,8 @@ const TASK_SUGGESTION_EXPIRY_DAYS = 14;
  * never carries points (`spec/behavior/meetings.md` § Suggested tasks): "give
  * Jake 50 points" said in a meeting is not an instruction, and the officer
  * adds points by hand. A card Ask Frapp drafts from the officer's own words
- * may (2026-11-22, `spec/behavior/ai.md` § Acting): it is the officer asking.
+ * may (2026-11-22, `spec/behavior/ai.md` § Asking Frapp to do something):
+ * the officer said them.
  */
 export interface TaskSuggestionPayload {
   title: string;
@@ -352,13 +353,14 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
     const dueDate = dateOrNull(input.due_date);
     // Only the officer's own request to Ask may carry points.
     const fromAsk = context.sourceType === ASK_SOURCE_TYPE;
+    const asked = who(input);
     return toPayload({
       title,
       description: text(
         input.description,
         TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH,
       ),
-      ...who(input),
+      ...asked,
       due_date: dueDate,
       // A time needs its day; the task service checks they agree on accept.
       due_at: dueDate ? instantOrNull(input.due_at) : null,
@@ -367,7 +369,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       ...extras({
         point_reward: fromAsk ? pointsOrNull(input.point_reward) : null,
         proof_kind: proofOrNull(input.proof_kind),
-        followed_by: followerOrNull(input.followed_by),
+        // A task up for grabs is the claimer's own once claimed: it is from
+        // nobody (`spec/behavior/tasks.md`), so its card never says so.
+        followed_by:
+          asked.audience === TASK_AUDIENCE_SOMEONE
+            ? null
+            : followerOrNull(input.followed_by),
       }),
     });
   }
@@ -438,6 +445,8 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       const follower = followerOrNull(edits.followed_by);
       if (follower) next.followed_by = follower;
     }
+    // Up for grabs is from nobody, whichever edit made it so.
+    if (next.audience === TASK_AUDIENCE_SOMEONE) delete next.followed_by;
     return toPayload(next);
   }
 

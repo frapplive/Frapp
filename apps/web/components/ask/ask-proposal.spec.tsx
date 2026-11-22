@@ -489,6 +489,36 @@ describe("AskProposal", () => {
     });
   });
 
+  it("sets a task's points and proof under Edit, and sends only them (2026-11-22)", async () => {
+    state.accept.mockResolvedValue({ result: null });
+    show({
+      ...base,
+      action: "create_task",
+      suggestion: suggestion("task", {
+        title: "Book the bus",
+        description: null,
+        assignee_id: JORDAN,
+        due_date: "2099-11-13",
+        due_at: null,
+        subtasks: ["Call the company"],
+      }),
+    });
+    expect(screen.getByText("1 step")).toBeDefined();
+    await userEvent.click(
+      await screen.findByRole("button", { name: ACT_COPY.edit }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(ACT_COPY.field_task_points),
+      "20",
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Photo" }));
+    await userEvent.click(screen.getByRole("button", { name: CONFIRM }));
+    expect(state.accept).toHaveBeenCalledWith({
+      id: "suggestion-1",
+      task: { point_reward: 20, proof_kind: "photo" },
+    });
+  });
+
   it("asks who a task is for before it can be confirmed", async () => {
     show({
       ...base,

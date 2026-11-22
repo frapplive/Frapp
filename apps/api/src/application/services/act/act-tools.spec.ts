@@ -344,6 +344,7 @@ describe('CreateTaskActTool', () => {
     audience: null,
     audience_role_id: null,
     audience_group_id: null,
+    audience_tier_id: null,
   };
   function build(
     resolved: { userIds: string[]; notes: unknown[] },
@@ -513,7 +514,7 @@ describe('CreateTaskActTool', () => {
     expect(audience.resolve).not.toHaveBeenCalled();
   });
 
-  it("leaves Who for the officer when a set is not one of the chapter's", async () => {
+  it("sends back a set that is not one of the chapter's, or could be two", async () => {
     const note = { type: 'unmatched_name', name: 'the band' };
     const { tool } = build({ userIds: [], notes: [] }, { notes: [note] });
     expect(
@@ -521,10 +522,27 @@ describe('CreateTaskActTool', () => {
         plan({ title: 'x', task: extras({ for_set: 'the band' }) }),
         toolContext(['tasks:manage']),
       ),
-    ).toMatchObject({
-      payload: { assignee_id: null, ...NOBODY },
-      notes: [note],
-    });
+    ).toEqual({ status: 'unclear', missing: 'audience' });
+  });
+
+  it('leaves From off a task up for grabs, which is from nobody', async () => {
+    const { tool, audience, taskAudience } = build(
+      { userIds: [JORDAN, JACOB], notes: [] },
+      { mine: [`role:${ROLE}`] },
+    );
+    const draft = await tool.draft(
+      plan({
+        title: 'x',
+        people: ['Jordan', 'Jacob'],
+        task: extras({ who_does: 'one', from: 'exec' }),
+      }),
+      toolContext(['tasks:manage']),
+    );
+    expect(
+      (draft as { payload: Record<string, unknown> }).payload,
+    ).not.toHaveProperty('followed_by');
+    expect(audience.resolve).not.toHaveBeenCalled();
+    expect(taskAudience.followEntriesOf).not.toHaveBeenCalled();
   });
 
   it('carries points, proof and steps, dropping what is not one', async () => {

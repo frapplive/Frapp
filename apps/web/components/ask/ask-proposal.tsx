@@ -64,6 +64,7 @@ import {
   meetingDueLabel,
   sameTaskWho,
   TASK_PROOF_KIND_LABELS,
+  TASK_FOLLOWER_COPY,
   TASK_PROOF_KINDS,
   taskWhoOf,
   taskWhoSuggestionFields,
@@ -78,6 +79,10 @@ import {
   dueEntryPassed,
 } from "@/components/tasks/due-date-field";
 import { WhoPicker, useWhoDirectory } from "@/components/tasks/who-picker";
+import {
+  FollowerSelect,
+  useFollowerChoices,
+} from "@/components/tasks/task-follower";
 import { SegmentedChoice } from "@/components/ui/segmented";
 import { deferredPanel } from "@/components/chat/deferred-panel";
 import { isoToLocalInput } from "@/components/events/local-input";
@@ -171,6 +176,8 @@ interface CardEdits {
   /** A task card's points and proof, as Edit's fields hold them (2026-11-22). */
   taskPoints: string;
   proof: TaskProofKind;
+  /** The tier, role or group a task is from (`followed_by`), or null. */
+  from: string | null;
   /** Points typed into an event card's empty field (#5148). */
   eventPoints: string;
 }
@@ -398,6 +405,7 @@ function TaskFacts({
  */
 function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
   const { points, task, new_event: event } = suggestion;
+  const { directory } = useWhoDirectory({ enabled: !!task?.followed_by });
   if (event) return <EventFacts event={event} />;
   if (task) {
     return (
@@ -410,7 +418,10 @@ function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
         {task.due_date ? (
           <Fact icon={Clock}>{meetingDueLabel(task.due_date)}</Fact>
         ) : null}
-        <TaskFacts task={task} fromName={null} />
+        <TaskFacts
+          task={task}
+          fromName={followerName(task.followed_by, directory)}
+        />
       </div>
     );
   }
@@ -872,6 +883,13 @@ function ActCard({
   const [proof, setProof] = useState<TaskProofKind>(
     kept?.proof ?? task?.proof_kind ?? "none",
   );
+  const [from, setFrom] = useState<string | null>(
+    kept ? kept.from : (task?.followed_by ?? null),
+  );
+  // Read only once Edit shows From: the card's facts need just the names.
+  const fromChoices = useFollowerChoices({ enabled: !!task && editing });
+  // Up for grabs is from nobody (`spec/behavior/tasks.md`).
+  const fromShown = who?.kind === "someone" ? null : from;
   // An event's points when nobody said them and nothing matched (#5148).
   const [eventPoints, setEventPoints] = useState(kept?.eventPoints ?? "");
   useEffect(() => {
@@ -886,6 +904,7 @@ function ActCard({
       details,
       taskPoints,
       proof,
+      from,
       eventPoints,
     });
   }, [
@@ -901,6 +920,7 @@ function ActCard({
     details,
     taskPoints,
     proof,
+    from,
     eventPoints,
   ]);
   const [fieldProblem, setFieldProblem] = useState<{
@@ -1004,6 +1024,9 @@ function ActCard({
           changes.point_reward = pointsNow;
         }
         if (proof !== (task.proof_kind ?? "none")) changes.proof_kind = proof;
+      }
+      if (fromShown !== (task.followed_by ?? null)) {
+        changes.followed_by = fromShown;
       }
       if (!who || !due) return setFlagged(true);
       if (dueEntryPassed(due, new Date(), suggestedDue)) {
@@ -1433,11 +1456,27 @@ function ActCard({
                   dense
                 />
               </div>
+              {who?.kind === "someone" ? null : (
+                <CardField
+                  id={`${suggestion.id}-task-from`}
+                  label={TASK_FOLLOWER_COPY.field}
+                  problem={null}
+                >
+                  <FollowerSelect
+                    id={`${suggestion.id}-task-from`}
+                    value={from}
+                    currentName={followerName(from, whoDirectory)}
+                    choices={fromChoices}
+                    onChange={setFrom}
+                    disabled={busy}
+                  />
+                </CardField>
+              )}
             </div>
           ) : (
             <TaskFacts
               task={task}
-              fromName={followerName(task.followed_by, whoDirectory)}
+              fromName={followerName(fromShown, whoDirectory)}
             />
           )}
         </>
@@ -1566,7 +1605,8 @@ function editedTask(
   } = edits;
   const next: NonNullable<AiSuggestion["task"]> = { ...task, ...rest };
   const lay = <
-    K extends "audience_tier_id" | "point_reward" | "followed_by" | "proof_kind",
+    K extends
+      "audience_tier_id" | "point_reward" | "followed_by" | "proof_kind",
   >(
     key: K,
     value: NonNullable<AiSuggestion["task"]>[K] | null | undefined,

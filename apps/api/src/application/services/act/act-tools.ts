@@ -19,8 +19,10 @@ import {
   formatRepeatRule,
   isModuleEnabled,
   taskFollowerEntry,
+  taskWhoSuggestionFields,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
+  type TaskWho,
 } from '@repo/validation';
 import { SystemPermissions, WILDCARD } from '#domain/constants/permissions';
 import type { Event } from '#domain/entities/event.entity';
@@ -420,24 +422,6 @@ const CHAPTER_NAMES = new Set([
   'whole chapter',
 ]);
 
-/** Who a drafted task is for, in the suggestion payload's own fields. */
-interface DraftedTaskWho {
-  assignee_id: string | null;
-  assignee_ids: string[] | null;
-  audience: 'everyone' | 'someone' | null;
-  audience_role_id: string | null;
-  audience_group_id: string | null;
-  audience_tier_id?: string;
-}
-
-const NOBODY: DraftedTaskWho = {
-  assignee_id: null,
-  assignee_ids: null,
-  audience: null,
-  audience_role_id: null,
-  audience_group_id: null,
-};
-
 /**
  * Create a task: for one member, several, or a role, tier or group (each
  * of them doing it, or one claiming it), with its points, proof, steps and
@@ -464,7 +448,12 @@ export class CreateTaskActTool implements ActTool {
     if (!title) return { status: 'unclear', missing: 'title' };
     const task = plan.task ?? null;
 
-    const { who, notes } = await this.whoOf(plan, context);
+    const read = await this.whoOf(plan, context);
+    // A role, tier or group that is none of the chapter's is sent back, so
+    // the loop reads the list again rather than a card asking about a
+    // "member" that was never one.
+    if (read === null) return { status: 'unclear', missing: 'audience' };
+    const { who, notes } = read;
 
     const dueDate = parseLocalDate(plan.date) ? plan.date : null;
     const dueAt =
@@ -487,9 +476,11 @@ export class CreateTaskActTool implements ActTool {
       .map((step) => clean(step, TASK_SUBTASK_TITLE_MAX_LENGTH))
       .filter((step): step is string => !!step)
       .slice(0, TASK_SUBTASKS_MAX);
-    const followedBy = task?.from
-      ? await this.fromOf(task.from, context)
-      : null;
+    // Up for grabs is from nobody (`spec/behavior/tasks.md`).
+    const followedBy =
+      task?.from && who?.kind !== 'someone'
+        ? await this.fromOf(task.from, context)
+        : null;
     return {
       status: 'draft',
       payload: {
@@ -498,7 +489,7 @@ export class CreateTaskActTool implements ActTool {
           plan.details,
           TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH,
         ),
-        ...who,
+        ...taskWhoSuggestionFields(who),
         due_date: dueDate,
         due_at: dueAt,
         subtasks: steps,
@@ -514,36 +505,30 @@ export class CreateTaskActTool implements ActTool {
 
   /**
    * A role, tier or group when one was named, else the people: one is the
-   * assignee, several each get a copy or one of them claims it. A name that
-   * is none of the chapter's, or could be two, leaves "Who?" for the
-   * officer to pick on the card.
+   * assignee, several each get a copy or one of them claims it. People who
+   * can't be placed leave "Who?" for the officer to pick on the card; a set
+   * name that is none of the chapter's, or could be two, is null.
    */
   private async whoOf(
     plan: ActPlan,
     context: ActToolContext,
-  ): Promise<{ who: DraftedTaskWho; notes: ActNote[] }> {
+  ): Promise<{ who: TaskWho | null; notes: ActNote[] } | null> {
     const task = plan.task ?? null;
-    const audience = task?.who_does === 'one' ? 'someone' : 'everyone';
+    const kind = task?.who_does === 'one' ? 'someone' : 'each';
     const set = task?.for_set?.replace(/\s+/g, ' ').trim();
     if (set) {
       if (CHAPTER_NAMES.has(set.toLowerCase())) {
-        return { who: { ...NOBODY, audience }, notes: [] };
+        return { who: { kind, target: { kind: 'chapter' } }, notes: [] };
       }
       const resolved = await this.audience.resolve([set], context.chapterId, [
         'role',
         'tier',
         'group',
       ]);
-      const entry = resolved.entries.length === 1 ? resolved.entries[0] : null;
-      if (!entry) return { who: NOBODY, notes: resolved.notes };
+      if (resolved.entries.length !== 1) return null;
+      const entry = resolved.entries[0];
       return {
-        who: {
-          ...NOBODY,
-          audience,
-          audience_role_id: entry.kind === 'role' ? entry.id : null,
-          audience_group_id: entry.kind === 'group' ? entry.id : null,
-          ...(entry.kind === 'tier' ? { audience_tier_id: entry.id } : {}),
-        },
+        who: { kind, target: { kind: entry.kind, id: entry.id } },
         notes: [],
       };
     }
@@ -551,18 +536,13 @@ export class CreateTaskActTool implements ActTool {
       roles: false,
     });
     const ids = resolved.userIds.slice(0, TASK_PEOPLE_MAX);
-    if (ids.length === 0) return { who: NOBODY, notes: resolved.notes };
-    if (ids.length === 1) {
-      return { who: { ...NOBODY, assignee_id: ids[0] }, notes: resolved.notes };
-    }
-    return {
-      who: {
-        ...NOBODY,
-        assignee_ids: ids,
-        audience: task?.who_does === 'one' ? 'someone' : null,
-      },
-      notes: resolved.notes,
-    };
+    const who: TaskWho | null =
+      ids.length === 0
+        ? null
+        : ids.length === 1
+          ? { kind: 'person', userId: ids[0] }
+          : { kind, target: { kind: 'people', userIds: ids } };
+    return { who, notes: resolved.notes };
   }
 
   /**

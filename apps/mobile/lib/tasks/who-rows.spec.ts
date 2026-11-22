@@ -223,16 +223,6 @@ describe("whoRows: a tier picked whole (#5473)", () => {
     ).toEqual([]);
   });
 
-  it("offers no tier where the payload can't carry one (a suggestion)", () => {
-    const rows = whoRows(tiered, { ...base, tab: "sets", tiers: false });
-    expect(
-      rows.some((row) => row.kind === "set" && row.set.kind === "tier"),
-    ).toBe(false);
-    expect(
-      whoRows(tiered, { ...base, tab: "people", search: "exec", tiers: false }),
-    ).toEqual([]);
-  });
-
   it("keys the tier's row apart from its heading", () => {
     const keys = whoRows(tiered, { ...base, tab: "sets" }).map(
       (row) => row.key,
