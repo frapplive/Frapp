@@ -469,7 +469,7 @@ function FindPanel({
             onQueryChange(e.target.value);
           }}
           onKeyDown={onInputKeyDown}
-          className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted-foreground"
+          className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-none placeholder:text-muted"
         />
       </div>
 

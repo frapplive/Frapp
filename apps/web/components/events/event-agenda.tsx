@@ -365,7 +365,7 @@ export function EventAgendaSection({
             maxLength={EVENT_AGENDA_ITEM_MAX}
             enterKeyHint="done"
             className={cn(
-              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted-foreground hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
+              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           />

@@ -1605,7 +1605,7 @@ export function EventEditorDialog({
             placeholder={EVENT_FORM_PLACEHOLDERS.name}
             autoFocus={mode === "create"}
             className={cn(
-              "-mx-2 h-11 rounded-md bg-transparent px-2 text-xl font-semibold text-foreground caret-primary placeholder:text-muted-foreground",
+              "-mx-2 h-11 rounded-md bg-transparent px-2 text-xl font-semibold text-foreground caret-primary placeholder:text-muted",
               "hover:bg-card-hover focus:bg-surface-1",
               FOCUS_RING,
             )}
