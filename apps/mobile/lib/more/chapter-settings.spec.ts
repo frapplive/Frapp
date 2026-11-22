@@ -21,12 +21,16 @@ describe("chapterSettingsAccess", () => {
       chapter: false,
       roles: true,
       logs: false,
+      newChannel: false,
+      newRole: true,
       any: true,
     });
     expect(chapterSettingsAccess(["chapter-config:view"])).toEqual({
       chapter: true,
       roles: true,
       logs: false,
+      newChannel: false,
+      newRole: false,
       any: true,
     });
     expect(
@@ -40,7 +44,22 @@ describe("chapterSettingsAccess", () => {
       chapter: false,
       roles: true,
       logs: false,
+      newChannel: false,
+      newRole: false,
       any: true,
     });
+  });
+
+  // #5296: New channel needs what the create route and the sheet's
+  // who-can-see lists take, so it is never a row that fails on save.
+  it("offers New channel only with channels:create and channels:manage", () => {
+    expect(chapterSettingsAccess(["channels:create"]).newChannel).toBe(false);
+    expect(chapterSettingsAccess(["channels:manage"]).newChannel).toBe(false);
+    const both = chapterSettingsAccess(["channels:create", "channels:manage"]);
+    expect(both.newChannel).toBe(true);
+    // Enough to open Chapter settings on its own.
+    expect(both.any).toBe(true);
+    expect(chapterSettingsAccess(["*"]).newChannel).toBe(true);
+    expect(chapterSettingsAccess(["*"]).newRole).toBe(true);
   });
 });
