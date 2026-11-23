@@ -2,7 +2,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsISO8601,
   IsIn,
   IsInt,
@@ -693,7 +692,7 @@ export class UpdateEventDto {
       'Set with `attachments` by a build that sends every Frapp link kind, so the list replaces what is stored. Without it, the stored minutes, event and message links are kept, since phone builds from before Frapp links drop the kinds they cannot read.',
   })
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   attachments_all_kinds?: boolean;
 
   @ApiPropertyOptional({
