@@ -1887,9 +1887,34 @@ describe('MemberService', () => {
           display_name: 'Someone',
         }),
       ).rejects.toThrow(
-        'You can only edit the profiles of members ranked below you.',
+        'You can only edit the profiles of members ranked below you or at your own rank.',
       );
       expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    // #5900 (Paul's go, relayed by Shawn, 2026-11-23): a peer at the
+    // caller's own rank is in reach, as for roles (#5843).
+    it("lets a chair fix a fellow chair's name and year", async () => {
+      const peer = {
+        ...memberRow(TIERED_MEMBER.riskChair),
+        id: 'member-social-chair',
+        user_id: 'user-social-chair',
+        role_ids: [ROLE.socialChair, ROLE.brother],
+      };
+      mockRepo.findById.mockResolvedValue(peer);
+      mockUserRepo.findById.mockResolvedValue(
+        userFixture({ id: peer.user_id, graduation_year: 2026 }),
+      );
+      mockUserRepo.update.mockResolvedValue(userFixture());
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(USER.riskChair),
+      );
+      await service.correctProfile(peer.id, CHAPTER_ID, USER.riskChair, {
+        graduation_year: 2027,
+      });
+      expect(mockUserRepo.update).toHaveBeenCalledWith(peer.user_id, {
+        graduation_year: 2027,
+      });
     });
 
     it('stops an officer renaming the President', async () => {
@@ -1957,6 +1982,32 @@ describe('MemberService', () => {
         ['members:view', 'roles:manage'],
       );
       expect(profile.viewer_can_edit_profile).toBe(true);
+    });
+
+    it('is true for a chair viewing a fellow chair (#5900), while removal stays below only', async () => {
+      const peer = {
+        ...memberRow(TIERED_MEMBER.riskChair),
+        id: 'member-social-chair',
+        user_id: 'user-social-chair',
+        role_ids: [ROLE.socialChair, ROLE.brother],
+      };
+      mockRepo.findById.mockResolvedValue(peer);
+      mockUserRepo.findById.mockResolvedValue(userFixture());
+      mockRbacService.getEffectivePermissions.mockResolvedValue([
+        'members:view',
+        'roles:manage',
+        'members:remove',
+      ]);
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(USER.riskChair),
+      );
+      const profile = await service.findProfileById(
+        peer.id,
+        CHAPTER_ID,
+        USER.riskChair,
+      );
+      expect(profile.viewer_can_edit_profile).toBe(true);
+      expect(profile.viewer_can_remove).toBe(false);
     });
 
     it('is false for that officer viewing the President', async () => {

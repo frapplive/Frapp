@@ -281,7 +281,7 @@ describe('PledgeClassService', () => {
         await expect(
           service.remove('class-new', CHAPTER_ID, USER.riskChair),
         ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
+          'You can only set the class of members ranked below you or at your own rank, and your own.',
         );
         expect(repo.delete).not.toHaveBeenCalled();
         // The President reaches everyone.
@@ -449,9 +449,29 @@ describe('PledgeClassService', () => {
             },
           ]),
         ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
+          'You can only set the class of members ranked below you or at your own rank, and your own.',
         );
         expect(repo.assignMembers).not.toHaveBeenCalled();
+      });
+
+      // #5900 (Paul's go, relayed by Shawn, 2026-11-23): a peer at the
+      // officer's own rank is in reach, as for roles (#5843).
+      it("lets a chair set a fellow chair's class and number", async () => {
+        const socialChair = {
+          ...pledge,
+          id: 'member-social-chair',
+          user_id: 'user-social-chair',
+          role_ids: [ROLE.socialChair, ROLE.brother],
+        } as Member;
+        members = [...members, socialChair];
+        await service.assign(CHAPTER, USER.riskChair, [
+          {
+            member_id: socialChair.id,
+            pledge_class_id: 'class-new',
+            order_number: 7,
+          },
+        ]);
+        expect(repo.assignMembers).toHaveBeenCalled();
       });
 
       it('refuses renumbering a higher-ranked member within their class', async () => {
@@ -464,7 +484,7 @@ describe('PledgeClassService', () => {
             },
           ]),
         ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
+          'You can only set the class of members ranked below you or at your own rank, and your own.',
         );
         expect(repo.assignMembers).not.toHaveBeenCalled();
       });

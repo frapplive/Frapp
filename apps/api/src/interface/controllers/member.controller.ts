@@ -184,8 +184,9 @@ export class MemberController {
    * An officer fixes another member's name or graduation year (#4367). The
    * guard is `roles:manage`, the officers who already set a member's roles
    * and pledge class; `MemberService.correctProfile` narrows it to members
-   * ranked below the caller, never the caller, and only a member of this
-   * chapter alone, since both fields live on the shared `users` row.
+   * ranked below the caller or at their own rank (#5900), never the caller,
+   * and only a member of this chapter alone, since both fields live on the
+   * shared `users` row.
    */
   @Patch(':id/profile')
   @ApiOperation({

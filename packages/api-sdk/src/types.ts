@@ -7504,7 +7504,7 @@ export interface components {
             custom_fields?: components["schemas"]["MemberCustomFieldValueDto"][];
             /** @description Whether the requesting viewer may remove this member from the chapter (DELETE /v1/members/{id}): they hold members:remove, it is not their own profile, and the member ranks below them. Present only on single-member reads. */
             viewer_can_remove?: boolean;
-            /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them, and the member is in no other chapter. Present only on single-member reads. */
+            /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads. */
             viewer_can_edit_profile?: boolean;
         };
         MemberRosterEntryDto: {

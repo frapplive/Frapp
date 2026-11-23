@@ -127,7 +127,8 @@ export class MemberProfileDto {
       "Whether the requesting viewer may fix this member's name and " +
       'graduation year (PATCH /v1/members/{id}/profile): they hold ' +
       'roles:manage, it is not their own profile, the member ranks below ' +
-      'them, and the member is in no other chapter. Present only on ' +
+      'them or at their own rank, and the member is in no other chapter. ' +
+      'Present only on ' +
       'single-member reads.',
   })
   viewer_can_edit_profile?: boolean;
