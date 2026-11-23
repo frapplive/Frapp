@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 const { hidden } = vi.hoisted(() => ({
   hidden: { features: new Set<string>(), calls: [] as unknown[][] },
@@ -33,7 +33,12 @@ vi.mock("@/lib/stores/chapter-store", () => ({
 }));
 
 const askEntry = vi.hoisted(() => ({
-  current: null as null | { open: boolean; openWith: () => void },
+  current: null as null | {
+    open: boolean;
+    openAsk: () => void;
+    keptDraft: () => string;
+    keepDraft: (text: string) => void;
+  },
 }));
 vi.mock("@/components/ask/ask-host", () => ({
   useAskEntry: () => askEntry.current,
@@ -241,7 +246,12 @@ describe("AppNav", () => {
   });
 
   it("holds Ask Frapp at its foot, the crest alone in the rail (#5560)", () => {
-    askEntry.current = { open: false, openWith: vi.fn() };
+    askEntry.current = {
+      open: false,
+      openAsk: vi.fn(),
+      keptDraft: () => "",
+      keepDraft: vi.fn(),
+    };
     const { unmount } = renderNav({ onToggleCollapsed: vi.fn() });
     const ask = screen.getByRole("button", { name: "Ask Frapp" });
     expect(ask).toHaveTextContent("Ask Frapp");
@@ -262,7 +272,25 @@ describe("AppNav", () => {
     const crest = screen.getByRole("button", { name: "Ask Frapp" });
     expect(crest).not.toHaveTextContent("Ask Frapp");
     expect(crest).toHaveAttribute("title", "Ask Frapp");
+    expect(crest).not.toHaveAttribute("aria-current");
+    // The crest opens the Ask page, as the bar does.
+    fireEvent.click(crest);
+    expect(askEntry.current!.openAsk).toHaveBeenCalledTimes(1);
     unmountRail();
+
+    // On the Ask page the crest is marked as the page on screen.
+    askEntry.current = {
+      open: true,
+      openAsk: vi.fn(),
+      keptDraft: () => "",
+      keepDraft: vi.fn(),
+    };
+    const { unmount: unmountOpen } = renderNav({ collapsed: true });
+    expect(screen.getByRole("button", { name: "Ask Frapp" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    unmountOpen();
 
     // The drawer has none; below `lg` the page floats its own.
     renderNav({ variant: "drawer" });

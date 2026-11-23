@@ -13,8 +13,10 @@ import { FrappCrest } from "./frapp-crest";
  * to the dashboard, so a member meets the same door on both. A glass capsule
  * with the crest in the chapter's colour, the conversation's own words
  * ("Ask Frapp anything") and its send arrow at the end, so it reads as the
- * field it opens rather than as a banner. A click opens the conversation
- * (`ask-card.tsx`) and focus comes back here when it closes.
+ * field it opens rather than as a banner. A click opens the Ask page
+ * (`/ask`, #5854's second step, Paul's pick of 2026-11-22), or puts focus in
+ * its field when that page is already up. On the Ask page the bar is marked
+ * as the current page, as a nav row is.
  *
  * From the nav column's width up (`lg`) it has one home on every layout: the
  * foot of the sidebar (`app-nav.tsx`), sharing the collapse toggle's row, and the crest
@@ -78,12 +80,10 @@ export function AskBar({
     return (
       <button
         type="button"
-        data-ask-entry=""
-        aria-haspopup="dialog"
-        aria-expanded={ask.open}
+        aria-current={ask.open ? "page" : undefined}
         aria-label={ASK_COPY.name}
         title={ASK_COPY.name}
-        onClick={(event) => ask.openWith(event.currentTarget)}
+        onClick={ask.openAsk}
         className={cn(
           "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border transition hover:brightness-125",
           GLASS,
@@ -98,11 +98,8 @@ export function AskBar({
   return (
     <button
       type="button"
-      // Where the conversation returns focus when it closes (`ask-card.tsx`).
-      data-ask-entry=""
-      aria-haspopup="dialog"
-      aria-expanded={ask.open}
-      onClick={(event) => ask.openWith(event.currentTarget)}
+      aria-current={ask.open ? "page" : undefined}
+      onClick={ask.openAsk}
       className={cn(
         // The Default control step (48), fully round, as the phone's bar.
         "flex h-12 w-full items-center gap-3 rounded-full border pl-[18px] pr-2 text-left transition hover:brightness-125",

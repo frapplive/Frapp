@@ -95,7 +95,7 @@ interface AskInChannel {
   resolveProposal: (id: string, resolution: AskProposalResolution) => void;
   resolveCard: (id: string, suggestionId: string, end: AskCardEnd) => void;
   dismiss: (id: string) => void;
-  /** What was changed on waiting cards, shared with the Ask card. */
+  /** What was changed on waiting cards, shared with the Ask page. */
   edits: AskCardEditsStore;
 }
 
@@ -233,7 +233,7 @@ export function useChannelAskAccess(): AskAccess {
   return useContext(AskAccessContext);
 }
 
-/** What was changed on waiting cards, for the Ask card to share. */
+/** What was changed on waiting cards, for the Ask page to share. */
 export function useSharedAskCardEdits(): AskCardEditsStore | null {
   return useContext(AskInChannelContext)?.edits ?? null;
 }
