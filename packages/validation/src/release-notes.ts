@@ -120,6 +120,18 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-23",
+    title: "New in this update",
+    changes: [
+      "Event cards from Ask now invite the right people, such as only your cabinet for a leaders reception, and follow who an earlier event of the same name invited.",
+      "An event's page now follows its clock on web and phone: before check-in opens it shows the details and who's coming, while check-in is open it leads with check-in and gives officers the attendance list, and afterwards officers see who came.",
+      "Picking a type for an event or a document now happens in one menu you can search, where you can also make a new type and rename or delete one without leaving it.",
+    ],
+    web: [
+      "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
+    ],
+  },
+  {
     date: "2026-11-22",
     title: "New in this update",
     changes: [
