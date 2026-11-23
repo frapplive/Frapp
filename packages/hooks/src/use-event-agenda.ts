@@ -106,7 +106,9 @@ export function useEventListsEditor(
       if (error) throw error;
       // The read now holds what was saved, so nothing flashes back while
       // the refetches below are out.
-      const { attachments_all_kinds: _flag, ...saved } = body;
+      // The flag is the request's, not the event's: keep it out of the cache.
+      const saved = { ...body };
+      delete saved.attachments_all_kinds;
       queryClient.setQueryData(detailKey, (row: unknown) =>
         row && typeof row === "object" ? { ...row, ...saved } : row,
       );
