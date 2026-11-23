@@ -12,13 +12,11 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
   BottomSheetModal,
   BottomSheetTextInput,
-  useBottomSheetInternal,
 } from "@gorhom/bottom-sheet";
 import { codeOf } from "@repo/api-sdk";
 import {
@@ -83,6 +81,8 @@ import {
 } from "@/components/sheet-scaffold";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
 import { useFocusOnOpen } from "@/lib/overlay";
+import { FormTextInput } from "@/components/form-text-input";
+import { useHostScrollLock } from "@/lib/keep-above-keyboard";
 import {
   NewTaskSheet,
   type TaskSuggestionSeed,
@@ -125,7 +125,7 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
  * "Add to calendar" on an event found in mail opens the full event editor.
  * So Edit opens the form the officer already uses: an event opens New event
  * filled in from the card (attendance by role, the end, notes, the repeat),
- * in the card itself, with the question still above it (2026-11-23, Paul
+ * in the card itself, with the question still above it (2026-11-22, Paul
  * picked "Card expands in place", as web's card does), and its Create is
  * the confirm; a task opens the task form. A points card
  * has no form of its own on the phone, so Edit turns its amount and reason
@@ -845,12 +845,10 @@ function CardField({
   const { tokens } = useFrappTheme();
   // A card is drawn in the Ask sheet and also under a question asked in a
   // channel, which is a screen: the sheet's own input throws outside a sheet.
-  const inSheet = useBottomSheetInternal(true) != null;
-  const Field = inSheet ? BottomSheetTextInput : TextInput;
   return (
     <View style={styles.cardRow}>
       <Text style={styles.eyebrow}>{label}</Text>
-      <Field
+      <FormTextInput
         value={value}
         onChangeText={onChangeText}
         accessibilityLabel={label}
@@ -884,10 +882,8 @@ function PointsInput({
   styles: Styles;
 }) {
   const { tokens } = useFrappTheme();
-  const inSheet = useBottomSheetInternal(true) != null;
-  const Field = inSheet ? BottomSheetTextInput : TextInput;
   return (
-    <Field
+    <FormTextInput
       value={value}
       onChangeText={onChangeText}
       accessibilityLabel={ACT_COPY.points_label}
@@ -983,7 +979,16 @@ function ActCard({
   // after, so what the officer typed is still there when they open it again
   // (#4593). `null` until then; then whether it shows.
   const [eventForm, setEventForm] = useState<boolean | null>(null);
-  const eventFormShown = !!event && eventForm === true;
+  // In the Ask sheet the form opens in the card. In a channel it is still
+  // its own sheet: the chat list is inverted and gives a part drawn in place
+  // no way to bring its top or a focused field into view (#5907). Only the
+  // Ask thread offers the lock a part in place holds while dragging.
+  const inAskThread = useHostScrollLock() !== null;
+  const eventFormShown = !!event && eventForm === true && inAskThread;
+  const eventSheet = useRef<BottomSheetModal>(null);
+  useEffect(() => {
+    if (!inAskThread && eventForm) eventSheet.current?.present();
+  }, [inAskThread, eventForm]);
   // Closing the form gives a screen reader's focus back to Edit, which the
   // form had taken the place of.
   const editButton = useRef<View>(null);
@@ -1267,7 +1272,8 @@ function ActCard({
     event && eventForm !== null ? (
       <NewEventSheet
         key="event-form"
-        presentation="inline"
+        ref={inAskThread ? undefined : eventSheet}
+        presentation={inAskThread ? "inline" : "sheet"}
         open={eventForm}
         template={proposedEventTemplate({
           ...event,

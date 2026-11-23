@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -110,11 +111,15 @@ import { MODULE_REFUSAL_COPY } from "@/lib/module-refusal";
 import { useNotesLabel } from "@/lib/minutes/meetings-on";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
-import { FormTextInput } from "@/components/form-text-input";
 import {
-  ScrollRevealProvider,
+  FormTextInput,
+  SheetAwareTextInput,
+} from "@/components/form-text-input";
+import {
   useEnclosingScrollReveal,
+  useHostScrollLock,
 } from "@/lib/keep-above-keyboard";
+import { useBackToClose } from "@/lib/overlay";
 import { askSeriesScope } from "@/lib/series-scope";
 
 /**
@@ -221,7 +226,7 @@ export interface NewEventSheetProps {
   keptDraft?: string;
   /**
    * `"inline"` draws the form where its host puts it, with no sheet: the Ask
-   * card's Edit opens it in the card (2026-11-23, Paul picked "Card expands
+   * card's Edit opens it in the card (2026-11-22, Paul picked "Card expands
    * in place"; web's `docked="inline"`). The host keeps it mounted and says
    * whether it shows with `open`, so what was typed is still there when it
    * opens again; its Close keeps the draft, and `onClosed` tells the host.
@@ -516,6 +521,20 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
     // In place there is no sheet to dismiss: closing is the host's, told
     // through `onClosed`.
     const inline = presentation === "inline";
+    // A held agenda row locks what would follow the finger instead: the
+    // sheet's own pan and scroll, or in place the host's (the Ask thread).
+    const hostLock = useHostScrollLock();
+    const holdAgenda = useCallback(
+      (dragging: boolean) => {
+        setDraggingAgenda(dragging);
+        if (inline) hostLock?.(dragging);
+      },
+      [inline, hostLock],
+    );
+    useEffect(() => {
+      if (!inline || !hostLock) return undefined;
+      return () => hostLock(false);
+    }, [inline, hostLock]);
     const close = useCallback(() => {
       if (inline) closed();
       else dismiss();
@@ -969,8 +988,8 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
                     update({ agendaPending }, [])
                   }
                   disabled={pending}
-                  input={FormTextInput}
-                  onDragging={setDraggingAgenda}
+                  input={SheetAwareTextInput}
+                  onDragging={holdAgenda}
                   onChange={(agenda) => update({ agenda }, [])}
                 />
                 {draft.repeat.preset !== "NONE" &&
@@ -1132,10 +1151,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
               contentContainerStyle={styles.body}
               keyboardShouldPersistTaps="handled"
             >
-              {/* The sheet's fields are its own: a reveal from the
-                  screen behind (event details' agenda) must not scroll
-                  that screen when one takes focus. */}
-              <ScrollRevealProvider value={null}>{form}</ScrollRevealProvider>
+              {form}
             </BottomSheetScrollView>
           </BottomSheetModal>
         )}
@@ -1213,6 +1229,9 @@ function InlineEventForm({
   children: ReactNode;
 }) {
   const reveal = useEnclosingScrollReveal();
+  // Android's back folds the form, as it closed the sheet: unheard, it
+  // would close the Ask sheet around it, and the draft with it.
+  useBackToClose(true, onClose);
   const box = useRef<View>(null);
   const shown = useRef(false);
   return (

@@ -51,8 +51,30 @@ export type ScrollReveal = (target: View) => void;
 
 const ScrollRevealContext = createContext<ScrollReveal | null>(null);
 
-/** Provided around a screen's `ScreenShell`, with `useScrollReveal`'s value. */
+/**
+ * Provided around a screen's `ScreenShell`, with `useScrollReveal`'s value,
+ * or inside a sheet's own scroll view (the Ask thread, 2026-11-23 build). A sheet's
+ * content is drawn in a portal, so a screen's provider never reaches it.
+ */
 export const ScrollRevealProvider = ScrollRevealContext.Provider;
+
+/**
+ * Stops the scroll view around this view, and the sheet that holds it, from
+ * following a finger: a part drawn in place that has its own drag (the
+ * event form's agenda rows) holds it while a row is held, as a sheet locks
+ * its own pan and scroll. `null` outside a host that offers it.
+ */
+const HostScrollLockContext = createContext<((locked: boolean) => void) | null>(
+  null,
+);
+
+/** Provided by a scroll view that draws parts in place (the Ask thread). */
+export const HostScrollLockProvider = HostScrollLockContext.Provider;
+
+/** {@link HostScrollLockContext}'s lock, or `null` outside one. */
+export function useHostScrollLock(): ((locked: boolean) => void) | null {
+  return useContext(HostScrollLockContext);
+}
 
 /**
  * The reveal of the scroll view around this view, or `null` outside one: for

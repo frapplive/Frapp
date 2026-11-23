@@ -6,11 +6,12 @@ import {
   type ReactTestInstance,
   type ReactTestRenderer,
 } from "react-test-renderer";
-import { Alert } from "react-native";
+import { Alert, BackHandler } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { moduleDisabledMessage } from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
+import { HostScrollLockProvider } from "@/lib/keep-above-keyboard";
 import { drawnText, screenText } from "@/test/screen-text";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
 import { MODULE_REFUSAL_COPY } from "@/lib/module-refusal";
@@ -464,6 +465,53 @@ describe("New event", () => {
     ).toHaveLength(0);
     act(() => tree.update(inline(true)));
     expect(byLabel(tree, "Event name").props.value).toBe("Formal");
+    act(() => tree.unmount());
+  });
+
+  it("in place, holds the host still while an agenda row is held, and folds on back", () => {
+    const onClosed = vi.fn();
+    const lock = vi.fn();
+    vi.mocked(BackHandler.addEventListener).mockClear();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <HostScrollLockProvider value={lock}>
+            <NewEventSheet
+              now={NOW}
+              presentation="inline"
+              open
+              onClosed={onClosed}
+            />
+          </HostScrollLockProvider>
+        </FrappThemeProvider>,
+      );
+    });
+    const agenda = tree.root.find(
+      (node) =>
+        typeof node.props.onDragging === "function" &&
+        typeof node.props.onDraftChange === "function",
+    );
+    act(() => agenda.props.onDragging(true));
+    expect(lock).toHaveBeenLastCalledWith(true);
+    act(() => agenda.props.onDragging(false));
+    expect(lock).toHaveBeenLastCalledWith(false);
+
+    // Android's back folds the form, not the Ask sheet around it. (The
+    // stand-in modal draws the pickers' sheets, whose own back listeners a
+    // device mounts only while they are up, so the form's is looked for.)
+    const handlers = vi
+      .mocked(BackHandler.addEventListener)
+      .mock.calls.map(
+        ([, handler]) => handler as () => boolean | null | undefined,
+      );
+    act(() => {
+      for (const handler of handlers) {
+        handler();
+        if (onClosed.mock.calls.length > 0) break;
+      }
+    });
+    expect(onClosed).toHaveBeenCalledTimes(1);
     act(() => tree.unmount());
   });
 
