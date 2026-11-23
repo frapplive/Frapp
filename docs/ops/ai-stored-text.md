@@ -4,6 +4,8 @@ Frapp keeps no prompt or answer text, with the exceptions in [`spec/behavior/ai.
 
 What is kept about Ask that is not text, the trace of each turn and the member's thumbs on it, is kept 90 days and deleted sooner when the asker leaves the chapter, deletes their account or answers No on the AI sheet. It is on its own page: [`ask-answer-quality.md`](ask-answer-quality.md).
 
+What members change when they decide on a Frapp AI suggestion, with the words sealed by the same key, is on [`ai-suggestion-changes.md`](ai-suggestion-changes.md).
+
 ## Reports
 
 A member reports an Ask answer, a drafted set of minutes, a suggested task, or a channel summary (#3946) from the "Report this" action under it. Each report is one row in `ai_reports`: who reported what (ids), the reason, the member's own note, which model and prompt version made it, and one sealed value holding the exchange. It is sealed with AES-256-GCM under `AI_STORED_TEXT_KEY`, bound to the chapter. With no key set, the row keeps the ids, the reason and the note, and `sealed` is null.

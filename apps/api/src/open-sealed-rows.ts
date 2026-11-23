@@ -3,9 +3,10 @@ import { AiTextCipherError, openAiText } from '#domain/utils/ai-text-cipher';
 import { aiStoredTextKeyRing } from './config/ai-stored-text-config';
 
 /**
- * The one reader behind `npm run ai:open-diagnostics` and
- * `npm run ai:open-reports` (#4315), for the Frapp team, on a team member's
- * own machine. How and when to use them: `docs/ops/ai-stored-text.md`.
+ * The one reader behind `npm run ai:open-diagnostics`,
+ * `npm run ai:open-reports` (#4315) and
+ * `npm run ai:open-suggestion-changes`, for the Frapp team, on a team
+ * member's own machine. How and when to use them: `docs/ops/ai-stored-text.md`.
  *
  * Reads one JSON object per line on stdin, `{"chapter_id": …, "sealed": …}`
  * plus the row's `id` when it was selected, and writes each opened row as
@@ -34,7 +35,9 @@ function parseRow(line: string): {
   };
 }
 
-async function openRows(context: (chapterId: string) => string): Promise<void> {
+async function openRows(
+  context: (chapterId: string, id: string | null) => string,
+): Promise<void> {
   const ring = aiStoredTextKeyRing();
   if (!ring) {
     throw new Error('Set AI_STORED_TEXT_KEY in this shell first.');
@@ -45,7 +48,7 @@ async function openRows(context: (chapterId: string) => string): Promise<void> {
     try {
       const row = parseRow(line);
       const opened = JSON.parse(
-        openAiText(ring, row.sealed, context(row.chapter_id)),
+        openAiText(ring, row.sealed, context(row.chapter_id, row.id)),
       ) as object;
       process.stdout.write(
         `${JSON.stringify(row.id ? { id: row.id, ...opened } : opened)}\n`,
@@ -63,8 +66,13 @@ async function openRows(context: (chapterId: string) => string): Promise<void> {
   if (failed > 0) process.exitCode = 1;
 }
 
-/** Runs the reader with the context the rows were sealed to. */
-export function openSealedRows(context: (chapterId: string) => string): void {
+/**
+ * Runs the reader with the context the rows were sealed to, from the row's
+ * chapter and, for a store sealed per row, its `id`.
+ */
+export function openSealedRows(
+  context: (chapterId: string, id: string | null) => string,
+): void {
   openRows(context).catch((error: unknown) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : 'Could not open the rows.'}\n`,

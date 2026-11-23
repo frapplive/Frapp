@@ -102,6 +102,7 @@ export * from "./event-excuse";
 export * from "./event-form-rows";
 // What is on right now, and the Now card's words (#5777).
 export * from "./event-now";
+export * from "./event-page";
 // The chapter's Everyone role, the floor every member holds, and the three
 // base roles an officer gives (Paul, 2026-11-21).
 export {

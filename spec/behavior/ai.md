@@ -1146,15 +1146,28 @@ Activity draws one card under Now (under the week card until #5779 replaced it w
 
 ## Stored AI text
 
-Frapp does not keep the text of prompts or answers, with three exceptions.
+Frapp does not keep the text of prompts or answers, with four exceptions.
 
 | Exception                                                          | What is kept                                                                            | Who reads it                                                                                                      | How long                                                      |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | A member reports an answer, a draft, a suggested task or a summary | That one exchange, shown to the member before they confirm                              | The Frapp team                                                                                                    | 30 days, encrypted                                            |
 | Beta diagnostics                                                   | Questions and answers in Ask, for one chapter                                           | The Frapp team                                                                                                    | 14 days, encrypted, with a fixed end date                     |
 | Suggested agenda items                                             | Each item the model suggested (a few words, and why), whether it was added or dismissed | The event's editors while it waits; after that only the prompt, as an example for meetings with the same audience | Until the event, or the minutes it was drawn from, is deleted |
+| What people change in a suggestion                                 | The member's question, the text the suggestion proposed and the text they saved         | The Frapp team                                                                                                    | 90 days, encrypted                                            |
 
 - A suggested task from minutes sent with **Add to next meeting's agenda** (#5790) is decided, so it keeps no text; the item it became keeps its words, which are the posted action item (no model wrote them; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)). A copy of the suggestion as it stood is kept for one day so Undo can put it back, then emptied by the hourly sweep.
+- **What people change in a suggestion is kept, so Frapp learns what it got wrong** (Paul, 2026-11-22: "we defo need to log what humans change when Frapp AI makes suggestions. that's how we learn what is good and not good").
+  When a member confirms, edits or dismisses a suggestion (an Ask card for an event, a task or points, a task suggested from minutes, or a "this time last year" event), sends it to the next meeting's agenda (kept as dismissed), or it expires untouched, Frapp keeps one record of it: how it was decided, whether through the card or the full form its Edit opened, and field by field whether what was saved kept, changed, added or removed what was proposed.
+  Who is invited (the roles, and whether anyone outside them is), who a task is for, times, days and points are kept as ids and numbers, with the shift in minutes; a text field is kept only as kept, changed, added or removed.
+  A "this time last year" event is always made in its own form from last year's, so its record holds the decision alone.
+  An event made in the form is read back as it was saved, so a change made there (who is invited, above all) is in the record.
+  A card Ask made names the Ask turn that made it, so the record can be read beside that turn's trace.
+  The words (the member's question, the proposed text and the saved text) are kept only sealed with the stored-text key, and only when the member who decided has Frapp AI on (Paul's pick on 2026-11-22, over keeping the changes alone). Without the key none are kept and the record holds the changes alone. The question waits sealed on the card and is emptied with the rest of the card's text when it is decided.
+  No words are kept for a card drawn from chat: one Ask proposed after reading channel messages, or one drawn from a channel. Their authors never said their words could be kept, as the diagnostics window never keeps an answer that drew on chat.
+  A record is deleted after 90 days, and sooner when the member who decided or the member it was made for leaves the chapter, deletes their account or answers No on the AI sheet; those also empty that member's question from the cards still waiting for them.
+  Nobody in the chapter reads it; how the Frapp team does: [`docs/ops/ai-suggestion-changes.md`](../../docs/ops/ai-suggestion-changes.md).
+  The privacy page names it.
+  Minutes drafts, Backwork's fill and other AI-filled forms are to write to the same record next.
 - The diagnostics window exists for the beta only, and only on Ask.
   While it is on, Ask shows a line saying answers are being saved.
   It never covers meeting features, and it never keeps an answer that drew on chat.

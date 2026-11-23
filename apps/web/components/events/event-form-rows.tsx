@@ -91,10 +91,7 @@ export function PropertyRow({
     >
       <EventFormGlyph
         name={glyph}
-        className={cn(
-          "text-muted-foreground",
-          align === "start" && "mt-2.5",
-        )}
+        className={cn("text-muted-foreground", align === "start" && "mt-2.5")}
       />
       <Label
         {...(labelFor ? { htmlFor: labelFor } : {})}
@@ -106,7 +103,11 @@ export function PropertyRow({
         {label}
       </Label>
       <div className="min-w-0">{children}</div>
-      {trailing ? <div className="flex items-center">{trailing}</div> : <span />}
+      {trailing ? (
+        <div className="flex items-center">{trailing}</div>
+      ) : (
+        <span />
+      )}
     </div>
   );
 }

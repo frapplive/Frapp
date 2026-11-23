@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { AttendanceEditor } from "@/components/events/attendance-editor";
 import { EventTypeRow } from "@/components/events/event-type-picker";
 import { AgendaDraftList } from "@/components/events/event-agenda";
@@ -193,8 +187,7 @@ function WhenFields({
     !!endTime &&
     !!startTime &&
     endTime <= startTime;
-  const spansDays =
-    !!startDay && !!endDay && endDay !== startDay && !overnight;
+  const spansDays = !!startDay && !!endDay && endDay !== startDay && !overnight;
   const [askedForEndDay, setAskedForEndDay] = useState(false);
   const showEndDay = askedForEndDay || spansDays;
   const startInstant = parseInstant(localInputToIso(startAt));
@@ -1242,7 +1235,11 @@ export function EventEditorDialog({
     kept.hold();
     try {
       if (mode === "create") {
-        const sentAgenda = agendaWithPending(agenda, agendaDraft, randomClientId);
+        const sentAgenda = agendaWithPending(
+          agenda,
+          agendaDraft,
+          randomClientId,
+        );
         // Role lists are omitted when empty on create; on update (below)
         // every list is sent, so an emptied one clears.
         //
@@ -1702,7 +1699,6 @@ export function EventEditorDialog({
                 placeholder={EVENT_FORM_PLACEHOLDERS.location}
               />
             </PropertyRow>
-
           </PropertyGroup>
 
           <PropertyGroup>
@@ -1763,7 +1759,6 @@ export function EventEditorDialog({
                 </div>
               </PropertyRow>
             ) : null}
-
           </PropertyGroup>
 
           <PropertyGroup>
@@ -1866,8 +1861,8 @@ export function EventEditorDialog({
                   <div className="grid gap-2">
                     <span className="text-sm font-semibold">Check-in zone</span>
                     <p className="text-caption text-muted-foreground">
-                      Optional. Members must be inside it to check in. At
-                      least 3 points; don&apos;t repeat the first.
+                      Optional. Members must be inside it to check in. At least
+                      3 points; don&apos;t repeat the first.
                     </p>
                     <div className="grid gap-1">
                       <Label htmlFor="event-zone-name">Zone name</Label>
@@ -1882,104 +1877,104 @@ export function EventEditorDialog({
                         placeholder="Great Hall"
                       />
                     </div>
-                  {checkInZone.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border p-3 text-caption text-muted-foreground">
-                      No check-in zone. Members can check in from anywhere.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {checkInZone.map((vertex, index) => (
-                        <div
-                          key={vertex.id}
-                          className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3"
-                        >
-                          <div className="grid min-w-[9rem] flex-1 gap-1">
-                            <Label htmlFor={`${vertex.id}-lat`}>
-                              Point {index + 1} latitude
-                            </Label>
-                            <Input
-                              id={`${vertex.id}-lat`}
-                              value={vertex.lat}
-                              inputMode="decimal"
-                              disabled={usingPreviewData}
-                              onChange={(eventValue) =>
-                                handleVertexChange(
-                                  vertex.id,
-                                  "lat",
-                                  eventValue.target.value,
-                                )
-                              }
-                              placeholder="42.7298"
-                            />
+                    {checkInZone.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border p-3 text-caption text-muted-foreground">
+                        No check-in zone. Members can check in from anywhere.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {checkInZone.map((vertex, index) => (
+                          <div
+                            key={vertex.id}
+                            className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3"
+                          >
+                            <div className="grid min-w-[9rem] flex-1 gap-1">
+                              <Label htmlFor={`${vertex.id}-lat`}>
+                                Point {index + 1} latitude
+                              </Label>
+                              <Input
+                                id={`${vertex.id}-lat`}
+                                value={vertex.lat}
+                                inputMode="decimal"
+                                disabled={usingPreviewData}
+                                onChange={(eventValue) =>
+                                  handleVertexChange(
+                                    vertex.id,
+                                    "lat",
+                                    eventValue.target.value,
+                                  )
+                                }
+                                placeholder="42.7298"
+                              />
+                            </div>
+                            <div className="grid min-w-[9rem] flex-1 gap-1">
+                              <Label htmlFor={`${vertex.id}-lng`}>
+                                Point {index + 1} longitude
+                              </Label>
+                              <Input
+                                id={`${vertex.id}-lng`}
+                                value={vertex.lng}
+                                inputMode="decimal"
+                                disabled={usingPreviewData}
+                                onChange={(eventValue) =>
+                                  handleVertexChange(
+                                    vertex.id,
+                                    "lng",
+                                    eventValue.target.value,
+                                  )
+                                }
+                                placeholder="-73.6789"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Move point ${index + 1} up`}
+                                disabled={usingPreviewData || index === 0}
+                                onClick={() => handleMoveVertex(index, -1)}
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Move point ${index + 1} down`}
+                                disabled={
+                                  usingPreviewData ||
+                                  index === checkInZone.length - 1
+                                }
+                                onClick={() => handleMoveVertex(index, 1)}
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Remove point ${index + 1}`}
+                                disabled={usingPreviewData}
+                                onClick={() => handleRemoveVertex(vertex.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="grid min-w-[9rem] flex-1 gap-1">
-                            <Label htmlFor={`${vertex.id}-lng`}>
-                              Point {index + 1} longitude
-                            </Label>
-                            <Input
-                              id={`${vertex.id}-lng`}
-                              value={vertex.lng}
-                              inputMode="decimal"
-                              disabled={usingPreviewData}
-                              onChange={(eventValue) =>
-                                handleVertexChange(
-                                  vertex.id,
-                                  "lng",
-                                  eventValue.target.value,
-                                )
-                              }
-                              placeholder="-73.6789"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Move point ${index + 1} up`}
-                              disabled={usingPreviewData || index === 0}
-                              onClick={() => handleMoveVertex(index, -1)}
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Move point ${index + 1} down`}
-                              disabled={
-                                usingPreviewData ||
-                                index === checkInZone.length - 1
-                              }
-                              onClick={() => handleMoveVertex(index, 1)}
-                            >
-                              <ArrowDown className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Remove point ${index + 1}`}
-                              disabled={usingPreviewData}
-                              onClick={() => handleRemoveVertex(vertex.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
 
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={usingPreviewData}
-                    onClick={handleAddVertex}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add point
-                  </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={usingPreviewData}
+                      onClick={handleAddVertex}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add point
+                    </Button>
                   </div>
                 </PopoverContent>
               </Popover>

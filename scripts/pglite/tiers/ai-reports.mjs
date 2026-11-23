@@ -73,6 +73,10 @@ console.log("\n=== Functional: Report this (20261112220000) ===");
       "a note-taker's own notes, kept only while the minutes are a draft (#4935)",
     "ai_suggestions.payload": "the proposal, emptied once decided",
     "ai_suggestions.quote": "the source's words, nulled once decided",
+    "ai_suggestions.request_sealed":
+      "the member's question, ciphertext only, nulled once decided (20261122221259)",
+    "ai_suggestion_changes.words_sealed":
+      "question, proposed and saved text, ciphertext only, 90 days (20261122221259)",
     "corpus_chunks.content":
       "the chapter's own records, indexed (not AI output)",
     "corpus_chunks.heading": "a heading from the chapter's own records",
@@ -107,6 +111,14 @@ console.log("\n=== Functional: Report this (20261112220000) ===");
     "ai_runs.locked_by",
     "ai_runs.result_ref",
     "ai_runs.status",
+    // The change log (20261122221259): codes held by checks, and `fields`
+    // held to verdicts, ids and numbers by `ai_suggestion_change_fields_ok`
+    // (`ai-suggestion-changes.mjs` proves it refuses a sentence).
+    "ai_suggestion_changes.decision",
+    "ai_suggestion_changes.fields",
+    "ai_suggestion_changes.kind",
+    "ai_suggestion_changes.source_type",
+    "ai_suggestion_changes.via",
     "ai_suggestions.dedupe_key",
     "ai_suggestions.kind",
     "ai_suggestions.required_permission",

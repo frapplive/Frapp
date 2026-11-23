@@ -376,6 +376,11 @@ class ActProposeTool implements AgentProposeTool {
         enabledModules: context.enabledModules,
         timeZone: context.timeZone,
         ...(context.signal === undefined ? {} : { signal: context.signal }),
+        ...(context.askId === undefined ? {} : { askId: context.askId }),
+        ...(context.question === undefined
+          ? {}
+          : { question: context.question }),
+        ...(context.readChat?.() ? { drewOnChat: true } : {}),
       },
       this.name,
       { action: this.name, ...this.plan(args) },

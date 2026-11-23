@@ -297,7 +297,7 @@ describe("EventsPage list", () => {
     render(<EventsPage />);
 
     await pick(user, "Time", "All");
-    await pick(user, "Attendance", "Mandatory");
+    await pick(user, "Attendance", "Required");
 
     expect(
       screen.getByRole("button", { name: "Filter events, 2 on" }),
@@ -310,7 +310,7 @@ describe("EventsPage list", () => {
     // The filters that are on show as chips under the header (Baymard).
     expect(
       screen.getByRole("button", {
-        name: "Remove filter Attendance: Mandatory",
+        name: "Remove filter Attendance: Required",
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear all" }));
@@ -452,7 +452,7 @@ describe("EventsPage list", () => {
     ).not.toBeInTheDocument();
 
     await openFilters(user);
-    await pick(user, "Attendance", "Mandatory");
+    await pick(user, "Attendance", "Required");
     expect(screen.getByText("1 event")).toBeInTheDocument();
     expect(row(/study night/i)).toBeInTheDocument();
   });
@@ -477,7 +477,6 @@ describe("EventsPage list", () => {
     // The events hue, never the accent or red; the grey pill is gone.
     expect(required.getAttribute("style")).toContain("color");
     expect(required.className).not.toContain("text-destructive-text");
-    expect(within(meeting).queryByText("Mandatory")).toBeNull();
     expect(within(meeting).queryByText("WEEKLY")).toBeNull();
   });
 
@@ -709,7 +708,7 @@ describe("EventsPage empty states", () => {
     render(<EventsPage />);
 
     await openFilters(user);
-    await pick(user, "Attendance", "Mandatory");
+    await pick(user, "Attendance", "Required");
     await pick(user, "Cadence", "One-time");
     await user.keyboard("{Escape}");
 
@@ -733,7 +732,7 @@ describe("EventsPage empty states", () => {
 
     await openFilters(user);
     await pick(user, "Time", "Past");
-    await pick(user, "Attendance", "Mandatory");
+    await pick(user, "Attendance", "Required");
     await user.keyboard("{Escape}");
     expect(
       screen.getByText(/^No events match these filters\./),
