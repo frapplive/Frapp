@@ -344,6 +344,17 @@ describe("memberAssignmentSections", () => {
     expect(reason(ownLevel, "President")).toBe(ASSIGN_CAPTIONS.presidency);
   });
 
+  it("lets a viewer outside the tiers reach no other member, even one outside them too (#5843)", () => {
+    const rows = sections({
+      reach: { ...VP_REACH, rank: Number.POSITIVE_INFINITY },
+      heldRoleIds: ["r-past"],
+      userId: "u-other",
+    }).flatMap((s) => s.rows);
+    expect(rows.find((r) => r.name === "Past Cor Sec")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.memberAbove,
+    );
+  });
+
   it("never lets the viewer reach a member ranked above them", () => {
     const rows = sections({
       reach: {
