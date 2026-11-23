@@ -95,8 +95,18 @@ export function taskSignedOffAutomatically(task: {
 }
 
 /**
+ * A public site's name: dotted, ending in a top-level domain (letters, or an
+ * internationalized one's `xn--` form). Not `test`, `localhost`, an IP
+ * address or `example.com.`, which no officer's phone can open (#5882).
+ */
+const PUBLIC_HOSTNAME =
+  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+/**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
- * when it isn't one. Never fetched; shown as its domain.
+ * when it isn't one. Never fetched; shown as its domain. An agenda's link
+ * attachment shares this rule; a task's proof link must also pass
+ * `proofLinkOpens`.
  */
 export function normalizeProofLink(value: string): string | null {
   const trimmed = value.trim();
@@ -116,6 +126,23 @@ export function normalizeProofLink(value: string): string | null {
   return trimmed;
 }
 
+/**
+ * Whether a proof link names a public site an officer's phone can open:
+ * http or https on a dotted name ending in a top-level domain. A link to a
+ * name that resolves nowhere (`https://test`, `https://localhost`, an IP
+ * address) opened in the officer's browser as "server can't be found"
+ * (#5882), so Mark done refuses one, and a stored one shows as text rather
+ * than a chip that opens.
+ */
+export function proofLinkOpens(link: string): boolean {
+  if (!normalizeProofLink(link)) return false;
+  try {
+    return PUBLIC_HOSTNAME.test(new URL(link.trim()).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** The domain a proof link chip shows ("docs.google.com"). */
 export function proofLinkDomain(link: string): string {
   try {
@@ -124,6 +151,10 @@ export function proofLinkDomain(link: string): string {
     return link;
   }
 }
+
+/** Mark done's line for a typed link that isn't a full web address. */
+export const TASK_PROOF_LINK_INVALID_MESSAGE =
+  "Use a full web link, like https://photos.google.com/…";
 
 /** Send back's line for an empty reason, before it sends (#4635). */
 export const TASK_SEND_BACK_REASON_MISSING = "Say what needs to change.";
@@ -149,11 +180,12 @@ export function taskMarkDoneCheck(
   | { ok: true; proof: { proofLink?: string; completionNote?: string } }
   | { ok: false; problem: string } {
   const typed = draft.link.trim();
-  const link = typed ? normalizeProofLink(typed) : null;
+  const normalized = typed ? normalizeProofLink(typed) : null;
+  const link = normalized && proofLinkOpens(normalized) ? normalized : null;
   if (typed && !link) {
     return {
       ok: false,
-      problem: "Use a web link that starts with http:// or https://.",
+      problem: TASK_PROOF_LINK_INVALID_MESSAGE,
     };
   }
   if (task.proofKind === "photo" && draft.photoCount === 0) {

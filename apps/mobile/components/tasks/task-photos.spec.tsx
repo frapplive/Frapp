@@ -106,6 +106,32 @@ describe("TaskProof (#4635)", () => {
     );
   });
 
+  it("shows a stored link to a name that resolves nowhere as text, with nothing to tap (#5882)", () => {
+    vi.mocked(WebBrowser.openBrowserAsync).mockClear();
+    const tree = render(
+      <TaskProof
+        task={{ ...TASK, proofLink: "https://test" }}
+        showProof
+        sentBack={false}
+      />,
+    );
+    const chips = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityLabel ===
+          "Proof link, not a working web address: https://test" &&
+        typeof node.type === "string",
+    );
+    expect(chips.length).toBeGreaterThan(0);
+    expect(chips.every((node) => node.props.onPress === undefined)).toBe(true);
+    expect(screenText(tree)).toContain("https://test");
+    expect(
+      tree.root.findAll(
+        (node) => node.props.accessibilityRole === "link",
+      ),
+    ).toHaveLength(0);
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
+  });
+
   it("opens the full-screen viewer on the photo tapped", () => {
     const tree = render(
       <TaskProof

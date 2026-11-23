@@ -11,7 +11,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTaskPhotoUrl, type LiveTaskPhoto } from "@repo/hooks";
-import { TASK_PHOTOS_MAX, proofLinkDomain } from "@repo/validation";
+import {
+  TASK_PHOTOS_MAX,
+  proofLinkDomain,
+  proofLinkOpens,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { CloseGlyph, LinkGlyph } from "@/components/control-glyphs";
 import { IconButton } from "@/components/icon-button";
@@ -201,10 +205,30 @@ function TaskPhotoStrip({
   );
 }
 
-/** A proof link as a chip showing its domain; opens in the in-app browser. */
+/**
+ * A proof link as a chip showing its domain; opens in the in-app browser.
+ * One stored before Mark done refused names that resolve nowhere
+ * (`https://test`) is the same chip as plain text, the link as typed, with
+ * nothing to tap: opened, it was the browser's "server can't be found"
+ * (#5882).
+ */
 function ProofLinkChip({ link }: { link: string }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
+  if (!proofLinkOpens(link)) {
+    return (
+      <View
+        style={styles.chip}
+        accessible
+        accessibilityLabel={`Proof link, not a working web address: ${link}`}
+      >
+        <LinkGlyph color={tokens.color.text.mutedForeground} size={14} />
+        <Text style={styles.chipTextMuted} numberOfLines={1}>
+          {link}
+        </Text>
+      </View>
+    );
+  }
   const domain = proofLinkDomain(link);
   return (
     <Pressable
@@ -437,6 +461,11 @@ function createStyles(tokens: SignetTokens) {
     chipText: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.foreground,
+      flexShrink: 1,
+    },
+    chipTextMuted: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
       flexShrink: 1,
     },
     line: {

@@ -4134,14 +4134,23 @@ describe('TaskService', () => {
         expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
       });
 
-      it.each(['javascript:alert(1)', 'not a link', 'ftp://example.com/x'])(
+      it.each([
+        'javascript:alert(1)',
+        'not a link',
+        'ftp://example.com/x',
+        // Names that resolve nowhere, which opened as "server can't be
+        // found" on the officer's phone (#5882).
+        'https://test',
+        'http://localhost:3000/x',
+        'https://192.168.1.20/photo.jpg',
+      ])(
         'refuses an invalid link (%s)',
         async (link) => {
           mockTaskRepo.findById.mockResolvedValue(
             inProgress({ proof_kind: 'link' }),
           );
           await expect(markDone({ proof_link: link })).rejects.toThrow(
-            'proof_link must be a web link',
+            'proof_link must be a full web link',
           );
           expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
         },

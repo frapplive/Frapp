@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   TASK_PROOF_LINK_MAX,
+  TASK_PROOF_LINK_INVALID_MESSAGE,
   normalizeProofLink,
+  proofLinkOpens,
   taskNeedsSignOff,
   taskMarkDoneCheck,
   taskSignedOffAutomatically,
@@ -31,6 +33,31 @@ describe("normalizeProofLink", () => {
     ["too long", `https://example.com/${"a".repeat(TASK_PROOF_LINK_MAX)}`],
   ])("refuses %s", (_, raw) => {
     expect(normalizeProofLink(raw)).toBeNull();
+  });
+});
+
+describe("proofLinkOpens (#5882)", () => {
+  it.each([
+    "https://docs.google.com/x",
+    "http://example.com",
+    "  https://photos.app.goo.gl/AbC  ",
+    "https://xn--bcher-kva.example/x",
+    "https://sub.example.co.uk:8443/a?b=c",
+  ])("opens %j", (link) => {
+    expect(proofLinkOpens(link)).toBe(true);
+  });
+
+  it.each([
+    ["a name with no dot", "https://test"],
+    ["localhost", "http://localhost:3000/photo.jpg"],
+    ["an IPv4 address", "https://192.168.1.20/photo.jpg"],
+    ["an IPv6 address", "http://[::1]/x"],
+    ["a numeric top-level domain", "https://example.123"],
+    ["a trailing dot", "https://example.com./x"],
+    ["no scheme", "docs.google.com/x"],
+    ["javascript", "javascript:alert(1)"],
+  ])("refuses %s", (_, link) => {
+    expect(proofLinkOpens(link)).toBe(false);
   });
 });
 
@@ -122,6 +149,15 @@ describe("taskMarkDoneCheck mirrors the server's refusals (#4635)", () => {
         { ...draft, link: "  https://docs.example.com/x  " },
       ),
     ).toEqual({ ok: true, proof: { proofLink: "https://docs.example.com/x" } });
+  });
+
+  it("refuses a link to a name that resolves nowhere (#5882)", () => {
+    expect(
+      taskMarkDoneCheck(
+        { proofKind: "link", sentBack: false },
+        { ...draft, link: "https://test" },
+      ),
+    ).toEqual({ ok: false, problem: TASK_PROOF_LINK_INVALID_MESSAGE });
   });
 
   it("needs proof or a reply on a sent-back task", () => {
