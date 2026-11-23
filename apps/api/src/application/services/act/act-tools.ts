@@ -164,12 +164,22 @@ interface ActDraftInvite {
   draft: EventAttendanceDraft;
 }
 
+const ATTENDANCE_STRENGTH: Record<EventAttendanceStatus, number> = {
+  not_invited: 0,
+  optional: 1,
+  required: 2,
+};
+
 /**
- * The draft with each `tier:<id>` entry spelled out as the roles in that
- * tier today, a role named on its own keeping its own status, and a role
- * the chapter no longer has (one copied from an old event) left out. Null
- * when a tier is not in `tierRoles`. Events take role ids only, so the
- * stored draft is roles; the card's line still names the tier.
+ * The draft as the event takes it. A `tier:<id>` entry is kept as it is, so
+ * the event follows the tier as roles join or leave it (#5870), unless a
+ * role in that tier is named on its own with a weaker answer ("Cabinet
+ * required, not the President"): an event answers a role the strongest of
+ * its own answer and its tier's, so that tier is spelled out as its roles
+ * today, the role named on its own keeping its own answer (as is a tier
+ * that holds no roles, so a list of only it still reads as nobody). A role the
+ * chapter no longer has (one copied from an old event), and an entry that
+ * matches everyone, are left out. Null when a tier is not in `tierRoles`.
  */
 export function attendanceByRole(
   draft: EventAttendanceDraft,
@@ -177,16 +187,28 @@ export function attendanceByRole(
   knownRoles: ReadonlySet<string>,
 ): EventAttendanceDraft | null {
   const roles: Record<string, EventAttendanceStatus> = {};
+  const named = Object.entries(draft.roles).filter(
+    ([key]) => !key.startsWith('tier:'),
+  );
   for (const [key, status] of Object.entries(draft.roles)) {
     if (!key.startsWith('tier:')) continue;
     const inTier = tierRoles.get(key);
     if (!inTier) return null;
+    const weakerInside = named.some(
+      ([id, own]) =>
+        inTier.includes(id) &&
+        ATTENDANCE_STRENGTH[own] < ATTENDANCE_STRENGTH[status],
+    );
+    // A tier with no roles is kept only by its roles, so it invites nobody.
+    if (!weakerInside && inTier.length > 0) {
+      if (status !== draft.everyone) roles[key] = status;
+      continue;
+    }
     for (const id of inTier) roles[id] = status;
   }
-  for (const [key, status] of Object.entries(draft.roles)) {
-    if (!key.startsWith('tier:')) roles[key] = status;
-  }
+  for (const [key, status] of named) roles[key] = status;
   for (const [key, status] of Object.entries(roles)) {
+    if (key.startsWith('tier:')) continue;
     if (status === draft.everyone || !knownRoles.has(key)) delete roles[key];
   }
   return { everyone: draft.everyone, roles };

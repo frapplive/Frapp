@@ -283,9 +283,9 @@ export function resolveAudience(
 /**
  * An entry as a card's attendance key: a role by its id, a tier as
  * `tier:<id>`, the form the event's Who's coming picker gives a tier. The
- * card names the tier by it; `attendanceByRole` (act-tools.ts) spells it out
- * as the tier's roles before the draft is stored, since events take role
- * ids only.
+ * card names the tier by it, and `attendanceByRole` (act-tools.ts) keeps it
+ * so the event follows the tier (#5870), spelling it out as its roles only
+ * where a role in it is named with a weaker answer.
  */
 export function attendanceKeyOf(entry: AudienceEntry): string | null {
   if (entry.kind === 'role') return entry.id;

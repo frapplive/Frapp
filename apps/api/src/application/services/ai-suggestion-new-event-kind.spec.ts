@@ -164,7 +164,7 @@ describe('NewEventSuggestionKind', () => {
                 [PRESIDENT]: 'required',
                 [SOCIAL]: 'optional',
                 'not-an-id': 'required',
-                // Events take role ids only, so a tier key is not kept.
+                // A tier is kept as its key (#5870).
                 [`tier:${EXEC_TIER}`]: 'required',
                 [`tier:${SOCIAL}`]: 'maybe',
                 // The same as everyone: not set apart.
@@ -177,7 +177,11 @@ describe('NewEventSuggestionKind', () => {
       ).toMatchObject({
         attendance: {
           everyone: 'not_invited',
-          roles: { [PRESIDENT]: 'required', [SOCIAL]: 'optional' },
+          roles: {
+            [PRESIDENT]: 'required',
+            [SOCIAL]: 'optional',
+            [`tier:${EXEC_TIER}`]: 'required',
+          },
         },
         attendance_line: 'Exec board required, nobody else invited',
       });

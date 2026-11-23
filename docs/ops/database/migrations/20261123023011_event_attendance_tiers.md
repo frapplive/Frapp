@@ -1,4 +1,4 @@
-# 20261122221100_event_attendance_tiers.sql
+# 20261123023011_event_attendance_tiers.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
