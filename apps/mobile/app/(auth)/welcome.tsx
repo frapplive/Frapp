@@ -11,7 +11,6 @@ import {
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
-import { formatPhone, formatPhoneInput } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   can,
@@ -44,6 +43,8 @@ import {
   applyEdit,
   draftFromProfile,
   hasChanges,
+  tidiedPhone,
+  typedPhone,
   type ProfileDraft,
   type ProfileDraftField,
   type ProfileEdits,
@@ -61,7 +62,7 @@ import { useLatestTrack } from "@/lib/use-latest-track";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * s03, the two screens after a member joins (`spec/ui/mobile/screens.md`,
+ * s03, the screens after a member joins (`spec/ui/mobile/screens.md`,
  * #5627; Paul's pick 2026-11-19, "Two: name, then notifications"):
  *
  * 1. **How the chapter sees you**, always: the name, pre-filled when sign-in
@@ -257,18 +258,16 @@ export default function Welcome() {
     setAboutFailed(false);
     // The phone formats as it is typed (#5798), as on the Edit sheet.
     const next =
-      field === "phone"
-        ? formatPhoneInput(value, undefined, aboutShown?.phone ?? "").value
-        : value;
+      field === "phone" ? typedPhone(value, aboutShown?.phone ?? "") : value;
     setAboutEdits((latest) => applyEdit(latest, aboutOriginal, field, next));
   }
 
   function leaveAboutField(field: ProfileDraftField) {
     reveal.blur(field);
     // A 7-digit local number reads `555-0142` once the member leaves it.
-    const phone = aboutShown?.phone ?? "";
-    if (field === "phone" && aboutOriginal && formatPhone(phone) !== phone) {
-      const tidy = formatPhone(phone);
+    const tidy =
+      field === "phone" ? tidiedPhone(aboutShown?.phone ?? "") : null;
+    if (tidy !== null && aboutOriginal) {
       setAboutEdits((latest) =>
         applyEdit(latest, aboutOriginal, "phone", tidy),
       );
@@ -294,6 +293,11 @@ export default function Welcome() {
       } finally {
         setSavingAbout(false);
       }
+      // What was saved is the new baseline, so a return here from
+      // notifications compares against it: clearing a saved field then
+      // sends the clear rather than reading as no change.
+      if (aboutShown) setAboutOriginal(aboutShown);
+      setAboutEdits(null);
     }
     afterAbout();
   }

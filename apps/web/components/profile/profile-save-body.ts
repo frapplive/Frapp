@@ -5,6 +5,8 @@ import {
   type BirthdayDraftProblem,
   birthdayDraftProblem,
   type BirthdayVisibility,
+  GRADUATION_YEAR_MAX,
+  GRADUATION_YEAR_MIN,
   isPhoneNumber,
 } from "@repo/validation";
 
@@ -94,12 +96,16 @@ export function profileSaveBody(
 
 /** Why a Save can't be sent yet, on the field the member must fix. */
 export type ProfileSaveProblem =
-  { field: "phone" } | { field: "birthday"; problem: BirthdayDraftProblem };
+  | { field: "phone" }
+  | { field: "graduationYear" }
+  | { field: "birthday"; problem: BirthdayDraftProblem };
 
 /**
  * The checks a Save runs before it sends `body` (from `profileSaveBody`):
- * a phone the API would refuse (`isPhoneNumber`), or half a birthday or a
- * day its month lacks (#4959). Shared by `/profile` and `/welcome`'s About
+ * a phone the API would refuse (`isPhoneNumber`), a graduation year outside
+ * `GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX` (the API's own range, checked
+ * here rather than by the input's `min`/`max`, which a `noValidate` form
+ * skips), or half a birthday or a day its month lacks (#4959). Shared by `/profile` and `/welcome`'s About
  * you, so the two refuse the same values in the same words.
  */
 export function profileSaveProblem(
@@ -107,6 +113,14 @@ export function profileSaveProblem(
   draft: ProfileFields,
 ): ProfileSaveProblem | null {
   if (body.phone && !isPhoneNumber(body.phone)) return { field: "phone" };
+  const year = body.graduation_year;
+  if (
+    year !== undefined &&
+    year !== null &&
+    (year < GRADUATION_YEAR_MIN || year > GRADUATION_YEAR_MAX)
+  ) {
+    return { field: "graduationYear" };
+  }
   // Month and day go together; the year rides with them.
   if (body.birthday_visibility !== undefined) {
     const problem = birthdayDraftProblem(

@@ -294,4 +294,39 @@ describe("About you (#5284)", () => {
       "Physics",
     );
   });
+
+  it("refuses a year outside the API's range, and sends nothing", async () => {
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Graduation year"), {
+      target: { value: "26" },
+    });
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText(/^Use a year between 1900 and 2100/),
+    ).toBeTruthy();
+    expect(mocks.updateUser).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("refuses half a birthday, and sends nothing", async () => {
+    mocks.user = { ...NEW, birthday_month: 3, birthday_day: null };
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Major"), {
+      target: { value: "Physics" },
+    });
+    // Touch the birthday so it is part of the Save.
+    fireEvent.change(screen.getByLabelText("Year (optional)"), {
+      target: { value: "2004" },
+    });
+
+    fireEvent.click(goToChat());
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(/day/i),
+    );
+    expect(mocks.updateUser).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
 });

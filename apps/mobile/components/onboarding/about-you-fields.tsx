@@ -15,19 +15,22 @@ import {
   OnboardingTextInput,
 } from "@/components/onboarding/onboarding-field";
 import { Toggle } from "@/components/toggle";
-import type { ProfileDraft, ProfileDraftField } from "@/lib/more/edit-profile";
+import {
+  BIRTHDAY_FIELD_ACCESSIBLE_LABELS,
+  type ProfileDraft,
+  type ProfileDraftField,
+  YEAR_FIELD_WIDTH,
+} from "@/lib/more/edit-profile";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const copy = PROFILE_FIELD_COPY;
 
-/** The graduation year's width beside Major, as on the Edit sheet. */
-const YEAR_FIELD_WIDTH = 96;
-
 /**
  * s03's About you fields (#5284): Phone, Major with Grad year, and Birthday
  * with the switch that shares it, in the Edit sheet's order, labels and
- * limits (`edit-profile-sheet.tsx`). The rules are the sheet's too
- * (`aboutYouPatch` in `lib/more/edit-profile.ts`); this only draws the draft
+ * limits (`edit-profile-sheet.tsx`), with the year width and birthday labels
+ * from `lib/more/edit-profile.ts`. The rules are the sheet's too
+ * (`aboutYouPatch`, `typedPhone`, `tidiedPhone`); this only draws the draft
  * the host holds and the refusal it says to show.
  *
  * Onboarding's own field (`OnboardingTextInput`), not the sheet's
@@ -160,27 +163,36 @@ export function AboutYouFields({
       </View>
 
       <View style={styles.group}>
-        <OnboardingFieldLabel>{BIRTHDAY_COPY.label}</OnboardingFieldLabel>
+        <Text style={styles.sectionTitle}>{BIRTHDAY_COPY.label}</Text>
         <View style={styles.row}>
-          <View style={styles.grow}>
+          <View style={[styles.group, styles.grow]}>
+            <OnboardingFieldLabel>
+              {BIRTHDAY_COPY.monthLabel}
+            </OnboardingFieldLabel>
             {input("birthdayMonth", {
-              label: "Birthday month, 1 to 12",
+              label: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayMonth,
               placeholder: "MM",
               keyboardType: "number-pad",
               maxLength: 2,
             })}
           </View>
-          <View style={styles.grow}>
+          <View style={[styles.group, styles.grow]}>
+            <OnboardingFieldLabel>
+              {BIRTHDAY_COPY.dayLabel}
+            </OnboardingFieldLabel>
             {input("birthdayDay", {
-              label: "Birthday day",
+              label: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayDay,
               placeholder: "DD",
               keyboardType: "number-pad",
               maxLength: 2,
             })}
           </View>
-          <View style={styles.grow}>
+          <View style={[styles.group, styles.grow]}>
+            <OnboardingFieldLabel>
+              {BIRTHDAY_COPY.yearLabel}
+            </OnboardingFieldLabel>
             {input("birthdayYear", {
-              label: "Birth year, optional",
+              label: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayYear,
               placeholder: "YYYY",
               keyboardType: "number-pad",
               maxLength: 4,
@@ -237,6 +249,12 @@ function createStyles(tokens: SignetTokens) {
     },
     year: {
       width: YEAR_FIELD_WIDTH,
+    },
+    // The birthday's heading over its three labelled fields, as the Edit
+    // sheet's section head.
+    sectionTitle: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.text.foreground,
     },
     invalid: {
       borderColor: tokens.color.semantic.destructive,

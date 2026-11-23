@@ -6,6 +6,7 @@ import {
   BIRTHDAY_VISIBILITY_DEFAULT,
   type BirthdayDraftProblem,
   GRADUATION_YEAR_MAX,
+  GRADUATION_YEAR_MESSAGE,
   GRADUATION_YEAR_MIN,
   MAJOR_MAX_LENGTH,
   majorSuggestions,
@@ -33,6 +34,7 @@ export function ProfileAboutFields({
   onChange,
   majors,
   phoneInvalid,
+  yearInvalid,
   birthdayProblem,
   disabled = false,
 }: {
@@ -42,6 +44,8 @@ export function ProfileAboutFields({
   majors: string[];
   /** The last Save refused the phone. */
   phoneInvalid: boolean;
+  /** The last Save refused the graduation year (`profileSaveProblem`). */
+  yearInvalid: boolean;
   /** The last Save's refusal of the birthday; null when none. */
   birthdayProblem: BirthdayDraftProblem | null;
   disabled?: boolean;
@@ -137,14 +141,16 @@ export function ProfileAboutFields({
             max={GRADUATION_YEAR_MAX}
             value={value.graduation_year ?? ""}
             disabled={disabled}
+            aria-invalid={yearInvalid || undefined}
+            aria-describedby={yearInvalid ? "graduation-year-error" : undefined}
             placeholder={PROFILE_FIELD_COPY.graduationYear.placeholder}
             onChange={(event) => {
               const raw = event.target.value;
               // Cleared means "no year". The range
-              // (`GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX`) is refused at
-              // submit, by the input's `min`/`max` and by the API, not here:
-              // guarding it on change would refuse the "2" on the way to
-              // "2026" (components.md § Text input, "When an error shows").
+              // (`GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX`) is refused on
+              // Save (`profileSaveProblem`), not here: guarding it on change
+              // would refuse the "2" on the way to "2026" (components.md
+              // § Text input, "When an error shows").
               const next = raw.trim() === "" ? null : parseGuardedInt(raw);
               if (next === undefined) return;
               onChange({ graduation_year: next });
@@ -152,6 +158,15 @@ export function ProfileAboutFields({
           />
         </div>
       </div>
+      {yearInvalid ? (
+        <p
+          id="graduation-year-error"
+          role="alert"
+          className="-mt-2 text-caption text-destructive-text"
+        >
+          {GRADUATION_YEAR_MESSAGE}
+        </p>
+      ) : null}
       <BirthdayFields
         value={{
           month: value.birthday_month ?? null,

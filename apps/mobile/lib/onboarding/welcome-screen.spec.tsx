@@ -10,10 +10,11 @@ import { flatStyle } from "@/test/flat-style";
 
 /**
  * s03 is what comes right after joining a chapter, for a new member and for an
- * App Reviewer alike, in two screens (#5627): "How the chapter sees you"
- * (always: the name, pre-filled when sign-in carried a real one, and an
- * optional photo), then "Turn on notifications" when this build can push and
- * push is off. In a build that cannot push (#2299; `isPushAvailable()` false,
+ * App Reviewer alike, in up to three screens (#5627, #5284): "How the
+ * chapter sees you" (always: the name, pre-filled when sign-in carried a real
+ * one, and an optional photo), "About you" when phone, major, graduation year
+ * or birthday is empty, then "Turn on notifications" when this build can push
+ * and push is off. In a build that cannot push (#2299; `isPushAvailable()` false,
  * `spec/ui/mobile/patterns.md` § Push notifications lists the causes) there is
  * no notifications screen at all, rather than a dead "Turn on" and an apology.
  * Then chat. `lib/notifications/primer.spec.ts` covers the rules; this covers
@@ -716,5 +717,47 @@ describe("s03 welcome, About you", () => {
       handler![1]();
     });
     expect(onAbout(root)).toBe(true);
+  });
+
+  it("returns to the name on Android back from About you", async () => {
+    const { BackHandler } = await import("react-native");
+    const listen = vi.mocked(BackHandler.addEventListener);
+    listen.mockClear();
+    const { root } = await render();
+    expect(onAbout(root)).toBe(true);
+
+    const calls = listen.mock.calls as unknown as [string, () => boolean][];
+    const handler = calls.filter(([e]) => e === "hardwareBackPress").at(-1);
+    expect(handler).toBeDefined();
+    let handled = false;
+    act(() => {
+      handled = handler![1]();
+    });
+    expect(handled).toBe(true);
+    expect(onYouScreen(root)).toBe(true);
+  });
+
+  it("sends a clear made after coming back to it from notifications", async () => {
+    const { BackHandler } = await import("react-native");
+    const listen = vi.mocked(BackHandler.addEventListener);
+    listen.mockClear();
+    pushAvailable = true;
+    permission = OFF;
+    const { root } = await render();
+    act(() => input(root, "Major")?.props.onChangeText("Physics"));
+    await press(button(root, "Continue"));
+    expect(updateUser).toHaveBeenLastCalledWith({ major: "Physics" });
+
+    const calls = listen.mock.calls as unknown as [string, () => boolean][];
+    act(() => {
+      calls
+        .filter(([e]) => e === "hardwareBackPress")
+        .at(-1)![1]();
+    });
+    expect(input(root, "Major")?.props.value).toBe("Physics");
+    act(() => input(root, "Major")?.props.onChangeText(""));
+    await press(button(root, "Continue"));
+
+    expect(updateUser).toHaveBeenLastCalledWith({ major: "" });
   });
 });

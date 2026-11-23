@@ -67,6 +67,7 @@ export function WelcomeAbout({
   const [original] = useState(() => aboutYouFields(saved));
   const [draft, setDraft] = useState<ProfileFields>(original);
   const [phoneInvalid, setPhoneInvalid] = useState(false);
+  const [yearInvalid, setYearInvalid] = useState(false);
   const [birthdayProblem, setBirthdayProblem] =
     useState<BirthdayDraftProblem | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -80,6 +81,10 @@ export function WelcomeAbout({
     const problem = profileSaveProblem(body, draft);
     if (problem?.field === "phone") {
       setPhoneInvalid(true);
+      return;
+    }
+    if (problem?.field === "graduationYear") {
+      setYearInvalid(true);
       return;
     }
     if (problem?.field === "birthday") {
@@ -115,10 +120,12 @@ export function WelcomeAbout({
           value={draft}
           majors={majors}
           phoneInvalid={phoneInvalid}
+          yearInvalid={yearInvalid}
           birthdayProblem={birthdayProblem}
           disabled={busy}
           onChange={(patch) => {
             if ("phone" in patch) setPhoneInvalid(false);
+            if ("graduation_year" in patch) setYearInvalid(false);
             if ("birthday_month" in patch) setBirthdayProblem(null);
             setSaveFailed(false);
             setDraft((prev) => ({ ...prev, ...patch }));

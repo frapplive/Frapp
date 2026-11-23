@@ -113,6 +113,7 @@ export function ProfilePanel() {
   // Set on a submit the phone refused, cleared when the member edits it
   // (validate on submit, not per keystroke: components.md § Text input).
   const [phoneError, setPhoneError] = useState(false);
+  const [yearError, setYearError] = useState(false);
   // Set on a submit with half a birthday, or a day its month lacks (#4959).
   const [birthdayError, setBirthdayError] =
     useState<BirthdayDraftProblem | null>(null);
@@ -208,6 +209,10 @@ export function ProfilePanel() {
     const problem = profileSaveProblem(body, profileDraft);
     if (problem?.field === "phone") {
       setPhoneError(true);
+      return;
+    }
+    if (problem?.field === "graduationYear") {
+      setYearError(true);
       return;
     }
     if (problem?.field === "birthday") {
@@ -438,9 +443,11 @@ export function ProfilePanel() {
               value={profile}
               majors={chapterMajors}
               phoneInvalid={phoneError}
+              yearInvalid={yearError}
               birthdayProblem={birthdayError}
               onChange={(patch) => {
                 if ("phone" in patch) setPhoneError(false);
+                if ("graduation_year" in patch) setYearError(false);
                 if ("birthday_month" in patch) setBirthdayError(null);
                 setProfileDraft((prev) => ({ ...prev, ...patch }));
               }}
