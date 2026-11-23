@@ -12,9 +12,10 @@ import { matchesWordStarts, normalizeWords } from "./fuzzy-match";
 import type { ChapterGroup } from "./use-groups";
 import {
   assignsRole,
-  assignsToMember,
   isWildcardRole,
+  memberStanding,
   permissionsNotHeldFor,
+  type MemberStanding,
   type Reach,
   type TierRow,
   type TieredRole,
@@ -44,7 +45,7 @@ export const ASSIGN_CAPTIONS = {
   presidency: "Changes with Transfer presidency",
   checking: "Checking what your role can give",
   ranksAbove: "Ranks at or above yours",
-  memberAbove: "They rank above you",
+  outsideTiers: "Your role isn't in any tier",
   takesAwayAbove: "Would take away a base role ranked at or above yours",
   noRoles: "Your role can't give roles",
   noGroups: "Your role can't change groups",
@@ -128,8 +129,9 @@ function roleReason(role: TieredRole, inputs: AssignmentInputs): string | null {
   if (isWildcardRole(role)) return ASSIGN_CAPTIONS.presidency;
   if (!inputs.canManageRoles) return ASSIGN_CAPTIONS.noRoles;
   if (!inputs.reach.known) return ASSIGN_CAPTIONS.checking;
-  if (!memberReachable(inputs)) return ASSIGN_CAPTIONS.memberAbove;
-  if (!assignsRole(inputs.reach, role, inputs.tiers)) {
+  const standing = standingOf(inputs);
+  if (standing === "out-of-reach") return ASSIGN_CAPTIONS.outsideTiers;
+  if (!assignsRole(inputs.reach, role, inputs.tiers, standing)) {
     return ASSIGN_CAPTIONS.ranksAbove;
   }
   // Only giving checks the permissions: taking a role away hands out nothing.
@@ -140,17 +142,20 @@ function roleReason(role: TieredRole, inputs: AssignmentInputs): string | null {
   return null;
 }
 
-/** Whether the rank rules let the viewer change this member's roles. */
-function memberReachable(inputs: {
+/**
+ * Where the rank rules place this member for the viewer (`memberStanding`):
+ * on one ranked above them, only roles below the viewer's own (#5903).
+ */
+function standingOf(inputs: {
   reach: Reach;
   roles: readonly TieredRole[];
   tiers: readonly TierRow[];
   heldRoleIds: readonly string[];
   userId?: string;
-}): boolean {
+}): MemberStanding {
   // Without the member's id the API decides, as before.
-  if (inputs.userId === undefined) return true;
-  return assignsToMember(
+  if (inputs.userId === undefined) return "reachable";
+  return memberStanding(
     inputs.reach,
     { userId: inputs.userId, roleIds: inputs.heldRoleIds },
     inputs.roles,
@@ -192,8 +197,10 @@ export function memberAssignmentSections(
 
   const sections: AssignmentSection[] = [];
   // Picking a base role takes the member's other one away, which the API
-  // rank-checks too. Once a peer is reachable (#5843), their base role can
-  // sit at the viewer's own rank, so the row says so rather than the member.
+  // rank-checks too. Once a peer (#5843) or a member above (#5903) is
+  // reachable, their base role can sit at or above the viewer's own rank, so
+  // the row says so rather than the member.
+  const standing = standingOf(inputs);
   const baseRoles = baseRolesInOrder(inputs.roles);
   const swapReason = (role: TieredRole): string | null =>
     !held.has(role.id) &&
@@ -201,7 +208,7 @@ export function memberAssignmentSections(
       (other) =>
         other.id !== role.id &&
         held.has(other.id) &&
-        !assignsRole(inputs.reach, other, inputs.tiers),
+        !assignsRole(inputs.reach, other, inputs.tiers, standing),
     )
       ? ASSIGN_CAPTIONS.takesAwayAbove
       : null;
@@ -362,8 +369,7 @@ export function memberRoleChips(inputs: {
         inputs.canManageRoles &&
         inputs.reach.known &&
         !isWildcardRole(role) &&
-        memberReachable(inputs) &&
-        assignsRole(inputs.reach, role, inputs.tiers),
+        assignsRole(inputs.reach, role, inputs.tiers, standingOf(inputs)),
     }));
 }
 

@@ -163,14 +163,16 @@ describe("base roles (2026-11-21)", () => {
     expect(rows.find((r) => r.name === "Grads")?.disabledReason).toBe(
       ASSIGN_CAPTIONS.ranksAbove,
     );
-    // A member ranked above the viewer: the member rule disables every row.
+    // A member ranked above the viewer (#5903): New Member sits at the
+    // chair's own rank, so it isn't theirs to give there, and the pick would
+    // take Grads, ranked above them, away.
     const above = sections({
       roles: highGrads,
       heldRoleIds: ["r-alumni"],
       reach: { ...VP_REACH, rank: 2 },
     })[0]!.rows;
     expect(above.find((r) => r.name === "New Member")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
+      ASSIGN_CAPTIONS.ranksAbove,
     );
     // A member holding a reachable base role: the pick is open.
     const open = sections({ roles: withBase, heldRoleIds: ["r-actives"] })[0]!
@@ -351,11 +353,14 @@ describe("memberAssignmentSections", () => {
       userId: "u-other",
     }).flatMap((s) => s.rows);
     expect(rows.find((r) => r.name === "Past Cor Sec")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
+      ASSIGN_CAPTIONS.outsideTiers,
     );
   });
 
-  it("never lets the viewer reach a member ranked above them", () => {
+  // #5903 (Paul's option 3, relayed by Shawn, 2026-11-23): on a member
+  // ranked above them, the President included, the viewer gives and takes
+  // only roles ranked below their own.
+  it("lets the viewer give a member ranked above them only roles below the viewer, even with roles:assign_own_level", () => {
     const rows = sections({
       reach: {
         ...VP_REACH,
@@ -365,9 +370,38 @@ describe("memberAssignmentSections", () => {
       heldRoleIds: ["r-vp"],
       userId: "u-vp",
     }).flatMap((s) => s.rows);
-    expect(rows.find((r) => r.name === "Rush Chair")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
-    );
+    const reason = (name: string) =>
+      rows.find((r) => r.name === name)?.disabledReason;
+    expect(reason("Past Cor Sec")).toBeNull();
+    expect(reason("Rush Chair")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+    expect(reason("Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+  });
+
+  it("lets a cabinet officer give the President a lower role, never their own rank's or `*`", () => {
+    const rows = sections({
+      heldRoleIds: ["r-pres"],
+      userId: "u-pres",
+    }).flatMap((s) => s.rows);
+    const reason = (name: string) =>
+      rows.find((r) => r.name === name)?.disabledReason;
+    expect(reason("Rush Chair")).toBeNull();
+    expect(reason("Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+    expect(reason("President")).toBe(ASSIGN_CAPTIONS.presidency);
+  });
+
+  it("lets a cabinet officer take a lower role chip off the President, never `*`", () => {
+    const chips = memberRoleChips({
+      roles: ROLES,
+      tiers: TIERS,
+      heldRoleIds: ["r-pres", "r-rush"],
+      reach: VP_REACH,
+      canManageRoles: true,
+      userId: "u-pres",
+    });
+    expect(chips.map((c) => [c.name, c.removable])).toEqual([
+      ["President", false],
+      ["Rush Chair", true],
+    ]);
   });
 
   it("treats the viewer's own profile as reachable", () => {

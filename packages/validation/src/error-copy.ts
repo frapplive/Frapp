@@ -332,8 +332,8 @@ export const SERVER_MESSAGE_COPY: Readonly<Record<string, string>> = {
   "A rollover has already been performed this calendar month":
     "The semester was already rolled over this month.",
   // Pledge classes (`PledgeClassService.assign`), already in an officer's words.
-  "You can only set the class of members ranked below you or at your own rank, and your own.":
-    "You can only set the class of members ranked below you or at your own rank, and your own.",
+  "Your role isn't in any tier, so you can only set your own class.":
+    "Your role isn't in any tier, so you can only set your own class.",
   "A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.":
     "A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.",
   // Points and hours

@@ -223,31 +223,48 @@ function assignsAt(reach: Reach, rank: number): boolean {
   );
 }
 
-/** Whether the caller may give or take away this role on a member. */
+/**
+ * Whether the caller may give or take away this role on a member. On a
+ * member ranked above them (`memberStanding` says `"above"`), only a role
+ * ranked strictly below the caller, never one at their own rank even with
+ * `roles:assign_own_level` (#5903; the API's `canAssignRoleOnMemberAt`).
+ */
 export function assignsRole(
   reach: Reach,
   role: TieredRole,
   tiers: readonly TierRow[],
+  standing: MemberStanding = "reachable",
 ): boolean {
   if (isWildcardRole(role)) return false;
+  if (standing === "out-of-reach") return false;
   const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
-  return assignsAt(reach, roleRank(role, positions));
+  const rank = roleRank(role, positions);
+  if (standing === "above") return reach.wildcard || rank > reach.rank;
+  return assignsAt(reach, rank);
 }
 
 /**
- * Whether the caller may change this member's roles at all: their own, or a
- * member ranked below them or at their own rank (#5843; the API's
- * `canAssignToMemberAt`). Which roles they may give or take on a peer is
- * still `assignsRole`'s, so a peer's own-rank role stays out of reach.
+ * Where a member stands for the caller giving or taking their roles:
+ *
+ * - `"reachable"`: their own, or a member ranked below them or at their own
+ *   rank (#5843), where `assignsRole` reaches the caller's own rank too with
+ *   `roles:assign_own_level`;
+ * - `"above"`: a member ranked above them, the President included, where it
+ *   reaches only roles ranked below the caller (#5903);
+ * - `"out-of-reach"`: the caller sits outside the tiers, and so reaches no
+ *   other member.
  */
-export function assignsToMember(
+export type MemberStanding = "reachable" | "above" | "out-of-reach";
+
+export function memberStanding(
   reach: Reach,
   member: { userId: string; roleIds: readonly string[] },
   roles: readonly TieredRole[],
   tiers: readonly TierRow[],
-): boolean {
-  if (reach.wildcard) return true;
-  if (reach.userId && reach.userId === member.userId) return true;
+): MemberStanding {
+  if (reach.wildcard) return "reachable";
+  if (reach.userId && reach.userId === member.userId) return "reachable";
+  if (!Number.isFinite(reach.rank)) return "out-of-reach";
   const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
   let rank = OUTSIDE_TIERS_RANK;
   for (const role of roles) {
@@ -255,7 +272,7 @@ export function assignsToMember(
       rank = Math.min(rank, roleRank(role, positions));
     }
   }
-  return Number.isFinite(reach.rank) && rank >= reach.rank;
+  return rank >= reach.rank ? "reachable" : "above";
 }
 
 /**

@@ -32,7 +32,8 @@ import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
   canAssignAt,
-  canAssignToMemberAt,
+  canAssignRoleOnMemberAt,
+  canCorrectProfileAt,
   canReach,
   holderRank,
   roleRank,
@@ -392,14 +393,16 @@ export class MemberService {
    * Set a member's roles, behind the rank rules (#4071) for `actorUserId`
    * unless they hold `*`:
    *
-   * - every role added or taken away must rank below the caller's own;
-   * - the member must rank below the caller or at the caller's own rank
-   *   (`canAssignToMemberAt`, #5843), so a cabinet officer can give a fellow
-   *   cabinet officer a committee role but a chair cannot strip an
-   *   officer's roles;
+   * - every role added or taken away must rank below the caller's own
+   *   (`canAssignRoleOnMemberAt`), whoever the member is: one below the
+   *   caller, a peer at their own rank (#5843), or one ranked above them,
+   *   the President included (#5903), so a cabinet officer can put the
+   *   President on a committee but a chair cannot strip an officer's
+   *   officer role;
    * - a caller holding `roles:assign_own_level` also reaches their own rank
-   *   for the roles (`canAssignAt`, #5725), so a cabinet officer can make
-   *   another cabinet officer Stewardship Chair;
+   *   for the roles (`canAssignAt`, #5725) on a member at or below that
+   *   rank, so a cabinet officer can make another cabinet officer
+   *   Stewardship Chair, but never on a member ranked above them;
    * - on their own row, the caller may not end up holding a permission they
    *   did not already hold, so nobody hands themselves a lower role that
    *   carries more than they have.
@@ -537,11 +540,16 @@ export class MemberService {
     ].filter((role) => role.system_key !== SystemRoleKeys.EVERYONE);
     if (changed.length === 0) return;
 
+    // A base-role swap `rolesAfterSave` made is in `changed` too, so giving
+    // the President a lower base role can't take away one at or above the
+    // caller.
     const isSelf = reach.memberId === member.id;
-    if (
-      changed.some((role) => !canAssignAt(reach, roleRank(role, positions))) ||
-      (!isSelf && !canAssignToMemberAt(reach, holderRank(before, positions)))
-    ) {
+    const memberRank = holderRank(before, positions);
+    const reachable = (role: Role) =>
+      isSelf
+        ? canAssignAt(reach, roleRank(role, positions))
+        : canAssignRoleOnMemberAt(reach, roleRank(role, positions), memberRank);
+    if (changed.some((role) => !reachable(role))) {
       throw new ForbiddenException({
         code: ROLE_ASSIGN_OUT_OF_REACH_CODE,
         message:
@@ -1267,8 +1275,9 @@ function sharedBirthday(
  *
  * `reach` says who is in reach: `'below'`, only members ranked below the
  * caller (removal); `'peer'`, those or a member at the caller's own rank
- * (correction, Paul's go relayed by Shawn, 2026-11-23, #5900), the rule
- * `canAssignToMemberAt` keeps for roles.
+ * (correction, Paul's go relayed by Shawn, 2026-11-23, #5900;
+ * `canCorrectProfileAt`). Neither reaches a member ranked above the caller,
+ * though roles and pledge class do since #5903.
  */
 function rankBlock(
   member: Member,
@@ -1281,7 +1290,7 @@ function rankBlock(
   const rank = memberRankIn(context, member);
   const reachable =
     reach === 'peer'
-      ? canAssignToMemberAt(context.reach, rank)
+      ? canCorrectProfileAt(context.reach, rank)
       : canReach(context.reach, rank);
   return reachable ? null : 'out-of-reach';
 }

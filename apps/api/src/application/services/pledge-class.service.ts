@@ -18,8 +18,7 @@ import type {
   PledgeClassAssignment,
 } from '#domain/entities/pledge-class.entity';
 import type { Member } from '#domain/entities/member.entity';
-import { canAssignToMemberAt } from '#domain/utils/role-rank';
-import { memberRankIn } from '#domain/utils/rank-context';
+import { canSetPledgeClassOf } from '#domain/utils/role-rank';
 import { assertMayChangeGroupAccess } from './chapter-group.service';
 import { RbacService } from './rbac.service';
 
@@ -34,8 +33,9 @@ import { RbacService } from './rbac.service';
  *
  * Every route needs `roles:manage` (the controller). Assigning members, and
  * deleting a class (which takes it off every member in it), also keep two
- * rules: an officer changes the class only of members ranked below them or at
- * their own rank (or their own), as for roles; and a class whose group a
+ * rules: an officer who ranks in the tiers changes the class of any member,
+ * the President included (#5903), and one outside the tiers only their own;
+ * and a class whose group a
  * channel list names decides who reads that channel, so changing who is in
  * it, or deleting it (which takes the group off those lists), needs
  * `channels:manage`, as a manual group does (`assertMayChangeGroupAccess`).
@@ -218,9 +218,9 @@ export class PledgeClassService {
   }
 
   /**
-   * The rank rule: a caller without `*` changes the class of only members
-   * ranked below them or at their own rank, and their own: the rule setting a
-   * member's roles keeps (`canAssignToMemberAt`; a peer since #5900).
+   * The rank rule: a caller without `*` changes the class of any member,
+   * ranked above them too since #5903, as long as the caller ranks in the
+   * tiers; one outside them changes only their own (`canSetPledgeClassOf`).
    */
   private async assertWithinReach(
     chapterId: string,
@@ -233,7 +233,7 @@ export class PledgeClassService {
       !context.reach.wildcard &&
       member.id !== context.reach.memberId &&
       member.user_id !== actorUserId &&
-      !canAssignToMemberAt(context.reach, memberRankIn(context, member));
+      !canSetPledgeClassOf(context.reach);
     if (members.some(outOfReach)) {
       throw new ForbiddenException(RANK_REFUSAL);
     }
@@ -271,6 +271,6 @@ export class PledgeClassService {
 }
 
 const RANK_REFUSAL =
-  'You can only set the class of members ranked below you or at your own rank, and your own.';
+  "Your role isn't in any tier, so you can only set your own class.";
 const GATES_A_CHANNEL =
   'A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.';
