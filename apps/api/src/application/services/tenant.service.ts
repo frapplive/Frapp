@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { TenantKind } from '@repo/validation';
+import { tenantSlugSchema, type TenantKind } from '@repo/validation';
 import {
   TENANT_SLUG_REPOSITORY,
   type ITenantSlugRepository,
@@ -50,16 +50,26 @@ export class TenantService {
    */
   async resolve(userId: string, rawSlug: string): Promise<ResolvedTenant> {
     const slug = rawSlug.trim().toLowerCase();
-    const row = await this.slugs.findBySlug(slug);
-    // A slug whose tenant was deleted keeps its row with no owner.
-    if (!row?.chapter_id) throw tenantNotFound();
+    // Malformed or reserved: no tenant can hold it, and the format and the
+    // reserved words are public, so answering early tells nothing.
+    if (!tenantSlugSchema.safeParse(slug).success) throw tenantNotFound();
 
-    const chapterId = row.chapter_id;
-    const membership = await this.members.findByUserAndChapter(
-      userId,
-      chapterId,
-    );
-    if (!membership) throw tenantNotFound();
+    // Both reads always run, together: an unknown slug and another tenant's
+    // slug then cost the same, so the response time can't tell which slugs
+    // exist either.
+    const [row, memberships] = await Promise.all([
+      this.slugs.findBySlug(slug),
+      this.members.findByUser(userId),
+    ]);
+    // A slug whose tenant was deleted keeps its row with no owner.
+    const chapterId = row?.chapter_id;
+    if (
+      !row ||
+      !chapterId ||
+      !memberships.some((member) => member.chapter_id === chapterId)
+    ) {
+      throw tenantNotFound();
+    }
 
     const [chapter, current] = await Promise.all([
       this.chapters.findById(chapterId),

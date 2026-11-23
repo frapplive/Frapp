@@ -617,7 +617,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChapterMembershipSummaryDto"
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error",
@@ -23357,6 +23367,155 @@
           "name",
           "university",
           "accept_terms_privacy"
+        ]
+      },
+      "ChapterMemberViewDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "university": {
+            "type": "string"
+          },
+          "subscription_status": {
+            "type": "string",
+            "enum": [
+              "incomplete",
+              "active",
+              "past_due",
+              "canceled"
+            ],
+            "description": "Read by the client subscription gate. Load-bearing — see `chapter-member-view.ts`."
+          },
+          "past_due_since": {
+            "type": "string",
+            "nullable": true,
+            "description": "Timestamp the chapter entered `past_due`, or null. Drives the 3-day client grace window; the grace predicate fails open without it."
+          },
+          "accent_color": {
+            "type": "string",
+            "nullable": true
+          },
+          "logo_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "donation_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "org_archetype": {
+            "type": "string"
+          },
+          "enabled_modules": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "vocabulary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "branding": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "theme_palette": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "analytics_opt_out": {
+            "type": "boolean",
+            "description": "Per-chapter opt-out for the pseudonymous analytics pipeline. Mobile reads it off this payload."
+          },
+          "needs_president": {
+            "type": "boolean",
+            "description": "Set when the chapter has lost its President outside a voluntary transfer (spec/behavior/rbac.md § Presidency Transfer). Every member reads this, not just `roles:manage` holders — see `PresidencyClaimBanner`."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "university",
+          "subscription_status",
+          "past_due_since",
+          "accent_color",
+          "logo_path",
+          "donation_url",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "ChapterMembershipSummaryDto": {
+        "type": "object",
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "has_completed_onboarding": {
+            "type": "boolean"
+          },
+          "dismissed_ops_nudges": {
+            "description": "Module keys whose ops-setup nudge this member has dismissed in this chapter.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chapter": {
+            "$ref": "#/components/schemas/ChapterMemberViewDto"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true,
+            "description": "The tenant's current URL slug (ADR-27), what its pages live under as `/c/<slug>/…`.",
+            "example": "fiji-rpi"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ]
+          },
+          "school": {
+            "type": "string",
+            "nullable": true,
+            "description": "The tenant's school. Always null until the school layer lands (#5835); declared now so clients are written against the final shape."
+          }
+        },
+        "required": [
+          "member_id",
+          "chapter_id",
+          "role_ids",
+          "has_completed_onboarding",
+          "dismissed_ops_nudges",
+          "chapter",
+          "slug",
+          "kind",
+          "school"
         ]
       },
       "CurrentChapterResponseDto": {

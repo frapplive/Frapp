@@ -4,8 +4,9 @@ import { RESERVED_TENANT_SLUGS } from '@repo/validation';
 
 /**
  * The reserved tenant slugs exist twice (ADR-27 decision 5, #5918):
- * `RESERVED_TENANT_SLUGS` in `@repo/validation`, which the API and both
- * clients check a chosen slug against, and `public.is_reserved_tenant_slug`
+ * `RESERVED_TENANT_SLUGS` in `@repo/validation`, which `tenantSlugSchema`
+ * checks (today `GET /v1/tenants/resolve`; the slug rename and the founder's
+ * choice when they land), and `public.is_reserved_tenant_slug`
  * in the database, which keeps the default slugs the insert trigger assigns
  * off them. Postgres can't import the package, so this fails while the
  * latest definition of the function in `supabase/migrations` lists a

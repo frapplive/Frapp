@@ -12,6 +12,12 @@ import { db, miss } from "../harness.mjs";
 //   - another tenant can never take a slug, current or retired (ADR-27
 //     cross-tenant test 7, database half);
 //   - a tenant can take back its own retired slug;
+//   - no UPDATE (or upsert) renames a slug or moves it to another tenant,
+//     and a deleted tenant's slugs stay, ownerless;
+//   - the backfill gives every chapter without a slug its default, oldest
+//     first (no chapter exists when the migrations apply here, so the tier
+//     runs it itself);
+//   - `get_request_context` reports a council's kind as stored;
 //   - `chapters.kind` defaults to `chapter` and refuses anything but
 //     `chapter` and `council`;
 //   - nobody but the owner and `service_role` may call the assigner.
@@ -23,6 +29,8 @@ try {
   const B = "c5918000-0000-4000-8000-00000000000b";
   const C = "c5918000-0000-4000-8000-00000000000c";
   const D = "c5918000-0000-4000-8000-00000000000d";
+  const E = "c5918000-0000-4000-8000-00000000000e";
+  const F = "c5918000-0000-4000-8000-00000000000f";
   await db.exec(`
     insert into chapters (id, name, university, created_at) values
       ('${A}', 'Slug Tier', 'Tier U', now() - interval '2 days'),
@@ -89,6 +97,48 @@ try {
     update tenant_slugs set retired_at = null where slug = '${slugA[0]}';
   `);
   const afterTakeBack = await current(A);
+
+  // A retired slug (A's renamed one) can't be moved or upserted to B, and no
+  // slug is renamed in place.
+  const moveRetired = await fails(
+    `update tenant_slugs set chapter_id = '${B}' where slug = 'slug-tier-renamed'`,
+  );
+  const upsertRetired = await fails(
+    `insert into tenant_slugs (slug, chapter_id) values ('slug-tier-renamed', '${B}')
+     on conflict (slug) do update set chapter_id = excluded.chapter_id, retired_at = null`,
+  );
+  const renameInPlace = await fails(
+    `update tenant_slugs set slug = 'slug-tier-other' where slug = '${slugB[0]}'`,
+  );
+
+  // The council's kind comes back through the guard's one-call read.
+  const councilKind = (
+    await one(
+      `select public.get_request_context(gen_random_uuid(), $1) as ctx`,
+      [D],
+    )
+  )?.ctx?.chapter?.kind;
+
+  // A deleted tenant's slug stays, with no owner.
+  const slugD = await current(D);
+  await db.exec(`delete from chapters where id = '${D}'`);
+  const orphan = await one(
+    `select chapter_id from tenant_slugs where slug = $1`,
+    [slugD[0]],
+  );
+
+  // The backfill, on chapters inserted with the trigger off: F is older.
+  await db.exec(`
+    alter table chapters disable trigger chapters_assign_tenant_slug;
+    insert into chapters (id, name, university, created_at) values
+      ('${E}', 'Backfill Tier', 'BT U', now()),
+      ('${F}', 'Backfill Tier', 'BT U', now() - interval '1 day');
+    alter table chapters enable trigger chapters_assign_tenant_slug;
+  `);
+  const beforeBackfill = [...(await current(E)), ...(await current(F))];
+  const assigned = (await one(`select public.backfill_tenant_slugs() as n`))?.n;
+  const backfilled = [(await current(F))[0], (await current(E))[0]];
+  const again = (await one(`select public.backfill_tenant_slugs() as n`))?.n;
 
   const privileges = (
     await db.query(
@@ -162,6 +212,45 @@ try {
       want: JSON.stringify(["succeeded", [slugA[0]]]),
     },
     {
+      name: "a retired slug can't be moved to another tenant by UPDATE",
+      got: /never moves to another tenant/.test(moveRetired)
+        ? "refused"
+        : moveRetired,
+      want: "refused",
+    },
+    {
+      name: "a retired slug can't be moved to another tenant by upsert",
+      got: /never moves to another tenant/.test(upsertRetired)
+        ? "refused"
+        : upsertRetired,
+      want: "refused",
+    },
+    {
+      name: "a slug is never renamed in place",
+      got: /never renamed/.test(renameInPlace) ? "refused" : renameInPlace,
+      want: "refused",
+    },
+    {
+      name: "get_request_context reports a council's kind as stored",
+      got: String(councilKind),
+      want: "council",
+    },
+    {
+      name: "a deleted tenant's slug stays in the table, ownerless",
+      got: JSON.stringify(orphan),
+      want: JSON.stringify({ chapter_id: null }),
+    },
+    {
+      name: "the backfill gives slugless chapters their default, oldest first, once",
+      got: JSON.stringify([beforeBackfill, assigned, backfilled, again]),
+      want: JSON.stringify([
+        [],
+        2,
+        ["backfill-tier-bt-u", "backfill-tier-bt-u-2"],
+        0,
+      ]),
+    },
+    {
       name: "anon and authenticated can't call the slug assigner",
       got: privileges
         .filter((p) => p.allowed)
@@ -182,8 +271,9 @@ try {
   }
 
   await db.exec(`
-    delete from tenant_slugs where chapter_id in ('${A}', '${B}', '${C}', '${D}');
-    delete from chapters where id in ('${A}', '${B}', '${C}', '${D}');
+    delete from tenant_slugs where chapter_id in ('${A}', '${B}', '${C}', '${E}', '${F}')
+      or slug = '${slugD[0]}';
+    delete from chapters where id in ('${A}', '${B}', '${C}', '${E}', '${F}');
   `);
 } catch (e) {
   miss();

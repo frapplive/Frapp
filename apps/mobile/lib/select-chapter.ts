@@ -36,8 +36,9 @@ export interface SelectChapterOptions {
  *    into issued tokens as the authoritative `active_chapter_id` claim.
  * 2. Refresh the Supabase session. The claim is baked in at issuance, so
  *    without this the *previous* claim stands until the current token expires
- *    (`jwt_expiry`, 3600s) and `ChapterGuard` rejects the mismatched
- *    `x-chapter-id` header with `chapter.context.mismatch`.
+ *    (`jwt_expiry`, 3600s). (Until ADR-27, #5918, `ChapterGuard` also rejected a
+ *    mismatched `x-chapter-id` header with `chapter.context.mismatch`; it now
+ *    serves the header's chapter.)
  *
  * Web's third step — write the chosen id into a local store — has no analogue
  * here, and adding one would be a defect rather than parity. `lib/auth-session`

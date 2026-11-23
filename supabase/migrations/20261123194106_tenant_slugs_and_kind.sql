@@ -24,6 +24,11 @@
 --      - `chapter_id` is `on delete set null`, not cascade: a deleted
 --        tenant's slugs stay in the table, ownerless, so they are never
 --        reused either. Nothing in the API deletes a chapter today.
+--      - A row's slug and owner never change once written: a BEFORE UPDATE
+--        trigger refuses a new `slug`, and a new `chapter_id` other than the
+--        null the foreign key's `set null` writes. So an UPDATE (or an
+--        `on conflict do update`) can't hand a retired or ownerless slug to
+--        another tenant either; only `retired_at` moves.
 --      - RLS on with no policies: the API is the only reader and writer,
 --        through the service-role client. A member reads a slug through
 --        `GET /v1/chapters` and `GET /v1/tenants/resolve`.
@@ -239,16 +244,69 @@ create trigger chapters_assign_tenant_slug
   after insert on public.chapters
   for each row execute function public.chapters_assign_tenant_slug();
 
--- The backfill: the oldest chapter keeps the unnumbered slug on a tie.
-do $$
-declare
-  r record;
+-- A slug belongs to one tenant for good: only `retired_at` may change, and
+-- `chapter_id` only to the null a deleted tenant's foreign key writes.
+create or replace function public.tenant_slugs_keep_owner()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
 begin
-  for r in select id from public.chapters order by created_at, id loop
-    perform public.assign_default_tenant_slug(r.id);
-  end loop;
+  if new.slug is distinct from old.slug then
+    raise exception 'tenant_slugs: a slug is never renamed; retire it and insert a new one'
+      using errcode = 'check_violation';
+  end if;
+  if new.chapter_id is distinct from old.chapter_id
+     and new.chapter_id is not null then
+    raise exception 'tenant_slugs: a slug never moves to another tenant'
+      using errcode = 'check_violation';
+  end if;
+  return new;
 end;
 $$;
+
+revoke all on function public.tenant_slugs_keep_owner()
+  from public, anon, authenticated;
+
+drop trigger if exists tenant_slugs_keep_owner on public.tenant_slugs;
+create trigger tenant_slugs_keep_owner
+  before update on public.tenant_slugs
+  for each row execute function public.tenant_slugs_keep_owner();
+
+-- Gives every chapter without a current slug its default, the oldest first,
+-- so on a tie the oldest chapter keeps the unnumbered slug. Returns how many
+-- it assigned. A function rather than a bare block so the PGlite tier can run
+-- the backfill itself: no chapter exists when the migrations apply there.
+create or replace function public.backfill_tenant_slugs()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  r record;
+  v_assigned integer := 0;
+begin
+  for r in
+    select c.id
+    from public.chapters c
+    where not exists (
+      select 1 from public.tenant_slugs t
+      where t.chapter_id = c.id and t.retired_at is null
+    )
+    order by c.created_at, c.id
+  loop
+    perform public.assign_default_tenant_slug(r.id);
+    v_assigned := v_assigned + 1;
+  end loop;
+  return v_assigned;
+end;
+$$;
+
+revoke all on function public.backfill_tenant_slugs()
+  from public, anon, authenticated;
+
+select public.backfill_tenant_slugs();
 
 -- 4. ------------------------------------------------------------------------
 

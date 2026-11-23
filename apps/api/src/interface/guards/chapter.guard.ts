@@ -580,7 +580,7 @@ export class ChapterGuard implements CanActivate {
     return true;
   }
 
-  /** Rule 4 of `readRequestedChapter`: neither the claim nor the header. */
+  /** Rule 3 of `readRequestedChapter`: neither the header nor the claim. */
   private async resolveSoleChapter(
     appUserId: string,
   ): Promise<{ chapterId: string; member?: MemberContext }> {

@@ -29,9 +29,11 @@ const SLUGS: TenantSlug[] = [
 
 describe('TenantService.resolve (ADR-27, #5918)', () => {
   let service: TenantService;
+  let members: jest.Mocked<IMemberRepository>;
+  let slugs: jest.Mocked<ITenantSlugRepository>;
 
   beforeEach(() => {
-    const slugs: jest.Mocked<ITenantSlugRepository> = {
+    slugs = {
       findBySlug: jest.fn(async (slug: string) =>
         structuredClone(SLUGS.find((row) => row.slug === slug) ?? null),
       ),
@@ -44,11 +46,9 @@ describe('TenantService.resolve (ADR-27, #5918)', () => {
         ),
       ),
     };
-    const members = {
-      findByUserAndChapter: jest.fn(async (_user: string, chapterId: string) =>
-        chapterId === MINE ? memberFixture({ chapter_id: MINE }) : null,
-      ),
-    } as unknown as IMemberRepository;
+    members = {
+      findByUser: jest.fn(async () => [memberFixture({ chapter_id: MINE })]),
+    } as unknown as jest.Mocked<IMemberRepository>;
     const chapters = {
       findById: jest.fn(async (id: string) =>
         chapterFixture({ id, name: 'Mine', kind: 'council' }),
@@ -82,12 +82,30 @@ describe('TenantService.resolve (ADR-27, #5918)', () => {
     });
   });
 
+  it('reads the slug and the caller’s memberships for an unknown slug as for another tenant’s', async () => {
+    await service.resolve('user-1', 'nobody-here').catch(() => undefined);
+    await service.resolve('user-1', 'theirs-rpi').catch(() => undefined);
+
+    // Same reads on both paths, so timing can't tell them apart.
+    expect(slugs.findBySlug).toHaveBeenCalledTimes(2);
+    expect(members.findByUser).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks the database nothing for a reserved or malformed slug', async () => {
+    await service.resolve('user-1', 'chat').catch(() => undefined);
+    await service.resolve('user-1', '../../etc').catch(() => undefined);
+
+    expect(slugs.findBySlug).not.toHaveBeenCalled();
+    expect(members.findByUser).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['an unknown slug', 'nobody-here'],
     ['another tenant’s current slug', 'theirs-rpi'],
     ['another tenant’s retired slug', 'theirs-old'],
     ['a deleted tenant’s slug', 'gone-rpi'],
     ['a malformed slug', '../../etc'],
+    ['a reserved word', 'chat'],
   ])('answers %s with the one 404', async (_label, slug) => {
     const failure = await service.resolve('user-1', slug).catch((e) => e);
 

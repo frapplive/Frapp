@@ -39,10 +39,9 @@ export interface RequestContext extends Request {
   /**
    * Verified claims from the caller's access token, including the
    * `active_chapter_id` claim issued by `custom_access_token_hook`.
-   * Undefined when the token could not be decoded locally — `ChapterGuard`
-   * then falls back to the `x-chapter-id` header, which
-   * spec/behavior/multi-tenancy.md explicitly allows for clients that have not
-   * refreshed their token yet.
+   * Undefined when the token could not be decoded locally. The claim is only
+   * the default anyway: `ChapterGuard` serves an `x-chapter-id` header first
+   * (ADR-27, #5918), and without either it auto-resolves a sole membership.
    */
   jwtClaims?: JwtPayload;
   /**

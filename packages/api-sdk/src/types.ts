@@ -7092,6 +7092,60 @@ export interface components {
             /** @description The admin accepted the Terms of Service and Privacy Policy, for the chapter and for themselves. Must be true (spec/behavior/legal.md). The acceptance timestamp and policy version are recorded server-side from the session — never from this payload. */
             accept_terms_privacy: boolean;
         };
+        ChapterMemberViewDto: {
+            id: string;
+            name: string;
+            university: string;
+            /**
+             * @description Read by the client subscription gate. Load-bearing — see `chapter-member-view.ts`.
+             * @enum {string}
+             */
+            subscription_status: "incomplete" | "active" | "past_due" | "canceled";
+            /** @description Timestamp the chapter entered `past_due`, or null. Drives the 3-day client grace window; the grace predicate fails open without it. */
+            past_due_since: string | null;
+            accent_color: string | null;
+            logo_path: string | null;
+            donation_url: string | null;
+            created_at: string;
+            updated_at: string;
+            org_archetype?: string;
+            enabled_modules?: {
+                [key: string]: boolean;
+            };
+            vocabulary?: {
+                [key: string]: unknown;
+            };
+            branding?: {
+                [key: string]: unknown;
+            };
+            theme_palette?: {
+                [key: string]: unknown;
+            };
+            /** @description Per-chapter opt-out for the pseudonymous analytics pipeline. Mobile reads it off this payload. */
+            analytics_opt_out?: boolean;
+            /** @description Set when the chapter has lost its President outside a voluntary transfer (spec/behavior/rbac.md § Presidency Transfer). Every member reads this, not just `roles:manage` holders — see `PresidencyClaimBanner`. */
+            needs_president?: boolean;
+        };
+        ChapterMembershipSummaryDto: {
+            /** Format: uuid */
+            member_id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            role_ids: string[];
+            has_completed_onboarding: boolean;
+            /** @description Module keys whose ops-setup nudge this member has dismissed in this chapter. */
+            dismissed_ops_nudges: string[];
+            chapter: components["schemas"]["ChapterMemberViewDto"];
+            /**
+             * @description The tenant's current URL slug (ADR-27), what its pages live under as `/c/<slug>/…`.
+             * @example fiji-rpi
+             */
+            slug: string | null;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /** @description The tenant's school. Always null until the school layer lands (#5835); declared now so clients are written against the final shape. */
+            school: string | null;
+        };
         CurrentChapterResponseDto: {
             id: string;
             name: string;
@@ -14031,7 +14085,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ChapterMembershipSummaryDto"][];
+                };
             };
             /** @description Error */
             default: {
