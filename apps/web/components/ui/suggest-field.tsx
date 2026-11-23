@@ -1,13 +1,7 @@
 "use client";
 
-import { forwardRef, useId, useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { forwardRef, useState } from "react";
+import { ComboboxField, ComboboxOption } from "@/components/ui/combobox";
 
 type SuggestFieldProps = Omit<
   React.ComponentProps<"input">,
@@ -28,8 +22,8 @@ type SuggestFieldProps = Omit<
  * A free-text field that offers what others already wrote under it (#5778),
  * the way Gmail's To field and Slack's channel-name box suggest an existing
  * entry while still taking a new one: type anything, or press a suggestion
- * (arrow keys and Enter work too) to take its exact spelling. Built on the
- * same pieces as `TimeField`: the list floats over the form and never moves
+ * (arrow keys and Enter work too) to take its exact spelling. Shares
+ * `ComboboxField` with `TimeField` (#5795): the list floats over the form and never moves
  * it, and focus stays in the field (WAI-ARIA combobox, list autocomplete).
  */
 export const SuggestField = forwardRef<HTMLInputElement, SuggestFieldProps>(
@@ -48,8 +42,6 @@ export const SuggestField = forwardRef<HTMLInputElement, SuggestFieldProps>(
     },
     ref,
   ) {
-    const listId = useId();
-    const anchorRef = useRef<HTMLDivElement>(null);
     const [focused, setFocused] = useState(false);
     // Closed by Escape or a pick until the next keystroke.
     const [dismissed, setDismissed] = useState(false);
@@ -78,105 +70,55 @@ export const SuggestField = forwardRef<HTMLInputElement, SuggestFieldProps>(
     };
 
     return (
-      <Popover open={open}>
-        <PopoverAnchor asChild>
-          <div ref={anchorRef} className="relative">
-            <Input
-              {...inputProps}
-              ref={ref}
-              type="text"
-              autoComplete="off"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-controls={listId}
-              aria-expanded={open}
-              aria-activedescendant={
-                open && highlighted !== null
-                  ? `${listId}-${highlighted}`
-                  : undefined
-              }
-              disabled={disabled}
-              value={value}
-              className={className}
-              onFocus={(event) => {
-                setFocused(true);
-                onFocus?.(event);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  step(1);
-                } else if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  step(-1);
-                } else if (
-                  event.key === "Enter" &&
-                  open &&
-                  highlighted !== null
-                ) {
-                  event.preventDefault();
-                  const suggestion = suggestions[highlighted];
-                  if (suggestion !== undefined) pick(suggestion);
-                } else if (event.key === "Escape" && open) {
-                  event.stopPropagation();
-                  setDismissed(true);
-                  setActive(null);
-                }
-                onKeyDown?.(event);
-              }}
-              onChange={(event) => {
-                setDismissed(false);
-                setActive(null);
-                onChange(event.target.value);
-              }}
-              onBlur={(event) => {
-                setFocused(false);
-                setActive(null);
-                setDismissed(false);
-                onBlur?.(event);
-              }}
-            />
-          </div>
-        </PopoverAnchor>
-        <PopoverContent
-          align="start"
-          className="w-[var(--radix-popover-trigger-width)] min-w-40 p-1"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-          onCloseAutoFocus={(event) => event.preventDefault()}
-          // A press on the list keeps focus in the field, so its blur
-          // doesn't close the list before the click lands.
-          onMouseDown={(event) => event.preventDefault()}
-          onInteractOutside={(event) => {
-            const target = event.target as Node | null;
-            if (target && anchorRef.current?.contains(target)) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <ul
-            id={listId}
-            role="listbox"
-            aria-label={suggestionsLabel}
-            className="max-h-60 overflow-y-auto"
+      <ComboboxField
+        {...inputProps}
+        ref={ref}
+        open={open}
+        aria-autocomplete="list"
+        activeKey={highlighted === null ? null : String(highlighted)}
+        onStep={step}
+        onPick={() => {
+          const suggestion =
+            highlighted === null ? undefined : suggestions[highlighted];
+          if (suggestion === undefined) return false;
+          pick(suggestion);
+          return true;
+        }}
+        onDismiss={() => {
+          setDismissed(true);
+          setActive(null);
+        }}
+        listLabel={suggestionsLabel}
+        disabled={disabled}
+        value={value}
+        className={className}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onKeyDown={onKeyDown}
+        onChange={(event) => {
+          setDismissed(false);
+          setActive(null);
+          onChange(event.target.value);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          setActive(null);
+          setDismissed(false);
+          onBlur?.(event);
+        }}
+        options={suggestions.map((suggestion, index) => (
+          <ComboboxOption
+            key={suggestion}
+            optionKey={String(index)}
+            highlighted={index === highlighted}
+            onPick={() => pick(suggestion)}
           >
-            {suggestions.map((suggestion, index) => (
-              <li
-                key={suggestion}
-                id={`${listId}-${index}`}
-                role="option"
-                aria-selected={index === highlighted}
-                onClick={() => pick(suggestion)}
-                className={cn(
-                  "flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm pointer-coarse:min-h-11",
-                  index === highlighted ? "bg-card-hover" : "hover:bg-card-hover",
-                )}
-              >
-                <span className="truncate">{suggestion}</span>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
+            <span className="truncate">{suggestion}</span>
+          </ComboboxOption>
+        ))}
+      />
     );
   },
 );

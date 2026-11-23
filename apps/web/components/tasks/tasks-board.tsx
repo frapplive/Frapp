@@ -168,7 +168,8 @@ const COLUMNS: {
 type TaskGroup = {
   id: string;
   label: string;
-  empty: string;
+  /** Null: the group is drawn only when it holds a task (No due date, #5761). */
+  empty: string | null;
   tasks: Task[];
   /** Tasks for everyone drawn in this lane, ahead of its tasks. */
   groupTiles?: GroupTileData[];
@@ -541,9 +542,10 @@ export function TasksBoard() {
       dues.has(value),
     ).map((value) => ({
       value,
+      // Overdue and No due date (#5761) read as they are; the rest say Due.
       label:
-        value === "overdue"
-          ? TASK_DUE_BUCKET_LABELS.overdue
+        value === "overdue" || value === "none"
+          ? TASK_DUE_BUCKET_LABELS[value]
           : `Due ${TASK_DUE_BUCKET_LABELS[value].toLowerCase()}`,
     }));
     return { assignee, status, due };
@@ -798,8 +800,7 @@ export function TasksBoard() {
         // show, so the toast offers the board it went to, as Linear's
         // "Created issue" toast links to an issue outside the view.
         const forViewer =
-          "assignee_id" in create.body &&
-          create.body.assignee_id === myUserId;
+          "assignee_id" in create.body && create.body.assignee_id === myUserId;
         toast({
           title: "Task created",
           description: `${create.body.title} is now assigned.`,
@@ -1312,8 +1313,11 @@ export function TasksBoard() {
                 const tiles = group.groupTiles ?? [];
                 const count = group.tasks.length + tiles.length;
                 // In List, a group with nothing in it draws nothing: four
-                // empty headings would push the work down the page.
-                if (!isGrid && count === 0) return null;
+                // empty headings would push the work down the page. No due
+                // date (#5761) draws nothing empty in Board either.
+                if ((!isGrid || group.empty === null) && count === 0) {
+                  return null;
+                }
                 const long =
                   !isGrid &&
                   !expandedGroups.has(group.id) &&
@@ -1626,7 +1630,11 @@ function TaskCard({
           <span className="inline-flex min-w-0 items-center gap-1">
             <Users className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="truncate">
-              {TASK_AUDIENCE_COPY.groupLine(audience.label, audience.done, audience.total)}
+              {TASK_AUDIENCE_COPY.groupLine(
+                audience.label,
+                audience.done,
+                audience.total,
+              )}
             </span>
           </span>
         ) : (
@@ -2031,4 +2039,3 @@ function ProofBadge({ kind }: { kind?: string | null }) {
     </Badge>
   );
 }
-

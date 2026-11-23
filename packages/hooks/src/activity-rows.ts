@@ -528,13 +528,22 @@ function taskRow(
   };
 }
 
+/** When a task is due, or null for one with no due date (#5761). */
+function dueMoment(task: {
+  due_at: string | null;
+  due_date: string | null;
+}): Date | null {
+  const raw = task.due_at ?? task.due_date;
+  return raw ? parseInstantOrBareLocalNoon(raw) : null;
+}
+
 /**
  * When an unfinished task is due, as a row says it: `soon` is "Due in 40
  * minutes" within a day, and `due` the clause the detail ends with (that, or
  * "Due Friday"; under a day's heading only its time, if it has one).
  */
 function taskDue(
-  task: { due_at: string | null; due_date: string },
+  task: { due_at: string | null; due_date: string | null },
   now: Date,
   when: RowWhen,
 ): { soon: string | null; due: string | null } {
@@ -948,7 +957,8 @@ export function activityToDos(
     ...activity.needs_you.tasks.map((task) =>
       both(
         (when) => toDoTaskRow(taskRow(task, "needs", "mine", now, when)),
-        parseInstantOrBareLocalNoon(task.due_at ?? task.due_date),
+        // No due date (#5761): no moment, so it goes under No deadline.
+        dueMoment(task),
         { overdue: localTaskStatus(task, now) === "OVERDUE" },
       ),
     ),

@@ -244,29 +244,29 @@ beforeEach(() => {
 });
 
 describe("EventCard — the snapshot", () => {
-  it("draws the name, the location, the points and the Mandatory chip", () => {
+  it("draws the name, the location, the points and the Required chip", () => {
     const text = screenText(render());
     expect(text).toContain("Event");
     expect(text).toContain("Chapter meeting");
     expect(text).toContain("Great Hall");
     expect(text).toContain("+10 pts");
-    expect(text).toContain("Mandatory");
+    expect(text).toContain("Required");
   });
 
-  it("draws Mandatory as the hairline chip, as the Events list does (#4132)", () => {
-    // Mandatory and "+10 pts" are the one hairline chip.
+  it("draws Required as the hairline chip, as the Events list does (#4132)", () => {
+    // Required and "+10 pts" are the one hairline chip.
     expect(
       render()
         .root.findAllByType(HairlineChip)
         .map((chip) => chip.props.label),
-    ).toEqual(["Mandatory", "+10 pts"]);
+    ).toEqual(["Required", "+10 pts"]);
   });
 
   it("goes by the card's own answer for this viewer over the default (#4132)", () => {
     const text = screenText(
       render({ payload: { ...PAYLOAD, viewer_required: false } }),
     );
-    expect(text).not.toContain("Mandatory");
+    expect(text).not.toContain("Required");
   });
 
   it("draws when it is in the viewer's own time, not the server's sentence", () => {
@@ -305,7 +305,7 @@ describe("EventCard — the snapshot", () => {
       }),
     );
     expect(text).not.toContain("pts");
-    expect(text).not.toContain("Mandatory");
+    expect(text).not.toContain("Required");
     expect(text).not.toContain("Great Hall");
   });
 });

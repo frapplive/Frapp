@@ -4,6 +4,7 @@ import type { TaskPayload } from "@repo/chat-core/cards";
 import {
   canReadCardTask,
   isSentBack,
+  cardTaskDue,
   readLiveTask,
   taskDueLine,
   subtaskProgress,
@@ -128,7 +129,7 @@ export function TaskCard({
   // An officer's Edit (#4512): the task screen's own rule (`taskEditable`),
   // read off the live task, so the card never opens an edit the screen
   // won't draw: a tasks:manage holder until the task is confirmed, on a task
-  // with an assignee and a day (not one up for grabs). It pushes the task's
+  // with an assignee (not one up for grabs). It pushes the task's
   // screen in its edit mode (#5514), where each field saves as it is left.
   const editable =
     !tasksOff &&
@@ -201,11 +202,8 @@ export function TaskCard({
             items={[
               // The live due date once read (an edit can move it), on the
               // rule every task surface shares (#4135).
-              taskDueLine(
-                live?.due ?? payload.due_at ?? payload.due_date,
-                live?.status ?? null,
-                now,
-              )?.text ?? null,
+              taskDueLine(cardTaskDue(live, payload), live?.status ?? null, now)
+                ?.text ?? null,
               payload.point_reward ? (
                 <PointsChip points={payload.point_reward} />
               ) : null,

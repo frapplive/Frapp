@@ -3,6 +3,7 @@ import {
   MEMBER_NUDGE_BODY_MAX,
   MEMBER_NUDGE_START_MAX,
   MEMBER_NUDGE_TITLE_MAX,
+  TASK_NO_DUE_DATE_LABEL,
   type MemberNudgeTaskKind,
 } from '@repo/validation';
 import type { LanguageModelMessage } from '../adapters/language-model.interface';
@@ -66,13 +67,16 @@ export const NUDGE_HISTORY_MS = 400 * DAY_MS;
 
 /**
  * The instant a task is due: its time when it has one, else the end of its
- * day (UTC), which is when `TaskService` starts calling it overdue.
+ * day (UTC), which is when `TaskService` starts calling it overdue. A task
+ * with no due date (#5761) is due at `Infinity`: never overdue, never due
+ * soon, and after every dated task in a sort.
  */
 export function taskDueInstant(
   task: Pick<Task, 'due_date' | 'due_at'>,
 ): number {
   const dueAt = task.due_at ? Date.parse(task.due_at) : Number.NaN;
   if (!Number.isNaN(dueAt)) return dueAt;
+  if (task.due_date === null) return Number.POSITIVE_INFINITY;
   return Date.parse(`${task.due_date}T00:00:00.000Z`) + DAY_MS;
 }
 
@@ -344,7 +348,10 @@ export interface NudgeFacts {
   today: string;
   taskTitle: string;
   taskDescription: string | null;
-  /** The due day, written out ("Friday, November 20"), with a time if set. */
+  /**
+   * The due day, written out ("Friday, November 20"), with a time if set;
+   * "No due date" for a task with none (#5761).
+   */
   due: string;
   /** Whole days until due (0 = today), when the task is not yet due. */
   daysLeft: number | null;
@@ -407,13 +414,20 @@ export function buildNudgeFacts(input: {
   const at = input.now.getTime();
   // A day-only deadline is the day the creator picked, whatever the zone;
   // one with a time is that instant where the member is.
-  const dayOnly = !task.due_at;
-  const due = dayOnly
-    ? writtenDay(Date.parse(`${task.due_date}T12:00:00.000Z`), 'UTC', false)
-    : writtenDay(taskDueInstant(task), input.timeZone, true);
-  const dueDay = dayOnly
-    ? Math.round(Date.parse(`${task.due_date}T00:00:00.000Z`) / DAY_MS)
-    : dayNumber(taskDueInstant(task), input.timeZone);
+  // A task with no due date (#5761) has no day to count from: only the
+  // cards that name none (thanks, sent back) reach it.
+  const day = task.due_at ? null : task.due_date;
+  const undated = !task.due_at && day === null;
+  const due = undated
+    ? TASK_NO_DUE_DATE_LABEL
+    : day !== null
+      ? writtenDay(Date.parse(`${day}T12:00:00.000Z`), 'UTC', false)
+      : writtenDay(taskDueInstant(task), input.timeZone, true);
+  const dueDay = undated
+    ? null
+    : day !== null
+      ? Math.round(Date.parse(`${day}T00:00:00.000Z`) / DAY_MS)
+      : dayNumber(taskDueInstant(task), input.timeZone);
   const today = dayNumber(at, input.timeZone);
   const done = task.completed_at ? Date.parse(task.completed_at) : null;
   const open = kind !== 'task_praise';
@@ -431,10 +445,12 @@ export function buildNudgeFacts(input: {
     taskDescription:
       othersWords && task.description ? clip(task.description, 400) : null,
     due,
-    daysLeft: open && dueDay >= today ? dueDay - today : null,
-    daysOverdue: open && dueDay < today ? today - dueDay : null,
+    daysLeft:
+      open && dueDay !== null && dueDay >= today ? dueDay - today : null,
+    daysOverdue:
+      open && dueDay !== null && dueDay < today ? today - dueDay : null,
     finishedDaysEarly:
-      !open && done !== null
+      !open && done !== null && dueDay !== null
         ? Math.max(0, dueDay - dayNumber(done, input.timeZone))
         : null,
     points:

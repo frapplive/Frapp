@@ -1,18 +1,12 @@
 "use client";
 
-import { forwardRef, useEffect, useId, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import {
   formatDueTimeLabel,
   parseTimeEntry,
   timeSpanMinutes,
 } from "@repo/formatting";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { ComboboxField, ComboboxOption } from "@/components/ui/combobox";
 import { eventLengthLabel } from "@repo/validation";
 
 /** The list's step: Google Calendar and Outlook both offer quarter hours. */
@@ -73,8 +67,6 @@ export const TimeField = forwardRef<HTMLInputElement, TimeFieldProps>(
     },
     ref,
   ) {
-    const listId = useId();
-    const anchorRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
     const written = (time: string) => (time ? formatDueTimeLabel(time) : "");
     const [text, setText] = useState(() => written(value));
@@ -125,121 +117,70 @@ export const TimeField = forwardRef<HTMLInputElement, TimeFieldProps>(
     };
 
     return (
-      <Popover open={open && !disabled} onOpenChange={setOpen}>
-        <PopoverAnchor asChild>
-          <div ref={anchorRef} className="relative">
-            <Input
-              {...inputProps}
-              ref={ref}
-              type="text"
-              inputMode="text"
-              autoComplete="off"
-              role="combobox"
-              aria-autocomplete="none"
-              aria-controls={listId}
-              aria-expanded={open && !disabled}
-              aria-activedescendant={
-                open ? `${listId}-${highlighted.replace(":", "")}` : undefined
-              }
-              disabled={disabled}
-              value={text}
-              placeholder={inputProps.placeholder ?? "7 PM"}
-              className={className}
-              aria-invalid={
-                ariaInvalid ?? (unreadable && !focused ? true : undefined)
-              }
-              onPointerDown={(event) => {
-                setOpen(true);
-                onPointerDown?.(event);
-              }}
-              onFocus={(event) => {
-                setFocused(true);
-                inputProps.onFocus?.(event);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  step(1);
-                } else if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  step(-1);
-                } else if (event.key === "Enter" && open && active) {
-                  event.preventDefault();
-                  pick(active);
-                } else if (event.key === "Escape" && open) {
-                  event.stopPropagation();
-                  setOpen(false);
-                }
-                onKeyDown?.(event);
-              }}
-              onChange={(event) => {
-                const next = event.target.value;
-                setText(next);
-                setActive(null);
-                setOpen(true);
-                onChange(parseTimeEntry(next, anchor) ?? "");
-              }}
-              onBlur={(event) => {
-                setFocused(false);
-                setOpen(false);
-                setActive(null);
-                if (value) setText(written(value));
-                onBlur?.(event);
-              }}
-            />
-          </div>
-        </PopoverAnchor>
-        <PopoverContent
-          align="start"
-          className="w-[var(--radix-popover-trigger-width)] min-w-40 p-1"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-          onCloseAutoFocus={(event) => event.preventDefault()}
-          onMouseDown={(event) => event.preventDefault()}
-          onInteractOutside={(event) => {
-            const target = event.target as Node | null;
-            if (target && anchorRef.current?.contains(target)) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <ul
-            ref={listRef}
-            id={listId}
-            role="listbox"
-            aria-label="Times"
-            className="max-h-60 overflow-y-auto"
+      <ComboboxField
+        {...inputProps}
+        ref={ref}
+        open={open && !disabled}
+        onOpenChange={setOpen}
+        aria-autocomplete="none"
+        activeKey={open ? highlighted.replace(":", "") : null}
+        onStep={step}
+        onPick={() => {
+          if (!active) return false;
+          pick(active);
+          return true;
+        }}
+        onDismiss={() => setOpen(false)}
+        listLabel="Times"
+        listRef={listRef}
+        inputMode="text"
+        disabled={disabled}
+        value={text}
+        placeholder={inputProps.placeholder ?? "7 PM"}
+        className={className}
+        aria-invalid={ariaInvalid ?? (unreadable && !focused ? true : undefined)}
+        onPointerDown={(event) => {
+          setOpen(true);
+          onPointerDown?.(event);
+        }}
+        onFocus={(event) => {
+          setFocused(true);
+          inputProps.onFocus?.(event);
+        }}
+        onKeyDown={onKeyDown}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          setActive(null);
+          setOpen(true);
+          onChange(parseTimeEntry(next, anchor) ?? "");
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          setOpen(false);
+          setActive(null);
+          if (value) setText(written(value));
+          onBlur?.(event);
+        }}
+        options={options.map((time) => (
+          <ComboboxOption
+            key={time}
+            optionKey={time.replace(":", "")}
+            data-time={time}
+            highlighted={time === highlighted}
+            selected={time === value}
+            onPick={() => pick(time)}
+            className="justify-between gap-3"
           >
-            {options.map((time) => {
-              const selected = time === value;
-              return (
-                <li
-                  key={time}
-                  id={`${listId}-${time.replace(":", "")}`}
-                  data-time={time}
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => pick(time)}
-                  className={cn(
-                    "flex min-h-8 cursor-pointer items-center justify-between gap-3 rounded-md px-2 text-sm pointer-coarse:min-h-11",
-                    selected
-                      ? "bg-accent-subtle font-semibold text-accent-text"
-                      : time === highlighted
-                        ? "bg-card-hover"
-                        : "hover:bg-card-hover",
-                  )}
-                >
-                  <span>{formatDueTimeLabel(time)}</span>
-                  {from ? (
-                    <span className="text-caption text-muted-foreground">
-                      {durationLabel(from, time)}
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </PopoverContent>
-      </Popover>
+            <span>{formatDueTimeLabel(time)}</span>
+            {from ? (
+              <span className="text-caption text-muted-foreground">
+                {durationLabel(from, time)}
+              </span>
+            ) : null}
+          </ComboboxOption>
+        ))}
+      />
     );
   },
 );

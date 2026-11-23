@@ -102,6 +102,7 @@ export * from "./event-excuse";
 export * from "./event-form-rows";
 // What is on right now, and the Now card's words (#5777).
 export * from "./event-now";
+export * from "./event-page";
 // The chapter's Everyone role, the floor every member holds, and the three
 // base roles an officer gives (Paul, 2026-11-21).
 export {
@@ -247,6 +248,9 @@ export {
 // The Repeat control's state, read and written the same way by the web
 // editor and the phone's New event sheet (#4488).
 export * from "./repeat-draft";
+// Giving a member a role: the "hold what you give" rule and its refusal
+// codes, shared by the API and both apps (#5730).
+export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
 export * from "./screen-copy";
@@ -267,6 +271,7 @@ export * from "./study-zone-shape";
 export * from "./subscription";
 // Tasks for everyone: one group task, a copy each (#4295 step 3).
 export * from "./task-audience";
+export * from "./task-due";
 export * from "./task-follower";
 // A task's proof kind, its refusal codes and sign-off rules (#4565, #4635).
 export * from "./task-proof";

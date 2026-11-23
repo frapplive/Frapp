@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View, type ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   useAiChapterSettings,
   useAiConsent,
+  useCategories,
+  useChannelAccessOptions,
   useChapterChatBackground,
   useCurrentChapter,
   useGeofences,
@@ -13,6 +15,7 @@ import {
   usePermissionList,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
+import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_SETTINGS_COPY,
@@ -39,6 +42,17 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
+import { PlusGlyph } from "@/components/control-glyphs";
+import {
+  ChannelFormSheet,
+  type ChannelFormMode,
+} from "@/components/chat/channel-form-sheet";
+import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import { accessOptionsStateOf } from "@/lib/chat/create-channel";
+import { useCreateChannelAndOpen } from "@/lib/chat/use-create-channel-and-open";
+import { selectCategories } from "@/lib/chat/channel-list";
+import { newRolePlacements, type NewRolePlacement } from "@/lib/roles/new-role";
+import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { chapterSettingsAccess } from "@/lib/more/chapter-settings";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -319,20 +333,27 @@ export default function ChapterSettingsScreen() {
                 </Text>
               </SettingAnchor>
             ) : null}
-
-            {access.roles ? (
-              <>
-                <SectionHeader>People</SectionHeader>
-                <ListSection>
-                  <ListRow
-                    label="Roles and groups"
-                    accessibilityHint="Opens the chapter's tiers, roles and groups."
-                    onPress={() => router.push("/chapter-roles")}
-                  />
-                </ListSection>
-              </>
-            ) : null}
           </>
+        )}
+        {/* Mounted through a search, as the accent and background sheets
+            are, so a New role draft kept on a close survives typing in
+            Search settings; only their rows hide (`searching`). */}
+        {access.newChannel ? (
+          <ChatSection searching={search.searching} />
+        ) : null}
+        {access.roles ? (
+          access.newRole ? (
+            <PeopleSectionWithNewRole searching={search.searching} />
+          ) : (
+            <PeopleSection searching={search.searching} placements={[]} />
+          )
+        ) : null}
+        {/* Where the phone stops (Shawn, 2026-11-22): permissions, channel
+            access, reordering, the chapter profile and the rest are web's
+            Settings, which an officer sets up once, at a desk. One quiet
+            line, as iOS Settings ends a group with its footnote. */}
+        {search.searching ? null : (
+          <Text style={styles.footnote}>{MORE_ON_THE_WEB}</Text>
         )}
       </SettingJumpProvider>
 
@@ -343,6 +364,151 @@ export default function ChapterSettingsScreen() {
         </>
       ) : null}
     </ScreenShell>
+  );
+}
+
+/** The screen's last line: what isn't here is on the web (#5296). */
+const MORE_ON_THE_WEB = "More settings are on the web dashboard.";
+
+/**
+ * Chat → New channel (#5296): the sheet Chat home's "+" opens (#3838), here
+ * too, so an officer setting the chapter up finds it where Discord mobile's
+ * Server Settings and Slack's Create a channel put it. Name, category,
+ * private or not, and who can see and post; then the channel opens, through
+ * the save Chat home uses (`useCreateChannelAndOpen`).
+ */
+function ChatSection({ searching }: { searching: boolean }) {
+  const { tokens } = useFrappTheme();
+  const createChannelAndOpen = useCreateChannelAndOpen();
+  const categoriesQuery = useCategories();
+  const categories = useMemo(
+    () => selectCategories(categoriesQuery.data),
+    [categoriesQuery.data],
+  );
+  const sheetRef = useRef<BottomSheetModal>(null);
+  // Mounted fresh for each opening, as on Chat home, so a Cancel's draft
+  // never comes back.
+  const [formKey, setFormKey] = useState<number | null>(null);
+  const accessOptionsQuery = useChannelAccessOptions(formKey !== null);
+  const accessOptions = useMemo(
+    () => selectChannelAccessOptions(accessOptionsQuery.data),
+    [accessOptionsQuery.data],
+  );
+  useEffect(() => {
+    if (formKey !== null) sheetRef.current?.present?.();
+  }, [formKey]);
+
+  return (
+    <>
+      {searching ? null : (
+        <>
+          <SectionHeader>Chat</SectionHeader>
+          <ListSection>
+            <SettingAnchor id="new-channel">
+              <ListRow
+                label="New channel"
+                leading={
+                  <PlusGlyph color={tokens.color.text.mutedForeground} />
+                }
+                accessibilityHint="Opens the form for a new channel."
+                onPress={() => setFormKey((key) => (key ?? 0) + 1)}
+              />
+            </SettingAnchor>
+          </ListSection>
+        </>
+      )}
+      {formKey !== null ? (
+        <ChannelFormSheet
+          key={formKey}
+          ref={sheetRef}
+          mode={NEW_CHANNEL_MODE}
+          categories={categories}
+          accessOptions={accessOptions}
+          accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
+          onSubmit={createChannelAndOpen}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const NEW_CHANNEL_MODE: ChannelFormMode = { kind: "create", categoryId: null };
+
+/**
+ * People for a `roles:manage` holder: the roles reads, then Roles and groups
+ * and New role (#5296). Split from {@link PeopleSection} so the reads (the
+ * roles, tiers and member list) are spent only on someone who can add a role.
+ */
+function PeopleSectionWithNewRole({ searching }: { searching: boolean }) {
+  const { tiers, reach, words } = useRolesData();
+  const placements = useMemo(
+    () => newRolePlacements(reach, tiers, `Outside the ${words.plural}`),
+    [reach, tiers, words.plural],
+  );
+  return (
+    <PeopleSection
+      searching={searching}
+      placements={placements}
+      tierLabel={words.Singular}
+    />
+  );
+}
+
+/**
+ * People: Roles and groups, then New role where the officer has somewhere to
+ * put one (#5296): a name, a tier and a color, then the role's page, where
+ * what it can do is switched.
+ */
+function PeopleSection({
+  searching,
+  placements,
+  tierLabel = "Tier",
+}: {
+  searching: boolean;
+  placements: readonly NewRolePlacement[];
+  tierLabel?: string;
+}) {
+  const router = useRouter();
+  const { tokens } = useFrappTheme();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const showNewRole = placements.length > 0;
+
+  return (
+    <>
+      {searching ? null : (
+        <>
+          <SectionHeader>People</SectionHeader>
+          <ListSection>
+            <ListRow
+              label="Roles and groups"
+              accessibilityHint="Opens the chapter's tiers, roles and groups."
+              onPress={() => router.push("/chapter-roles")}
+            />
+            {showNewRole ? (
+              <SettingAnchor id="new-role">
+                <ListRow
+                  label="New role"
+                  leading={
+                    <PlusGlyph color={tokens.color.text.mutedForeground} />
+                  }
+                  accessibilityHint="Opens the form for a new role."
+                  onPress={() => sheetRef.current?.present()}
+                />
+              </SettingAnchor>
+            ) : null}
+          </ListSection>
+        </>
+      )}
+      {showNewRole ? (
+        <NewRoleSheet
+          ref={sheetRef}
+          chapterRole={{ placements, tierLabel }}
+          onCreated={(roleId) =>
+            router.push({ pathname: "/role", params: { roleId } })
+          }
+        />
+      ) : null}
+    </>
   );
 }
 

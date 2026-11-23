@@ -924,20 +924,23 @@ function ActCard({
           details.trim().slice(0, TASK_SUGGESTION_DETAILS_MAX_LENGTH) || null;
         if (said !== (task.description ?? null)) changes.description = said;
       }
-      if (!assigneeId || !due) return setFlagged(true);
+      // A task can be confirmed with no due date (#5761).
+      if (!assigneeId) return setFlagged(true);
       if (dueEntryPassed(due, new Date(), suggestedDue)) {
         return setFlagged(true);
       }
       if (assigneeId !== (task.assignee_id ?? "")) {
         changes.assignee_id = assigneeId;
       }
-      const fields = dueEntryFields(due);
+      const fields = due ? dueEntryFields(due) : null;
+      const dueDate = fields?.due_date ?? null;
+      const dueAt = fields?.due_at ?? null;
       if (
-        fields.due_date !== task.due_date ||
-        (fields.due_at ?? null) !== (task.due_at ?? null)
+        dueDate !== (task.due_date ?? null) ||
+        dueAt !== (task.due_at ?? null)
       ) {
-        changes.due_date = fields.due_date;
-        changes.due_at = fields.due_at ?? null;
+        changes.due_date = dueDate;
+        changes.due_at = dueAt;
       }
       if (Object.keys(changes).length > 0) edits = { task: changes };
     }
@@ -1311,7 +1314,6 @@ function ActCard({
                 <DueDateField
                   aria-label={ACT_COPY.field_due}
                   placeholder={ACT_COPY.pick_due}
-                  missing={flagged && !due}
                   passed={
                     flagged && dueEntryPassed(due, new Date(), suggestedDue)
                   }

@@ -11,7 +11,14 @@ import {
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
-import type { AiSuggestionKindHandler } from './ai-suggestion-kinds';
+import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type {
+  AiSuggestionChangeLog,
+  AiSuggestionKindHandler,
+} from './ai-suggestion-kinds';
 import { TaskService } from './task.service';
 import { OpenTaskService } from './open-task.service';
 import type { TaskAudienceTarget } from './task-audience.service';
@@ -222,6 +229,43 @@ function toPayload(task: TaskSuggestionPayload): AiSuggestionPayload {
   return { ...task };
 }
 
+/** What the change log compares for a suggested task (Paul, 2026-11-22). */
+const TASK_CHANGE_FIELDS: ChangeFieldSpec = {
+  title: 'text',
+  description: 'text',
+  // Who: one person and several people read as one set.
+  assignee_ids: 'ids',
+  audience: 'text',
+  audience_role_id: 'id',
+  audience_group_id: 'id',
+  due_date: 'date',
+  due_at: 'instant',
+  subtasks: 'text',
+  subtask_count: 'number',
+};
+
+/** A stored proposal as the change log's fields. */
+export function taskChangeView(payload: AiSuggestionPayload): ChangeView {
+  const task = readTaskPayload(payload);
+  const people = task.assignee_ids?.length
+    ? task.assignee_ids
+    : task.assignee_id
+      ? [task.assignee_id]
+      : null;
+  return {
+    title: task.title,
+    description: task.description,
+    assignee_ids: people,
+    audience: task.audience,
+    audience_role_id: task.audience_role_id,
+    audience_group_id: task.audience_group_id,
+    due_date: task.due_date,
+    due_at: task.due_at,
+    subtasks: task.subtasks.length > 0 ? task.subtasks.join('\n') : null,
+    subtask_count: task.subtasks.length,
+  };
+}
+
 /**
  * The task the chapter already has that an accept says this suggestion is
  * (#5562, "Already a task"), or null when the accept makes a new one. Only an
@@ -249,6 +293,28 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
   readonly module = 'tasks';
   readonly expiresAfterDays = TASK_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'tasks';
+
+  /**
+   * An accept that names a task the chapter already has ("Already a task")
+   * is compared with that task as it stands, on the fields one task shows
+   * for itself; who it went to is left out, since a group's copies each
+   * name one member.
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: TASK_CHANGE_FIELDS,
+    view: taskChangeView,
+    readSaved: async ({ chapterId, payload }) => {
+      const existingId = existingTaskIdOf(payload);
+      if (!existingId) return null;
+      const task = await this.tasks.findById(existingId, chapterId);
+      return {
+        title: task.title,
+        description: task.description,
+        due_date: task.due_date,
+        due_at: task.due_at,
+      };
+    },
+  };
 
   constructor(
     private readonly tasks: TaskService,
@@ -357,10 +423,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
         message: 'Pick who this task is for.',
       });
     }
-    if (!task.due_date) {
+    // A task can have no due date (#5761); one up for grabs still needs
+    // one, since whoever claims it gets it by then.
+    if (!task.due_date && task.audience === TASK_AUDIENCE_SOMEONE) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick a due date.',
+        message: 'A task up for grabs needs a due date.',
       });
     }
   }
@@ -378,11 +446,11 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
       return { resultId: existing.id };
     }
     const task = readTaskPayload(input.payload);
-    // `assertAcceptable` ran before the claim; these narrow the types.
-    if (!namesSomeone(task) || !task.due_date) {
+    // `assertAcceptable` ran before the claim; this narrows the type.
+    if (!namesSomeone(task)) {
       throw new BadRequestException({
         code: 'ai.suggestion.incomplete',
-        message: 'Pick who this task is for and when it is due.',
+        message: 'Pick who this task is for.',
       });
     }
     // A task from minutes names them by id (#5562), so its screens read the
@@ -391,6 +459,12 @@ export class TaskSuggestionKind implements AiSuggestionKindHandler {
     // "Someone in…" posts one task up for grabs (2026-11-18); the result is
     // the posting's id.
     if (task.audience === TASK_AUDIENCE_SOMEONE) {
+      if (!task.due_date) {
+        throw new BadRequestException({
+          code: 'ai.suggestion.incomplete',
+          message: 'A task up for grabs needs a due date.',
+        });
+      }
       const posting = await this.openTasks.create({
         chapter_id: input.chapterId,
         created_by: input.userId,

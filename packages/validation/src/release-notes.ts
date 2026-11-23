@@ -120,6 +120,22 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-22",
+    title: "New in this update",
+    changes: [
+      "Phone numbers on profiles format themselves as you type and read the same tidy way everywhere they show up.",
+      "When a role can't be given, the list of roles says why, naming the permission your role is missing, instead of a vague \"ask an officer\".",
+      "A task can now have no due date: leave Due empty, or pick No due date, and it waits under its own No due date heading in My tasks without ever going overdue.",
+      "Ask Frapp's answers now flow in smoothly, and a long question you paste folds behind Show more.",
+    ],
+    web: [
+      "Reopening Ask Frapp lands on your newest messages, and a new question moves to the top while Frapp answers under it.",
+    ],
+    phone: [
+      "Officers can add a channel or a role from Chapter settings: a role takes a name, a tier and a color.",
+    ],
+  },
+  {
     date: "2026-11-21",
     title: "New in this update",
     changes: [

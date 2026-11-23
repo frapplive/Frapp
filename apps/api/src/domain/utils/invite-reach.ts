@@ -23,11 +23,8 @@
  */
 import type { Role } from '#domain/entities/role.entity';
 import { SystemRoleKeys, WILDCARD } from '#domain/constants/permissions';
-import {
-  permissionsNotHeld,
-  ranksAtOrAbove,
-  roleRank,
-} from '#domain/utils/role-rank';
+import { permissionsNotGivable } from '@repo/validation';
+import { ranksAtOrAbove, roleRank } from '#domain/utils/role-rank';
 import type { RankContext } from '#domain/utils/rank-context';
 
 /** Why an invite can't grant a role carrying `*`. */
@@ -63,9 +60,10 @@ export function inviteRefusal(
   ) {
     return INVITE_RANK_REFUSAL;
   }
-  const base = new Set(everyone?.permissions ?? []);
-  const missing = permissionsNotHeld(reach, role.permissions).filter(
-    (permission) => !base.has(permission),
+  const missing = permissionsNotGivable(
+    { wildcard: reach.wildcard, held: reach.permissions },
+    role.permissions,
+    context.roles,
   );
   if (missing.length > 0) {
     return `You can only invite people into a role whose permissions you hold: ${missing.join(', ')}.`;

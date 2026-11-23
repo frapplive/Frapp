@@ -12,6 +12,10 @@
 import { askPostRefusalCopy } from "./ask-post";
 import { AUDIT_LOG_READ_ONLY_REFUSAL } from "./chat-audit-log";
 import { moduleRefusalFromServerMessage } from "./module-refusal";
+import {
+  ROLE_ASSIGN_OUT_OF_REACH_CODE,
+  ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE,
+} from "./role-assignment";
 import { subscriptionRefusalFromServerMessage } from "./subscription";
 import {
   SELF_ASSIGNABLE_REFUSAL_COPY,
@@ -29,7 +33,8 @@ export const BLANK_NAME_REFUSAL = "Enter a name.";
  * (`isServerBusy` in `@repo/api-sdk`): nothing the member did, and it passes
  * when the load does. writing.md § Rate limited (global).
  */
-export const SERVER_BUSY_COPY = "Frapp is busy right now. Try again in a moment.";
+export const SERVER_BUSY_COPY =
+  "Frapp is busy right now. Try again in a moment.";
 
 export const OFFLINE_COPY =
   "Couldn't reach Frapp. Check your connection and try again.";
@@ -85,6 +90,14 @@ export function copyForErrorCode(code: string | null): string | null {
   // officer's), each with its own sentence, read from SERVER_MESSAGE_COPY.
   if (code in SELF_ASSIGNABLE_REFUSAL_COPY) {
     return SELF_ASSIGNABLE_REFUSAL_COPY[code as SelfAssignableRefusal];
+  }
+  // Giving or taking a role the rank rules refuse (#5730,
+  // `spec/behavior/rbac.md` § Rank).
+  if (code === ROLE_ASSIGN_OUT_OF_REACH_CODE) {
+    return "That role, or this member, ranks too high for your role to change.";
+  }
+  if (code === ROLE_ASSIGN_PERMISSION_NOT_HELD_CODE) {
+    return "This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.";
   }
   if (code === "service_entry.receipt_required") {
     return "Add a photo of your proof, then submit.";

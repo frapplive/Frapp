@@ -170,6 +170,19 @@ describe("TaskCard", () => {
     expect(screen.getByText(/\+10 pts/)).toBeInTheDocument();
   });
 
+  it("says no due line for a task with no due date (#5761)", () => {
+    mockUseTask.mockReturnValue(liveTask({ due_date: null, due_at: null }));
+    render(
+      <TaskCard
+        message={makeMessage({ due_date: null })}
+        viewerId="someone"
+        isConfirmed
+      />,
+    );
+    expect(screen.getByText(/Alice → Bob/)).toBeInTheDocument();
+    expect(screen.queryByText(/Due/)).toBeNull();
+  });
+
   it("falls back to the content string on a malformed payload", () => {
     const message = makeMessage();
     (message as { payload: unknown }).payload = { nonsense: true };
