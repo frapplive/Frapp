@@ -129,7 +129,10 @@ POST /v1/tasks the response property 'due_date' became nullable for the status '
 # `readLiveRushCandidate` returning null when `typeof r.vote_count !== "number"`, the only mobile reader
 # of the field: the card then shows the prospect with no tally, badge, Vote or Extend bid, as it does
 # before its read lands. At ea9bc12c, `git grep 'useRushCandidate\|rush/candidates' ea9bc12c -- apps/mobile`
-# finds no caller. The field is absent only in a chapter that took the key off a role.
+# finds no caller. The field is absent for any role that holds `rush:view` without `rush:view_results`:
+# one a chapter took the key off, or one an officer granted `rush:view` alone (New Member, Alumni or a
+# custom role in a new chapter, or any role in a chapter that turned Recruitment on after the
+# 20261111010000 backfill). The seeded Member role and every role the backfill reached hold both.
 GET /v1/rush/candidates the response property 'vote_count' became optional for the status '200'
 GET /v1/rush/candidates/{id} the response property 'vote_count' became optional for the status '200'
 POST /v1/rush/candidates/{id}/vote the response property 'vote_count' became optional for the status '201'

@@ -21,10 +21,7 @@ import {
  * to show a role without the key is refused.
  */
 describe('RushController permissions', () => {
-  const controller = new RushController(
-    {} as RushService,
-    {} as RbacService,
-  );
+  const controller = new RushController({} as RushService, {} as RbacService);
 
   const ROUTES = [
     ['lookup', SystemPermissions.RUSH_VIEW],
@@ -125,6 +122,13 @@ describe('RushController rush:view_results', () => {
     const rbacService = {
       memberHasAnyPermission: jest.fn().mockResolvedValue(canViewResults),
     };
+    return build(rushService, rbacService);
+  };
+
+  const build = (
+    rushService: Record<string, jest.Mock>,
+    rbacService: { memberHasAnyPermission: jest.Mock },
+  ) => {
     const controller = new RushController(
       rushService as unknown as RushService,
       rbacService as unknown as RbacService,
@@ -132,25 +136,50 @@ describe('RushController rush:view_results', () => {
     return { controller, rushService, rbacService };
   };
 
+  // The permission read starts before the service runs, so a request that
+  // fails first (a 404) must not leave its rejection unhandled.
+  it('leaves no unhandled rejection when the permission read fails after a 404', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const { controller } = build(
+        { findView: jest.fn().mockRejectedValue(new Error('not found')) },
+        {
+          memberHasAnyPermission: jest
+            .fn()
+            .mockRejectedValue(new Error('roles read failed')),
+        },
+      );
+      await expect(
+        controller.getOne('ch-1', 'user-1', 'cand-1'),
+      ).rejects.toThrow('not found');
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it.each([true, false])(
-    'passes canViewResults=%s from the caller\'s roles to every read',
+    "passes canViewResults=%s from the caller's roles to every read",
     async (canViewResults) => {
       const { controller, rushService, rbacService } = setup(canViewResults);
-      const viewer = { id: 'user-1', canViewResults };
 
       await controller.lookup('ch-1', 'user-1', { name: 'Sam' });
       await controller.getOne('ch-1', 'user-1', 'cand-1');
       await controller.vote('ch-1', 'user-1', 'cand-1');
       await controller.bid('ch-1', 'user-1', 'cand-1');
 
-      expect(rushService.findViewByName).toHaveBeenCalledWith(
-        'ch-1',
-        viewer,
-        'Sam',
-      );
-      expect(rushService.findView).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
-      expect(rushService.vote).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
-      expect(rushService.bid).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
+      const viewers = [
+        rushService.findViewByName.mock.calls[0][1],
+        rushService.findView.mock.calls[0][2],
+        rushService.vote.mock.calls[0][2],
+        rushService.bid.mock.calls[0][2],
+      ];
+      for (const viewer of viewers) {
+        expect(viewer.id).toBe('user-1');
+        await expect(viewer.canViewResults).resolves.toBe(canViewResults);
+      }
       expect(rbacService.memberHasAnyPermission).toHaveBeenCalledTimes(4);
       for (const call of rbacService.memberHasAnyPermission.mock.calls) {
         expect(call).toEqual([

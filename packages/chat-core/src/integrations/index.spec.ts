@@ -71,48 +71,80 @@ describe("filterSlashCommands", () => {
     ).toEqual([]);
   });
 
-  // #4084: the server refuses a subcommand whose key the role lacks, so the
-  // palette's rush row lists only the ones it holds.
+  // #4084: the server refuses a subcommand whose keys the role lacks, so the
+  // palette's rush row lists only the ones it holds all of.
   describe("rush subcommands by role", () => {
-    const rushRow = (permissions?: readonly string[]) =>
-      filterSlashCommands("", allEnabled, { permissions }).find(
+    const MV = "members:view";
+    const rushRow = (permissions?: readonly string[], query = "") =>
+      filterSlashCommands(query, allEnabled, { permissions }).find(
         (command) => command.name === "rush",
       );
     const catalogRow = SLASH_COMMANDS.find((c) => c.name === "rush");
 
-    it("is the catalog row for a role holding all three, or before permissions are read", () => {
-      expect(rushRow(["rush:add", "rush:vote", "rush:bid"])).toEqual(
-        catalogRow,
-      );
+    it("is the catalog row for a role holding every key, or before permissions are read", () => {
+      expect(
+        rushRow([MV, "rush:view", "rush:add", "rush:vote", "rush:bid"]),
+      ).toEqual(catalogRow);
       expect(rushRow(["*"])).toEqual(catalogRow);
       expect(rushRow(undefined)).toEqual(catalogRow);
+      expect(catalogRow?.usage).toBe(
+        "add @candidate | vote <candidate-id> | bid @candidate",
+      );
     });
 
     it("lists only the subcommands the role holds", () => {
-      const row = rushRow(["rush:view", "rush:vote"]);
+      const row = rushRow([MV, "rush:view", "rush:vote"]);
       expect(row?.usage).toBe("vote <candidate-id>");
       expect(row?.description).toBe("Vote on a candidate");
 
-      const two = rushRow(["rush:add", "rush:bid"]);
+      const two = rushRow([MV, "rush:view", "rush:add", "rush:bid"]);
       expect(two?.usage).toBe("add @candidate | bid @candidate");
       expect(two?.description).toBe("Add a candidate or extend a bid");
     });
 
+    it("needs rush:view for vote and bid, whose names dispatch looks up, and members:view for all", () => {
+      expect(rushSubcommandsFor([MV, "rush:vote", "rush:bid"])).toEqual([]);
+      expect(rushSubcommandsFor(["rush:view", "rush:add", "rush:bid"])).toEqual(
+        [],
+      );
+      expect(rushRow([MV, "rush:add", "rush:bid"])?.usage).toBe(
+        "add @candidate",
+      );
+    });
+
     it("leaves the command out for a role holding none of them", () => {
-      expect(rushRow(["members:view", "rush:view"])).toBeUndefined();
+      expect(rushRow([MV, "rush:view"])).toBeUndefined();
+    });
+
+    it("doesn't match a search for a subcommand the role can't use", () => {
+      const addOnly = [MV, "rush:add"];
+      expect(rushRow(addOnly, "bid")).toBeUndefined();
+      expect(rushRow(addOnly, "vote")).toBeUndefined();
+      expect(rushRow(addOnly, "add")).toBeDefined();
+    });
+
+    it("doesn't list a typed subcommand the role can't use, and keeps one it can", () => {
+      const addOnly = [MV, "rush:add"];
+      expect(rushRow(addOnly, "rush vote Bob")).toBeUndefined();
+      expect(rushRow(addOnly, "rush bid Sam")).toBeUndefined();
+      expect(rushRow(addOnly, "rush add Sam")).toBeDefined();
+      // Not a subcommand: listed, and dispatch answers with the usage.
+      expect(rushRow(addOnly, "rush ad Sam")).toBeDefined();
     });
 
     it("keeps the chapter's word on a narrowed row", () => {
       const row = filterSlashCommands("", allEnabled, {
         recruitment: "Intake",
-        permissions: ["rush:vote"],
+        permissions: [MV, "rush:view", "rush:vote"],
       }).find((command) => command.name === "rush");
       expect(row?.displayName).toBe("intake");
       expect(row?.usage).toBe("vote <candidate-id>");
     });
 
-    it("rushSubcommandsFor reads each key with can", () => {
-      expect(rushSubcommandsFor(["rush:bid"])).toEqual(["bid"]);
+    it("rushSubcommandsFor reads each subcommand's keys with canAll", () => {
+      expect(rushSubcommandsFor([MV, "rush:view", "rush:bid"])).toEqual([
+        "bid",
+      ]);
       expect(rushSubcommandsFor([])).toEqual([]);
       expect(rushSubcommandsFor(undefined)).toEqual(["add", "vote", "bid"]);
     });

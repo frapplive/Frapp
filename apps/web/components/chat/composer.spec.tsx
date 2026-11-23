@@ -320,6 +320,27 @@ describe("Composer slash palette (#396)", () => {
   });
 });
 
+// #4084: the composer hands the member's permissions to the palette, which
+// narrows `/rush` by them; a dropped prop would offer every subcommand.
+describe("Composer slash palette narrows /rush by the member's permissions", () => {
+  it("leaves /rush out for a role holding no rush subcommand", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps({ permissions: ["members:view"] })} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/event")).toBeInTheDocument();
+    expect(screen.queryByText("/rush")).not.toBeInTheDocument();
+  });
+
+  it("offers /rush while the permissions haven't been read", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/rush")).toBeInTheDocument();
+  });
+});
+
 describe("Composer mention wiring", () => {
   it("registers the @-mention extension with a suggestion.items callback", () => {
     capturedExtensions.length = 0;

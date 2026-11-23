@@ -773,7 +773,7 @@ Properties are listed without `feature`, which every event carries. "Counts requ
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | `rush-candidate-added` | A member adds a candidate. No name is sent                                                                                | `is_existing_user`, `posted_to_chat` |
 | `rush-candidate-voted` | A member votes for a candidate. A repeat vote succeeds again and is recorded again, though the tally doesn't move         | —                                    |
-| `rush-candidate-bid`   | A member extends a bid (any member may: there are no rush permissions). A repeat bid succeeds again and is recorded again | —                                    |
+| `rush-candidate-bid`   | A member extends a bid (`rush:bid`, [`rush.md` § Permissions](rush.md#permissions)). A repeat bid succeeds again and is recorded again | —                                    |
 
 **Reports (`reports`)**
 

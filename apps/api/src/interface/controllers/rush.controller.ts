@@ -62,12 +62,19 @@ export class RushController {
     private readonly rbacService: RbacService,
   ) {}
 
-  private async viewer(chapterId: string, userId: string): Promise<RushViewer> {
-    const canViewResults = await this.rbacService.memberHasAnyPermission(
+  /**
+   * The caller, with their `rush:view_results` read started but not awaited,
+   * so it overlaps the service's candidate read. The empty `catch` only marks
+   * the rejection handled for a request that fails before the service awaits
+   * it; the service's own await still sees the rejection.
+   */
+  private viewer(chapterId: string, userId: string): RushViewer {
+    const canViewResults = this.rbacService.memberHasAnyPermission(
       chapterId,
       userId,
       [SystemPermissions.RUSH_VIEW_RESULTS],
     );
+    canViewResults.catch(() => undefined);
     return { id: userId, canViewResults };
   }
 
@@ -82,7 +89,7 @@ export class RushController {
   ) {
     return this.rushService.findViewByName(
       chapterId,
-      await this.viewer(chapterId, userId),
+      this.viewer(chapterId, userId),
       query.name,
     );
   }
@@ -99,7 +106,7 @@ export class RushController {
     return this.rushService.findView(
       id,
       chapterId,
-      await this.viewer(chapterId, userId),
+      this.viewer(chapterId, userId),
     );
   }
 
@@ -149,11 +156,7 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.vote(
-      id,
-      chapterId,
-      await this.viewer(chapterId, userId),
-    );
+    return this.rushService.vote(id, chapterId, this.viewer(chapterId, userId));
   }
 
   @Post(':id/bid')
@@ -169,10 +172,6 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.bid(
-      id,
-      chapterId,
-      await this.viewer(chapterId, userId),
-    );
+    return this.rushService.bid(id, chapterId, this.viewer(chapterId, userId));
   }
 }

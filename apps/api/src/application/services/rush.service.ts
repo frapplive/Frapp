@@ -31,10 +31,14 @@ export interface CreateRushCandidateInput {
  * Who is reading a candidate, and whether they may see its vote count
  * (`rush:view_results`, #4084). The count is left out of the view, not
  * zeroed, so no client can mistake a hidden count for none.
+ *
+ * `canViewResults` is a promise so the caller can start the permission read
+ * before the candidate read and the two overlap; the controller attaches a
+ * handler to it, so a request that 404s first leaves no unhandled rejection.
  */
 export interface RushViewer {
   id: string;
-  canViewResults: boolean;
+  canViewResults: Promise<boolean>;
 }
 
 export type CreateRushCandidateResult = RushCandidate & {
@@ -150,9 +154,11 @@ export class RushService {
     viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const [voteCount, viewerHasVoted] = await Promise.all([
-      viewer.canViewResults
-        ? this.rushRepo.countVotes(candidate.id, candidate.chapter_id)
-        : undefined,
+      viewer.canViewResults.then((canViewResults) =>
+        canViewResults
+          ? this.rushRepo.countVotes(candidate.id, candidate.chapter_id)
+          : undefined,
+      ),
       this.rushRepo.viewerHasVoted(
         candidate.id,
         candidate.chapter_id,

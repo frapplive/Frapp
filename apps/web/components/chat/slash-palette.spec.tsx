@@ -177,7 +177,7 @@ describe("SlashPalette", () => {
       <SlashPalette
         open
         isModuleEnabled={() => true}
-        permissions={["members:view", "rush:view"]}
+        permissions={["members:view"]}
         status="ready"
         onSelect={noop}
         onOpenChange={noop}

@@ -13,8 +13,11 @@ import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 
-const sees = (id: string) => ({ id, canViewResults: true });
-const blind = (id: string) => ({ id, canViewResults: false });
+const sees = (id: string) => ({ id, canViewResults: Promise.resolve(true) });
+const blind = (id: string) => ({
+  id,
+  canViewResults: Promise.resolve(false),
+});
 
 describe('RushService', () => {
   let service: RushService;
