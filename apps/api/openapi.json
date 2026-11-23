@@ -1363,6 +1363,262 @@
         ]
       }
     },
+    "/v1/schools": {
+      "get": {
+        "description": "Schools by name, short name or another name, best match first, at most 20. Each says whether a student can verify there today.",
+        "operationId": "SchoolController_search_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Part of the school's name, short name or another name for it (\"rens\", \"RPI\"). Under 2 characters answers an empty list.",
+            "schema": {
+              "maxLength": 100,
+              "example": "rensselaer",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchoolSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/mine": {
+      "get": {
+        "description": "The schools where the caller proved a school address, newest first. Empty for someone who hasn't verified, or skipped.",
+        "operationId": "SchoolController_listMine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MySchoolDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification": {
+      "post": {
+        "description": "Emails a six-digit code to an address on one of the school's verified domains. 404 `school.not_found`; 409 `school.verification_unavailable` when the school can't verify students yet; 400 `school.email.wrong_domain`; 429 `school.code.cooldown` within a minute of the last code, or `school.code.rate_limited` past the hourly ceilings per address, IP or account; 503 `school.code.send_failed`.",
+        "operationId": "SchoolController_startVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentSchoolCodeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a code to your school email",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification/confirm": {
+      "post": {
+        "description": "Checks the code and makes the caller a member of the school. 400 `school.code.missing`, `school.code.expired` or `school.code.wrong`; 429 `school.code.too_many_attempts`; 409 `school.email.taken` when another account verified that address, or `school.verification_unavailable`.",
+        "operationId": "SchoolController_confirmVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm your school email with its code",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/school": {
+      "get": {
+        "description": "The school in `x-school-id` and the caller's membership there. 403 `school.context.invalid` for a school the caller isn't verified at (or that doesn't exist); 400 `school.context.required` without the header.",
+        "operationId": "SchoolPageController_get_v1",
+        "parameters": [
+          {
+            "name": "x-school-id",
+            "in": "header",
+            "description": "The school a campus page (`/s/<slug>`) acts in.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The school a campus page names",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
     "/v1/roles": {
       "get": {
         "operationId": "RbacController_list_v1",
@@ -24268,6 +24524,134 @@
           "diff",
           "member_visible",
           "created_at"
+        ]
+      },
+      "SchoolSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school's current URL slug (`/s/<slug>`, ADR-27).",
+            "example": "rpi"
+          },
+          "verifiable": {
+            "type": "boolean",
+            "description": "Whether a student can verify at this school today: the school is verified and has at least one verified email domain."
+          },
+          "email_domains": {
+            "description": "The school's verified email domains, for the address field's placeholder. Empty when it can't verify students.",
+            "example": [
+              "rpi.edu"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name",
+          "slug",
+          "verifiable",
+          "email_domains"
+        ]
+      },
+      "MySchoolDto": {
+        "type": "object",
+        "properties": {
+          "school": {
+            "$ref": "#/components/schemas/SchoolSummaryDto"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pnm",
+              "member",
+              "alum"
+            ]
+          },
+          "verified_email": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school address the code went to."
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "school",
+          "status",
+          "verified_email",
+          "verified_at"
+        ]
+      },
+      "StartSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The caller's school address. Only an address on one of the school's verified domains is sent a code.",
+            "example": "student@rpi.edu",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "SentSchoolCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address the code went to, in lower case."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code stops working."
+          },
+          "resend_after_seconds": {
+            "type": "number",
+            "description": "Seconds before another code can be asked for.",
+            "example": 60
+          }
+        },
+        "required": [
+          "email",
+          "expires_at"
+        ]
+      },
+      "ConfirmSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The six-digit code from the email.",
+            "example": "123456",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": [
+          "code"
         ]
       },
       "PermissionCatalogEntryDto": {

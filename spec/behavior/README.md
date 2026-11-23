@@ -143,3 +143,19 @@ Writes that reach people outside the chapter also have a rolling 24-hour ceiling
 - Starting a chapter keeps the default write throttle (30 a minute) and no tighter one, so a president who fixes the wizard's errors and resubmits isn't held up by the tries that were refused; only chapters actually made count.
 - There is no tighter ceiling for a chapter of one member: a real chapter is one on its first day too, so any ceiling that lets that president invite everyone is no tighter than these. The per-sender ceiling, which counts across chapters, and the chapters-started ceiling are what bound an account that starts chapters only to send email.
 - The chapter's starter is the account onboarding stamps as `legal_accepted_by`; a deleted chapter no longer counts.
+
+### School-email codes
+
+The one-time code that proves a school address (#5929, [`school-layer.md`](../architecture/school-layer.md) § 2.2) has its own ceilings, per address, per IP and per account, over a rolling hour. The database counts and writes under a lock on each (`start_school_email_verification`), so they hold across API replicas, and the numbers live in `@repo/validation`'s `school-verification.ts`, which the API passes to it. The IP is stored only as a hash, and code rows are deleted after a day.
+
+| What | Ceiling | Refusal |
+| --- | --- | --- |
+| Codes to one address, from any account | 5 an hour | `429 school.code.rate_limited` |
+| Codes from one IP, across accounts and addresses | 20 an hour (a campus network shares one) | `429 school.code.rate_limited` |
+| Codes one account asks for, across addresses and schools | 10 an hour | `429 school.code.rate_limited` |
+| Another code from the same account to the same school | one a minute | `429 school.code.cooldown` |
+| Wrong tries on one code | 5, then the code stops working | `429 school.code.too_many_attempts` |
+
+- A code works for 10 minutes and once. A new code closes the account's earlier one at that school.
+- The three hourly ceilings answer with one sentence and one code, so a refusal doesn't say whose ceiling it was. Each says how long to wait.
+- Only an address on one of the school's verified domains is sent a code, and the domain is checked again when the code is typed. An address another account already verified at the school is refused only after its code matches, so only the address's holder learns it is taken.

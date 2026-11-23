@@ -253,6 +253,8 @@ export * from "./repeat-draft";
 export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
+// School-email verification (#5929): limits, refusal codes and the step's words.
+export * from "./school-verification";
 export * from "./screen-copy";
 // Roles members pick themselves (#4958): the safety rule and its words.
 export * from "./self-assignable-roles";

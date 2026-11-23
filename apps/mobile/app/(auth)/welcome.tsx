@@ -4,7 +4,9 @@ import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  useCurrentChapter,
   useCurrentUser,
+  useMySchools,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
@@ -30,6 +32,7 @@ import {
   OnboardingTextInput,
 } from "@/components/onboarding/onboarding-field";
 import { ProfilePhoto } from "@/components/profile/profile-photo";
+import { SchoolStep } from "@/components/onboarding/school-step";
 import {
   ONBOARDING_COLUMN_WIDTH,
   OnboardingPrimaryButton,
@@ -52,7 +55,13 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *    (`needsName` in `@repo/validation`); a typed name is required
  *    (`typedNameMissing`). Web shows the same
  *    screen after a join (`apps/web/app/(auth)/welcome`).
- * 2. **Turn on notifications**, when this build can push and push isn't on
+ * 2. **Where do you go to school?**, for a member with no verified school
+ *    (#5929, `components/onboarding/school-step.tsx`): the school, its email,
+ *    the code, then "You're verified at <school>", with "Not a student? Skip
+ *    for now" throughout. Web asks the same after its name screen. Changed
+ *    for #5929 by gampheadband, 2026-11-23: Paul's "Two: name, then
+ *    notifications" gains this optional beat between them.
+ * 3. **Turn on notifications**, when this build can push and push isn't on
  *    yet (`shouldOfferPrimer`, #2299). Either answer goes to chat; a "Not
  *    now" comes back once, days later, on the chat home (`usePushReminder`).
  *
@@ -71,7 +80,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  */
 const DECIDE_TIMEOUT_MS = 4_000;
 
-type Beat = "you" | "notifications";
+type Beat = "you" | "school" | "notifications";
 
 export default function Welcome() {
   const { tokens } = useFrappTheme();
@@ -89,6 +98,11 @@ export default function Welcome() {
   const [waitedOut, setWaitedOut] = useState(false);
   const userQuery = useCurrentUser();
   const updateUser = useUpdateUser();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
+  // Whether the school beat was shown, so back from notifications returns
+  // to it rather than skipping over it.
+  const [askedSchool, setAskedSchool] = useState(false);
   const profile = useMemo(
     () => selectViewerProfile(userQuery.data),
     [userQuery.data],
@@ -185,22 +199,35 @@ export default function Welcome() {
         nameChanged,
       }),
     );
+    // A member already verified at a school isn't asked again; a failed
+    // read asks, since the beat can be skipped (#5929).
+    if ((mySchools.data?.length ?? 0) === 0) {
+      setAskedSchool(true);
+      setStep("school");
+      return;
+    }
+    leaveSchool();
+  }
+
+  function leaveSchool() {
     if (primer.showPrimer) setStep("notifications");
     else void finish();
   }
 
-  // Android's back on the notifications screen returns to the name, as a
-  // back gesture between two screens would; it never leaves onboarding half
-  // done. Held while an answer is on its way out. The first screen leaves
+  // Android's back on a later beat returns to the one before it, as a back
+  // gesture between screens would; it never leaves onboarding half done.
+  // Held while an answer is on its way out. The first screen leaves
   // Android's back alone.
   useEffect(() => {
-    if (step !== "notifications") return;
+    if (step !== "notifications" && step !== "school") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!answering) setStep("you");
+      if (!answering) {
+        setStep(step === "notifications" && askedSchool ? "school" : "you");
+      }
       return true;
     });
     return () => sub.remove();
-  }, [step, answering]);
+  }, [step, answering, askedSchool]);
 
   if (status === "unauthenticated") {
     return <Redirect href="/(auth)/sign-in" />;
@@ -210,6 +237,16 @@ export default function Welcome() {
   // spinner, and no screen that the next read would swap out.
   if (step === "deciding") {
     return <View style={styles.container} testID="welcome-deciding" />;
+  }
+
+  if (step === "school") {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        busy={leaving}
+        onLeave={leaveSchool}
+      />
+    );
   }
 
   return (
@@ -284,8 +321,8 @@ export default function Welcome() {
         </ScrollView>
 
         {/*
-        One gold button per screen. On the name it moves on: to notifications
-        when there is one to ask, else to chat. On notifications it asks, and
+        One gold button per screen. On the name it moves on: to the school
+        beat, else to notifications when there is one to ask, else to chat. On notifications it asks, and
         Not now is the quiet line under it; either answer leaves for chat,
         after the OS dialog closes.
       */}
@@ -308,7 +345,7 @@ export default function Welcome() {
           ) : (
             <OnboardingPrimaryButton
               label={
-                primer.showPrimer
+                primer.showPrimer || (mySchools.data?.length ?? 0) === 0
                   ? ONBOARDING_YOU_COPY.continue
                   : ONBOARDING_YOU_COPY.goToChat
               }

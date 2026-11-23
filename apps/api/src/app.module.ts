@@ -33,6 +33,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { FinancialInvoiceModule } from './modules/financial-invoice/financial-invoice.module';
 import { BackworkModule } from './modules/backwork/backwork.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { SchoolModule } from './modules/school/school.module';
 import { ServiceEntryModule } from './modules/service-entry/service-entry.module';
 import { TaskModule } from './modules/task/task.module';
 import { TenantModule } from './modules/tenant/tenant.module';
@@ -117,6 +118,7 @@ import { validateEnv } from './config/env.validation';
     FinancialInvoiceModule,
     BackworkModule,
     ChatModule,
+    SchoolModule,
     ServiceEntryModule,
     TaskModule,
     TenantModule,

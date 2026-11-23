@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   useActiveChapterId,
+  useCurrentChapter,
   useCurrentUser,
+  useMySchools,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
@@ -28,6 +30,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchoolStep } from "@/components/onboarding/school-step";
 import { markWelcomeDue } from "@/lib/onboarding/welcome-due";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { initials } from "@/lib/utils";
@@ -45,7 +48,12 @@ type Me = {
  * then notifications"). The phone's s03 shows the same screen, in the same
  * order and words (`apps/mobile/app/(auth)/welcome.tsx`); the phone then asks
  * about notifications, which the web has no second screen for, so here the
- * one button goes to chat.
+ * one button goes to chat, or to the school step below.
+ *
+ * Then, for a member with no verified school, "Where do you go to school?"
+ * (#5929, `school-step.tsx`), which can be skipped. Changed for #5929 by
+ * gampheadband, 2026-11-23: Paul's "Two: name, then notifications" gains this
+ * optional step after the name, on both apps.
  *
  * The name is pre-filled when sign-in carried a real one (Apple or Google). A
  * name that is only the API's `Member` or the email before the `@` starts
@@ -65,11 +73,24 @@ export function WelcomeYou() {
   const updateUser = useUpdateUser();
   const updateOnboarding = useUpdateOnboarding();
   const chapterId = useActiveChapterId();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
   const me = userQuery.data as Me | undefined;
+  // The school step, once the name is saved (#5929).
+  const [askingSchool, setAskingSchool] = useState(false);
   // `null` until typed in: the field shows the loaded name until then.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+
+  if (askingSchool) {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        onLeave={() => router.replace("/chat")}
+      />
+    );
+  }
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -140,8 +161,16 @@ export function WelcomeYou() {
     }
     // The welcome card in the default channel shows once (#5627).
     if (me?.id && chapterId) markWelcomeDue(me.id, chapterId);
-    // Stays busy: the page is on its way to chat.
-    router.replace("/chat");
+    // A member already verified at a school goes straight to chat; anyone
+    // else is asked, and can skip (#5929). A failed read asks too: the step
+    // itself can be skipped.
+    if ((mySchools.data?.length ?? 0) > 0) {
+      // Stays busy: the page is on its way to chat.
+      router.replace("/chat");
+      return;
+    }
+    setLeaving(false);
+    setAskingSchool(true);
   }
 
   return (
@@ -220,7 +249,9 @@ export function WelcomeYou() {
           {leaving ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {ONBOARDING_YOU_COPY.goToChat}
+          {(mySchools.data?.length ?? 0) > 0
+            ? ONBOARDING_YOU_COPY.goToChat
+            : ONBOARDING_YOU_COPY.continue}
         </Button>
       </form>
     </AuthScreen>
