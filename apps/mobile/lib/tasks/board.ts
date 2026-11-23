@@ -375,6 +375,7 @@ export function selectTaskRows(
         due_date: row.dueDay ?? row.dueDate,
         due_at: row.dueAt,
         status: shown,
+        stored_status: stored ?? undefined,
         completed_at: row.completedAt,
       },
       now,

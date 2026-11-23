@@ -3,6 +3,7 @@ import {
   isDueOverdue,
   parseInstantOrBareLocalNoon,
 } from "@repo/formatting";
+import { localTaskStatus } from "./task-card";
 import type { TaskStatus } from "./use-tasks";
 import { TASK_NO_DUE_DATE_LABEL } from "@repo/validation";
 
@@ -122,32 +123,49 @@ export const MY_TASKS_GROUP_EMPTY: Record<MyTasksGroup, string | null> = {
 };
 
 /**
- * The group a task sits in. A finished task stays where it was when it was
- * finished, so marking a row done never moves it under the member's thumb:
- * one finished late (`completed_at` past its due, by `isDueOverdue`) stays in
- * Overdue, and one finished on time whose day has since passed stays in
- * Today. Web's My tasks lists only open tasks here; the phone keeps finished
- * rows on the board for a while.
+ * The group a task sits in. Overdue is read on the member's own day
+ * (`localTaskStatus`, #5774): the API calls a date-only task overdue once its
+ * date ends in UTC, the evening in the Americas, and a task still "Due today"
+ * on its row must not sit under Overdue while Today says nothing is due.
+ *
+ * A finished task stays where it was when it was finished, so marking a row
+ * done never moves it under the member's thumb: one finished late
+ * (`completed_at` past its due, by `isDueOverdue`) stays in Overdue, and one
+ * finished on time whose day has since passed stays in Today. Web's My tasks
+ * lists only open tasks here; the phone keeps finished rows for a while.
  */
 export function myTasksGroup(
   task: Parameters<typeof taskDueBucket>[0] & {
+    stored_status?: TaskStatus;
     completed_at?: string | null;
   },
   now: Date = new Date(),
 ): MyTasksGroup {
-  if (task.status === "COMPLETED" && finishedLate(task)) return "overdue";
-  const bucket = taskDueBucket(task, now);
+  const status = task.status
+    ? localTaskStatus({ ...task, status: task.status }, now)
+    : task.status;
+  if (status === "COMPLETED" && finishedLate(task, now)) return "overdue";
+  const bucket = taskDueBucket({ ...task, status }, now);
   return bucket === "earlier" ? "today" : bucket;
 }
 
-/** Whether a finished task was finished after its due moment. */
-function finishedLate(task: {
-  due_date: string | null | undefined;
-  due_at?: string | null;
-  completed_at?: string | null;
-}): boolean {
-  const done = task.completed_at ? new Date(task.completed_at) : null;
-  if (!done || Number.isNaN(done.getTime())) return false;
+/**
+ * Whether a finished task was finished after its due moment. The moment is
+ * capped at `now`, the clock the board was drawn by: a screen that hasn't
+ * re-read its clock showed the row as not yet late, so ticking it there
+ * keeps it where it was.
+ */
+function finishedLate(
+  task: {
+    due_date: string | null | undefined;
+    due_at?: string | null;
+    completed_at?: string | null;
+  },
+  now: Date,
+): boolean {
+  const ms = task.completed_at ? Date.parse(task.completed_at) : Number.NaN;
+  if (Number.isNaN(ms)) return false;
+  const done = new Date(Math.min(ms, now.getTime()));
   const timed = task.due_at ? parseInstantOrBareLocalNoon(task.due_at) : null;
   const raw = timed ? task.due_at : task.due_date;
   return raw ? isDueOverdue(raw, done) : false;

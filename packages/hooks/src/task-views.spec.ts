@@ -127,6 +127,62 @@ describe("myTasksGroup", () => {
     ).toBe("today");
   });
 
+  it("reads a date-only task's overdue on the member's day, not the server's UTC one (#5774)", () => {
+    // 6 PM on its due day: past midnight UTC in the Americas, so the API
+    // already says OVERDUE, while the row still reads "Due today".
+    const evening = new Date(2026, 10, 12, 18);
+    expect(
+      myTasksGroup(
+        { due_date: "2026-11-12", status: "OVERDUE", stored_status: "TODO" },
+        evening,
+      ),
+    ).toBe("today");
+    expect(
+      myTasksGroup(
+        { due_date: "2026-11-11", status: "OVERDUE", stored_status: "TODO" },
+        evening,
+      ),
+    ).toBe("overdue");
+  });
+
+  it("keeps a timed task finished after its minute in Overdue, and one finished before it in Today", () => {
+    const dueAt = new Date(2026, 10, 12, 11).toISOString();
+    const done = {
+      due_date: "2026-11-12",
+      due_at: dueAt,
+      status: "COMPLETED" as const,
+    };
+    expect(
+      myTasksGroup(
+        { ...done, completed_at: new Date(2026, 10, 12, 11, 30).toISOString() },
+        NOW,
+      ),
+    ).toBe("overdue");
+    expect(
+      myTasksGroup(
+        { ...done, completed_at: new Date(2026, 10, 12, 10).toISOString() },
+        NOW,
+      ),
+    ).toBe("today");
+  });
+
+  it("judges a tick by the clock the board was drawn with", () => {
+    // Drawn at noon, before the 1 PM due, so the row was under Today; ticked
+    // at 1:05 on a screen that hasn't re-read its clock, it stays there.
+    const dueAt = new Date(2026, 10, 12, 13).toISOString();
+    expect(
+      myTasksGroup(
+        {
+          due_date: "2026-11-12",
+          due_at: dueAt,
+          status: "COMPLETED",
+          completed_at: new Date(2026, 10, 12, 13, 5).toISOString(),
+        },
+        NOW,
+      ),
+    ).toBe("today");
+  });
+
   it("keeps a finished task where it was finished", () => {
     const done = { due_date: "2026-11-10", status: "COMPLETED" as const };
     // Finished late: it was in Overdue when the box was ticked.

@@ -1,1 +1,1 @@
-My tasks now lists anything past due under its own Overdue heading above Today, so Today shows only what's due today.
+Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.
