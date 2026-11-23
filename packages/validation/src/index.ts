@@ -89,7 +89,6 @@ export * from "./error-copy";
 // An event's agenda and attachments (#4934): their limits and shapes, which
 // the API enforces and both editors read.
 export * from "./event-agenda";
-export * from "./frapp-link";
 // Event attendance by role: who an event is for, read the same way by the
 // API's read gate, check-in, auto-absent and pushes, and by both editors.
 export * from "./event-attendance";
@@ -130,6 +129,7 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
