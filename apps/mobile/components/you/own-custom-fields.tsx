@@ -69,6 +69,9 @@ function refusal(error: unknown): string {
  * until the read answers.
  */
 export function OwnCustomFieldsSection() {
+  const { tokens } = useFrappTheme();
+  const { accent } = useChapterBranding();
+  const styles = createStyles(tokens, accent);
   const canViewMembers = can("members:view", usePermissionList());
   const query = useOwnCustomFields({ enabled: canViewMembers });
   const update = useUpdateOwnCustomFields();
@@ -130,14 +133,18 @@ export function OwnCustomFieldsSection() {
                 description={problem ?? row.audience}
                 descriptionTone={problem ? "destructive" : "default"}
                 trailing={
-                  <Toggle
-                    value={row.on}
-                    onValueChange={(on) =>
-                      save(row.fieldId, on ? "true" : "false")
-                    }
-                    accessibilityLabel={row.label}
-                    disabled={update.isPending}
-                  />
+                  // The value side of a detail row, so the switch sits at
+                  // the row's end like the values above it.
+                  <View style={styles.switchSlot}>
+                    <Toggle
+                      value={row.on}
+                      onValueChange={(on) =>
+                        save(row.fieldId, on ? "true" : "false")
+                      }
+                      accessibilityLabel={row.label}
+                      disabled={update.isPending}
+                    />
+                  </View>
                 }
               />
             );
@@ -316,6 +323,10 @@ function createStyles(tokens: SignetTokens, accent: string) {
     },
     fieldGroup: {
       gap: tokens.spacing.sm,
+    },
+    switchSlot: {
+      flex: 1,
+      alignItems: "flex-end",
     },
     field: fieldStyles.field,
     fieldFocused: fieldStyles.fieldFocused,
