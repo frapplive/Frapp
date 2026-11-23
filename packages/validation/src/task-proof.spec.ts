@@ -151,6 +151,24 @@ describe("taskMarkDoneCheck mirrors the server's refusals (#4635)", () => {
     ).toEqual({ ok: true, proof: { proofLink: "https://docs.example.com/x" } });
   });
 
+  it("adds https:// to a link typed without a scheme (#5882)", () => {
+    expect(
+      taskMarkDoneCheck(
+        { proofKind: "link", sentBack: false },
+        { ...draft, link: "  drive.google.com/file/d/abc  " },
+      ),
+    ).toEqual({
+      ok: true,
+      proof: { proofLink: "https://drive.google.com/file/d/abc" },
+    });
+    expect(
+      taskMarkDoneCheck(
+        { proofKind: "link", sentBack: false },
+        { ...draft, link: "not a link" },
+      ),
+    ).toEqual({ ok: false, problem: TASK_PROOF_LINK_INVALID_MESSAGE });
+  });
+
   it("refuses a link to a name that resolves nowhere (#5882)", () => {
     expect(
       taskMarkDoneCheck(

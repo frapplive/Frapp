@@ -180,7 +180,11 @@ export function taskMarkDoneCheck(
   | { ok: true; proof: { proofLink?: string; completionNote?: string } }
   | { ok: false; problem: string } {
   const typed = draft.link.trim();
-  const normalized = typed ? normalizeProofLink(typed) : null;
+  // A link typed as a phone's share sheet or a member writes it,
+  // `drive.google.com/…`, takes https:// rather than a refusal (#5882).
+  const withScheme =
+    typed && !/^[a-z][a-z0-9+.-]*:/i.test(typed) ? `https://${typed}` : typed;
+  const normalized = withScheme ? normalizeProofLink(withScheme) : null;
   const link = normalized && proofLinkOpens(normalized) ? normalized : null;
   if (typed && !link) {
     return {
