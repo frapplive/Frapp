@@ -182,6 +182,28 @@ describe("base roles (2026-11-21)", () => {
     ).toBeNull();
   });
 
+  it("on a member ranked above the viewer, says a pick would take away their base role at the viewer's own rank, even with roles:assign_own_level (#5903)", () => {
+    // New Member sits outside the tiers, below the chair, so it is theirs to
+    // give; picking it would take Brothers (the chairs' own tier) away from
+    // a member ranked above them, which own-level doesn't reach there.
+    const lowNew = withBase.map((r) =>
+      r.id === "r-new" ? { ...r, tier_id: null } : r,
+    );
+    const rows = sections({
+      roles: lowNew,
+      heldRoleIds: ["r-vp", "r-actives"],
+      userId: "u-vp",
+      reach: {
+        ...VP_REACH,
+        rank: 2,
+        held: new Set([...VP_REACH.held, "roles:assign_own_level"]),
+      },
+    })[0]!.rows;
+    expect(rows.find((r) => r.name === "New Member")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.takesAwayAbove,
+    );
+  });
+
   it("says when a member holds no base role", () => {
     expect(needsBaseRole(withBase, ["r-rush", "r-everyone"])).toBe(true);
     expect(needsBaseRole(withBase, ["r-actives", "r-everyone"])).toBe(false);
@@ -387,6 +409,26 @@ describe("memberAssignmentSections", () => {
     expect(reason("Rush Chair")).toBeNull();
     expect(reason("Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
     expect(reason("President")).toBe(ASSIGN_CAPTIONS.presidency);
+  });
+
+  it("offers no remove on a chip at the viewer's own rank on a member above them, even with roles:assign_own_level (#5903)", () => {
+    const chips = memberRoleChips({
+      roles: ROLES,
+      tiers: TIERS,
+      heldRoleIds: ["r-vp", "r-rush", "r-past"],
+      reach: {
+        ...VP_REACH,
+        rank: 2,
+        held: new Set([...VP_REACH.held, "roles:assign_own_level"]),
+      },
+      canManageRoles: true,
+      userId: "u-vp",
+    });
+    expect(chips.map((c) => [c.name, c.removable])).toEqual([
+      ["Vice President", false],
+      ["Rush Chair", false],
+      ["Past Cor Sec", true],
+    ]);
   });
 
   it("lets a cabinet officer take a lower role chip off the President, never `*`", () => {

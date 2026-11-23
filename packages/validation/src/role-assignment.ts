@@ -7,8 +7,10 @@ import { isEveryoneRole, type EveryoneSaveRole } from "./everyone-role";
 
 /**
  * A role out of the caller's reach on that member (`canAssignRoleOnMemberAt`):
- * one ranked at or above the caller, or, on a member ranked above them (in
- * reach since #5903), one at the caller's own rank too.
+ * one ranked at or above the caller, except a role at their own rank on a
+ * member at or below them when they hold `roles:assign_own_level`. On a
+ * member ranked above them (in reach since #5903) that exception never
+ * applies.
  */
 export const ROLE_ASSIGN_OUT_OF_REACH_CODE = "role.assign_out_of_reach";
 

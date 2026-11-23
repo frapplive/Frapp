@@ -1386,13 +1386,22 @@ describe('MemberService', () => {
     // only roles ranked below their own. Never one at or above it, never `*`.
     describe('on a member ranked above the caller (#5903)', () => {
       const PRESIDENT_ON_FLOOR = 'member-president-on-floor';
+      const PRESIDENT_TREASURER = 'member-president-treasurer';
       beforeAll(() => {
-        members.push({
-          ...memberRow(TIERED_MEMBER.president),
-          id: PRESIDENT_ON_FLOOR,
-          user_id: 'user-president-on-floor',
-          role_ids: [ROLE.president, ROLE.brother],
-        });
+        members.push(
+          {
+            ...memberRow(TIERED_MEMBER.president),
+            id: PRESIDENT_ON_FLOOR,
+            user_id: 'user-president-on-floor',
+            role_ids: [ROLE.president, ROLE.brother],
+          },
+          {
+            ...memberRow(TIERED_MEMBER.president),
+            id: PRESIDENT_TREASURER,
+            user_id: 'user-president-treasurer',
+            role_ids: [ROLE.president, ROLE.treasurer],
+          },
+        );
       });
 
       it('lets a cabinet officer give the President a lower role', async () => {
@@ -1445,6 +1454,15 @@ describe('MemberService', () => {
             code: 'role.assign_out_of_reach',
           });
         }
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("refuses taking a role at the officer's own rank from the President, even with roles:assign_own_level", async () => {
+        await expect(
+          save(PRESIDENT_TREASURER, [ROLE.president], USER.vicePresident, [
+            'roles:assign_own_level',
+          ]),
+        ).rejects.toBeInstanceOf(ForbiddenException);
         expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
       });
 

@@ -125,11 +125,14 @@ export type AssignmentInputs = {
   query?: string;
 };
 
-function roleReason(role: TieredRole, inputs: AssignmentInputs): string | null {
+function roleReason(
+  role: TieredRole,
+  inputs: AssignmentInputs,
+  standing: MemberStanding,
+): string | null {
   if (isWildcardRole(role)) return ASSIGN_CAPTIONS.presidency;
   if (!inputs.canManageRoles) return ASSIGN_CAPTIONS.noRoles;
   if (!inputs.reach.known) return ASSIGN_CAPTIONS.checking;
-  const standing = standingOf(inputs);
   if (standing === "out-of-reach") return ASSIGN_CAPTIONS.outsideTiers;
   if (!assignsRole(inputs.reach, role, inputs.tiers, standing)) {
     return ASSIGN_CAPTIONS.ranksAbove;
@@ -186,13 +189,15 @@ export function memberAssignmentSections(
   const assignable = inputs.roles.filter(
     (role) => !isEveryoneRole(role) && !isBaseRole(role) && matches(role.name),
   );
+  // Where the member stands for the viewer, read once for every row.
+  const standing = standingOf(inputs);
   const roleRow = (role: TieredRole): AssignmentRow => ({
     kind: "role",
     id: role.id,
     name: role.name,
     color: roleColorOrNull(role.color),
     held: held.has(role.id),
-    disabledReason: roleReason(role, inputs),
+    disabledReason: roleReason(role, inputs, standing),
   });
 
   const sections: AssignmentSection[] = [];
@@ -200,7 +205,6 @@ export function memberAssignmentSections(
   // rank-checks too. Once a peer (#5843) or a member above (#5903) is
   // reachable, their base role can sit at or above the viewer's own rank, so
   // the row says so rather than the member.
-  const standing = standingOf(inputs);
   const baseRoles = baseRolesInOrder(inputs.roles);
   const swapReason = (role: TieredRole): string | null =>
     !held.has(role.id) &&
@@ -357,6 +361,7 @@ export function memberRoleChips(inputs: {
 }): AssignmentChip[] {
   const positions = tierPositionsOf(inputs.tiers);
   const held = new Set(inputs.heldRoleIds);
+  const standing = standingOf(inputs);
   return inputs.roles
     .filter((role) => held.has(role.id) && !isEveryoneRole(role))
     .sort((a, b) => compareRolesByRank(a, b, positions))
@@ -369,7 +374,7 @@ export function memberRoleChips(inputs: {
         inputs.canManageRoles &&
         inputs.reach.known &&
         !isWildcardRole(role) &&
-        assignsRole(inputs.reach, role, inputs.tiers, standingOf(inputs)),
+        assignsRole(inputs.reach, role, inputs.tiers, standing),
     }));
 }
 

@@ -229,12 +229,12 @@ export class PledgeClassService {
   ): Promise<void> {
     if (members.length === 0) return;
     const context = await this.rbac.getRankContext(chapterId, actorUserId);
-    const outOfReach = (member: Member) =>
-      !context.reach.wildcard &&
-      member.id !== context.reach.memberId &&
-      member.user_id !== actorUserId &&
-      !canSetPledgeClassOf(context.reach);
-    if (members.some(outOfReach)) {
+    // The rule ranks only the caller, never the member: anyone else is in
+    // reach or no one is.
+    if (canSetPledgeClassOf(context.reach)) return;
+    const someoneElse = (member: Member) =>
+      member.id !== context.reach.memberId && member.user_id !== actorUserId;
+    if (members.some(someoneElse)) {
       throw new ForbiddenException(RANK_REFUSAL);
     }
   }
@@ -271,6 +271,6 @@ export class PledgeClassService {
 }
 
 const RANK_REFUSAL =
-  "Your role isn't in any tier, so you can only set your own class.";
+  "Your role isn't in any tier, so you can't change another member's class.";
 const GATES_A_CHANNEL =
   'A channel uses this class to decide who can see or post in it, so only someone who can manage channels can change who is in it.';

@@ -31,7 +31,6 @@ import { Member } from '#domain/entities/member.entity';
 import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
-  canAssignAt,
   canAssignRoleOnMemberAt,
   canCorrectProfileAt,
   canReach,
@@ -542,14 +541,19 @@ export class MemberService {
 
     // A base-role swap `rolesAfterSave` made is in `changed` too, so giving
     // the President a lower base role can't take away one at or above the
-    // caller.
-    const isSelf = reach.memberId === member.id;
+    // caller. The caller's own row ranks at their own rank, so it takes the
+    // same rule as a peer's.
     const memberRank = holderRank(before, positions);
-    const reachable = (role: Role) =>
-      isSelf
-        ? canAssignAt(reach, roleRank(role, positions))
-        : canAssignRoleOnMemberAt(reach, roleRank(role, positions), memberRank);
-    if (changed.some((role) => !reachable(role))) {
+    if (
+      changed.some(
+        (role) =>
+          !canAssignRoleOnMemberAt(
+            reach,
+            roleRank(role, positions),
+            memberRank,
+          ),
+      )
+    ) {
       throw new ForbiddenException({
         code: ROLE_ASSIGN_OUT_OF_REACH_CODE,
         message:

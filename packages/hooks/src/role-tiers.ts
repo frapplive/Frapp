@@ -237,10 +237,9 @@ export function assignsRole(
 ): boolean {
   if (isWildcardRole(role)) return false;
   if (standing === "out-of-reach") return false;
+  if (standing === "above") return reachesRole(reach, role, tiers);
   const positions = new Map(tiers.map((tier) => [tier.id, tier.position]));
-  const rank = roleRank(role, positions);
-  if (standing === "above") return reach.wildcard || rank > reach.rank;
-  return assignsAt(reach, rank);
+  return assignsAt(reach, roleRank(role, positions));
 }
 
 /**

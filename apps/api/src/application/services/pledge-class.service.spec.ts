@@ -30,7 +30,7 @@ import { OUTSIDE_TIERS_RANK } from '#domain/utils/role-rank';
 import type { RankContext } from './rbac.service';
 
 const OUTSIDE_TIERS_REFUSAL =
-  "Your role isn't in any tier, so you can only set your own class.";
+  "Your role isn't in any tier, so you can't change another member's class.";
 
 /** The risk chair's context with their roles moved outside every tier. */
 function outsideTiers(): RankContext {
