@@ -2016,16 +2016,14 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     tasksRef.current = ROWS;
   });
 
-  it("groups a member's tasks as Today, This week and Later, then what waits on an officer", async () => {
+  it("groups a member's tasks as Overdue, Today, This week and Later, then what waits on an officer (#5906)", async () => {
     permissionsRef.current = ["members:view"];
     // A member's read holds only their own rows.
     tasksRef.current = ROWS.filter((row) => row.assignee_id === ME);
     render(<TasksBoard />);
 
-    expect(titlesIn("Today")).toEqual([
-      "Return the projector",
-      "Sweep the chapter room",
-    ]);
+    expect(titlesIn("Overdue")).toEqual(["Return the projector"]);
+    expect(titlesIn("Today")).toEqual(["Sweep the chapter room"]);
     expect(titlesIn("This week")).toEqual(["Draft the rush calendar"]);
     expect(titlesIn("Later")).toEqual(["Plan formal"]);
     expect(titlesIn("Waiting on an officer")).toEqual(["Book the venue"]);
@@ -2044,6 +2042,17 @@ describe("TasksBoard views and filters (#4295 step 5, #3617)", () => {
     expect(
       screen.getByRole("menuitem", { name: /^Layout/ }),
     ).toBeInTheDocument();
+  });
+
+  it("draws no Overdue heading when nothing is overdue (#5906)", () => {
+    permissionsRef.current = ["members:view"];
+    tasksRef.current = ROWS.filter(
+      (row) => row.assignee_id === ME && row.status !== "OVERDUE",
+    );
+    render(<TasksBoard />);
+
+    expect(screen.queryByRole("region", { name: "Overdue" })).toBeNull();
+    expect(titlesIn("Today")).toEqual(["Sweep the chapter room"]);
   });
 
   /** Picks a filter's value in the Filter menu (#5578). */

@@ -82,15 +82,18 @@ export function taskDueBucket(
 }
 
 /**
- * My tasks' three groups, in order (#4295: "My tasks grouped as Today, This
- * week and Later"). Overdue leads Today rather than taking a group of its
- * own, as Todoist's Today view lists it: it is the first thing to do today,
- * and its due line already says it is late, in the warning hue. No due date
- * (#5761) follows Later.
+ * My tasks' groups, in order. #4295 step 5 grouped them as Today, This week
+ * and Later, with overdue leading Today. Since #5906 (Shawn, 2026-11-23: "the
+ * stuff that's overdue should go into an overdue section not the today
+ * section") Overdue is its own group above Today, as Todoist's and TickTick's
+ * Today views head the list with an Overdue section, so Today holds only what
+ * is due today. Like No due date (#5761), a surface draws Overdue only when
+ * it holds a task.
  */
-export type MyTasksGroup = "today" | "week" | "later" | "none";
+export type MyTasksGroup = "overdue" | "today" | "week" | "later" | "none";
 
 export const MY_TASKS_GROUPS: readonly MyTasksGroup[] = [
+  "overdue",
   "today",
   "week",
   "later",
@@ -98,6 +101,7 @@ export const MY_TASKS_GROUPS: readonly MyTasksGroup[] = [
 ];
 
 export const MY_TASKS_GROUP_LABELS: Record<MyTasksGroup, string> = {
+  overdue: TASK_DUE_BUCKET_LABELS.overdue,
   today: "Today",
   week: "This week",
   later: "Later",
@@ -105,23 +109,48 @@ export const MY_TASKS_GROUP_LABELS: Record<MyTasksGroup, string> = {
 };
 
 /**
- * The quiet line under a My tasks group with nothing in it. No due date has
- * none: it is drawn only when it holds a task, so a member who dates
- * everything never sees it.
+ * The quiet line under a My tasks group with nothing in it. Overdue and No
+ * due date have none: each is drawn only when it holds a task, so a member
+ * who is on top of everything never sees an empty Overdue.
  */
 export const MY_TASKS_GROUP_EMPTY: Record<MyTasksGroup, string | null> = {
+  overdue: null,
   today: "Nothing due today",
   week: "Nothing else this week",
   later: "Nothing later",
   none: null,
 };
 
+/**
+ * The group a task sits in. A finished task stays where it was when it was
+ * finished, so marking a row done never moves it under the member's thumb:
+ * one finished late (`completed_at` past its due, by `isDueOverdue`) stays in
+ * Overdue, and one finished on time whose day has since passed stays in
+ * Today. Web's My tasks lists only open tasks here; the phone keeps finished
+ * rows on the board for a while.
+ */
 export function myTasksGroup(
-  task: Parameters<typeof taskDueBucket>[0],
+  task: Parameters<typeof taskDueBucket>[0] & {
+    completed_at?: string | null;
+  },
   now: Date = new Date(),
 ): MyTasksGroup {
+  if (task.status === "COMPLETED" && finishedLate(task)) return "overdue";
   const bucket = taskDueBucket(task, now);
-  return bucket === "overdue" || bucket === "earlier" ? "today" : bucket;
+  return bucket === "earlier" ? "today" : bucket;
+}
+
+/** Whether a finished task was finished after its due moment. */
+function finishedLate(task: {
+  due_date: string | null | undefined;
+  due_at?: string | null;
+  completed_at?: string | null;
+}): boolean {
+  const done = task.completed_at ? new Date(task.completed_at) : null;
+  if (!done || Number.isNaN(done.getTime())) return false;
+  const timed = task.due_at ? parseInstantOrBareLocalNoon(task.due_at) : null;
+  const raw = timed ? task.due_at : task.due_date;
+  return raw ? isDueOverdue(raw, done) : false;
 }
 
 /**

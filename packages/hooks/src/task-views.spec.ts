@@ -94,12 +94,58 @@ describe("a task with no due date (#5761)", () => {
 });
 
 describe("myTasksGroup", () => {
-  it("folds overdue into Today", () => {
+  it("gives overdue its own group above Today (#5906)", () => {
     expect(
       myTasksGroup({ due_date: "2026-11-01", status: "OVERDUE" }, NOW),
-    ).toBe("today");
+    ).toBe("overdue");
+    // Past due by the local clock before the server has derived it.
+    expect(myTasksGroup({ due_date: "2026-11-11", status: "TODO" }, NOW)).toBe(
+      "overdue",
+    );
+    expect(myTasksGroup({ due_date: "2026-11-12", status: "TODO" }, NOW)).toBe(
+      "today",
+    );
     expect(myTasksGroup({ due_date: "2026-11-30", status: "TODO" }, NOW)).toBe(
       "later",
+    );
+  });
+
+  it("puts a timed task in Overdue from its minute, and Today before it", () => {
+    const due = new Date(NOW.getTime() - 60_000).toISOString();
+    const soon = new Date(NOW.getTime() + 60_000).toISOString();
+    expect(
+      myTasksGroup(
+        { due_date: "2026-11-12", due_at: due, status: "IN_PROGRESS" },
+        NOW,
+      ),
+    ).toBe("overdue");
+    expect(
+      myTasksGroup(
+        { due_date: "2026-11-12", due_at: soon, status: "IN_PROGRESS" },
+        NOW,
+      ),
+    ).toBe("today");
+  });
+
+  it("keeps a finished task where it was finished", () => {
+    const done = { due_date: "2026-11-10", status: "COMPLETED" as const };
+    // Finished late: it was in Overdue when the box was ticked.
+    expect(
+      myTasksGroup(
+        { ...done, completed_at: new Date(2026, 10, 11, 9).toISOString() },
+        NOW,
+      ),
+    ).toBe("overdue");
+    // Finished on its day, which has since passed: Today, as before.
+    expect(
+      myTasksGroup(
+        { ...done, completed_at: new Date(2026, 10, 10, 9).toISOString() },
+        NOW,
+      ),
+    ).toBe("today");
+    // No readable completion time: never guessed late.
+    expect(myTasksGroup({ ...done, completed_at: "banana" }, NOW)).toBe(
+      "today",
     );
   });
 });
