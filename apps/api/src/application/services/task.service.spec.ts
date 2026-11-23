@@ -5,7 +5,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { TASK_REPEAT_NEEDS_DUE_DATE } from '@repo/validation';
+import {
+  TASK_PROOF_LINK_INVALID_MESSAGE,
+  TASK_REPEAT_NEEDS_DUE_DATE,
+} from '@repo/validation';
 import { TaskService, type CreateTaskInput } from './task.service';
 import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface';
 import type { ITaskRepository } from '#domain/repositories/task.repository.interface';
@@ -4134,18 +4137,24 @@ describe('TaskService', () => {
         expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
       });
 
-      it.each(['javascript:alert(1)', 'not a link', 'ftp://example.com/x'])(
-        'refuses an invalid link (%s)',
-        async (link) => {
-          mockTaskRepo.findById.mockResolvedValue(
-            inProgress({ proof_kind: 'link' }),
-          );
-          await expect(markDone({ proof_link: link })).rejects.toThrow(
-            'proof_link must be a web link',
-          );
-          expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
-        },
-      );
+      it.each([
+        'javascript:alert(1)',
+        'not a link',
+        'ftp://example.com/x',
+        // Names that resolve nowhere, which opened as "server can't be
+        // found" on the officer's phone (#5882).
+        'https://test',
+        'http://localhost:3000/x',
+        'https://192.168.1.20/photo.jpg',
+      ])('refuses an invalid link (%s)', async (link) => {
+        mockTaskRepo.findById.mockResolvedValue(
+          inProgress({ proof_kind: 'link' }),
+        );
+        await expect(markDone({ proof_link: link })).rejects.toThrow(
+          TASK_PROOF_LINK_INVALID_MESSAGE,
+        );
+        expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
+      });
 
       it('stores a Link task’s trimmed link with the completion', async () => {
         mockTaskRepo.findById.mockResolvedValue(

@@ -769,7 +769,7 @@ export class UpdateTaskStatusDto {
 
   @ApiPropertyOptional({
     description:
-      "With `status: COMPLETED` only: a link proof, http or https (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it).",
+      "With `status: COMPLETED` only: a link proof, http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5882; 400 otherwise) (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it).",
     maxLength: TASK_PROOF_LINK_MAX,
   })
   @IsOptional()

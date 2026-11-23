@@ -31,8 +31,10 @@ import { TaskStatus } from '#domain/entities/task.entity';
 import { taskDueInstant } from '#domain/utils/member-nudge';
 import {
   normalizeProofLink,
+  proofLinkOpens,
   TASK_COMPLETION_NOTE_MAX,
   TASK_PHOTOS_MAX,
+  TASK_PROOF_LINK_INVALID_MESSAGE,
   TASK_PROOF_LINK_REQUIRED_MESSAGE,
   TASK_PROOF_REQUIRED_CODE,
   TASK_PROOF_REQUIRED_MESSAGE,
@@ -2112,10 +2114,12 @@ export class TaskService {
     let proofLink: string | null = null;
     if (completion.proof_link?.trim()) {
       proofLink = normalizeProofLink(completion.proof_link);
-      if (!proofLink) {
-        throw new BadRequestException(
-          'proof_link must be a web link starting with http:// or https://',
-        );
+      // A name that resolves nowhere (`https://test`) opened as "server
+      // can't be found" on the officer's phone (#5882). Mark done's own
+      // sentence, capitalised, so a phone build from before that check shows
+      // it rather than "Try again" (`isMemberSentence` in @repo/hooks).
+      if (!proofLink || !proofLinkOpens(proofLink)) {
+        throw new BadRequestException(TASK_PROOF_LINK_INVALID_MESSAGE);
       }
     }
     const note = completion.completion_note?.trim() || null;

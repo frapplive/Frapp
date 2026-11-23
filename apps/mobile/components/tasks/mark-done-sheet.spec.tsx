@@ -240,7 +240,7 @@ describe("MarkDoneSheet (#4635)", () => {
     await press(markDone(tree));
     expect(onComplete).not.toHaveBeenCalled();
     expect(screenText(tree)).toContain(
-      "Use a web link that starts with http:// or https://.",
+      "Use a full web link, like https://photos.google.com/…",
     );
     act(() =>
       field(tree, "Link").props.onChangeText("https://docs.example.com/a"),
