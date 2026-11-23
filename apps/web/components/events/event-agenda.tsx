@@ -19,6 +19,8 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
+  ATTACHMENT_LINK_DEAD_CAPTION,
+  attachmentLinkOpens,
   attachmentLinkProblem,
   attachmentLinkTitle,
   attachmentTitle,
@@ -672,7 +674,22 @@ export function EventAttachmentsSection({
               key={attachment.id}
               className="flex min-h-9 items-center gap-2 pointer-coarse:min-h-11"
             >
-              {attachment.kind === "link" ? (
+              {attachment.kind === "link" &&
+              !attachmentLinkOpens(attachment.url) ? (
+                // Saved before #5883's rule: kept, and drawn as text so it
+                // never opens "server can't be found".
+                <span
+                  role="note"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
+                  aria-label={`${attachment.title}, not a working web address: ${attachment.url}`}
+                >
+                  <Link2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{attachment.title}</span>
+                  <span className="min-w-0 truncate text-caption">
+                    {attachment.url} · {ATTACHMENT_LINK_DEAD_CAPTION}
+                  </span>
+                </span>
+              ) : attachment.kind === "link" ? (
                 <a
                   href={attachment.url}
                   target="_blank"

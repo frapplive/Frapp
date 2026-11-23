@@ -101,14 +101,15 @@ export class EventService {
    * starts pointing at a file its members can't open. A document the meeting
    * already held (`stored`) passes unchecked: the list is sent whole, and a
    * file deleted since it was attached must not block every later save
-   * (`spec/behavior/events.md` § Agenda and attachments).
+   * (`spec/behavior/events.md` § Agenda and attachments). A held link that
+   * no longer passes the link rule passes for the same reason (#5883).
    */
   private async attachmentsFor(
     input: CreateEventInput['attachments'],
     chapterId: string,
     stored: readonly EventAttachment[] = [],
   ): Promise<EventAttachment[] | undefined> {
-    const attachments = normalizeAttachments(input);
+    const attachments = normalizeAttachments(input, stored);
     if (!attachments) return attachments;
     const held = new Set(
       stored.flatMap((a) => (a.kind === 'document' ? [a.document_id] : [])),

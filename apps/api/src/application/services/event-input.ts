@@ -5,6 +5,8 @@ import {
   agendaProblem,
   EVENT_ATTACHMENTS_MAX,
   normalizeAgendaText,
+  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+  attachmentLinkOpens,
   normalizeAttachmentUrl,
   readAgendaTabledFrom,
   attendanceTierIdOf,
@@ -343,11 +345,15 @@ export function keepAgendaTabledFrom(
 /**
  * Attachments as the column stores them (#4934): a link's URL normalized
  * (http or https only), every title trimmed and non-empty, and only the
- * fields its `kind` carries. Whether a document is the chapter's is the
- * caller's check (`EventService`), since it needs a read.
+ * fields its `kind` carries. A link must also name a public site a phone can
+ * open (`attachmentLinkOpens`, #5883), except one whose address the meeting
+ * already held (`stored`): the list is sent whole, so a link saved before
+ * the rule must not block every later save. Whether a document is the
+ * chapter's is the caller's check (`EventService`), since it needs a read.
  */
 export function normalizeAttachments(
   items: readonly EventAttachmentInput[] | undefined,
+  stored: readonly EventAttachment[] = [],
 ): EventAttachment[] | undefined {
   if (items === undefined) return undefined;
   if (items.length > EVENT_ATTACHMENTS_MAX) {
@@ -355,6 +361,9 @@ export function normalizeAttachments(
       `An event holds at most ${EVENT_ATTACHMENTS_MAX} attachments.`,
     );
   }
+  const heldLinks = new Set(
+    stored.flatMap((a) => (a.kind === 'link' ? [a.url] : [])),
+  );
   const cleaned = items.map((item): EventAttachment => {
     const title = item.title.replace(/\s+/g, ' ').trim();
     if (!title) {
@@ -366,6 +375,9 @@ export function normalizeAttachments(
         throw new BadRequestException(
           'A link attachment needs a web address starting with http:// or https://.',
         );
+      }
+      if (!attachmentLinkOpens(url) && !heldLinks.has(url)) {
+        throw new BadRequestException(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE);
       }
       return { id: item.id, kind: 'link', url, title };
     }

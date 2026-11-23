@@ -11,7 +11,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as WebBrowser from "expo-web-browser";
 import { signetDarkTokens } from "@repo/theme/signet";
-import { AGENDA_CHECK_OFF_LOCKED_COPY } from "@repo/validation";
+import {
+  AGENDA_CHECK_OFF_LOCKED_COPY,
+  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+} from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
@@ -1463,6 +1466,28 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(labelled(tree, 'Remove "Budget"').length).toBeGreaterThan(0);
   });
 
+  it("refuses a link no phone can open, saying why (#5883)", () => {
+    permissions = ["members:view", "events:update"];
+    const tree = render();
+    const pressable = (label: string) =>
+      tree.root.find(
+        (node) =>
+          typeof node.type !== "string" &&
+          node.props.label === label &&
+          typeof node.props.onPress === "function",
+      );
+    act(() => pressable("Add a link").props.onPress());
+    const field = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Link" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => field.props.onChangeText("http://localhost:3000"));
+    act(() => pressable("Add link").props.onPress());
+    expect(screenText(tree)).toContain(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE);
+    expect(listsChange).not.toHaveBeenCalled();
+  });
+
   it("offers no Chapter Files picker while that module is off", () => {
     permissions = ["members:view", "events:update"];
     enabledModules = { documents: false };
@@ -1644,6 +1669,25 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
       "https://example.com/budget",
     );
+  });
+
+  it("draws a stored link no phone can open as text that doesn't open (#5883)", async () => {
+    event = {
+      ...EVENT,
+      attachments: [
+        { id: "t9", kind: "link", url: "https://test", title: "Old notes" },
+      ],
+    };
+    const tree = render();
+    const row = attachmentRow(
+      tree,
+      "Old notes, not a working web address: https://test",
+    );
+    expect(row.props.disabled).toBe(true);
+    expect(row.props.accessibilityRole).toBe("text");
+    expect(screenText(tree)).toContain("https://test · not a working link");
+    await act(async () => row.props.onPress());
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   });
 
   it("says when a link won't open", async () => {

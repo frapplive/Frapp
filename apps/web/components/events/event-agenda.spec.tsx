@@ -2,7 +2,11 @@ import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { EventAgendaItem, EventAttachment } from "@repo/validation";
+import {
+  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+  type EventAgendaItem,
+  type EventAttachment,
+} from "@repo/validation";
 
 /**
  * An event's agenda and attachments on its sheet (#4934): read by everyone
@@ -414,6 +418,48 @@ describe("EventAttachmentsSection", () => {
         title: "docs.example.com",
       }),
     ]);
+  });
+
+  it.each(["https://test", "http://localhost:3000", "https://192.168.1.20"])(
+    "refuses a link to %s, which no phone can open, saying why (#5883)",
+    async (url) => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <EventAttachmentsSection
+          attachments={[]}
+          canEdit
+          documentsOn={false}
+          onChange={onChange}
+        />,
+      );
+      await user.click(screen.getByRole("button", { name: "Add a link" }));
+      await user.type(screen.getByRole("textbox", { name: "Link" }), url);
+      await user.click(screen.getByRole("button", { name: "Add link" }));
+      expect(
+        screen.getByText(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE),
+      ).toBeInTheDocument();
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("draws a stored link no phone can open as text, not a link (#5883)", () => {
+    render(
+      <EventAttachmentsSection
+        attachments={[
+          { id: "x9", kind: "link", url: "https://test", title: "Old notes" },
+        ]}
+        canEdit={false}
+        documentsOn
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(
+      screen.getByRole("note", {
+        name: "Old notes, not a working web address: https://test",
+      }),
+    ).toHaveTextContent("https://test · not a working link");
   });
 
   it("attaches a file it doesn't hold yet, with its name cut to the limit", async () => {

@@ -46,6 +46,8 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
+  ATTACHMENT_LINK_DEAD_CAPTION,
+  attachmentLinkOpens,
   attachmentLinkProblem,
   attachmentLinkTitle,
   attachmentTitle,
@@ -946,25 +948,37 @@ function EventAttachmentsSection({
       <ListPanel>
         {attachments.map((attachment) => {
           const isLink = attachment.kind === "link";
+          // A link saved before #5883's rule is kept, and drawn as text with
+          // its address so it never opens "server can't be found".
+          const dead = isLink && !attachmentLinkOpens(attachment.url);
           // Only a chapter read that answered "off" disables a document; one
           // that can't say yet lets the server answer.
-          const disabled = !isLink && (documentsOn === false || !!openingId);
-          const source = isLink
-            ? proofLinkDomain(attachment.url)
-            : documentsOn === false
-              ? "Chapter Files is off"
-              : "Chapter Files";
+          const disabled =
+            dead || (!isLink && (documentsOn === false || !!openingId));
+          const source = dead
+            ? `${attachment.url} · ${ATTACHMENT_LINK_DEAD_CAPTION}`
+            : isLink
+              ? proofLinkDomain(attachment.url)
+              : documentsOn === false
+                ? "Chapter Files is off"
+                : "Chapter Files";
           return (
             <View key={attachment.id} style={styles.line}>
               <Pressable
-                accessibilityRole={isLink ? "link" : "button"}
-                accessibilityLabel={`${attachment.title}, ${source}`}
+                accessibilityRole={dead ? "text" : isLink ? "link" : "button"}
+                accessibilityLabel={
+                  dead
+                    ? `${attachment.title}, not a working web address: ${attachment.url}`
+                    : `${attachment.title}, ${source}`
+                }
                 accessibilityState={{ disabled }}
                 disabled={disabled}
                 onPress={() =>
-                  attachment.kind === "link"
-                    ? void openLink(attachment.url)
-                    : void openDocument(attachment.document_id)
+                  dead
+                    ? undefined
+                    : attachment.kind === "link"
+                      ? void openLink(attachment.url)
+                      : void openDocument(attachment.document_id)
                 }
                 style={({ pressed }) => [
                   styles.row,
@@ -978,7 +992,10 @@ function EventAttachmentsSection({
                 ) : (
                   <DocumentsGlyph color={muted} size={20} />
                 )}
-                <Text style={styles.text} numberOfLines={1}>
+                <Text
+                  style={[styles.text, dead ? styles.textQuiet : null]}
+                  numberOfLines={1}
+                >
                   {attachment.title}
                 </Text>
                 <Text style={styles.caption} numberOfLines={1}>
@@ -1355,6 +1372,9 @@ function createStyles(tokens: SignetTokens, accent?: string) {
     textDone: {
       color: tokens.color.text.mutedForeground,
       textDecorationLine: "line-through",
+    },
+    textQuiet: {
+      color: tokens.color.text.mutedForeground,
     },
     caption: {
       flexShrink: 1,

@@ -116,9 +116,8 @@ const PRIVATE_TLDS = new Set([
 
 /**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
- * when it isn't one. Never fetched; shown as its domain. An agenda's link
- * attachment shares this rule; a task's proof link must also pass
- * `proofLinkOpens`.
+ * when it isn't one. Never fetched; shown as its domain. A new proof link
+ * or agenda link attachment must also pass `proofLinkOpens`.
  */
 export function normalizeProofLink(value: string): string | null {
   const trimmed = value.trim();

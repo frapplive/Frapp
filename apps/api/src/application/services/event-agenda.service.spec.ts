@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE } from '@repo/validation';
 import { Event } from '#domain/entities/event.entity';
 import {
   baseEvent,
@@ -152,6 +153,48 @@ describe('EventService — agenda and attachments', () => {
           ],
         },
         'A link attachment needs a web address starting with http:// or https://.',
+      ],
+      [
+        'a link to https://test, which no phone can open (#5883)',
+        {
+          attachments: [
+            {
+              id: 'x1',
+              kind: 'link' as const,
+              url: 'https://test',
+              title: 'Dead',
+            },
+          ],
+        },
+        ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+      ],
+      [
+        'a link to http://localhost:3000, which no phone can open (#5883)',
+        {
+          attachments: [
+            {
+              id: 'x1',
+              kind: 'link' as const,
+              url: 'http://localhost:3000',
+              title: 'Dead',
+            },
+          ],
+        },
+        ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+      ],
+      [
+        'a link to https://192.168.1.20, which no phone can open (#5883)',
+        {
+          attachments: [
+            {
+              id: 'x1',
+              kind: 'link' as const,
+              url: 'https://192.168.1.20',
+              title: 'Dead',
+            },
+          ],
+        },
+        ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
       ],
       [
         'an attachment with no title',
@@ -342,6 +385,53 @@ describe('EventService — agenda and attachments', () => {
           { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
         ],
       });
+    });
+
+    it('keeps a link the meeting already held that no phone can open (#5883)', async () => {
+      const held = {
+        id: 'x1',
+        kind: 'link' as const,
+        url: 'https://test',
+        title: 'Old',
+      };
+      mockEventRepo.findById.mockResolvedValue({
+        ...upcoming,
+        attachments: [held],
+      });
+      await service.update('evt-1', 'ch-1', {
+        attachments: [
+          held,
+          { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [
+          held,
+          { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+    });
+
+    it('refuses a new link that no phone can open beside a held one (#5883)', async () => {
+      mockEventRepo.findById.mockResolvedValue({
+        ...upcoming,
+        attachments: [
+          { id: 'x1', kind: 'link', url: 'https://test', title: 'Old' },
+        ],
+      });
+      await expect(
+        service.update('evt-1', 'ch-1', {
+          attachments: [
+            {
+              id: 'x2',
+              kind: 'link',
+              url: 'http://localhost:3000',
+              title: 'New',
+            },
+          ],
+        }),
+      ).rejects.toThrow(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE);
+      expect(mockEventRepo.update).not.toHaveBeenCalled();
     });
 
     describe("with scope 'series'", () => {

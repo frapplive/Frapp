@@ -7,6 +7,8 @@ import {
   EVENT_AGENDA_ITEM_MAX,
   agendaCheckOffOpen,
   reorderEventEntry,
+  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+  attachmentLinkOpens,
   attachmentLinkProblem,
   attachmentTitle,
   readEventAgenda,
@@ -91,6 +93,34 @@ describe("event agenda helpers (#4934)", () => {
     expect(
       attachmentLinkProblem(`https://a.example/${"x".repeat(2100)}`),
     ).toMatch(/too long/);
+  });
+});
+
+describe("an agenda link that resolves nowhere (#5883)", () => {
+  const dead = [
+    "https://test",
+    "http://localhost:3000",
+    "https://192.168.1.20",
+    "https://printer.local/x",
+  ];
+
+  it("refuses it on save, saying why", () => {
+    for (const url of dead) {
+      expect(attachmentLinkOpens(url)).toBe(false);
+      expect(attachmentLinkProblem(url)).toBe(
+        ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
+      );
+    }
+    expect(attachmentLinkOpens("https://docs.google.com/d/1")).toBe(true);
+    expect(attachmentLinkProblem("https://docs.google.com/d/1")).toBeNull();
+  });
+
+  it("keeps one already stored on read, for the apps to draw as text", () => {
+    expect(
+      readEventAttachments([
+        { id: "1", kind: "link", url: "https://test", title: "Old" },
+      ]),
+    ).toEqual([{ id: "1", kind: "link", url: "https://test", title: "Old" }]);
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   normalizeProofLink,
   proofLinkDomain,
+  proofLinkOpens,
   TASK_PROOF_LINK_MAX,
 } from "./task-proof";
 
@@ -76,12 +77,34 @@ export const EVENT_ATTACHMENT_KINDS = ["link", "document"] as const;
 
 /**
  * A link attachment's URL as Frapp keeps it: trimmed, http or https only,
- * or `null` when it isn't one: `normalizeProofLink`. A task's proof link
- * must also pass `proofLinkOpens` (#5882); an attachment doesn't yet.
+ * or `null` when it isn't one: `normalizeProofLink`. It is the read's rule
+ * too, which keeps a `javascript:` or `data:` address from ever being drawn.
+ * A newly attached link must also pass {@link attachmentLinkOpens} (#5883).
  */
 export function normalizeAttachmentUrl(value: string): string | null {
   return normalizeProofLink(value);
 }
+
+/**
+ * Whether a link attachment names a public site a member's phone can open:
+ * a task proof link's `proofLinkOpens` (#5882, #5883). `https://test`,
+ * `localhost`, an IP address or a `.local` name is refused on save; one
+ * stored before the rule is kept and drawn as text, not a link that opens
+ * "server can't be found".
+ */
+export function attachmentLinkOpens(url: string): boolean {
+  return proofLinkOpens(url);
+}
+
+/**
+ * Why a link that is a web address is still refused (#5883): the API's
+ * message and both forms' words for a link failing `attachmentLinkOpens`.
+ */
+export const ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE =
+  "That address won't open on members' phones. Use a public web link, like https://docs.google.com/…";
+
+/** What a stored link that fails `attachmentLinkOpens` says beside it. */
+export const ATTACHMENT_LINK_DEAD_CAPTION = "not a working link";
 
 /** An agenda item's text as stored: trimmed, inner whitespace collapsed. */
 export function normalizeAgendaText(value: string): string {
@@ -323,7 +346,7 @@ export function attachmentLinkTitle(title: string, url: string): string {
 
 /**
  * Why a pasted link can't be attached, or `null` when it can: the form's
- * words for `normalizeAttachmentUrl`'s two refusals.
+ * words for `normalizeAttachmentUrl`'s refusals and `attachmentLinkOpens`'s.
  */
 export function attachmentLinkProblem(value: string): string | null {
   const trimmed = value.trim();
@@ -331,7 +354,7 @@ export function attachmentLinkProblem(value: string): string | null {
   if (trimmed.length > TASK_PROOF_LINK_MAX) {
     return `That link is too long to attach (over ${TASK_PROOF_LINK_MAX} characters).`;
   }
-  return normalizeAttachmentUrl(trimmed)
-    ? null
-    : "Paste a web address starting with http:// or https://.";
+  const url = normalizeAttachmentUrl(trimmed);
+  if (!url) return "Paste a web address starting with http:// or https://.";
+  return attachmentLinkOpens(url) ? null : ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE;
 }
