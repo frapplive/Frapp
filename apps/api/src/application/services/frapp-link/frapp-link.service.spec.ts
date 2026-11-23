@@ -249,7 +249,7 @@ describe('FrappLinkService.resolve with a module off', () => {
       ['document:d-open', 'hidden'],
       ['minutes:m1', 'ok'],
     ]);
-    expect(answers[0]!.title).toBeNull();
+    expect(answers[0].title).toBeNull();
   });
 });
 
@@ -273,9 +273,9 @@ describe('keepUnseenLinks', () => {
       },
     ];
     // The old build removed the web link and kept the document.
-    expect(
-      keepUnseenLinks([stored[0]!], stored).map((link) => link.id),
-    ).toEqual(['a', 'b', 'd']);
+    expect(keepUnseenLinks([stored[0]], stored).map((link) => link.id)).toEqual(
+      ['a', 'b', 'd'],
+    );
   });
 });
 
