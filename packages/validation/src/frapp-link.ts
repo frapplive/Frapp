@@ -21,9 +21,9 @@ import {
  *   member looking (`POST /v1/frapp-links/resolve`), so a rename shows
  *   everywhere, a deleted record reads "Removed", and a member who can't open
  *   it never sees its name. A task's record link stores no title at all. An
- *   event's always carries one, as the event contract has since #4934: a
- *   document's name when it was attached (which phone builds from before
- *   Frapp links still draw), and the kind's own word for the rest.
+ *   event's always carries one, as the event contract has since #4934, but
+ *   only the kind's own word ("Document", "Minutes"), never a record's name:
+ *   phone builds from before Frapp links draw it to every member.
  * - A web link stores its address and a title (its domain when none was
  *   typed). Frapp never fetches it.
  *
@@ -65,9 +65,9 @@ export interface FrappWebLink {
 }
 
 /**
- * A Chapter Files document. `title` is set only on an event's: the name it had
- * when attached, for older phone builds (the kind's word on other record
- * kinds). The live name always comes from resolve.
+ * A Chapter Files document. `title` is set only on an event's, and is the
+ * kind's word ("Document"), for older phone builds. The live name always
+ * comes from resolve.
  */
 export interface FrappDocumentLink {
   id: string;
@@ -298,25 +298,42 @@ export type FrappTitledLink = FrappLink & { title: string };
 
 /**
  * The list as an event write sends it: every entry carries a title, since
- * the event contract has required one since #4934. A document keeps the
- * name it was attached with (`fallbackNames` supplies one for a document
- * attached just now); the other record kinds take their kind's word, never
- * a record's name, so no write copies a name a reader might not see.
+ * the event contract has required one since #4934. A record's is its kind's
+ * word, never its name (the API sets the same), so no write copies a name a
+ * reader might not see.
  */
 export function withEventLinkTitles(
   links: readonly FrappLink[],
-  fallbackNames: ReadonlyMap<string, string> = new Map(),
 ): FrappTitledLink[] {
-  return links.map((link): FrappTitledLink => {
-    if (link.kind === "link") return link;
-    if (link.kind === "document") {
-      const title = frappLinkTitle(
-        link.title ?? fallbackNames.get(link.document_id) ?? "",
+  return links.map((link): FrappTitledLink =>
+    link.kind === "link"
+      ? link
+      : { ...link, title: FRAPP_LINK_COPY.kindNames[link.kind] },
+  );
+}
+
+/**
+ * Whether two lists hold the same links in the same order: each entry's id,
+ * what it points at, and a web link's title. Key order and an event record's
+ * stored title don't count, so a list read back from the database compares
+ * equal to the one that wrote it.
+ */
+export function sameFrappLinks(
+  a: readonly FrappLink[],
+  b: readonly FrappLink[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((link, index) => {
+      const other = b[index]!;
+      return (
+        link.id === other.id &&
+        frappLinkKey(link) === frappLinkKey(other) &&
+        (link.kind !== "link" ||
+          (other.kind === "link" && link.title === other.title))
       );
-      return { ...link, title: title || FRAPP_LINK_COPY.kindNames.document };
-    }
-    return { ...link, title: FRAPP_LINK_COPY.kindNames[link.kind] };
-  });
+    })
+  );
 }
 
 /** The list with `target` added at the end under a new id, unless it is full or holds it already. */
@@ -416,7 +433,13 @@ export function parseFrappAppLink(
   if (!sameOrigin(url, all)) return null;
   const minutes = /^\/meetings\/([^/]+)\/?$/.exec(url.pathname);
   if (minutes?.[1]) {
-    const meetingId = decodeURIComponent(minutes[1]).trim();
+    let meetingId: string;
+    try {
+      meetingId = decodeURIComponent(minutes[1]).trim();
+    } catch {
+      // A malformed escape ("%E0%A4%A") names no meeting.
+      return null;
+    }
     if (meetingId) return { kind: "minutes", meeting_id: meetingId };
   }
   return null;
@@ -459,6 +482,10 @@ export const FRAPP_LINK_COPY = {
   chapterFiles: "Chapter Files",
   full: `Holds ${FRAPP_LINKS_MAX} attachments.`,
   remove: (name: string) => `Remove "${name}"`,
+  /** A row whose name can't be read: its kind and place in the list. */
+  removeUnnamed: (kind: string, position: number) =>
+    `Remove ${kind.toLowerCase()} ${position}`,
+  loadFailed: "Couldn't load. Try again in a moment.",
   /** The picker's one field: it searches files, minutes and events, and takes a pasted address. */
   pickerPlaceholder: "Search or paste a link",
   noMatches: "Nothing here matches.",
@@ -497,7 +524,8 @@ export interface FrappLinkRow {
  * One row's words, the same on both apps: a web link's title and domain;
  * a record's live name and what it is ("Chapter Files", the meeting's or
  * event's date, "#channel · who"). Before the resolve answers, a record shows
- * the name an event's document kept, else its kind's word, as pending.
+ * its kind's word, as pending: never a stored title, which may be a name a
+ * reader can't open.
  */
 export function frappLinkRow(
   link: FrappLink,
@@ -515,7 +543,7 @@ export function frappLinkRow(
   const kindName = FRAPP_LINK_COPY.kindNames[link.kind];
   if (!resolved) {
     return {
-      name: (link.kind === "document" ? link.title : undefined) ?? kindName,
+      name: kindName,
       detail: null,
       opens: true,
       pending: true,
@@ -555,7 +583,12 @@ export function frappLinkRow(
         pending: false,
       };
     case "event":
-      return { name, detail: date || null, opens: true, pending: false };
+      return {
+        name,
+        detail: date ? `Event · ${date}` : "Event",
+        opens: true,
+        pending: false,
+      };
     case "message":
       return {
         name: `#${name}`,
@@ -565,4 +598,20 @@ export function frappLinkRow(
         pending: false,
       };
   }
+}
+
+/**
+ * The quiet line under a record the picker offers: "Chapter Files" for a
+ * document, else its kind and date ("Minutes · Nov 16"), as its row will read
+ * once attached.
+ */
+export function frappLinkCandidateDetail(
+  kind: "document" | "minutes" | "event",
+  date: string | null,
+  now: Date = new Date(),
+): string {
+  if (kind === "document") return FRAPP_LINK_COPY.chapterFiles;
+  const word = FRAPP_LINK_COPY.kindNames[kind];
+  const day = date ? shortDate(date, now) : "";
+  return day ? `${word} · ${day}` : word;
 }

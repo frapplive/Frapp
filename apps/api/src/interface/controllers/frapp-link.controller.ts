@@ -13,6 +13,7 @@ import { PermissionsGuard } from '../guards/permissions.guard';
 import { RequirePermissions } from '../decorators/permissions.decorator';
 import {
   CurrentChapterId,
+  CurrentEnabledModules,
   CurrentUser,
 } from '../decorators/current-user.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
@@ -63,6 +64,7 @@ export class FrappLinkController {
   async resolve(
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
+    @CurrentEnabledModules() enabledModules: Record<string, boolean> | null,
     @Body() dto: ResolveFrappLinksDto,
   ): Promise<ResolveFrappLinksResponseDto> {
     return {
@@ -70,6 +72,7 @@ export class FrappLinkController {
         chapterId,
         userId,
         dto.targets.map(targetOf),
+        enabledModules,
       ),
     };
   }

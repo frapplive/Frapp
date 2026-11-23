@@ -33,6 +33,13 @@ export interface CreateEventInput {
   agenda?: EventAgendaItem[];
   /** This meeting's attachments, whole (#4934); omitted leaves it. */
   attachments?: EventAttachmentInput[];
+  /**
+   * Whether `attachments` was sent by a build that knows every Frapp link
+   * kind. Phone builds from before Frapp links don't send it and drop the
+   * kinds they can't read, so for them the stored minutes, event and message
+   * links are kept (`spec/behavior/frapp-links.md`). Never stored.
+   */
+  attachments_all_kinds?: boolean;
   check_in_zone?: GeofenceCoordinate[] | null;
   check_in_zone_name?: string | null;
   check_in_opens_minutes?: number;
@@ -96,6 +103,13 @@ export interface UpdateEventInput {
   agenda?: EventAgendaItem[];
   /** This meeting's attachments, whole (#4934); omitted leaves it. */
   attachments?: EventAttachmentInput[];
+  /**
+   * Whether `attachments` was sent by a build that knows every Frapp link
+   * kind. Phone builds from before Frapp links don't send it and drop the
+   * kinds they can't read, so for them the stored minutes, event and message
+   * links are kept (`spec/behavior/frapp-links.md`). Never stored.
+   */
+  attachments_all_kinds?: boolean;
   check_in_zone?: GeofenceCoordinate[] | null;
   check_in_zone_name?: string | null;
   check_in_opens_minutes?: number;
@@ -111,7 +125,7 @@ export interface UpdateEventInput {
  */
 export type SeriesUpdateInput = Omit<
   UpdateEventInput,
-  'agenda' | 'attachments'
+  'agenda' | 'attachments' | 'attachments_all_kinds'
 >;
 
 type AttendanceLists = Pick<

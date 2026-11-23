@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsISO8601,
   IsIn,
   IsInt,
@@ -141,13 +142,13 @@ export class EventAttachmentDto extends FrappLinkDto {
     required: true,
     maxLength: FRAPP_LINK_TITLE_MAX,
     description:
-      "What the list shows before the record's live name is read: a link's title, a document's name when it was attached, the kind's word for minutes, events and messages (the API sets that word whatever is sent).",
+      'A web link\'s title. On a record it is the kind\'s own word ("Document", "Minutes", "Event", "Message"), which the API sets whatever is sent, so no record\'s name is stored where a member who can\'t open it would read it.',
   })
   title: string;
 }
 
 const AGENDA_DESCRIPTION = `This meeting's agenda, in order: at most ${EVENT_AGENDA_MAX} short items. Sent whole; it replaces the stored list, and \`[]\` clears it (null is refused). Belongs to this one meeting: with \`scope: 'series'\` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none.`;
-const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${FRAPP_LINKS_MAX} Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a \`title\` (its name), which phone builds from before Frapp links draw.`;
+const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${FRAPP_LINKS_MAX} Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send \`attachments_all_kinds: true\` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.`;
 
 export class CreateEventDto {
   @ApiProperty({ maxLength: EVENT_NAME_MAX_LENGTH })
@@ -686,6 +687,14 @@ export class UpdateEventDto {
   @ValidateNested({ each: true })
   @Type(() => EventAttachmentDto)
   attachments?: EventAttachmentDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Set with `attachments` by a build that sends every Frapp link kind, so the list replaces what is stored. Without it, the stored minutes, event and message links are kept, since phone builds from before Frapp links drop the kinds they cannot read.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  attachments_all_kinds?: boolean;
 
   @ApiPropertyOptional({
     type: [GeofenceCoordinateDto],

@@ -790,7 +790,6 @@ function TaskScreen({
               <FrappLinksEditor
                 links={edit.attachments}
                 canEdit={controls.edit}
-                keepDocumentNames={false}
                 onChange={edit.changeAttachments}
               />
             </ListPanel>

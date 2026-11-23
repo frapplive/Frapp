@@ -82,12 +82,15 @@ export function useEventListsEditor(
     const body: {
       agenda?: EventAgendaItem[];
       attachments?: FrappTitledLink[];
+      attachments_all_kinds?: boolean;
     } = {};
     for (const field of dirty.current) {
       const value = editedRef.current[field];
       if (field === "agenda" && value) body.agenda = value as EventAgendaItem[];
       if (field === "attachments" && value) {
         body.attachments = withEventLinkTitles(value as EventAttachment[]);
+        // This build sends every kind, so the list replaces what's stored.
+        body.attachments_all_kinds = true;
       }
     }
     dirty.current.clear();
@@ -103,8 +106,9 @@ export function useEventListsEditor(
       if (error) throw error;
       // The read now holds what was saved, so nothing flashes back while
       // the refetches below are out.
+      const { attachments_all_kinds: _flag, ...saved } = body;
       queryClient.setQueryData(detailKey, (row: unknown) =>
-        row && typeof row === "object" ? { ...row, ...body } : row,
+        row && typeof row === "object" ? { ...row, ...saved } : row,
       );
     } catch (failure) {
       dirty.current.clear();

@@ -7940,7 +7940,7 @@ export interface components {
              * @description `message`: the message.
              */
             message_id?: string;
-            /** @description What the list shows before the record's live name is read: a link's title, a document's name when it was attached, the kind's word for minutes, events and messages (the API sets that word whatever is sent). */
+            /** @description A web link's title. On a record it is the kind's own word ("Document", "Minutes", "Event", "Message"), which the API sets whatever is sent, so no record's name is stored where a member who can't open it would read it. */
             title: string;
         };
         GeofenceCoordinateDto: {
@@ -7974,7 +7974,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8021,7 +8021,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8072,7 +8072,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
@@ -8117,7 +8117,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8160,8 +8160,10 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
+            /** @description Set with `attachments` by a build that sends every Frapp link kind, so the list replaces what is stored. Without it, the stored minutes, event and message links are kept, since phone builds from before Frapp links drop the kinds they cannot read. */
+            attachments_all_kinds?: boolean;
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. Send an empty array to clear an existing zone. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
             /** @description Human-readable name for `check_in_zone`, shown on the mobile scanner ("Inside the Great Hall zone"). */

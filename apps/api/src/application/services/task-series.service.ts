@@ -19,6 +19,8 @@ import {
   TASK_REPEAT_NEEDS_DUE_DATE,
   nextTaskRepeatDate,
   type TaskRepeatRule,
+  readFrappLinks,
+  sameFrappLinks,
 } from '@repo/validation';
 import { taskDueInstant } from '#domain/utils/member-nudge';
 import { TaskService, type UpdateTaskInput } from './task.service';
@@ -131,7 +133,7 @@ export class TaskSeriesService {
     );
     if (
       attachments !== undefined &&
-      JSON.stringify(attachments) !== JSON.stringify(series.attachments ?? [])
+      !sameFrappLinks(attachments, readFrappLinks(series.attachments ?? []))
     ) {
       patch.attachments = attachments;
     }
@@ -243,11 +245,14 @@ export class TaskSeriesService {
         copyInput.reference_photo_paths = input.reference_photo_paths;
       }
       try {
+        // The list checked once above, so the copy neither reads it again
+        // nor refuses what the series just took.
         const updated = await this.taskService.update(
           open.id,
           chapterId,
           actorId,
           copyInput,
+          attachments,
         );
         if (editedIsOpen) return updated;
       } catch (error) {

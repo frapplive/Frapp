@@ -12,6 +12,7 @@ import {
   type FrappLink,
   type RepeatDraft,
   type TaskProofKind,
+  sameFrappLinks,
 } from "@repo/validation";
 import { parsePointReward, storedDueOf, TASK_FORM_COPY } from "./create-task";
 import type { TaskRowModel } from "./board";
@@ -275,7 +276,7 @@ export function attachmentsSave(
   row: TaskRowModel,
   next: readonly FrappLink[],
 ): TaskFieldSave {
-  if (JSON.stringify(next) === JSON.stringify(row.attachments)) return NONE;
+  if (sameFrappLinks(next, row.attachments)) return NONE;
   return { kind: "save", body: { attachments: [...next] } };
 }
 

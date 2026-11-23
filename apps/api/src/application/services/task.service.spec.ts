@@ -1981,19 +1981,39 @@ describe('TaskService', () => {
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
     });
 
-    it('refuses the same record twice', async () => {
+    it('refuses a record newly attached from a module the chapter turned off', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      linkRepos.enabledModules.documents = false;
       await expect(
         service.create({
           chapter_id: 'ch-1',
           title: 'Read the bylaws',
           assignee_id: 'user-1',
           created_by: 'admin-1',
-          attachments: [
-            { id: 'a', kind: 'event', event_id: DOC },
-            { id: 'b', kind: 'event', event_id: DOC },
-          ],
+          attachments: [{ id: 'a', kind: 'document', document_id: DOC }],
         }),
-      ).rejects.toThrow('That is attached already.');
+      ).rejects.toThrow('Chapter Files is off in this chapter');
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first when the same record comes twice', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue(baseTask);
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Read the bylaws',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        attachments: [
+          { id: 'a', kind: 'event', event_id: DOC },
+          { id: 'b', kind: 'event', event_id: DOC },
+        ],
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [{ id: 'a', kind: 'event', event_id: DOC }],
+        }),
+      );
     });
 
     it('keeps a record it already held, even once it is gone', async () => {

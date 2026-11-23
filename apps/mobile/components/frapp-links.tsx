@@ -15,7 +15,6 @@ import {
   useDocumentDownloadUrl,
   useFrappLinkCandidates,
   useFrappLinks,
-  type FrappLinkCandidate,
 } from "@repo/hooks";
 import {
   FRAPP_LINK_COPY,
@@ -24,7 +23,7 @@ import {
   frappLinkKey,
   frappLinkRow,
   frappLinksHold,
-  frappLinkTitle,
+  frappLinkCandidateDetail,
   frappLinkUrlProblem,
   frappWebLinkTitle,
   normalizeFrappLinkUrl,
@@ -33,6 +32,7 @@ import {
   type FrappLink,
   type FrappLinkKind,
   type FrappLinkTarget,
+  type FrappRecordLinkKind,
 } from "@repo/validation";
 import type { SignetTokens } from "@repo/theme/signet";
 import { IconButton } from "@/components/icon-button";
@@ -43,6 +43,7 @@ import { ChatGlyph, EventsGlyph } from "@/components/tab-glyphs";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { useKeepAboveKeyboard } from "@/lib/keep-above-keyboard";
+import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -170,7 +171,7 @@ export function FrappLinkRows({
   if (links.length === 0) return null;
   return (
     <>
-      {links.map((link) => {
+      {links.map((link, index) => {
         const row = frappLinkRow(
           link,
           link.kind === "link" ? undefined : resolved.get(frappLinkKey(link)),
@@ -218,7 +219,16 @@ export function FrappLinkRows({
             </Pressable>
             {canEdit ? (
               <IconButton
-                label={FRAPP_LINK_COPY.remove(row.name)}
+                label={
+                  row.opens
+                    ? FRAPP_LINK_COPY.remove(row.name)
+                    : FRAPP_LINK_COPY.removeUnnamed(
+                        FRAPP_LINK_COPY.kindNames[
+                          link.kind as FrappRecordLinkKind
+                        ],
+                        index + 1,
+                      )
+                }
                 onPress={() =>
                   onChange((current) =>
                     current.filter((entry) => entry.id !== link.id),
@@ -240,18 +250,6 @@ export function FrappLinkRows({
   );
 }
 
-function candidateDetail(candidate: FrappLinkCandidate): string {
-  if (candidate.kind === "document") return FRAPP_LINK_COPY.chapterFiles;
-  const word = FRAPP_LINK_COPY.kindNames[candidate.kind];
-  if (!candidate.date) return word;
-  const date = new Date(candidate.date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${word} · ${date}`;
-}
-
 /**
  * The attach picker, web's on the phone: one field searches Chapter Files,
  * minutes and the calendar, and takes a pasted address. A pasted Frapp
@@ -260,13 +258,11 @@ function candidateDetail(candidate: FrappLinkCandidate): string {
  */
 export function FrappLinkPicker({
   links,
-  keepDocumentNames,
   documentsOn = null,
   onChange,
   onDone,
 }: {
   links: readonly FrappLink[];
-  keepDocumentNames: boolean;
   documentsOn?: boolean | null;
   onChange: FrappLinksChange;
   onDone: () => void;
@@ -284,10 +280,13 @@ export function FrappLinkPicker({
   const typed = text.trim();
   const looksLikeAddress = /^(https?:\/\/|www\.)/i.test(typed);
   const appTarget = useMemo(
-    () => (looksLikeAddress ? parseFrappAppLink(typed) : null),
+    // This build's own web origin too, as chat's links read (a staging
+    // build's links name staging's records).
+    () =>
+      looksLikeAddress ? parseFrappAppLink(typed, [webAppOrigin()]) : null,
     [looksLikeAddress, typed],
   );
-  const { candidates, isLoading } = useFrappLinkCandidates(
+  const { candidates, isLoading, isError } = useFrappLinkCandidates(
     looksLikeAddress ? "" : typed,
     { enabled: !looksLikeAddress, documents: documentsOn !== false },
   );
@@ -295,21 +294,17 @@ export function FrappLinkPicker({
     (candidate) => !frappLinksHold(links, candidate.target),
   );
 
-  function attach(target: FrappLinkTarget, name?: string) {
-    onChange((current) =>
-      withFrappLink(
-        current,
-        target.kind === "document" && keepDocumentNames && name
-          ? { ...target, title: frappLinkTitle(name) }
-          : target,
-        randomClientId,
-      ),
-    );
+  function attach(target: FrappLinkTarget) {
+    onChange((current) => withFrappLink(current, target, randomClientId));
     onDone();
   }
 
   function attachAddress() {
     if (appTarget) {
+      if (frappLinksHold(links, appTarget)) {
+        setProblem("That is attached already.");
+        return;
+      }
       attach(appTarget);
       return;
     }
@@ -412,6 +407,8 @@ export function FrappLinkPicker({
       ) : null}
       {looksLikeAddress ? null : isLoading ? (
         <Text style={styles.caption}>Loading…</Text>
+      ) : isError && offered.length === 0 ? (
+        <Text style={styles.caption}>{FRAPP_LINK_COPY.loadFailed}</Text>
       ) : offered.length === 0 ? (
         <Text style={styles.caption}>{FRAPP_LINK_COPY.noMatches}</Text>
       ) : (
@@ -420,7 +417,7 @@ export function FrappLinkPicker({
             key={frappLinkKey(candidate.target)}
             accessibilityRole="button"
             accessibilityLabel={`${FRAPP_LINK_COPY.attach} ${candidate.name}`}
-            onPress={() => attach(candidate.target, candidate.name)}
+            onPress={() => attach(candidate.target)}
             style={({ pressed }) => [
               styles.row,
               pressed ? styles.pressed : null,
@@ -432,7 +429,7 @@ export function FrappLinkPicker({
                 {candidate.name}
               </Text>
               <Text style={styles.caption} numberOfLines={1}>
-                {candidateDetail(candidate)}
+                {frappLinkCandidateDetail(candidate.kind, candidate.date)}
               </Text>
             </View>
           </Pressable>
@@ -459,13 +456,11 @@ export function FrappLinkPicker({
 export function FrappLinksEditor({
   links,
   canEdit,
-  keepDocumentNames,
   documentsOn = null,
   onChange,
 }: {
   links: readonly FrappLink[];
   canEdit: boolean;
-  keepDocumentNames: boolean;
   documentsOn?: boolean | null;
   onChange: FrappLinksChange;
 }) {
@@ -483,7 +478,6 @@ export function FrappLinksEditor({
       {canEdit && !full && picking ? (
         <FrappLinkPicker
           links={links}
-          keepDocumentNames={keepDocumentNames}
           documentsOn={documentsOn}
           onChange={onChange}
           onDone={() => setPicking(false)}

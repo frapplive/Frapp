@@ -52,6 +52,8 @@ import {
   type TaskGroupAudience,
   type FrappLink,
   type TaskProofKind,
+  readFrappLinks,
+  sameFrappLinks,
 } from '@repo/validation';
 import {
   normalizeFrappLinks,
@@ -1701,6 +1703,8 @@ export class TaskService {
     chapterId: string,
     actorId: string,
     input: UpdateTaskInput,
+    /** `input.attachments` already checked, by a series edit that checked it once. */
+    checkedLinks?: FrappLink[],
   ): Promise<TaskView> {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) throw new NotFoundException('Task not found');
@@ -1711,7 +1715,13 @@ export class TaskService {
         'Change who a group task is from on every copy, with scope "group"',
       );
     }
-    const updated = await this.applyEdit(task, chapterId, actorId, input);
+    const updated = await this.applyEdit(
+      task,
+      chapterId,
+      actorId,
+      input,
+      checkedLinks,
+    );
     const [view] = await this.withSubtasks(chapterId, [
       toDisplayStatus(updated),
     ]);
@@ -1814,7 +1824,7 @@ export class TaskService {
         checkedLinks ??
         (await this.checkedAttachments(chapterId, input.attachments, stored)) ??
         [];
-      if (JSON.stringify(next) !== JSON.stringify(stored)) {
+      if (!sameFrappLinks(next, readFrappLinks(stored))) {
         patch.attachments = next;
       }
     }

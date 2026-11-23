@@ -19,7 +19,7 @@ import {
   frappLinkKey,
   frappLinkRow,
   frappLinksHold,
-  frappLinkTitle,
+  frappLinkCandidateDetail,
   frappLinkUrlProblem,
   frappLinkWebHref,
   frappWebLinkTitle,
@@ -29,6 +29,7 @@ import {
   type FrappLink,
   type FrappLinkKind,
   type FrappLinkTarget,
+  type FrappRecordLinkKind,
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -40,7 +41,7 @@ import { cn } from "@/lib/utils";
 /**
  * A list of Frapp links (`spec/behavior/frapp-links.md`): an event's
  * attachments and a task's Attached row draw the same rows and the same
- * attach picker, as the phone's `FrappLinkList` does.
+ * attach picker, as the phone's `components/frapp-links.tsx` does.
  *
  * Each record row reads its name live for the member looking (a document,
  * minutes, an event or a chat message), or says "You don't have access" or
@@ -78,7 +79,7 @@ export function FrappLinkRows({
   if (links.length === 0) return null;
   return (
     <ul className="grid gap-1">
-      {links.map((link) => {
+      {links.map((link, index) => {
         const row = frappLinkRow(
           link,
           link.kind === "link" ? undefined : resolved.get(frappLinkKey(link)),
@@ -128,7 +129,16 @@ export function FrappLinkRows({
             )}
             {canEdit ? (
               <IconButton
-                label={FRAPP_LINK_COPY.remove(row.name)}
+                label={
+                  row.opens
+                    ? FRAPP_LINK_COPY.remove(row.name)
+                    : FRAPP_LINK_COPY.removeUnnamed(
+                        FRAPP_LINK_COPY.kindNames[
+                          link.kind as FrappRecordLinkKind
+                        ],
+                        index + 1,
+                      )
+                }
                 onClick={() =>
                   onChange((current) =>
                     current.filter((entry) => entry.id !== link.id),
@@ -150,19 +160,14 @@ export function FrappLinkRows({
  * calendar as you type, and takes a pasted address. A pasted Frapp address
  * attaches the record it names; any other http(s) address attaches as a web
  * link, with an optional title.
- *
- * `keepDocumentNames` stores a document's name with it, which an event's
- * list does (its contract needs a title on every entry); a task's never.
  */
 export function FrappLinkPicker({
   links,
-  keepDocumentNames,
   documentsOn = null,
   onChange,
   onDone,
 }: {
   links: readonly FrappLink[];
-  keepDocumentNames: boolean;
   /** Whether Chapter Files is on: `false` offers no files; `null` can't say yet. */
   documentsOn?: boolean | null;
   onChange: FrappLinksChange;
@@ -186,7 +191,7 @@ export function FrappLinkPicker({
         : null,
     [looksLikeAddress, typed],
   );
-  const { candidates, isLoading } = useFrappLinkCandidates(
+  const { candidates, isLoading, isError } = useFrappLinkCandidates(
     looksLikeAddress ? "" : typed,
     { enabled: !looksLikeAddress, documents: documentsOn !== false },
   );
@@ -194,21 +199,17 @@ export function FrappLinkPicker({
     (candidate) => !frappLinksHold(links, candidate.target),
   );
 
-  function attach(target: FrappLinkTarget, name?: string) {
-    onChange((current) =>
-      withFrappLink(
-        current,
-        target.kind === "document" && keepDocumentNames && name
-          ? { ...target, title: frappLinkTitle(name) }
-          : target,
-        randomClientId,
-      ),
-    );
+  function attach(target: FrappLinkTarget) {
+    onChange((current) => withFrappLink(current, target, randomClientId));
     onDone();
   }
 
   function attachAddress() {
     if (appTarget) {
+      if (frappLinksHold(links, appTarget)) {
+        setProblem("That is attached already.");
+        return;
+      }
       attach(appTarget);
       return;
     }
@@ -238,7 +239,7 @@ export function FrappLinkPicker({
       onSubmit={(event) => {
         event.preventDefault();
         if (looksLikeAddress) attachAddress();
-        else if (offered[0]) attach(offered[0].target, offered[0].name);
+        else if (offered[0]) attach(offered[0].target);
       }}
     >
       <label htmlFor={fieldId} className="sr-only">
@@ -277,6 +278,10 @@ export function FrappLinkPicker({
       ) : null}
       {looksLikeAddress ? null : isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : isError && offered.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {FRAPP_LINK_COPY.loadFailed}
+        </p>
       ) : offered.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {FRAPP_LINK_COPY.noMatches}
@@ -285,23 +290,15 @@ export function FrappLinkPicker({
         <ul className="grid max-h-64 gap-1 overflow-y-auto">
           {offered.map((candidate) => {
             const Icon = ICONS[candidate.kind];
-            const detail =
-              candidate.kind === "document"
-                ? FRAPP_LINK_COPY.chapterFiles
-                : candidate.date
-                  ? `${FRAPP_LINK_COPY.kindNames[candidate.kind]} · ${new Date(
-                      candidate.date,
-                    ).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}`
-                  : FRAPP_LINK_COPY.kindNames[candidate.kind];
+            const detail = frappLinkCandidateDetail(
+              candidate.kind,
+              candidate.date,
+            );
             return (
               <li key={frappLinkKey(candidate.target)}>
                 <button
                   type="button"
-                  onClick={() => attach(candidate.target, candidate.name)}
+                  onClick={() => attach(candidate.target)}
                   className={cn(
                     "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card-hover pointer-coarse:min-h-11",
                     FOCUS_RING_OFFSET,
@@ -342,13 +339,11 @@ export function FrappLinkPicker({
 export function FrappLinksEditor({
   links,
   canEdit,
-  keepDocumentNames,
   documentsOn = null,
   onChange,
 }: {
   links: readonly FrappLink[];
   canEdit: boolean;
-  keepDocumentNames: boolean;
   documentsOn?: boolean | null;
   onChange: FrappLinksChange;
 }) {
@@ -365,7 +360,6 @@ export function FrappLinksEditor({
       {canEdit && !full && picking ? (
         <FrappLinkPicker
           links={links}
-          keepDocumentNames={keepDocumentNames}
           documentsOn={documentsOn}
           onChange={onChange}
           onDone={() => setPicking(false)}

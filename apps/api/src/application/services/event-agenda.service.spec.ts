@@ -90,7 +90,7 @@ describe('EventService — agenda and attachments', () => {
               id: 'x2',
               kind: 'document',
               document_id: DOC_ID,
-              title: 'Last week agenda',
+              title: 'Document',
             },
           ],
         }),
@@ -154,20 +154,6 @@ describe('EventService — agenda and attachments', () => {
         'A link attachment needs a web address starting with http:// or https://.',
       ],
       [
-        'a document attachment with no title',
-        {
-          attachments: [
-            {
-              id: 'x1',
-              kind: 'document' as const,
-              document_id: '00000000-0000-4000-8000-000000000001',
-              title: '  ',
-            },
-          ],
-        },
-        'Every attachment needs a title.',
-      ],
-      [
         'a document attachment with no document',
         {
           attachments: [
@@ -183,7 +169,7 @@ describe('EventService — agenda and attachments', () => {
       expect(mockEventRepo.create).not.toHaveBeenCalled();
     });
 
-    it("refuses a document that isn't one of the chapter's files, by its title", async () => {
+    it("refuses a document that isn't one of the chapter's files, never naming it", async () => {
       mockDocumentRepo.findByIds.mockResolvedValue([]);
       await expect(
         service.create({
@@ -199,7 +185,7 @@ describe('EventService — agenda and attachments', () => {
         }),
       ).rejects.toThrow(
         new BadRequestException(
-          '"Bylaws" isn\'t one of this chapter\'s files any more. Remove it, or attach it again from Chapter Files.',
+          "A document you attached isn't one of this chapter's files any more. Remove it, or attach it again from Chapter Files.",
         ),
       );
       expect(mockEventRepo.create).not.toHaveBeenCalled();
@@ -338,9 +324,43 @@ describe('EventService — agenda and attachments', () => {
       expect(mockDocumentRepo.findByIds).not.toHaveBeenCalled();
       expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
         attachments: [
-          held,
+          // The name an older save stored gives way to the kind's word.
+          { ...held, title: 'Document' },
           { id: 'x2', kind: 'link', url: 'https://a.example', title: 'A' },
         ],
+      });
+    });
+
+    it('keeps the minutes, event and message links an older phone build could not see', async () => {
+      const minutes = {
+        id: 'x3',
+        kind: 'minutes' as const,
+        meeting_id: 'm1',
+        title: 'Minutes',
+      };
+      const link = {
+        id: 'x2',
+        kind: 'link' as const,
+        url: 'https://a.example',
+        title: 'A',
+      };
+      mockEventRepo.findById.mockResolvedValue({
+        ...baseEvent,
+        attachments: [minutes, link],
+      });
+      // An older build sends only what it reads, and no flag.
+      await service.update('evt-1', 'ch-1', { attachments: [link] });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [link, minutes],
+      });
+      mockEventRepo.update.mockClear();
+      // This build's list replaces it.
+      await service.update('evt-1', 'ch-1', {
+        attachments: [link],
+        attachments_all_kinds: true,
+      });
+      expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+        attachments: [link],
       });
     });
 

@@ -874,7 +874,6 @@ function EventAttachmentsSection({
         <FrappLinksEditor
           links={attachments}
           canEdit={canEdit}
-          keepDocumentNames
           documentsOn={documentsOn}
           onChange={onChange}
         />

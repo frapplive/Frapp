@@ -1,5 +1,5 @@
 import { FrappLinkService } from './frapp-link.service';
-import { normalizeFrappLinks } from './frapp-link-input';
+import { keepUnseenLinks, normalizeFrappLinks } from './frapp-link-input';
 
 const CH = 'ch-1';
 const ME = 'user-1';
@@ -220,6 +220,65 @@ describe('FrappLinkService.resolve', () => {
   });
 });
 
+describe('FrappLinkService.resolve with a module off', () => {
+  it('hides records from a module the chapter turned off, unread', async () => {
+    const links = service({
+      docs: [{ id: 'd-open', title: 'Bylaws' }],
+      visibleDocs: ['d-open'],
+      meetings: [
+        {
+          id: 'm1',
+          event_name: 'Chapter',
+          event_start_time: '2026-11-16T23:00:00Z',
+        },
+      ],
+      readableMeetings: ['m1'],
+      events: [],
+      visibleEvents: [],
+    });
+    const answers = await links.resolve(
+      CH,
+      ME,
+      [
+        { kind: 'document', document_id: 'd-open' },
+        { kind: 'minutes', meeting_id: 'm1' },
+      ],
+      { documents: false },
+    );
+    expect(answers.map((answer) => [answer.key, answer.state])).toEqual([
+      ['document:d-open', 'hidden'],
+      ['minutes:m1', 'ok'],
+    ]);
+    expect(answers[0]!.title).toBeNull();
+  });
+});
+
+describe('keepUnseenLinks', () => {
+  it('puts back the kinds an older phone build could not read, after what it sent', () => {
+    const stored = [
+      {
+        id: 'a',
+        kind: 'document' as const,
+        document_id: 'd1',
+        title: 'Document',
+      },
+      { id: 'b', kind: 'minutes' as const, meeting_id: 'm1', title: 'Minutes' },
+      { id: 'c', kind: 'link' as const, url: 'https://a.example', title: 'A' },
+      {
+        id: 'd',
+        kind: 'message' as const,
+        channel_id: 'c1',
+        message_id: 'x1',
+        title: 'Message',
+      },
+    ];
+    // The old build removed the web link and kept the document.
+    expect(
+      keepUnseenLinks([stored[0]!], stored).map((link) => link.id),
+    ).toEqual(['a', 'b', 'd']);
+  });
+});
+
 describe('normalizeFrappLinks', () => {
   it("gives an event's record links the kind's word, never a name, and a task's none", () => {
     const sent = [
@@ -233,7 +292,7 @@ describe('normalizeFrappLinks', () => {
     ];
     expect(normalizeFrappLinks(sent, 'event')).toEqual([
       { id: 'a', kind: 'minutes', meeting_id: 'm1', title: 'Minutes' },
-      { id: 'b', kind: 'document', document_id: 'd1', title: 'Bylaws' },
+      { id: 'b', kind: 'document', document_id: 'd1', title: 'Document' },
     ]);
     expect(normalizeFrappLinks(sent, 'task')).toEqual([
       { id: 'a', kind: 'minutes', meeting_id: 'm1' },

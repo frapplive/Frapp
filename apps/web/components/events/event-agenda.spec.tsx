@@ -435,7 +435,7 @@ describe("EventAttachmentsSection", () => {
     ]);
   });
 
-  it("attaches a file it doesn't hold yet, keeping its name cut to the limit", async () => {
+  it("attaches a file it doesn't hold yet, storing no name with it", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const long = "Spring budget ".repeat(20);
@@ -470,7 +470,8 @@ describe("EventAttachmentsSection", () => {
       kind: "document",
       document_id: "doc-2",
     });
-    expect(at(next, 1).title).toHaveLength(120);
+    // A name stored with it would reach members who can't open the file.
+    expect(at(next, 1)).not.toHaveProperty("title");
   });
 
   it("offers no Attach once the event holds ten", () => {

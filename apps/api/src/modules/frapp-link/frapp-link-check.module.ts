@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FrappLinkChecker } from '../../application/services/frapp-link/frapp-link-checker.service';
+import { CHAPTER_REPOSITORY } from '#domain/repositories/chapter.repository.interface';
 import { CHAPTER_DOCUMENT_REPOSITORY } from '#domain/repositories/chapter-document.repository.interface';
 import { MEETING_REPOSITORY } from '#domain/repositories/meeting.repository.interface';
 import { EVENT_REPOSITORY } from '#domain/repositories/event.repository.interface';
@@ -7,6 +8,7 @@ import {
   CHAT_CHANNEL_REPOSITORY,
   CHAT_MESSAGE_REPOSITORY,
 } from '#domain/repositories/chat.repository.interface';
+import { SupabaseChapterRepository } from '../../infrastructure/supabase/repositories/supabase-chapter.repository';
 import { SupabaseChapterDocumentRepository } from '../../infrastructure/supabase/repositories/supabase-chapter-document.repository';
 import { SupabaseMeetingRepository } from '../../infrastructure/supabase/repositories/supabase-meeting.repository';
 import { SupabaseEventRepository } from '../../infrastructure/supabase/repositories/supabase-event.repository';
@@ -21,6 +23,7 @@ import { SupabaseChatMessageRepository } from '../../infrastructure/supabase/rep
 @Module({
   providers: [
     FrappLinkChecker,
+    { provide: CHAPTER_REPOSITORY, useClass: SupabaseChapterRepository },
     {
       provide: CHAPTER_DOCUMENT_REPOSITORY,
       useClass: SupabaseChapterDocumentRepository,

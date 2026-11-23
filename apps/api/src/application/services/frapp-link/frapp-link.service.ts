@@ -30,6 +30,7 @@ import { ChapterDocumentService } from '../chapter-document.service';
 import { MeetingService } from '../meeting.service';
 import { EventService } from '../event.service';
 import { ChannelAccessService } from '../channel-access.service';
+import { frappLinkModuleOn } from './frapp-link-checker.service';
 
 type Ids = { [K in FrappLinkTarget['kind']]: string[] };
 
@@ -48,7 +49,8 @@ function hidden(key: string): FrappLinkResolved {
  * gone or was never this chapter's. Each kind is read by its own feature's
  * rule (Documents' lists, minutes' event audience, the event list's rule,
  * channel access), never a rule of its own, so a link shows exactly what the
- * member would see opening the record.
+ * member would see opening the record. A record whose module the chapter
+ * turned off reads `hidden`, unread, as its own screens are closed.
  */
 @Injectable()
 export class FrappLinkService {
@@ -76,14 +78,20 @@ export class FrappLinkService {
     chapterId: string,
     userId: string,
     targets: readonly FrappLinkTarget[],
+    enabledModules: Record<string, boolean> | null = null,
   ): Promise<FrappLinkResolved[]> {
     const unique = new Map<string, FrappLinkTarget>();
     for (const target of targets) {
       const key = frappLinkKey(target);
       if (!unique.has(key)) unique.set(key, target);
     }
+    const answers = new Map<string, FrappLinkResolved>();
     const ids: Ids = { document: [], minutes: [], event: [], message: [] };
-    for (const target of unique.values()) {
+    for (const [key, target] of unique) {
+      if (!frappLinkModuleOn(enabledModules, target.kind)) {
+        answers.set(key, hidden(key));
+        continue;
+      }
       switch (target.kind) {
         case 'document':
           ids.document.push(target.document_id);
@@ -99,7 +107,6 @@ export class FrappLinkService {
           break;
       }
     }
-    const answers = new Map<string, FrappLinkResolved>();
     const parts = await Promise.all([
       this.resolveDocuments(chapterId, userId, ids.document),
       this.resolveMinutes(chapterId, userId, ids.minutes),

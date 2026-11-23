@@ -48,7 +48,10 @@ import {
   normalizeAgenda,
   normalizeCheckInZone,
 } from './event-input';
-import { normalizeFrappLinks } from './frapp-link/frapp-link-input';
+import {
+  keepUnseenLinks,
+  normalizeFrappLinks,
+} from './frapp-link/frapp-link-input';
 import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 import {
   EVENT_AGENDA_MAX,
@@ -596,6 +599,7 @@ export class EventService {
     const {
       agenda: rawAgenda,
       attachments: rawAttachments,
+      attachments_all_kinds: allKinds,
       ...rest
     } = { ...input, ...attendance };
     const meetingOwn: Partial<Event> = {};
@@ -614,11 +618,14 @@ export class EventService {
     if (rawAttachments !== undefined) {
       // The stored list says which documents were attached already.
       existing ??= await this.findById(id, chapterId);
-      meetingOwn.attachments = await this.attachmentsFor(
+      const sent = await this.attachmentsFor(
         rawAttachments,
         chapterId,
         existing.attachments,
       );
+      meetingOwn.attachments = allKinds
+        ? sent
+        : keepUnseenLinks(sent ?? [], existing.attachments ?? []);
     }
     const ownsSomething = Object.keys(meetingOwn).length > 0;
     const patch: SeriesUpdateInput = rest;

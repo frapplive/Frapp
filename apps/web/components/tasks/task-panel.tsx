@@ -646,6 +646,9 @@ function AttachedRow({
     [task.attachments],
   );
   const [shown, setShown] = useState<FrappLink[] | null>(null);
+  // Only the latest save puts the row back on the stored list, so an
+  // earlier save finishing late never flashes the list it replaced.
+  const turn = useRef(0);
   const links = shown ?? stored;
   if (!editable && links.length === 0) return null;
   return (
@@ -654,11 +657,13 @@ function AttachedRow({
         <FrappLinksEditor
           links={links}
           canEdit={editable}
-          keepDocumentNames={false}
           onChange={(update) => {
             const next = update(links);
+            const mine = ++turn.current;
             setShown(next);
-            void onSave(next).finally(() => setShown(null));
+            void onSave(next).finally(() => {
+              if (turn.current === mine) setShown(null);
+            });
           }}
         />
       </div>

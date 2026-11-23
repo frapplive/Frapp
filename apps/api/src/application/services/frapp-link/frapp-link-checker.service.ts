@@ -1,9 +1,14 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import {
   frappLinkKey,
+  isModuleEnabled,
   type FrappLink,
   type FrappRecordLinkKind,
 } from '@repo/validation';
+import {
+  CHAPTER_REPOSITORY,
+  type IChapterRepository,
+} from '#domain/repositories/chapter.repository.interface';
 import {
   CHAPTER_DOCUMENT_REPOSITORY,
   type IChapterDocumentRepository,
@@ -30,6 +35,35 @@ const GONE: Record<FrappRecordLinkKind, string> = {
   message: "isn't in this chapter's chat any more",
 };
 
+/**
+ * The module each record kind belongs to (`MODULE_CATALOG` keys). A record
+ * whose module the chapter turned off can't be attached, and resolve reads it
+ * as hidden, so a link never opens a door the module toggle closed. Chat has
+ * no toggle.
+ */
+export const FRAPP_LINK_MODULES: Record<FrappRecordLinkKind, string | null> = {
+  document: 'documents',
+  minutes: 'meetings',
+  event: 'events',
+  message: null,
+};
+
+/** Whether the chapter's modules let a record of `kind` be linked. */
+export function frappLinkModuleOn(
+  enabledModules: Record<string, boolean> | null | undefined,
+  kind: FrappRecordLinkKind,
+): boolean {
+  const module = FRAPP_LINK_MODULES[kind];
+  return module === null || isModuleEnabled(enabledModules, module);
+}
+
+const OFF: Record<FrappRecordLinkKind, string> = {
+  document: 'Chapter Files is off in this chapter, so a document',
+  minutes: 'Meetings is off in this chapter, so minutes',
+  event: 'Events is off in this chapter, so an event',
+  message: 'A message',
+};
+
 const WHAT: Record<FrappRecordLinkKind, string> = {
   document: 'A document',
   minutes: 'Those minutes',
@@ -46,7 +80,9 @@ const WHAT: Record<FrappRecordLinkKind, string> = {
  * A record the list already held (`stored`) passes unchecked: the list is
  * sent whole, and one deleted since it was attached must not block every
  * later save (it reads "Removed" on the row). A message link's channel is
- * taken from the message, never from the request.
+ * taken from the message, never from the request, and a held one keeps the
+ * channel the list already stored. A record from a module the chapter turned
+ * off can't be newly added.
  *
  * Repositories only, so the event and task modules can both hold it without
  * reaching each other's services.
@@ -54,6 +90,8 @@ const WHAT: Record<FrappRecordLinkKind, string> = {
 @Injectable()
 export class FrappLinkChecker {
   constructor(
+    @Inject(CHAPTER_REPOSITORY)
+    private readonly chapterRepo: IChapterRepository,
     @Inject(CHAPTER_DOCUMENT_REPOSITORY)
     private readonly documentRepo: IChapterDocumentRepository,
     @Inject(MEETING_REPOSITORY)
@@ -71,10 +109,20 @@ export class FrappLinkChecker {
     links: readonly FrappLink[],
     stored: readonly FrappLink[] = [],
   ): Promise<FrappLink[]> {
-    const held = new Set(stored.map((link) => frappLinkKey(link)));
+    const held = new Map(stored.map((link) => [frappLinkKey(link), link]));
     const added = links.filter(
       (link) => link.kind !== 'link' && !held.has(frappLinkKey(link)),
     );
+    if (added.length === 0) return links.map((link) => heldAs(link, held));
+    const chapter = await this.chapterRepo.findById(chapterId);
+    for (const link of added) {
+      if (
+        link.kind !== 'link' &&
+        !frappLinkModuleOn(chapter?.enabled_modules ?? null, link.kind)
+      ) {
+        throw new BadRequestException(`${OFF[link.kind]} can't be attached.`);
+      }
+    }
     const idsOf = <K extends FrappLink['kind']>(
       kind: K,
       pick: (link: Extract<FrappLink, { kind: K }>) => string,
@@ -109,7 +157,9 @@ export class FrappLinkChecker {
     };
 
     return links.map((link) => {
-      if (link.kind === 'link' || held.has(frappLinkKey(link))) return link;
+      if (link.kind === 'link' || held.has(frappLinkKey(link))) {
+        return heldAs(link, held);
+      }
       const ok =
         link.kind === 'document'
           ? found.document.has(link.document_id)
@@ -119,12 +169,7 @@ export class FrappLinkChecker {
               ? found.event.has(link.event_id)
               : messageChannels.has(link.message_id);
       if (!ok) {
-        // An event's document carries its name; say it, as the event form
-        // always has.
-        const name =
-          link.kind === 'document' && link.title
-            ? `"${link.title}"`
-            : `${WHAT[link.kind]} you attached`;
+        const name = `${WHAT[link.kind]} you attached`;
         const again =
           link.kind === 'document'
             ? 'Remove it, or attach it again from Chapter Files.'
@@ -166,4 +211,20 @@ export class FrappLinkChecker {
         .map((message) => [message.id, message.channel_id]),
     );
   }
+}
+
+/**
+ * A link the list already held, as it was stored: a message keeps the channel
+ * the server took from the message when it was attached, never one a later
+ * request names.
+ */
+function heldAs(
+  link: FrappLink,
+  held: ReadonlyMap<string, FrappLink>,
+): FrappLink {
+  if (link.kind !== 'message') return link;
+  const stored = held.get(frappLinkKey(link));
+  return stored?.kind === 'message'
+    ? { ...link, channel_id: stored.channel_id }
+    : link;
 }

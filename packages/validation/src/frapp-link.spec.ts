@@ -10,6 +10,8 @@ import {
   parseFrappAppLink,
   readFrappLinks,
   withEventLinkTitles,
+  sameFrappLinks,
+  frappLinkCandidateDetail,
   withFrappLink,
   type FrappLink,
 } from "./frapp-link";
@@ -128,6 +130,10 @@ describe("parseFrappAppLink", () => {
       kind: "minutes",
       meeting_id: "m1",
     });
+    // A malformed escape names nothing rather than throwing mid-render.
+    expect(parseFrappAppLink("https://app.frapp.live/meetings/%E0%A4%A")).toBe(
+      null,
+    );
     expect(
       parseFrappAppLink("https://app.frapp.live/chat?channel=c1&message=x1"),
     ).toEqual({ kind: "message", channel_id: "c1", message_id: "x1" });
@@ -173,6 +179,11 @@ describe("frappLinkRow", () => {
       name: "Document",
       pending: true,
     });
+    // A pending row never shows a stored title: it may be a name this
+    // reader can't open.
+    expect(
+      frappLinkRow({ ...doc, title: "Secret plans" }, undefined, now).name,
+    ).toBe("Document");
     expect(
       frappLinkRow(
         doc,
@@ -262,19 +273,51 @@ describe("frappLinkRow", () => {
 });
 
 describe("withEventLinkTitles", () => {
-  it("gives every entry a title, never copying a record's name it doesn't hold", () => {
+  it("titles every record by its kind, never by a name it held", () => {
     const links: FrappLink[] = [
       { id: "1", kind: "link", url: "https://a.example", title: "A" },
       { id: "2", kind: "document", document_id: "d1", title: "Bylaws" },
-      { id: "3", kind: "document", document_id: "d2" },
       { id: "4", kind: "minutes", meeting_id: "m1", title: "Old name" },
       { id: "5", kind: "message", channel_id: "c1", message_id: "x1" },
     ];
+    expect(withEventLinkTitles(links).map((link) => link.title)).toEqual([
+      "A",
+      "Document",
+      "Minutes",
+      "Message",
+    ]);
+  });
+});
+
+describe("sameFrappLinks", () => {
+  it("ignores key order and an event record's stored title", () => {
+    const a: FrappLink[] = [
+      { id: "1", kind: "document", document_id: "d1" },
+      { id: "2", kind: "link", url: "https://a.example", title: "A" },
+    ];
+    const reordered = [
+      { document_id: "d1", kind: "document", id: "1", title: "Document" },
+      { title: "A", url: "https://a.example", kind: "link", id: "2" },
+    ] as FrappLink[];
+    expect(sameFrappLinks(a, reordered)).toBe(true);
+    expect(sameFrappLinks(a, [a[0]!])).toBe(false);
     expect(
-      withEventLinkTitles(links, new Map([["d2", "Budget"]])).map(
-        (link) => link.title,
-      ),
-    ).toEqual(["A", "Bylaws", "Budget", "Minutes", "Message"]);
-    expect(withEventLinkTitles([links[2]!])[0]!.title).toBe("Document");
+      sameFrappLinks(a, [a[0]!, { ...(a[1] as FrappWebLinkLike), title: "B" }]),
+    ).toBe(false);
+  });
+});
+
+type FrappWebLinkLike = Extract<FrappLink, { kind: "link" }>;
+
+describe("frappLinkCandidateDetail", () => {
+  const now = new Date("2026-11-23T12:00:00Z");
+  it("reads as the row will once attached", () => {
+    expect(frappLinkCandidateDetail("document", null, now)).toBe(
+      "Chapter Files",
+    );
+    expect(
+      frappLinkCandidateDetail("minutes", "2026-11-16T18:00:00Z", now),
+    ).toBe("Minutes · Nov 16");
+    expect(frappLinkCandidateDetail("event", null, now)).toBe("Event");
   });
 });

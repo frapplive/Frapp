@@ -14,7 +14,7 @@ A **Frapp link** is one entry in a list of things a task or an event points at. 
 | `event` | `event_id` | An event ([`events.md`](events.md)) |
 | `message` | `channel_id`, `message_id` | A chat message |
 
-Every entry also has a client-made `id`, unique in its list. A list holds at most 10 (`FRAPP_LINKS_MAX`), and holds each thing once: two entries for the same record, or the same address, are a 400 ("That is attached already.").
+Every entry also has a client-made `id`, unique in its list. A list holds at most 10 (`FRAPP_LINKS_MAX`), and holds each thing once: a second entry for the same record, or the same address, is dropped on save, and the picker says "That is attached already." instead of adding it.
 
 ## Names are read per reader
 
@@ -22,17 +22,18 @@ A record link stores ids, not a name. A name copied into the list would show to 
 
 - **Resolve.** `POST /v1/frapp-links/resolve` (any member, `members:view`) takes up to 40 targets and answers each, for the member asking, with `state`:
   - `ok`, with the record's name now and a fact for its row (a meeting's or event's start; a message's channel and sender);
-  - `hidden`, when the record is there but not theirs to open (a restricted document, minutes they can't read, an event they can't see, a message in a channel they aren't in). Its name is never sent;
+  - `hidden`, when the record is there but not theirs to open (a restricted document, minutes they can't read, an event they can't see, a message in a channel they aren't in), or its module is off for the chapter (Chapter Files, Meetings, Events). Its name is never sent;
   - `removed`, when it was deleted or was never this chapter's.
 - **A row** reads the same on both apps (`frappLinkRow`): the live name and its quiet line ("Chapter Files", "Minutes · Nov 16", "Event · Nov 16", "#general · Moiz · Nov 16"); "You don't have access" or "Removed", which don't open; and the kind's word, dimmed, while the resolve is out.
-- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A document keeps the name it had when it was attached, which those builds show. A minutes, event or message entry is titled with its kind's word ("Minutes", "Event", "Message"), never a record's name, so no copied name reaches a reader who can't open it. A task's record links keep no title. Phone builds from before Frapp links skip the kinds they don't know.
+- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A record entry's title is its kind's word ("Document", "Minutes", "Event", "Message"), never its name, so no copied name reaches a reader who can't open it; the API sets it whatever is sent, and a name an older save stored is replaced on the event's next save. Those builds show a document as "Document". A task's record links keep no title.
+- **Older phone builds** read only web links and documents, and save an event's list whole. So a save without `attachments_all_kinds: true` (which this build's hook sends) keeps the stored minutes, event and message links the build couldn't see, after the list it sent.
 
 ## Writing a list
 
-A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id`, and `PATCH /v1/events/:id` (with `POST /v1/events`). The API normalizes each entry (`normalizeFrappLinks`), and checks that each record **newly added** is one of the chapter's (one read per kind, `FrappLinkChecker`). A record the list already held isn't checked again, so one deleted since never blocks a later save. A refused entry is a 400 naming it.
+A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id`, and `PATCH /v1/events/:id` (with `POST /v1/events`). The API normalizes each entry (`normalizeFrappLinks`), and checks that each record **newly added** is one of the chapter's and from a module the chapter has on (one read per kind, `FrappLinkChecker`). A record the list already held isn't checked again, so one deleted since never blocks a later save, and a held message keeps the channel stored with it. A refused entry is a 400 naming it.
 
 - **A group task** (`tasks.md` § Tasks for everyone): every copy holds the same list. A group edit (`scope: "group"`) changes it on every copy, checked once.
-- **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields.
+- **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields, checked once and written to the open copy as checked.
 - **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261123183858_task_attachments`), as `events.attachments` is.
 
 ## Where a link opens

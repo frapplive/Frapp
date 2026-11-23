@@ -86,7 +86,7 @@ export function useFrappLinkCandidates(
     /** False when Chapter Files is off: no file is offered or read. */
     documents?: boolean;
   },
-): { candidates: FrappLinkCandidate[]; isLoading: boolean } {
+): { candidates: FrappLinkCandidate[]; isLoading: boolean; isError: boolean } {
   const limit = options.limit ?? 6;
   const withDocuments = options.documents !== false;
   const documents = useDocuments({
@@ -145,5 +145,10 @@ export function useFrappLinkCandidates(
       (withDocuments && documents.isLoading) ||
       meetings.isLoading ||
       events.isLoading,
+    /** A read failed, so what's offered may be missing records. */
+    isError:
+      (withDocuments && documents.isError) ||
+      meetings.isError ||
+      events.isError,
   };
 }
