@@ -44,6 +44,7 @@ import {
   pickerMode,
   setTick,
   tickChecked,
+  peopleToAdd,
   tickedIds,
   tierKey,
   toggleChapter,
@@ -179,7 +180,15 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
     });
     const picked = whoLabel(value, directory);
     return (
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // Add people: closed without Add drops the picks, so they are
+          // never sent by a later Add (#5905).
+          if (!next && allow === "people") onChange(null);
+        }}
+      >
         <PopoverTrigger asChild>
           {trigger ??
             (chip ? (
@@ -514,7 +523,10 @@ export function WhoPickerBody({
       />
     );
 
-  const count = included.size;
+  // Add people counts only who gets a copy, not who already has one.
+  const count = peopleOnly
+    ? peopleToAdd(value, directory, marked ?? new Set()).length
+    : included.size;
   const summary = whoSummary(value, directory, narrowedFrom);
   const hint = whoHint(value, directory);
 

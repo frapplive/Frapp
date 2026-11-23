@@ -10261,7 +10261,7 @@ export interface components {
             done: boolean;
         };
         AddToTaskGroupDto: {
-            /** @description The members who get a copy, 1 to 1000, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped. */
+            /** @description The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped. */
             assignee_ids: string[];
         };
         AddToTaskGroupResponseDto: {

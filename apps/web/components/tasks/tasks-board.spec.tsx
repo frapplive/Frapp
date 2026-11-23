@@ -2585,10 +2585,15 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     expect(
       within(panel).getByText("Everyone · 14 of 20 done"),
     ).toBeInTheDocument();
-    // An officer can add people from a copy's For (#5905).
+    // An officer can add people from a copy's For (#5905), and the picker
+    // marks the group's other members, not only this copy's, as having it.
+    await user.click(within(panel).getByRole("button", { name: "Add people" }));
     expect(
-      within(panel).getByRole("button", { name: "Add people" }),
-    ).toBeInTheDocument();
+      await screen.findByRole("checkbox", { name: /Cole Martin\s*has it/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: /Paul Carlson\s*has it/ }),
+    ).toBeDisabled();
   });
 
   it("offers no Add people on a copy without tasks:manage (#5905)", async () => {

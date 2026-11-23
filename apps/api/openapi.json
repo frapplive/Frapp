@@ -32435,9 +32435,9 @@
         "type": "object",
         "properties": {
           "assignee_ids": {
-            "description": "The members who get a copy, 1 to 1000, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.",
+            "description": "The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.",
             "minItems": 1,
-            "maxItems": 1000,
+            "maxItems": 500,
             "type": "array",
             "items": {
               "type": "string",

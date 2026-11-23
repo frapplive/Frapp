@@ -38,7 +38,7 @@ import {
   pickerMode,
   setTick,
   tickChecked,
-  tickedIds,
+  peopleToAdd,
   toggleChapter,
   togglePerson,
   toggleSet,
@@ -132,7 +132,7 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
     );
     const mode = pickerMode(value, heldMode);
     const showFooter = !single && !add && isGroupWho(value);
-    const addCount = add ? tickedIds(value, directory).length : 0;
+    const addCount = add ? peopleToAdd(value, directory, add.marked).length : 0;
 
     const setMode = (next: WhoMode) => {
       setHeldMode(next);

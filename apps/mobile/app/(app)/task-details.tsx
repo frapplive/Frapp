@@ -11,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   TASK_ACTION_LABELS,
   taskHandedInLine,
@@ -338,13 +337,17 @@ function TaskScreen({
   const [peopleNote, setPeopleNote] = useState<string | null>(null);
   const removal = removalAllowed(picked, copies);
   const removeFromGroup = useRemoveFromTaskGroup();
-  // Add people (#5905): the plus on Who has it opens the picker.
-  const addPeopleRef = useRef<BottomSheetModal>(null);
+  // Add people (#5905): the plus on Who has it mounts the picker, which
+  // opens itself, and it unmounts once closed; the plus waits while an add
+  // is out.
+  const [addingPeople, setAddingPeople] = useState(false);
+  const [addPending, setAddPending] = useState(false);
   const holders = useMemo(
     () => copies.flatMap((copy) => (copy.assigneeId ? [copy.assigneeId] : [])),
     [copies],
   );
   const showAdded = (line: string) => {
+    setAddPending(false);
     setPeopleNote(line);
     AccessibilityInfo.announceForAccessibility(line);
   };
@@ -819,10 +822,11 @@ function TaskScreen({
               controls.removePeople
                 ? () => {
                     setPeopleNote(null);
-                    addPeopleRef.current?.present();
+                    setAddingPeople(true);
                   }
                 : undefined
             }
+            addDisabled={addPending || addingPeople}
           />
         ) : null}
 
@@ -950,12 +954,13 @@ function TaskScreen({
         />
       ) : null}
 
-      {showPeople && controls.removePeople ? (
+      {addingPeople && showPeople && controls.removePeople ? (
         <AddPeopleSheet
-          ref={addPeopleRef}
           taskId={row.id}
           holders={holders}
+          onSending={() => setAddPending(true)}
           onResult={showAdded}
+          onClose={() => setAddingPeople(false)}
         />
       ) : null}
 

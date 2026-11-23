@@ -1176,6 +1176,51 @@ describe('SupabaseTaskRepository — taking members out of a group (#5492)', () 
   });
 });
 
+describe('SupabaseTaskRepository — adding members to a group (#5905)', () => {
+  const GROUP = '0c000000-0000-4000-8000-000000000070';
+  const TEMPLATE_B = '0b000000-0000-4000-8000-000000000071';
+  const MADE_B = '0b000000-0000-4000-8000-000000000072';
+
+  it('passes the chapter, group, template and members to the RPC, and returns the copies made', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: { add_task_group_copies: { data: [{ id: MADE_B }] } },
+    });
+    const repo = new SupabaseTaskRepository(harness.client);
+
+    const made = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.addGroupCopies(CHAPTER_B, GROUP, TEMPLATE_B, [USER_SHARED]),
+    );
+
+    expect(made.map((row) => row.id)).toEqual([MADE_B]);
+    expect(harness.rpcCalls[0]).toEqual({
+      fn: 'add_task_group_copies',
+      args: {
+        p_chapter_id: CHAPTER_B,
+        p_group_id: GROUP,
+        p_template_id: TEMPLATE_B,
+        p_assignee_ids: [USER_SHARED],
+      },
+    });
+  });
+
+  it('throws what the RPC refuses', async () => {
+    const harness = createTenantHarness({
+      tables: {},
+      rpc: {
+        add_task_group_copies: {
+          error: { message: 'task group not found', code: 'P0001' },
+        },
+      },
+    });
+    const repo = new SupabaseTaskRepository(harness.client);
+
+    await expect(
+      repo.addGroupCopies(CHAPTER_B, GROUP, TEMPLATE_B, [USER_SHARED]),
+    ).rejects.toThrow('task group not found');
+  });
+});
+
 describe('SupabaseTaskRepository — a group from minutes (#5562)', () => {
   const copies = [
     { id: 'c1', group_id: 'g1', meeting_id: null },

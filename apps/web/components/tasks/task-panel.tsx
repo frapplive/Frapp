@@ -87,7 +87,7 @@ import {
   type CompletionProof,
 } from "./task-photo";
 import { WhoPicker, useWhoDirectory } from "./who-picker";
-import { tickedIds } from "@repo/hooks/task-who-picker";
+import { peopleToAdd } from "@repo/hooks/task-who-picker";
 import { copyAudience, type RowPerson } from "./task-row";
 import { movesDayTo } from "./task-edit-form";
 
@@ -728,11 +728,12 @@ export function AddPeople({
   const marked = new Set(holders);
 
   async function submit() {
-    const assigneeIds = tickedIds(picked, directory).filter(
-      (userId) => !marked.has(userId),
-    );
+    const assigneeIds = peopleToAdd(picked, directory, marked);
     setPicked(null);
-    if (assigneeIds.length === 0) return;
+    if (assigneeIds.length === 0) {
+      toast({ title: TASK_AUDIENCE_COPY.addedLine(0) });
+      return;
+    }
     try {
       const result = await add.mutateAsync({ id: taskId, assigneeIds });
       toast({ title: TASK_AUDIENCE_COPY.addedLine(result.added.length) });

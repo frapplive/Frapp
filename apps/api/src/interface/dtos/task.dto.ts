@@ -732,10 +732,10 @@ export class RemoveFromTaskGroupResponseDto {
 }
 
 /**
- * The most members one `POST /v1/tasks/:id/group/add` adds (#5905), the
- * same bound as taking them out.
+ * The most members one `POST /v1/tasks/:id/group/add` adds (#5905): the
+ * bound on picking people for a new task.
  */
-export const TASK_GROUP_ADD_MAX = TASK_GROUP_REMOVE_MAX;
+export const TASK_GROUP_ADD_MAX = TASK_PEOPLE_MAX;
 
 /** `POST /v1/tasks/:id/group/add` (#5905). */
 export class AddToTaskGroupDto {

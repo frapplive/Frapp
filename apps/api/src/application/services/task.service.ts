@@ -1179,13 +1179,10 @@ export class TaskService {
     }
     // A list of one is that person's task, held to the list's rule: active
     // members only, as two or more are (`TaskAudienceReader.resolve`).
-    if (
-      input.assignee_ids != null &&
-      !(await this.audiences.reader(input.chapter_id)).activeIds.has(assigneeId)
-    ) {
-      throw new BadRequestException(
-        'Everyone you pick must be an active member of the chapter',
-      );
+    if (input.assignee_ids != null) {
+      (await this.audiences.reader(input.chapter_id)).assertActive([
+        assigneeId,
+      ]);
     }
     const dueDate = checkedDueDate(input.due_date ?? null);
     const dueAt = checkedDueAt(dueDate, input.due_at);
@@ -1363,15 +1360,7 @@ export class TaskService {
       followed_by: followedBy,
     });
 
-    // `notifyAssigned` reports its own failures, so one member's push can't
-    // stop the rest.
-    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
-      await Promise.all(
-        copies
-          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
-          .map((copy) => this.notifyAssigned(copy, input.created_by)),
-      );
-    }
+    await this.notifyEachAssigned(copies, input.created_by);
 
     const own =
       copies.find((copy) => copy.assignee_id === input.created_by) ?? copies[0];
@@ -1564,10 +1553,9 @@ export class TaskService {
    * follower. A cabinet member who sent a task to four brothers hands it
    * to a fifth (Winston, 2026-11-23).
    *
-   * The copy it's made from is the one asked on, unless that one is
-   * confirmed: a confirmed copy kept what it was paid on while later
-   * edits to everyone's copy passed it by ({@link updateGroup}), so an
-   * open copy is the group as it stands. Everyone listed must be an active
+   * The copy it's made from is {@link groupTemplate}'s: the one asked on
+   * unless it is confirmed, since a confirmed copy kept what it was paid on
+   * while later edits to everyone's copy passed it by ({@link updateGroup}). Everyone listed must be an active
    * member, as when the task was made. A member who already has a copy is
    * skipped, so a retry finishes the job; the repository holds the group
    * locked while it writes, so two adds can't give one member two copies.
@@ -1582,35 +1570,20 @@ export class TaskService {
   ): Promise<{ added: string[]; group: TaskGroupSummary }> {
     const { task, groupId } = await this.groupCopyOrThrow(id, chapterId);
     const asked = [...new Set(assigneeIds)];
-    const { activeIds } = await this.audiences.reader(chapterId);
-    if (asked.some((userId) => !activeIds.has(userId))) {
-      throw new BadRequestException(
-        'Everyone you pick must be an active member of the chapter',
-      );
-    }
+    (await this.audiences.reader(chapterId)).assertActive(asked);
     const copies = await this.taskRepo.findGroupCopies(chapterId, [groupId]);
     const has = new Set(copies.map((copy) => copy.assignee_id));
     const fresh = asked.filter((userId) => !has.has(userId));
     let made: Task[] = [];
     if (fresh.length > 0) {
-      const template = task.points_awarded
-        ? (copies.find((copy) => !copy.points_awarded) ?? task)
-        : task;
+      const template = groupTemplate(task, copies);
       made = await this.taskRepo.addGroupCopies(
         chapterId,
         groupId,
         template.id,
         fresh,
       );
-      // `notifyAssigned` reports its own failures, so one member's push
-      // can't stop the rest.
-      for (let i = 0; i < made.length; i += GROUP_NOTIFY_CONCURRENCY) {
-        await Promise.all(
-          made
-            .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
-            .map((copy) => this.notifyAssigned(copy, actorId)),
-        );
-      }
+      await this.notifyEachAssigned(made, actorId);
     }
     const summary = (await this.groupSummaries(chapterId, [task])).get(groupId);
     if (!summary) throw new NotFoundException('Task not found');
@@ -1646,6 +1619,24 @@ export class TaskService {
       first_due_date: firstDueDate,
       ...start,
     };
+  }
+
+  /**
+   * {@link notifyAssigned} for each of a group's new copies, a few at a time.
+   * `notifyAssigned` reports its own failures, so one member's push can't
+   * stop the rest.
+   */
+  private async notifyEachAssigned(
+    copies: Task[],
+    assignerId: string,
+  ): Promise<void> {
+    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
+      await Promise.all(
+        copies
+          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
+          .map((copy) => this.notifyAssigned(copy, assignerId)),
+      );
+    }
   }
 
   /**
@@ -2682,4 +2673,21 @@ export class TaskService {
       photos.map((photo) => photo.storage_path),
     );
   }
+}
+
+/**
+ * The copy a group's new copies are made from (#5905): the group as it
+ * stands. The copy asked on while it is open; else any open copy, since
+ * {@link TaskService.updateGroup} edits every one of those; else, with
+ * every copy confirmed, the one confirmed last, which saw the most edits.
+ */
+export function groupTemplate(asked: Task, copies: readonly Task[]): Task {
+  if (!asked.points_awarded) return asked;
+  const open = copies.find((copy) => !copy.points_awarded);
+  if (open) return open;
+  return copies.reduce(
+    (latest, copy) =>
+      (copy.confirmed_at ?? '') > (latest.confirmed_at ?? '') ? copy : latest,
+    asked,
+  );
 }

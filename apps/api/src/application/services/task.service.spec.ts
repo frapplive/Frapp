@@ -1847,6 +1847,13 @@ describe('TaskService', () => {
         ([id]) => id,
       );
       expect(pushed).toEqual(expect.arrayContaining(['user-2', 'user-3']));
+      // The group is counted after the copies are written, so the answer
+      // includes them.
+      expect(
+        mockTaskRepo.findGroupCopyStates.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        mockTaskRepo.addGroupCopies.mock.invocationCallOrder[0],
+      );
       expect(result).toEqual({
         added: ['user-2', 'user-3'],
         group: {
@@ -1887,6 +1894,27 @@ describe('TaskService', () => {
       mockTaskRepo.findGroupCopies.mockResolvedValue([
         copyOf('user-1', { points_awarded: true }),
         copyOf('user-2'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it('makes them from the copy confirmed last when every copy is confirmed', async () => {
+      const paid = (id: string, at: string) =>
+        copyOf(id, { points_awarded: true, confirmed_at: at });
+      mockTaskRepo.findById.mockResolvedValue(
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+        paid('user-2', '2026-11-22T00:00:00.000Z'),
       ]);
 
       await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);

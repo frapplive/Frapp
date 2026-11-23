@@ -402,4 +402,40 @@ describe("WhoPicker", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("textbox", { name: "Search people" })).toBeNull();
   });
+
+  it("drops Add people's picks when it closes without Add (#5905)", async () => {
+    const onChange = vi.fn();
+    function PeopleHarness() {
+      const [value, setValue] = useState<TaskWho | null>(null);
+      return (
+        <WhoPicker
+          allow="people"
+          label="Add people"
+          value={value}
+          onChange={(next) => {
+            setValue(next);
+            onChange(next);
+          }}
+          marked={new Set(["u-paul"])}
+          markedNote="has it"
+          doneLabel={(count) => (count === 0 ? "Add" : `Add ${count}`)}
+        />
+      );
+    }
+    render(<PeopleHarness />);
+    const open = () =>
+      userEvent.click(screen.getByRole("button", { name: /^add people/i }));
+    await open();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Sam Ortiz/ }));
+    expect(screen.getByRole("button", { name: "Add 1" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
+
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    await open();
+    expect(screen.getByRole("checkbox", { name: /Sam Ortiz/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
 });
