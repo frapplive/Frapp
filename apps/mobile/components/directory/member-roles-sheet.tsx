@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
 import { statusOf } from "@repo/api-sdk";
-import { errorCopy } from "@repo/hooks/error-copy";
+import { errorCopy, serverCopyOf } from "@repo/hooks/error-copy";
 import {
   ASSIGN_COPY,
   memberAssignmentSections,
@@ -285,7 +285,11 @@ export const MemberRolesSheet = forwardRef<
       // Said even when the officer has moved on, so no change is lost quietly.
       Alert.alert(
         ASSIGN_COPY.rolesFailed,
-        rolesSaveFailedBody(status, isShown(memberId) ? null : line.name),
+        rolesSaveFailedBody(
+          status,
+          isShown(memberId) ? null : line.name,
+          serverCopyOf(caught),
+        ),
       );
     } finally {
       line.inFlight = false;

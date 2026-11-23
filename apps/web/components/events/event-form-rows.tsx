@@ -69,7 +69,6 @@ export function PropertyRow({
   labelFor,
   align = "center",
   children,
-  trailing,
 }: {
   glyph: EventFormGlyphName;
   label: string;
@@ -78,23 +77,18 @@ export function PropertyRow({
   /** `start` for a row whose value can grow to several lines. */
   align?: "center" | "start";
   children: React.ReactNode;
-  /** A quiet control at the row's end (Type's Edit types). */
-  trailing?: React.ReactNode;
 }) {
   const Label = labelFor ? "label" : "span";
   return (
     <div
       className={cn(
-        "grid grid-cols-[1rem_minmax(4.5rem,6.5rem)_minmax(0,1fr)_auto] gap-x-2.5 py-1.5 pl-1",
+        "grid grid-cols-[1rem_minmax(4.5rem,6.5rem)_minmax(0,1fr)] gap-x-2.5 py-1.5 pl-1",
         align === "center" ? "items-center" : "items-start",
       )}
     >
       <EventFormGlyph
         name={glyph}
-        className={cn(
-          "text-muted-foreground",
-          align === "start" && "mt-2.5",
-        )}
+        className={cn("text-muted-foreground", align === "start" && "mt-2.5")}
       />
       <Label
         {...(labelFor ? { htmlFor: labelFor } : {})}
@@ -106,7 +100,6 @@ export function PropertyRow({
         {label}
       </Label>
       <div className="min-w-0">{children}</div>
-      {trailing ? <div className="flex items-center">{trailing}</div> : <span />}
     </div>
   );
 }
@@ -162,7 +155,7 @@ export const RowInput = React.forwardRef<
       ref={ref}
       className={cn(
         ROW_VALUE,
-        "truncate caret-primary placeholder:text-muted-foreground focus:bg-card",
+        "truncate caret-primary placeholder:text-muted focus:bg-card",
         "aria-[invalid=true]:text-destructive-text",
         className,
       )}
@@ -194,7 +187,7 @@ export const RowTextarea = React.forwardRef<
       onChange={onChange}
       className={cn(
         ROW_VALUE,
-        "h-auto resize-none py-2 leading-5 caret-primary placeholder:text-muted-foreground focus:bg-card",
+        "h-auto resize-none py-2 leading-5 caret-primary placeholder:text-muted focus:bg-card",
         className,
       )}
       {...props}

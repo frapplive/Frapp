@@ -170,7 +170,7 @@ const TIME_OPTIONS = [
 
 const ATTENDANCE_OPTIONS = [
   { value: "all", label: "All" },
-  { value: "mandatory", label: "Mandatory" },
+  { value: "mandatory", label: "Required" },
   { value: "optional", label: "Optional" },
 ] as const satisfies readonly { value: AttendanceFilter; label: string }[];
 

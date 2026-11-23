@@ -128,7 +128,7 @@ describe('TaskSuggestionKind (#4309)', () => {
     );
   });
 
-  it('asks for an owner and a day before it can be accepted', () => {
+  it('asks for an owner before it can be accepted, and takes no due date (#5761)', () => {
     expect(() =>
       kind.assertAcceptable(kind.normalizeProposal({ title: 'A' })!),
     ).toThrow('Pick who this task is for.');
@@ -136,7 +136,19 @@ describe('TaskSuggestionKind (#4309)', () => {
       kind.assertAcceptable(
         kind.normalizeProposal({ title: 'A', assignee_id: MEMBER })!,
       ),
-    ).toThrow('Pick a due date.');
+    ).not.toThrow();
+  });
+
+  it('asks a task up for grabs for a due date (#5761)', () => {
+    expect(() =>
+      kind.assertAcceptable(
+        kind.normalizeProposal({
+          title: 'A',
+          audience: 'someone',
+          audience_role_id: '66666666-6666-4666-8666-666666666666',
+        })!,
+      ),
+    ).toThrow('A task up for grabs needs a due date.');
   });
 
   describe('several people, a role or group, and someone (2026-11-18)', () => {

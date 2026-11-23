@@ -141,6 +141,20 @@ export interface ProposedCard {
   title: string;
   /** The member the card names as owner, by name, when it names one. */
   owner?: string | null;
+  /** On a proposed event (#5853): who it invites and what it is. */
+  event?: {
+    everyone: 'required' | 'optional' | 'not_invited';
+    /** Roles and tiers by name, as the card sets them apart. */
+    required: string[];
+    optional: string[];
+    notInvited: string[];
+    /** The same, tiers spelled out as their roles. */
+    requiredRoles: string[];
+    optionalRoles: string[];
+    type: string | null;
+    points: number | null;
+    line: string | null;
+  };
 }
 
 /** Who is asking, as the roster shows them. Never contact details. */

@@ -7,6 +7,8 @@ import {
   checkInZoneLine,
   describeAttendance,
   EVENT_FORM_ROW_LABELS,
+  EVENT_PAGE_COPY,
+  eventPagePhase,
   deleteOffersSeriesChoice,
   readEventAgenda,
   readEventAttachments,
@@ -16,13 +18,17 @@ import type React from "react";
 import { useMemo } from "react";
 import type { EventFormGlyphName } from "@repo/theme/event-form-glyphs";
 import { EventFormGlyph } from "@/components/events/event-form-rows";
-import { AlertTriangle, Loader2, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ActionMenuButton } from "@/components/shared/row-menu";
+import { EventPeople } from "@/components/events/event-people";
 import { SectionSkeleton } from "@/components/shared/page-skeletons";
 import { SkeletonText } from "@/components/shared/async-states";
 import {
   useActiveChapterId,
   useDeleteEvent,
   useEvent,
+  useEventInvitees,
   useMyPermissions,
   useRequiredOfViewer,
   useRoleTiers,
@@ -220,14 +226,28 @@ export function EventDetailSheet({
       ? resolvedEvent.name
       : "Untitled event";
   // Who's coming, by role (`spec/behavior/events.md` § Attendance by role).
-  const attendance = attendanceFromEvent(
-    attendanceFieldsOf(resolvedEvent ?? {}),
+  // Memoized: `attendanceFieldsOf` returns fresh role arrays, and the
+  // invitee and roster memos below key on them.
+  const audience = useMemo(
+    () => attendanceFieldsOf(resolvedEvent ?? {}),
+    [resolvedEvent],
   );
+  const attendance = attendanceFromEvent(audience);
+  // The page follows the event's clock (Paul 2026-11-22): before check-in
+  // opens it is who's coming, while it's open the roster fills, and after it
+  // closes the record comes first (`eventPagePhase`).
+  const phase = eventPagePhase(
+    resolvedEvent?.start_time,
+    resolvedEvent?.end_time,
+    resolvedEvent?.check_in_opens_minutes,
+    now,
+  );
+  const invitees = useEventInvitees(audience);
   // Excuses (`spec/behavior/events.md` § Excuses): offered to a member the
   // event requires, by their roles; received by its creator, and decided by
   // them or any `events:update` holder.
   const requiredOf = useRequiredOfViewer();
-  const requiredOfViewer = requiredOf(attendanceFieldsOf(resolvedEvent ?? {}));
+  const requiredOfViewer = requiredOf(audience);
   const viewerId = useViewerUserId();
   const createdByViewer =
     viewerId !== null && resolvedEvent?.created_by === viewerId;
@@ -373,6 +393,58 @@ export function EventDetailSheet({
   const deleteControl = gate.controlProps(
     !canMutate || deleteEventMutation.isPending,
   );
+  const canTakeAttendance = can("events:update", permissions);
+  // The roster is the side list once check-in opens, for whoever takes
+  // attendance; before then, and for everyone else, it's who's coming.
+  const showRoster = phase !== "upcoming" && !!eventId && !usingPreviewData;
+
+  // The check-in row, said once: first among the details while check-in is
+  // open, since it's the one thing a member does then, and in its form order
+  // otherwise. The zone only matters while a check-in can be made.
+  const checkInRow = (
+    <DetailRow
+      glyph="checkIn"
+      label={EVENT_FORM_ROW_LABELS.checkIn}
+      align="start"
+    >
+      {eventId && !usingPreviewData ? (
+        <MyCheckIn
+          eventId={eventId}
+          start={resolvedEvent?.start_time}
+          end={resolvedEvent?.end_time}
+          opensMinutes={resolvedEvent?.check_in_opens_minutes}
+          pointValue={resolvedEvent?.point_value}
+          eventUnavailable={eventUnavailable}
+          zone={zoneState}
+          eventPending={checkInReadPending}
+        />
+      ) : null}
+      {checkInZoneIsMalformed && phase !== "past" ? (
+        // A broken zone is worth saying early: an officer can fix it before
+        // the night instead of at the door.
+        <div className="mt-1 flex items-start gap-2 rounded-md border border-warning/45 bg-warning-tint p-3 text-caption text-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            This event&apos;s zone is incomplete, so every check-in is rejected.
+            Edit the event to finish or clear it.
+          </div>
+        </div>
+      ) : phase !== "live" ? null : hasCheckInZone ? (
+        <p className="text-caption text-muted-foreground">
+          {checkInZoneLine(checkInZoneName)}
+        </p>
+      ) : zoneState === "code" ? (
+        <p className="text-caption text-muted-foreground">
+          No zone. An officer&apos;s screen is showing the code, so members scan
+          it to check in.
+        </p>
+      ) : (
+        <p className="text-caption text-muted-foreground">
+          No zone, so members can check in from anywhere.
+        </p>
+      )}
+    </DetailRow>
+  );
 
   return (
     <Panel
@@ -388,11 +460,10 @@ export function EventDetailSheet({
       */}
       <PanelContent aria-describedby={undefined}>
         {/*
-          The panel's actions are icons in its title row, beside the close
-          (components.md § Chrome weight). They were full-width worded
-          buttons opening the body, which made the first thing in an event's
-          details a toolbar. The words live on as each control's accessible
-          name and tooltip (`IconButton`, components.md § Icon-only actions).
+          The panel's actions sit in its title row, beside the close
+          (components.md § Chrome weight): Edit as an icon, and Delete in the
+          ⋯, never on its own in the header (rulebook § Page layout:
+          destructive actions sit behind ⋯).
         */}
         <PanelHeader
           actions={
@@ -410,26 +481,34 @@ export function EventDetailSheet({
                 </IconButton>
               ) : null}
               {canDeleteEvent ? (
-                <IconButton
-                  label="Delete event"
-                  className="hover:text-destructive-text"
-                  {...deleteControl}
-                  onClick={handleDelete}
-                >
-                  {deleteEventMutation.isPending ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Trash2 aria-hidden="true" />
-                  )}
-                </IconButton>
+                <ActionMenuButton
+                  label={`More for ${eventName}`}
+                  busy={deleteEventMutation.isPending}
+                  entries={[
+                    {
+                      type: "item",
+                      key: "delete",
+                      label: "Delete event",
+                      icon: Trash2,
+                      destructive: true,
+                      disabled: deleteControl.disabled,
+                      // The gate's reason (offline, a lapsed chapter) rides
+                      // the item, as it rode the icon button before.
+                      title: deleteControl.title,
+                      describedBy: deleteControl["aria-describedby"],
+                      onSelect: () => void handleDelete(),
+                    },
+                  ]}
+                />
               ) : null}
             </>
           }
         >
           {/*
             The event's kind mark (#5560): the sky bar its agenda row and
-            hour-grid block wear, and "Required" in sky when it requires this
-            viewer, so dot, row, grid and sheet read as one thing.
+            hour-grid block wear, so dot, row, grid and sheet read as one
+            thing. Whether it requires the viewer is a chip in the state line
+            under it, the one the phone, the list and the chat card draw.
           */}
           <span
             aria-hidden="true"
@@ -439,21 +518,26 @@ export function EventDetailSheet({
             style={{ backgroundColor: EVENT_HUE }}
           />
           <span>{eventName}</span>
-          {requiredOfViewer ? (
-            <span
-              className="ml-2 text-caption font-semibold"
-              style={{ color: EVENT_HUE }}
-            >
-              Required
-            </span>
-          ) : null}
         </PanelHeader>
-        {/* `gap-0`: the blocks below carry their own top margins. */}
-        <PanelBody className="gap-0">
-          {/* Where it stands, first (#5777): on now, or ended today. */}
+        {/*
+          `gap-0`: the blocks below carry their own top margins. Docked on a
+          wide page the body takes the side list's width too (the panel's
+          own 576px plus the rail), centred as the panel's inset does.
+        */}
+        <PanelBody
+          className={cn(
+            "gap-0",
+            docked && "px-[max(1.25rem,calc((100%_-_960px)/2_+_1.25rem))]",
+          )}
+        >
+          {/* Where it stands, first (#5777): on now, or ended today, and
+              whether it requires the viewer. */}
           {resolvedEvent ? (
-            <div className="mt-4 flex">
+            <div className="mt-4 flex flex-wrap items-center gap-2 empty:hidden">
               <EventNowPill event={resolvedEvent} now={now} />
+              {requiredOfViewer ? (
+                <Badge variant="outline">{EVENT_PAGE_COPY.required}</Badge>
+              ) : null}
             </div>
           ) : null}
           {usingPreviewData ? (
@@ -478,241 +562,236 @@ export function EventDetailSheet({
           ) : null}
 
           {/*
-            Details first, then the agenda, then attendance (Paul
-            2026-11-19: "details should come first, followed by the agenda
-            and the attendance"). The details are the event form's own rows
-            read back (`EVENT_FORM_ROWS`, the same marks and words), so the
-            page reads as the form that made it, the way Notion Calendar's
-            and Linear's detail views do. The sections after them each get a
-            heading and a rule, one look for all of them.
+            Two columns when the pane is wide enough (Paul's pick
+            2026-11-22): the record on the left (details, then the agenda,
+            then minutes and notes, Paul 2026-11-19), the people on the right
+            (who's coming, excuses, then the roster once check-in opens), as
+            Linear's and GitHub's record pages keep content and people apart.
+            Narrower, the side list stacks under the record. Laid out by the
+            pane's own width (`@container`), since beside chat the same sheet
+            is half as wide as with chat closed.
           */}
-          <div className="mt-4 flex flex-col [&>*+*]:mt-5 [&>*+*]:border-t [&>*+*]:border-border [&>*+*]:pt-5">
-            <section aria-label="Details" className="grid gap-2">
-              <dl className="grid gap-0.5">
-                <DetailRow glyph="when" label={EVENT_FORM_ROW_LABELS.when}>
-                  {schedule ?? "Not set"}
-                </DetailRow>
-                {/* A meeting whose rule can't be read (its series head
-                    isn't loaded) still says it's in one, and still links on,
-                    as the phone's does. */}
-                {cadence || (series?.length ?? 0) > 1 ? (
-                  <DetailRow
-                    glyph="repeat"
-                    label={EVENT_FORM_ROW_LABELS.repeat}
-                  >
-                    <span>{cadence ?? "Part of a series"}</span>
-                    {/*
-                      The series as one link to its next meeting, not a list
-                      of every date (Paul 2026-11-19: "don't need to see all
-                      the upcoming series events"): the calendar holds the
-                      rest, and this is the one an officer reaches for next.
-                    */}
-                    {nextOccurrence && onSelectOccurrence ? (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="text-muted-foreground"
-                        >
-                          {" · "}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onSelectOccurrence(nextOccurrence)}
-                          className={cn(
-                            "rounded-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline",
-                            FOCUS_RING_OFFSET,
-                          )}
-                        >
-                          Next {formatDayTime(nextOccurrence.start_time) ?? ""}
-                        </button>
-                      </>
+          <div className="@container mt-4">
+            <div className="grid gap-5 @[52rem]:grid-cols-[minmax(0,1fr)_18rem] @[52rem]:gap-8">
+              <div className="flex min-w-0 flex-col [&>*+*]:mt-5 [&>*+*]:border-t [&>*+*]:border-border [&>*+*]:pt-5">
+                <section aria-label="Details" className="grid gap-2">
+                  <dl className="grid gap-0.5">
+                    {phase === "live" ? checkInRow : null}
+                    <DetailRow glyph="when" label={EVENT_FORM_ROW_LABELS.when}>
+                      {schedule ?? "Not set"}
+                    </DetailRow>
+                    {/* A meeting whose rule can't be read (its series head
+                        isn't loaded) still says it's in one, and still links
+                        on, as the phone's does. */}
+                    {cadence || (series?.length ?? 0) > 1 ? (
+                      <DetailRow
+                        glyph="repeat"
+                        label={EVENT_FORM_ROW_LABELS.repeat}
+                      >
+                        <span>{cadence ?? "Part of a series"}</span>
+                        {/*
+                          The series as one link to its next meeting, not a
+                          list of every date (Paul 2026-11-19: "don't need to
+                          see all the upcoming series events").
+                        */}
+                        {nextOccurrence && onSelectOccurrence ? (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="text-muted-foreground"
+                            >
+                              {" · "}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => onSelectOccurrence(nextOccurrence)}
+                              className={cn(
+                                "rounded-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline",
+                                FOCUS_RING_OFFSET,
+                              )}
+                            >
+                              Next{" "}
+                              {formatDayTime(nextOccurrence.start_time) ?? ""}
+                            </button>
+                          </>
+                        ) : null}
+                      </DetailRow>
                     ) : null}
-                  </DetailRow>
+                    {location ? (
+                      <DetailRow
+                        glyph="location"
+                        label={EVENT_FORM_ROW_LABELS.location}
+                      >
+                        {location}
+                      </DetailRow>
+                    ) : null}
+                    <DetailRow
+                      glyph="attendance"
+                      label={EVENT_FORM_ROW_LABELS.attendance}
+                      align="start"
+                    >
+                      <span>
+                        {describeAttendance(attendance, attendanceName)}
+                      </span>
+                      {/*
+                        The headcount, then the viewer's own part: "You're
+                        required · Can't make it?" sits here, under who's
+                        coming, where it says why it's offered (it floated
+                        centred under the rows before, attached to nothing).
+                      */}
+                      <div className="flex flex-wrap items-center gap-x-1.5 text-caption text-muted-foreground">
+                        {invitees !== null ? (
+                          <span>{EVENT_PAGE_COPY.people(invitees.length)}</span>
+                        ) : null}
+                        {eventId && !usingPreviewData && !eventUnavailable ? (
+                          // Keyed by event: the sheet switches series
+                          // occurrences in place, and a half-typed reason must
+                          // not carry over.
+                          <MyExcuse
+                            key={`excuse-${eventId}`}
+                            eventId={eventId}
+                            required={requiredOfViewer}
+                            start={resolvedEvent?.start_time}
+                            end={resolvedEvent?.end_time}
+                            opensMinutes={resolvedEvent?.check_in_opens_minutes}
+                            writeAsk={
+                              excuseAsk?.eventId === eventId
+                                ? excuseAsk.count
+                                : 0
+                            }
+                            afterCount={invitees !== null}
+                          />
+                        ) : null}
+                      </div>
+                    </DetailRow>
+                    {points ? (
+                      <DetailRow
+                        glyph="points"
+                        label={EVENT_FORM_ROW_LABELS.points}
+                      >
+                        {points}
+                      </DetailRow>
+                    ) : null}
+                    {phase !== "live" ? checkInRow : null}
+                    {description ? (
+                      <DetailRow
+                        glyph="description"
+                        label={EVENT_FORM_ROW_LABELS.description}
+                        align="start"
+                      >
+                        {/* The source is a multi-line field, so its line
+                            breaks stay. */}
+                        <p className="whitespace-pre-wrap break-words">
+                          {description}
+                        </p>
+                      </DetailRow>
+                    ) : null}
+                  </dl>
+                </section>
+
+                {eventId && !usingPreviewData ? (
+                  // Keyed by meeting: a half-typed item, or a change still
+                  // waiting to save, must not carry over to another
+                  // occurrence the sheet switches to.
+                  <EventMeetingLists
+                    key={`lists-${eventId}`}
+                    eventId={eventId}
+                    lists={{ agenda, attachments }}
+                    // Not while the event is gone or never loaded: every
+                    // write would 404, as Edit and Delete already know.
+                    canEdit={canEditInPlace && !eventUnavailable}
+                    // Suggested draws on minutes, so it waits for them to be on.
+                    upcoming={
+                      meetingsOn === true &&
+                      typeof resolvedEvent?.end_time === "string" &&
+                      Date.parse(resolvedEvent.end_time) > now
+                    }
+                    checkOffOpen={agendaCheckOffOpen(
+                      resolvedEvent?.start_time,
+                      new Date(now),
+                    )}
+                    documentsOn={documentsOn}
+                  />
                 ) : null}
-                {location ? (
-                  <DetailRow
-                    glyph="location"
-                    label={EVENT_FORM_ROW_LABELS.location}
+
+                {eventId && !usingPreviewData ? (
+                  <EventMinutes eventId={eventId} eventName={eventName} />
+                ) : null}
+
+                {notes ? (
+                  <section
+                    aria-label={meetingsOn ? "Notes" : "Meeting minutes"}
                   >
-                    {location}
-                  </DetailRow>
+                    <h3 className="mb-1 text-sm font-semibold">
+                      {meetingsOn ? "Notes" : "Meeting minutes"}
+                    </h3>
+                    {/* Same plain-text convention as chat's TextRenderer:
+                      preserve the line breaks admins typed. */}
+                    <p className="whitespace-pre-wrap break-words text-sm">
+                      {notes}
+                    </p>
+                  </section>
                 ) : null}
-                <DetailRow
-                  glyph="attendance"
-                  label={EVENT_FORM_ROW_LABELS.attendance}
+              </div>
+
+              {/*
+                The side list. The excuses waiting on a decision come first,
+                for the event's creator or anyone who takes attendance. Then
+                who's coming, as people, until check-in opens; from then on,
+                for whoever takes attendance, the roster. The roster is
+                `events:update` on the server, so it mounts only for a viewer
+                who holds it: mounted for a member, its read 403'd and the
+                sheet said "Your role can't do this" (#3855). `<Can>` holds it
+                back while permissions load, so it never fires that read first.
+              */}
+              {eventId && !usingPreviewData ? (
+                <aside
+                  aria-label="People"
+                  className="grid min-w-0 content-start gap-5 border-t border-border pt-5 @[52rem]:border-l @[52rem]:border-t-0 @[52rem]:pl-6 @[52rem]:pt-0"
                 >
-                  {describeAttendance(attendance, attendanceName)}
-                </DetailRow>
-                {points ? (
-                  <DetailRow
-                    glyph="points"
-                    label={EVENT_FORM_ROW_LABELS.points}
-                  >
-                    {points}
-                  </DetailRow>
-                ) : null}
-                {/*
-                  Every viewer's own check-in, in its row: the one thing in
-                  the details a member acts on, so its button sits right
-                  there. Officers check in too, so they get it as well as the
-                  roster below.
-                */}
-                <DetailRow
-                  glyph="checkIn"
-                  label={EVENT_FORM_ROW_LABELS.checkIn}
-                  align="start"
-                >
-                  {eventId && !usingPreviewData ? (
-                    <MyCheckIn
+                  {!eventUnavailable &&
+                  (createdByViewer || canTakeAttendance) ? (
+                    <ExcuseReview
+                      key={`excuses-${eventId}`}
                       eventId={eventId}
-                      start={resolvedEvent?.start_time}
-                      end={resolvedEvent?.end_time}
-                      opensMinutes={resolvedEvent?.check_in_opens_minutes}
-                      pointValue={resolvedEvent?.point_value}
-                      eventUnavailable={eventUnavailable}
-                      zone={zoneState}
-                      eventPending={checkInReadPending}
+                      viewerId={viewerId}
+                      canUpdateEvents={canTakeAttendance}
                     />
                   ) : null}
-                  {/* Where it can be made from, under the window. */}
-                  {hasCheckInZone ? (
-                    <p className="text-caption text-muted-foreground">
-                      {checkInZoneLine(checkInZoneName)}
-                    </p>
-                  ) : checkInZoneIsMalformed ? (
-                    <div className="mt-1 flex items-start gap-2 rounded-md border border-warning/45 bg-warning-tint p-3 text-caption text-warning">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        This event&apos;s zone is incomplete, so every check-in
-                        is rejected. Edit the event to finish or clear it.
-                      </div>
-                    </div>
-                  ) : zoneState === "code" ? (
-                    <p className="text-caption text-muted-foreground">
-                      No zone. An officer&apos;s screen is showing the code, so
-                      members scan it to check in.
-                    </p>
+                  {/*
+                    The roster once check-in opens, for an officer; Who's
+                    coming for everyone else, and for an officer while their
+                    permissions are still being read. Offline with no answer,
+                    the officer is told the roster is there.
+                  */}
+                  {showRoster ? (
+                    <Can
+                      permission="events:update"
+                      fallback={<EventPeople audience={audience} />}
+                      deniedFallback={<EventPeople audience={audience} />}
+                      offlineFallback={(retry) => (
+                        <PermissionsOfflineSurface
+                          description="Reconnect to see who checked in to this event."
+                          onRetry={retry}
+                        />
+                      )}
+                    >
+                      <AttendancePanel
+                        // Keyed by meeting: opening another one from the
+                        // series starts its roster fresh, filter included.
+                        key={eventId}
+                        eventId={eventId}
+                        eventStart={resolvedEvent?.start_time}
+                        audience={audience}
+                        phase={phase}
+                      />
+                    </Can>
                   ) : (
-                    <p className="text-caption text-muted-foreground">
-                      No zone, so members can check in from anywhere.
-                    </p>
+                    <EventPeople audience={audience} />
                   )}
-                </DetailRow>
-                {description ? (
-                  <DetailRow
-                    glyph="description"
-                    label={EVENT_FORM_ROW_LABELS.description}
-                    align="start"
-                  >
-                    {/* The source is a multi-line field, so its line breaks
-                        stay. */}
-                    <p className="whitespace-pre-wrap break-words">
-                      {description}
-                    </p>
-                  </DetailRow>
-                ) : null}
-              </dl>
-              {/* Keyed by event: the sheet switches series occurrences in
-                  place, and a half-typed reason must not carry over. */}
-              {eventId && !usingPreviewData && !eventUnavailable ? (
-                <MyExcuse
-                  key={`excuse-${eventId}`}
-                  eventId={eventId}
-                  required={requiredOfViewer}
-                  start={resolvedEvent?.start_time}
-                  end={resolvedEvent?.end_time}
-                  opensMinutes={resolvedEvent?.check_in_opens_minutes}
-                  writeAsk={
-                    excuseAsk?.eventId === eventId ? excuseAsk.count : 0
-                  }
-                />
+                </aside>
               ) : null}
-            </section>
-
-            {eventId && !usingPreviewData ? (
-              // Keyed by meeting: a half-typed item, or a change still
-              // waiting to save, must not carry over to another occurrence
-              // the sheet switches to (the old one's is sent as it goes).
-              <EventMeetingLists
-                key={`lists-${eventId}`}
-                eventId={eventId}
-                lists={{ agenda, attachments }}
-                // Not while the event is gone or never loaded: every write
-                // would 404, as Edit and Delete already know.
-                canEdit={canEditInPlace && !eventUnavailable}
-                // Suggested draws on minutes, so it waits for them to be on.
-                upcoming={
-                  meetingsOn === true &&
-                  typeof resolvedEvent?.end_time === "string" &&
-                  Date.parse(resolvedEvent.end_time) > now
-                }
-                checkOffOpen={agendaCheckOffOpen(
-                  resolvedEvent?.start_time,
-                  new Date(now),
-                )}
-                documentsOn={documentsOn}
-              />
-            ) : null}
-
-            {/*
-              Attendance: the excuses waiting on a decision, then the roster.
-              The roster is `events:update` on the server, so it mounts only
-              for a viewer who holds it: mounted for a member, its read 403'd
-              and the sheet said "Your role can't do this" where their own
-              check-in belonged (#3855). `<Can>` holds it back while
-              permissions load, so it never mounts and fires that read first.
-            */}
-            {eventId && !usingPreviewData ? (
-              <div className="grid gap-3 empty:hidden">
-                {/* The event's creator receives its excuses; an
-                    events:update holder may decide them too. */}
-                {!eventUnavailable &&
-                (createdByViewer || can("events:update", permissions)) ? (
-                  <ExcuseReview
-                    key={`excuses-${eventId}`}
-                    eventId={eventId}
-                    viewerId={viewerId}
-                    canUpdateEvents={can("events:update", permissions)}
-                  />
-                ) : null}
-                <Can
-                  permission="events:update"
-                  offlineFallback={(retry) => (
-                    <PermissionsOfflineSurface
-                      description="Reconnect to see who checked in to this event."
-                      onRetry={retry}
-                    />
-                  )}
-                >
-                  <AttendancePanel
-                    // Keyed by meeting: opening another one from the series
-                    // starts its roster fresh, filter included.
-                    key={eventId}
-                    eventId={eventId}
-                    eventStart={resolvedEvent?.start_time}
-                    eventEnd={resolvedEvent?.end_time}
-                  />
-                </Can>
-              </div>
-            ) : null}
-
-            {eventId && !usingPreviewData ? (
-              <EventMinutes eventId={eventId} eventName={eventName} />
-            ) : null}
-
-            {notes ? (
-              <section aria-label={meetingsOn ? "Notes" : "Meeting minutes"}>
-                <h3 className="mb-1 text-sm font-semibold">
-                  {meetingsOn ? "Notes" : "Meeting minutes"}
-                </h3>
-                {/* Same plain-text convention as chat's TextRenderer (#369
-                  owns a real markdown renderer if that lands later):
-                  preserve the line breaks admins typed. */}
-                <p className="whitespace-pre-wrap break-words text-sm">
-                  {notes}
-                </p>
-              </section>
-            ) : null}
+            </div>
           </div>
         </PanelBody>
         {confirmDialog}

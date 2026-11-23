@@ -23,26 +23,28 @@ const Select = SelectPrimitive.Root;
 
 const SelectValue = SelectPrimitive.Value;
 
+/*
+ * The §4 text-input recipe: a select is a field, so it matches the field
+ * beside it in height, fill, hairline and focus. No vertical padding: the row
+ * is already centred by `items-center`, and `py-2` only mattered as a floor,
+ * which made the control overflow its own border the moment a call site
+ * pinned a shorter `h-*`. The error outline is keyed off `aria-invalid` as the
+ * input's is, so a missing pick reads like a missing field beside it (#3983).
+ */
+const SELECT_TRIGGER_CLASS = cn(
+  "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted [&>span]:line-clamp-1",
+  FOCUS_RING,
+  "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
+  "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",
+);
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
-    className={cn(
-      // The §4 text-input recipe: a select is a field, so it matches the
-      // field beside it in height, fill, hairline and focus.
-      // No vertical padding: the row is already centred by `items-center`, and
-      // `py-2` only mattered as a floor — which made the control overflow its
-      // own border the moment a call site pinned a shorter `h-*`.
-      "flex h-10 w-full items-center justify-between whitespace-nowrap rounded-md border border-control-edge bg-surface-1 px-3 text-base pointer-coarse:h-11 text-foreground transition-colors data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1",
-      FOCUS_RING,
-      // The input's error outline, keyed off `aria-invalid` as the input's is,
-      // so a missing pick reads like a missing field beside it (#3983).
-      "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
-      "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",
-      className,
-    )}
+    className={cn(SELECT_TRIGGER_CLASS, className)}
     {...props}
   >
     {children}
@@ -52,6 +54,28 @@ const SelectTrigger = React.forwardRef<
   </SelectPrimitive.Trigger>
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
+
+/**
+ * A field that opens a menu other than a `Select` (the Type menu, which
+ * searches and creates), drawn as `SelectTrigger` is so the two read as one
+ * kind of field side by side. `placeholder` draws its value in the muted tone.
+ */
+const SelectFieldButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { placeholder?: boolean }
+>(({ className, children, placeholder = false, ...props }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    data-placeholder={placeholder ? "" : undefined}
+    className={cn(SELECT_TRIGGER_CLASS, className)}
+    {...props}
+  >
+    <span>{children}</span>
+    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+  </button>
+));
+SelectFieldButton.displayName = "SelectFieldButton";
 
 const SelectScrollUpButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
@@ -172,6 +196,7 @@ const SelectSeparator = React.forwardRef<
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
 export {
+  SelectFieldButton,
   Select,
   SelectValue,
   SelectTrigger,

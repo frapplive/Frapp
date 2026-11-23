@@ -11,7 +11,7 @@ import { FOCUS_RING } from "@/components/ui/focus"
 const INPUT_CLASSES = cn(
   "flex h-10 w-full rounded-md border border-control-edge bg-surface-1 px-3 py-1 text-base pointer-coarse:h-11 text-foreground caret-primary transition-colors",
   "file:border-0 file:bg-transparent file:text-sm file:font-semibold file:text-foreground",
-  "placeholder:text-muted-foreground",
+  "placeholder:text-muted",
   FOCUS_RING,
   "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
   "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled"

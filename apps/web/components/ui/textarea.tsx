@@ -19,7 +19,7 @@ const Textarea = React.forwardRef<
     <textarea
       className={cn(
         "flex min-h-24 w-full rounded-md border border-control-edge bg-surface-1 px-3 py-2 text-base pointer-coarse:px-3.5 pointer-coarse:py-3 text-foreground caret-primary transition-colors",
-        "placeholder:text-muted-foreground",
+        "placeholder:text-muted",
         FOCUS_RING,
         "enabled:aria-[invalid=true]:border-destructive enabled:aria-[invalid=true]:focus-visible:border-destructive enabled:aria-[invalid=true]:focus-visible:ring-destructive/25",
         "disabled:cursor-not-allowed disabled:border-border disabled:text-disabled",

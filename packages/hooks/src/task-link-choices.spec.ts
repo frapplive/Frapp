@@ -17,6 +17,19 @@ function task(over: Partial<TaskLinkSource>): TaskLinkSource {
 }
 
 describe("taskLinkChoices (#5772)", () => {
+  it("says No due date for an undated task, after the dated ones (#5761)", () => {
+    const rows = taskLinkChoices(
+      [task({ title: "Someday", due_date: null }), task({ title: "Tomorrow" })],
+      "",
+      nameOf,
+      NOW,
+    );
+    expect(rows.map((row) => [row.title, row.detail])).toEqual([
+      ["Tomorrow", "Moiz Khan · Due tomorrow"],
+      ["Someday", "Moiz Khan · No due date"],
+    ]);
+  });
+
   it("puts open tasks first by due, then finished ones newest first", () => {
     const rows = taskLinkChoices(
       [

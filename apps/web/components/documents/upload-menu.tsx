@@ -58,7 +58,7 @@ export function UploadMenu({
   folderRows: readonly FolderRow[];
   /** `chapter_docs:upload`: Upload and Import a folder. */
   canUpload: boolean;
-  /** `chapter_docs:manage`: Google Drive. */
+  /** `chapter_docs:manage`: Google Drive, and renaming and deleting types. */
   canManage: boolean;
 }) {
   const openImport = useRef<(() => void) | null>(null);
@@ -84,6 +84,7 @@ export function UploadMenu({
           folders={folders}
           typeOptions={typeOptions}
           typeRows={typeRows}
+          canManageTypes={canManage}
           triggerClassName="rounded-r-none"
         />
       ) : null}

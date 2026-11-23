@@ -1052,7 +1052,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
   it("gives an officer Always formal in Display, and locks a formal channel's choices (#3787)", async () => {
     const { resetLockedChannelsForTests } =
       await import("@repo/chat-core/density");
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     setDisplayLock.mockResolvedValue(undefined);
     channelsData.value = [general];
     const tree = render();
@@ -1227,7 +1227,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
   });
 
   it("gives a channel manager Background beside Display, and sets it as the menu closes (#4031)", async () => {
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     setChannelBackground.mockResolvedValue(undefined);
     channelsData.value = [general];
     const tree = render();
@@ -1262,7 +1262,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     const save = vi
       .spyOn(photo, "saveChatBackgroundPick")
       .mockResolvedValue({ status: "refused", reason: "Not allowed here." });
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     setChannelBackground.mockResolvedValue(undefined);
     channelsData.value = [general];
     const tree = render();
@@ -1315,7 +1315,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     longPress(member, "general");
     expect(menuLabels(member)).not.toContain("Background");
 
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     longPress(officer, "general");
     expect(menuLabels(officer)).toContain("Background");
@@ -1329,7 +1329,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     longPress(tree, "general");
     expect(menuLabels(tree)).not.toContain("Delete channel");
 
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     longPress(officer, "general");
     expect(menuLabels(officer).at(-1)).toBe("Delete channel");
@@ -1394,7 +1394,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     expect(member.root.findByType(ChannelFilterButton).props.atEdge).toBe(true);
 
     // An officer: the + is last on both, so it runs in one column.
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     expect(drawn(officer)).toEqual([
       ["chevron", "Sort and filter channels", "New channel"],
@@ -1431,7 +1431,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       ...sidebarPrefs.value,
       pinnedIds: new Set([social.id]),
     };
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const tree = render();
 
     expect(layout(tree).map(([name]) => name)).toEqual(["Pinned", "Channels"]);
@@ -1452,7 +1452,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     expect(triggerStyle(render()).marginRight).toBe(
       -(signetDarkTokens.touch.minimum - 20) / 2,
     );
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     expect(triggerStyle(render()).marginRight).toBeUndefined();
   });
 
@@ -1517,7 +1517,11 @@ describe("Chat home sidebar arrangement (#2877)", () => {
   it("puts a New channel + on section headings for officers only (#3838)", async () => {
     channelsData.value = [general];
     expect(pressablesLabelled(render(), "New channel")).toHaveLength(0);
+    // #5296: `channels:manage` alone can't make one (the route takes
+    // `channels:create`), so it gets no form that fails on save.
     permissionList.value = ["channels:manage"];
+    expect(pressablesLabelled(render(), "New channel")).toHaveLength(0);
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     const plus = pressablesLabelled(officer, "New channel");
     expect(plus.length).toBeGreaterThan(0);
@@ -1547,7 +1551,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     channelsData.value = [
       { ...general, who_can_see: null, who_can_post: ["role:r1"] },
     ];
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     longPress(officer, "general");
     pressItem(officer, "Edit channel");
@@ -1576,7 +1580,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     channelsData.value = [
       { ...general, who_can_see: null, who_can_post: ["role:r1"] },
     ];
-    permissionList.value = ["channels:manage"];
+    permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     longPress(officer, "general");
     pressItem(officer, "Edit channel");

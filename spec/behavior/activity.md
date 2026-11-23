@@ -291,7 +291,8 @@ title", 2026-11-20; it was a card with a 96px ring and the next thing to do, #47
   from before the member joined does not hold them.
 - **Tasks** the member holds. Done: marked done since the week began (`completed_at`), confirmed
   or not, since the member's part is finished. Still open: not done and due before the week ends,
-  overdue ones included, however old. Every task has a due date.
+  overdue ones included, however old. A task with no due date (#5761) is never due before the
+  week ends, so it isn't counted.
 - **Polls** from other members that the caller can read. Done: voted on since the week began,
   by when the vote was last changed, which is the only time a vote keeps (a change rewrites it,
   ADR-07). So a pick changed this week on a poll first answered earlier counts as one done this

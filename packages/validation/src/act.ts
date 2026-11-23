@@ -7,6 +7,7 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
 } from "./field-limits";
+import { TASK_NO_DUE_DATE_LABEL } from "./task-due";
 
 /**
  * Asking Frapp to do something (#718, `spec/behavior/ai.md` § Asking Frapp to
@@ -63,6 +64,8 @@ export const ACT_MISSING = [
   "attendance_access",
   "nobody_attended",
   "too_many_members",
+  "invitees",
+  "event_type",
   "request",
 ] as const;
 export type ActMissing = (typeof ACT_MISSING)[number];
@@ -113,7 +116,6 @@ export const ACT_COPY = {
   field_details: "Details",
   no_task_name: "Give the task a name.",
   need_assignee: "Pick who this is for.",
-  need_due: "Pick when it is due.",
   gone: "No longer waiting. Ask again to redo it.",
   cancelled: "Dismissed. Nothing was changed.",
   failed: "That didn't go through. Try again.",
@@ -147,6 +149,8 @@ export const ACT_COPY = {
     nobody_attended: "Nobody is marked as having attended that event.",
     too_many_members:
       "That is more members than one points change can hold. Split it up.",
+    invitees: "Say which roles or tiers are invited.",
+    event_type: "Say which event type it is.",
     request:
       "I couldn't work out what to do from that. Try saying it another way.",
   } satisfies Record<ActMissing, string>,
@@ -164,11 +168,15 @@ export const ACT_COPY = {
   remove_member: "Remove",
   add_member: "Add a member",
   pick_member: "Pick a member",
-  pick_due: "Pick a due date",
+  /** A task card with no due date (#5761): it may be confirmed as it is. */
+  pick_due: TASK_NO_DUE_DATE_LABEL,
   pick_event: "Which event?",
   no_recent_events: "There are no recent events to pick from.",
   former_member: "A former member",
-  /** Who an event proposed on the card is for: always the whole chapter. */
+  /**
+   * Who an event proposed on the card is for, when the card carries no
+   * invite list of its own (one saved before #5853).
+   */
   everyone_required: "Required for everyone",
   everyone_optional: "Optional, everyone invited",
   /**

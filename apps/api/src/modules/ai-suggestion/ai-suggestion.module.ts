@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiSuggestionChangeLogService } from '../../application/services/ai-suggestion-change-log.service';
 import { AiSuggestionService } from '../../application/services/ai-suggestion.service';
 import { AiSuggestionConsentListener } from '../../application/services/ai-suggestion-consent.listener';
 import { AI_SUGGESTION_KIND_HANDLERS } from '../../application/services/ai-suggestion-kinds';
@@ -70,6 +71,7 @@ import { SupabaseMeetingNextAgendaItemRepository } from '../../infrastructure/su
   controllers: [AiSuggestionController, MeetingActionItemTasksController],
   providers: [
     AiSuggestionService,
+    AiSuggestionChangeLogService,
     AiSuggestionConsentListener,
     AiSuggestionExpiryService,
     AiEnabledGuard,

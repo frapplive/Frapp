@@ -53,6 +53,7 @@ const STEP_KINDS: Readonly<Record<string, AskStepKind>> = {
   event_attendance: "attendance",
   attendance_summary: "attendance",
   roster: "people",
+  chapter_roles: "people",
   find_member: "people",
   my_tasks: "tasks",
   chapter_tasks: "tasks",

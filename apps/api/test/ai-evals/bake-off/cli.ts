@@ -17,6 +17,8 @@
  * what is asked (`one-shot` today), `--only id,id` a few questions, and
  * `--json <file>` writes the whole run for a result page.
  * `judge.agreement` scores a judge against the hand-graded sample.
+ * `ask.invites` asks the event requests whose card must invite the right
+ * roles and tiers (#5853, `real-questions/invite-questions.ts`) of the loop.
  *
  * Prints the Markdown table, and with `--out <file>` writes it there too.
  * `--models scripted` runs the whole path with no network and no cost.
@@ -36,6 +38,7 @@ import {
   scriptedJudge,
 } from '../real-questions/judge';
 import { HAND_GRADED_SAMPLE } from '../real-questions/judge-sample';
+import { INVITE_QUESTIONS } from '../real-questions/invite-questions';
 import {
   formatRealRun,
   runRealQuestions,
@@ -96,6 +99,24 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (values.task === 'ask.invites' && values.models) {
+    // The event cards' invite lists (#5853), always on the loop: only the
+    // loop can read a chapter's roles before it proposes.
+    process.env.AI_ENABLED = 'true';
+    const run = await runRealQuestions({
+      models: list(values.models) ?? [],
+      runs: Number(values.runs ?? '1'),
+      agent: 'loop',
+      questions: INVITE_QUESTIONS,
+      only: list(values.only),
+      date: values.date,
+    });
+    emit(formatRealRun(run));
+    if (values.json)
+      writeFileSync(values.json, `${JSON.stringify(run, null, 2)}\n`);
+    return;
+  }
+
   if (values.task === 'ask.real' && values.models) {
     process.env.AI_ENABLED = 'true';
     const runs = Number(values.runs ?? '1');
@@ -129,7 +150,7 @@ async function main(): Promise<void> {
     process.stderr.write(
       [
         'Usage: npm run ai:bake-off -w apps/api -- --task <task> --models <id,id> [--out <file>] [--date YYYY-MM-DD]',
-        `Tasks: ${BAKE_OFF_TASKS.map((t) => t.name).join(', ')}, ask.real (${REAL_QUESTIONS.length} real questions; also --efforts --runs --agent --judge --only --json), judge.agreement (--judge)`,
+        `Tasks: ${BAKE_OFF_TASKS.map((t) => t.name).join(', ')}, ask.real (${REAL_QUESTIONS.length} real questions; also --efforts --runs --agent --judge --only --json), ask.invites (${INVITE_QUESTIONS.length} event invite lists; also --runs --only --json), judge.agreement (--judge)`,
         `Models: ${BAKE_OFF_CANDIDATES.map((c) => c.id).join(', ')}`,
         '',
       ].join('\n'),

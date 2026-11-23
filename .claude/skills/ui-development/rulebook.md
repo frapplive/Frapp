@@ -112,6 +112,9 @@ These cause most of the iterations, so they come first.
   thing; see § 9.*
 - **Record pages read top-down in the order people use them.** An event is details, then agenda, then
   attendance; a series is one Repeat row and a "Next Friday" link, never a list. (11-19)
+  *Changed 11-22 by Paul: a record page also follows its clock. An event shows who's coming before
+  check-in opens, leads with check-in and the roster while it's open, and opens on who came after; a
+  section nobody can act on yet (a roster a month out) stays off the page.*
 - **Long content is scannable:** one meta line, a short summary (3 bullets or fewer), collapsible topic
   rows, a pinned jump bar, sticky title and primary action. "Nothing stands out" is the failure.
   (11-16 to 11-19, minutes)
@@ -285,6 +288,10 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   with three or more buttons, or a bottom sheet of actions. A chat message's long-press sheet with its
   reaction row is the one exception. Lint catches only a hand-drawn ⋯ icon or a `ui/context-menu`
   import on web, and `ActionSheetIOS` or an inline Alert of three or more buttons on the phone; the rest of this rule is checked in review.
+- **A chapter's own list of types** (event types, document types) is one Type menu on both apps: find,
+  `Create “…”`, and each type's edit view (pencil on its row) inside the menu that applies it. Never a chip
+  row, a separate "Edit types" popover, or an explainer header over the list (Paul, 11-22: "yo what is
+  this?"; [`components.md` § Type menu](../../../spec/ui/design-system/components.md#type-menu-a-chapters-own-list-of-types)).
 - **Settings:** web `SettingsGroup` and `SettingsRow` (`components/shared/settings-row.tsx`), phone
   `ListSection` and `ListRow`. A row is a label, at most one muted line, and one trailing thing: a switch,
   a value that opens the picker, or a chevron. **Settings save on their own** (Paul's pick, 11-20): a

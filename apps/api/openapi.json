@@ -31719,11 +31719,12 @@
           },
           "due_date": {
             "type": "string",
-            "description": "Due date (YYYY-MM-DD)"
+            "nullable": true,
+            "description": "Due date (YYYY-MM-DD). Omit, or send null, for a task with no due date (#5761): it is never overdue, gets no due reminders and can't repeat."
           },
           "due_at": {
             "type": "string",
-            "description": "The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it. Omit for a task due on `due_date` with no time.",
+            "description": "The moment the task is due, when it has a time of day (ISO 8601 with an offset). `due_date` must be the calendar day of this moment as the creator sees it, so it needs a `due_date`. Omit for a task due on `due_date` with no time.",
             "format": "date-time"
           },
           "subtasks": {
@@ -31770,8 +31771,7 @@
           }
         },
         "required": [
-          "title",
-          "due_date"
+          "title"
         ]
       },
       "TaskPhotoDto": {
@@ -31853,7 +31853,9 @@
           },
           "due_date": {
             "type": "string",
-            "format": "date"
+            "format": "date",
+            "nullable": true,
+            "description": "Null for a task with no due date (#5761)."
           },
           "due_at": {
             "type": "string",
@@ -32052,7 +32054,8 @@
           },
           "due_date": {
             "type": "string",
-            "description": "Due date (YYYY-MM-DD)"
+            "nullable": true,
+            "description": "Due date (YYYY-MM-DD), or null to take it off (#5761), which takes the time off too. A copy of a repeating task keeps its day."
           },
           "due_at": {
             "type": "string",
@@ -32728,6 +32731,36 @@
           "name"
         ]
       },
+      "NewEventAttendanceDto": {
+        "type": "object",
+        "properties": {
+          "everyone": {
+            "type": "string",
+            "enum": [
+              "required",
+              "optional",
+              "not_invited"
+            ],
+            "description": "What the event asks of a member set apart by no entry."
+          },
+          "roles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "required",
+                "optional",
+                "not_invited"
+              ]
+            },
+            "description": "Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles."
+          }
+        },
+        "required": [
+          "everyone",
+          "roles"
+        ]
+      },
       "NewEventSuggestionDto": {
         "type": "object",
         "properties": {
@@ -32772,7 +32805,33 @@
             "description": "The chapter event type the event is one of, when one matched."
           },
           "is_mandatory": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must."
+          },
+          "attendance": {
+            "nullable": true,
+            "description": "Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewEventAttendanceDto"
+              }
+            ]
+          },
+          "attendance_line": {
+            "type": "string",
+            "nullable": true,
+            "description": "One line for who is invited, in the chapter's names when the card was made (\"Cabinet required, nobody else invited\")."
+          },
+          "attendance_from": {
+            "nullable": true,
+            "description": "The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewEventPointsFromDto"
+              }
+            ]
           },
           "recurrence_rule": {
             "type": "string",
@@ -32790,6 +32849,9 @@
           "points_from",
           "event_type_id",
           "is_mandatory",
+          "attendance",
+          "attendance_line",
+          "attendance_from",
           "recurrence_rule"
         ]
       },
@@ -35576,7 +35638,9 @@
           "due_date": {
             "type": "string",
             "format": "date",
-            "example": "2026-11-20"
+            "nullable": true,
+            "example": "2026-11-20",
+            "description": "Null for a task with no due date (#5761)."
           },
           "due_at": {
             "type": "string",
@@ -35772,7 +35836,9 @@
           "due_date": {
             "type": "string",
             "format": "date",
-            "example": "2026-11-20"
+            "nullable": true,
+            "example": "2026-11-20",
+            "description": "Null for a task with no due date (#5761)."
           },
           "due_at": {
             "type": "string",

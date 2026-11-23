@@ -600,7 +600,7 @@ export function WhoPickerBody({
           }}
           aria-label={many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople}
           placeholder={many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople}
-          className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
         />
       </div>
       {many && !searching ? (

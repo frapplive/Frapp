@@ -118,10 +118,11 @@ describe("MyExcuse", () => {
         "underline",
         "text-muted-foreground",
         "pointer-coarse:min-h-11",
-        "justify-self-center",
       ]),
     );
     expect(link.closest("section")).toBeNull();
+    // It says why it's offered, in the Who's coming row (Paul 2026-11-22).
+    expect(screen.getByText("You're required")).toBeInTheDocument();
   });
 
   it("opens the line on arrival when the chat card asked (#4660)", () => {

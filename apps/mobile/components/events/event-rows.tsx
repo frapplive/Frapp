@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { formatPoints, formatTimeRange } from "@repo/formatting";
 import { useRequiredOfViewer } from "@repo/hooks";
-import { CHECK_IN_OPEN_LABEL } from "@repo/validation";
+import { CHECK_IN_OPEN_LABEL, EVENT_PAGE_COPY } from "@repo/validation";
 import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import { ForwardGlyph } from "@/components/control-glyphs";
@@ -155,7 +155,7 @@ export function EventRowFlat({
       </View>
       {/* Hairline, as web's row draws it (#3822, #4132): required of this
           viewer, by default or by a role of theirs (`useRequiredOfViewer`). */}
-      {required ? <HairlineChip label="Mandatory" /> : null}
+      {required ? <HairlineChip label={EVENT_PAGE_COPY.required} /> : null}
       <ForwardGlyph color={tokens.color.text.mutedForeground} />
     </PressableRow>
   );

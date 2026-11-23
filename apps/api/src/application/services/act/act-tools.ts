@@ -8,8 +8,16 @@ import {
   REPEAT_DEFAULT_COUNT,
   TASK_TITLE_MAX_LENGTH,
   WEEKDAY_CODES,
+  attendanceFromEvent,
+  attendanceInvitesNobody,
+  attendanceToWire,
+  describeAttendance,
+  EVENT_ATTENDANCE_LABELS,
+  eventSetsRolesApart,
   formatRepeatRule,
   isModuleEnabled,
+  type EventAttendanceDraft,
+  type EventAttendanceStatus,
 } from '@repo/validation';
 import { SystemPermissions, WILDCARD } from '#domain/constants/permissions';
 import type { Event } from '#domain/entities/event.entity';
@@ -26,8 +34,14 @@ import { AttendanceService } from '../attendance.service';
 import { EventService } from '../event.service';
 import { reportCaughtFailure } from '../../../infrastructure/observability/report-caught-failure';
 import { EventTypeService } from '../event-type.service';
+import {
+  ActAudienceResolver,
+  attendanceKeyOf,
+  entriesNamed,
+  type AudienceEntry,
+} from './act-audience';
 import { ActPeopleResolver } from './act-people';
-import type { ActPlan, ActRepeat } from './act-prompt';
+import type { ActInvite, ActPlan, ActRepeat } from './act-prompt';
 import type {
   ActDraft,
   ActEventChoice,
@@ -83,7 +97,122 @@ function eventNamed(typed: string, event: Event): boolean {
 }
 
 /** How far back an earlier event of the same name is looked for. */
-const SAME_NAME_BACK_DAYS = 180;
+const SAME_NAME_BACK_DAYS = 400;
+
+/**
+ * The chapter's event type this event is one of: the type of that exact
+ * name, or the one type whose name the event's words fit ("Chapter" is a
+ * "Chapter meeting"). None when two types fit.
+ */
+function matchingType(
+  name: string,
+  types: readonly EventType[],
+): EventType | null {
+  const lower = name.toLowerCase();
+  const exact = types.find((type) => type.name.toLowerCase() === lower);
+  if (exact) return exact;
+  const typed = words(name);
+  // Only the event's words fitting the type's, never the other way:
+  // a one-word type such as "Chapter" would otherwise claim "Chapter
+  // retreat planning call" and make it required (#5148 review).
+  const fits = types.filter((type) => wordsFit(typed, words(type.name)));
+  return fits.length === 1 ? fits[0] : null;
+}
+
+/** A type the loop named from the chapter's list, as written or near it. */
+function typeNamed(
+  typed: string,
+  types: readonly EventType[],
+): EventType | null {
+  const lower = typed.trim().toLowerCase();
+  const exact = types.filter(
+    (type) => type.name.trim().toLowerCase() === lower,
+  );
+  if (exact.length === 1) return exact[0];
+  const near = types.filter(
+    (type) => words(type.name).join(' ') === words(typed).join(' '),
+  );
+  return near.length === 1 ? near[0] : null;
+}
+
+/** The one entry a name was resolved to, among those resolved. */
+function resolveAudienceName(
+  typed: string,
+  entries: readonly AudienceEntry[],
+): AudienceEntry | null {
+  const found = entriesNamed(typed, entries);
+  return found.length === 1 ? found[0] : null;
+}
+
+/**
+ * The rule as a member without `events:update` may set it: nobody
+ * required (`EventService.create` moves each required role to optional).
+ * A role that comes to match everyone stays, so it still overrides its
+ * tier in `attendanceByRole`, which drops it after.
+ */
+function withoutRequired(draft: EventAttendanceDraft): EventAttendanceDraft {
+  const soften = (status: EventAttendanceStatus): EventAttendanceStatus =>
+    status === 'required' ? 'optional' : status;
+  const roles: Record<string, EventAttendanceStatus> = {};
+  for (const [key, status] of Object.entries(draft.roles)) {
+    roles[key] = soften(status);
+  }
+  return { everyone: soften(draft.everyone), roles };
+}
+
+interface ActDraftInvite {
+  draft: EventAttendanceDraft;
+}
+
+/**
+ * The draft with each `tier:<id>` entry spelled out as the roles in that
+ * tier today, a role named on its own keeping its own status, and a role
+ * the chapter no longer has (one copied from an old event) left out. Null
+ * when a tier is not in `tierRoles`. Events take role ids only, so the
+ * stored draft is roles; the card's line still names the tier.
+ */
+export function attendanceByRole(
+  draft: EventAttendanceDraft,
+  tierRoles: ReadonlyMap<string, readonly string[]>,
+  knownRoles: ReadonlySet<string>,
+): EventAttendanceDraft | null {
+  const roles: Record<string, EventAttendanceStatus> = {};
+  for (const [key, status] of Object.entries(draft.roles)) {
+    if (!key.startsWith('tier:')) continue;
+    const inTier = tierRoles.get(key);
+    if (!inTier) return null;
+    for (const id of inTier) roles[id] = status;
+  }
+  for (const [key, status] of Object.entries(draft.roles)) {
+    if (!key.startsWith('tier:')) roles[key] = status;
+  }
+  for (const [key, status] of Object.entries(roles)) {
+    if (status === draft.everyone || !knownRoles.has(key)) delete roles[key];
+  }
+  return { everyone: draft.everyone, roles };
+}
+
+/**
+ * The card's line for a draft that may name tiers. `describeAttendance`
+ * leaves out a role that matches everyone, so a role named apart from its
+ * tier ("not the President") is added after it.
+ */
+function attendanceLine(
+  draft: EventAttendanceDraft,
+  tierRoles: ReadonlyMap<string, readonly string[]>,
+  names: ReadonlyMap<string, string>,
+): string {
+  const line = describeAttendance(draft, (id) => names.get(id));
+  const inTiers = new Set(
+    Object.keys(draft.roles).flatMap((key) => tierRoles.get(key) ?? []),
+  );
+  const apart = Object.entries(draft.roles)
+    .filter(([key, status]) => status === draft.everyone && inTiers.has(key))
+    .map(([key]) => names.get(key))
+    .filter((name): name is string => Boolean(name));
+  if (apart.length === 0) return line;
+  return `${line}; ${apart.join(' and ')} ${EVENT_ATTENDANCE_LABELS[draft.everyone].toLowerCase()}`;
+}
 
 function holds(context: ActToolContext, permission: string): boolean {
   return (
@@ -432,6 +561,7 @@ export class CreateEventActTool implements ActTool {
   constructor(
     private readonly events: EventService,
     private readonly eventTypes: EventTypeService,
+    private readonly audience: ActAudienceResolver,
   ) {}
 
   async draft(plan: ActPlan, context: ActToolContext): Promise<ActDraft> {
@@ -462,13 +592,35 @@ export class CreateEventActTool implements ActTool {
     // it required; anyone else's is made with none and optional
     // (`EventService.create`), so their card says so and asks nothing.
     const setsRequirements = holds(context, SystemPermissions.EVENTS_UPDATE);
+    const types = await this.typesOf(context);
+    let type: EventType | null;
+    if (plan.event_type) {
+      // Named by the loop from the chapter's own list: a name that is not
+      // one is sent back, never matched to something else.
+      const named = typeNamed(plan.event_type, types ?? []);
+      if (!named && types !== null) {
+        return { status: 'unclear', missing: 'event_type' };
+      }
+      type = named;
+    } else {
+      type = types ? matchingType(name, types) : null;
+    }
+
+    let invite: ActDraftInvite | null = null;
+    if (plan.invite) {
+      const read = await this.inviteOf(plan.invite, type, context);
+      if (!read) return { status: 'unclear', missing: 'invitees' };
+      invite = read;
+    }
     // Points the member did not say are copied from the chapter's own
     // records, and the card says from where (Paul, 2026-11-16: never "the
     // chapter's usual amount"). With nothing to copy they stay empty, and
-    // the card asks for them before it can be confirmed.
-    const type = await this.matchingType(name, context);
+    // the card asks for them before it can be confirmed. Who is invited,
+    // when nobody chose, is copied the same way from the last event of the
+    // same name (#5853: last year's reception invites last year's list).
+    const copiesInvite = !invite && plan.required == null;
     const earlier =
-      setsRequirements && said === null && !type
+      setsRequirements && ((said === null && !type) || copiesInvite)
         ? await this.earlierNamed(name, context)
         : null;
     const points = setsRequirements
@@ -482,10 +634,44 @@ export class CreateEventActTool implements ActTool {
           : earlier
             ? { kind: 'event' as const, name: earlier.name }
             : null;
-    // Attendance not said follows the type, as the event form does.
-    const mandatory = setsRequirements
-      ? (plan.required ?? type?.is_mandatory ?? false)
-      : false;
+
+    let attendance: EventAttendanceDraft;
+    let attendanceFrom: { kind: 'event'; name: string } | null = null;
+    if (invite) {
+      attendance = invite.draft;
+    } else if (copiesInvite && earlier && eventSetsRolesApart(earlier)) {
+      attendance = attendanceFromEvent(earlier);
+      attendanceFrom = { kind: 'event', name: earlier.name };
+    } else {
+      // Attendance not said follows the type, as the event form does.
+      attendance = {
+        everyone:
+          (plan.required ?? type?.is_mandatory ?? false)
+            ? 'required'
+            : 'optional',
+        roles: {},
+      };
+    }
+    if (!setsRequirements) attendance = withoutRequired(attendance);
+    if (attendanceInvitesNobody(attendanceToWire(attendance))) {
+      return { status: 'unclear', missing: 'invitees' };
+    }
+    let line = describeAttendance(attendance, () => undefined);
+    if (Object.keys(attendance.roles).length > 0) {
+      // A failed read fails the card rather than telling the loop that a
+      // name it read from chapter_roles is wrong.
+      const read = await this.entryNames(context);
+      line = attendanceLine(attendance, read.tierRoles, read.names);
+      const byRole = attendanceByRole(
+        attendance,
+        read.tierRoles,
+        new Set(read.roleIds),
+      );
+      if (!byRole || attendanceInvitesNobody(attendanceToWire(byRole))) {
+        return { status: 'unclear', missing: 'invitees' };
+      }
+      attendance = byRole;
+    }
     return {
       status: 'draft',
       payload: {
@@ -497,7 +683,10 @@ export class CreateEventActTool implements ActTool {
         point_value: points,
         points_from: pointsFrom,
         event_type_id: type?.id ?? null,
-        is_mandatory: mandatory,
+        is_mandatory: attendance.everyone === 'required',
+        attendance,
+        attendance_line: line,
+        attendance_from: attendanceFrom,
         recurrence_rule: plan.repeats
           ? proposedRepeatRule(plan.repeats, plan.date, context.timeZone)
           : null,
@@ -507,18 +696,76 @@ export class CreateEventActTool implements ActTool {
   }
 
   /**
-   * The chapter's event type this event is one of: the type of that exact
-   * name, or the one type whose name the event's words fit ("Chapter" is a
-   * "Chapter meeting").
-   * None when two types fit, or the list cannot be read.
+   * The invite list the loop wrote, as the chapter's roles and tiers. Null
+   * when a name is none of them, or could be two: the model is told to read
+   * the list and try again, rather than a card guessing.
    */
-  private async matchingType(
-    name: string,
+  private async inviteOf(
+    invite: ActInvite,
+    type: EventType | null,
     context: ActToolContext,
-  ): Promise<EventType | null> {
-    let types: EventType[];
+  ): Promise<ActDraftInvite | null> {
+    const byStatus = [
+      ['not_invited', invite.not_invited],
+      ['optional', invite.optional],
+      ['required', invite.required],
+    ] as const;
+    const all = byStatus.flatMap(([, names]) => names);
+    const resolved = await this.audience.resolve(all, context.chapterId, [
+      'role',
+      'tier',
+    ]);
+    if (resolved.notes.length > 0) return null;
+    const everyone: EventAttendanceStatus =
+      invite.everyone_else ?? (type?.is_mandatory ? 'required' : 'optional');
+    const roles: Record<string, EventAttendanceStatus> = {};
+    // Lowest first, so a name given twice keeps the stronger status.
+    for (const [status, names] of byStatus) {
+      for (const typed of names) {
+        const one = resolveAudienceName(typed, resolved.entries);
+        const key = one ? attendanceKeyOf(one) : null;
+        // Kept even when it matches everyone: it may set a role apart from
+        // its tier ("the Cabinet, not the President").
+        if (key) roles[key] = status;
+      }
+    }
+    return { draft: { everyone, roles } };
+  }
+
+  /**
+   * Each role and tier by its attendance key, for the card's line, and the
+   * roles in each tier by its key.
+   */
+  private async entryNames(context: ActToolContext): Promise<{
+    names: Map<string, string>;
+    tierRoles: Map<string, string[]>;
+    roleIds: string[];
+  }> {
+    const options = await this.audience.options(context.chapterId, {
+      groups: false,
+    });
+    const names = new Map<string, string>();
+    const tierRoles = new Map<string, string[]>();
+    for (const tier of options.tiers) {
+      names.set(`tier:${tier.id}`, tier.name);
+      tierRoles.set(
+        `tier:${tier.id}`,
+        tier.roles.map((role) => role.id),
+      );
+      for (const role of tier.roles) names.set(role.id, role.name);
+    }
+    for (const role of options.untiered) names.set(role.id, role.name);
+    return {
+      names,
+      tierRoles,
+      roleIds: [...names.keys()].filter((key) => !key.startsWith('tier:')),
+    };
+  }
+
+  /** The chapter's event types, or null when they cannot be read. */
+  private async typesOf(context: ActToolContext): Promise<EventType[] | null> {
     try {
-      types = await this.eventTypes.list(context.chapterId);
+      return await this.eventTypes.list(context.chapterId);
     } catch (error) {
       reportCaughtFailure(this.logger, {
         level: 'warning',
@@ -528,20 +775,12 @@ export class CreateEventActTool implements ActTool {
       });
       return null;
     }
-    const lower = name.toLowerCase();
-    const exact = types.find((type) => type.name.toLowerCase() === lower);
-    if (exact) return exact;
-    const typed = words(name);
-    // Only the event's words fitting the type's, never the other way:
-    // a one-word type such as "Chapter" would otherwise claim "Chapter
-    // retreat planning call" and make it required (#5148 review).
-    const fits = types.filter((type) => wordsFit(typed, words(type.name)));
-    return fits.length === 1 ? fits[0] : null;
   }
 
   /**
    * The latest event this member can see with the same name, in the last
-   * half year, for its points.
+   * 400 days (a yearly event a little late still counts), for its points
+   * and who it invited.
    */
   private async earlierNamed(
     name: string,
