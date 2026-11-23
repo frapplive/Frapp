@@ -76,6 +76,27 @@ function useRushInvalidate() {
     ]);
 }
 
+/**
+ * Add a prospect by name (`POST /v1/rush/candidates`, `rush:add`), the same
+ * write `/<vocab> add` sends from chat, without the chat card. A 409 means
+ * the chapter already has that name.
+ */
+export function useAddRushProspect() {
+  const client = useFrappClient();
+  const invalidate = useRushInvalidate();
+  return useMutation({
+    mutationKey: ["rush", "add-prospect"],
+    mutationFn: async (displayName: string) => {
+      const { data, error } = await client.POST("/v1/rush/candidates", {
+        body: { display_name: displayName },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: invalidate,
+  });
+}
+
 /** Save the whole stage list, in order (`rush:manage`). */
 export function useSaveRushStages() {
   const client = useFrappClient();

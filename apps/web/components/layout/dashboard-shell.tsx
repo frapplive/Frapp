@@ -52,6 +52,7 @@ import { NotificationsPopover } from "@/components/layout/notifications-popover"
 import { AccountMenu } from "@/components/layout/account-menu";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
 import { resolvePageTitle } from "@/components/layout/page-title";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
 import { useChapterTheme } from "@/lib/hooks/use-chapter-theme";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -401,6 +402,8 @@ export function DashboardShell({
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
   const isModuleEnabled = useChapterModuleGate();
+  // A title named in the chapter's own word (Recruitment's Rush / Intake).
+  const chapterVocabulary = useChapterVocabulary();
   // The crumb's parent link follows its nav row's gates, so the top bar never
   // offers a member the Settings door the nav hides from them.
   // `/chat` is titled for the list on screen: the Direct messages row's
@@ -409,10 +412,19 @@ export function DashboardShell({
     () =>
       onChatRoute && chatView === "direct"
         ? { title: DIRECT_MESSAGES_TITLE }
-        : resolvePageTitle(pathname, (item) =>
-            isNavItemVisible(item, permissions, isModuleEnabled),
+        : resolvePageTitle(
+            pathname,
+            (item) => isNavItemVisible(item, permissions, isModuleEnabled),
+            chapterVocabulary,
           ),
-    [onChatRoute, chatView, pathname, permissions, isModuleEnabled],
+    [
+      onChatRoute,
+      chatView,
+      pathname,
+      permissions,
+      isModuleEnabled,
+      chapterVocabulary,
+    ],
   );
 
   const { data: notificationsData } = useNotifications();

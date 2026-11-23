@@ -50,6 +50,7 @@ It normally has no route of its own — s17 is the single exception, and honestl
 | s11 | [Dues](#s11-dues)                                             | `(app)/dues.tsx`                                                                                                                                                    |
 | s12 | [Documents](#s12-documents)                                   | `(app)/documents.tsx`                                                                                                                                               |
 | s13 | [Directory](#s13-directory)                                   | `(app)/directory.tsx`                                                                                                                                               |
+| —   | [Recruitment](#recruitment)                                   | `(app)/rush.tsx`, `(app)/rush-prospect.tsx`                                                                                                                         |
 | s14 | [Notifications](#s14-notifications)                           | `(app)/notifications.tsx`                                                                                                                                           |
 | s15 | [Profile (on the You tab)](#s15-profile-on-the-you-tab)       | `(app)/(tabs)/you.tsx`, `components/you/profile-sections.tsx`                                                                                                       |
 | s16 | [Settings](#s16-settings)                                     | `(app)/preferences.tsx`                                                                                                                                             |
@@ -455,6 +456,17 @@ the meta line is class · company · city · year, what a member looks someone u
 and the placeholder takes `text.muted` as every phone field does (it clears 4.5:1 since the 2026-11-09 ladder), as web's do since 2026-11-22 ([#5666](https://github.com/frapplive/Frapp/issues/5666)); until then web's took `--muted-foreground`.
 Web's Directory shows each member's points and the phone's doesn't.
 Any member who can open the Directory could read them (web takes them from `GET /v1/points/leaderboard`, behind `members:view`), so this is a layout call, not a permission: web's points are a column of its wide officer roster, and a phone row already carries the face, dot, name, status line and meta line, so points stay on the Points leaderboard.
+
+### Recruitment
+
+Routes: `(app)/rush.tsx`, `(app)/rush-prospect.tsx` (`components/rush/`). Added in #5924 by `gampheadband`, 2026-11-23, from Winston's UI design v8 § 3b. Rules: [`../../behavior/rush.md` § Pipeline](../../behavior/rush.md#pipeline).
+
+The chapter's recruitment pipeline, under its own word for recruitment (Rush, Recruitment, Intake). It is a You row after Directory, not a tab, so the chapter keeps its four tabs, and is drawn only while the module is on and the role holds `members:view` and `rush:view`; an opened link without them goes back to You.
+
+- **The list** is titled with the chapter's word, with the count of open prospects under it ("48 prospects"). A search field and a row of chips sit above the list: one chip per visible stage, in the board's order, each with its count, and one **Closed** chip that holds every Closed stage, as Pipedrive's and HubSpot's phone deal lists filter one stage at a time. It opens on the first stage. A row is the name; "Added by {name}", then the rating summary ("★ 3.7 · 6 ratings") when the role may see it; then up to two tags and "+N". Pull to refresh; a skeleton while loading; each empty chip says what goes there, and New says how to add one (`/<word> add` in chat). Adding from this screen comes later; the slash command adds today.
+- **The prospect screen**: the name, with who added them and when under it. **Stage** opens a sheet of the visible stages (`rush:add`; read-only otherwise); a Closed stage asks "Why are they closed?" with the four reasons first, and closing that sheet changes nothing. **Rating**: the viewer's own 1 to 5 stars (`rush:vote`), with the average and count under it for `rush:view_results`. **Vote**: the chat card's anonymous vote, "You voted" once cast, with the count for `rush:view_results`. **Tags** as chips, with Edit tags for `rush:notes`, a sheet of the chapter's tags that saves each tap. **Notes · chapter only**: the notes for `rush:read_notes`, newest first; a box to write one for `rush:notes` (its draft kept per prospect), with "Only roles that can read recruitment notes see them." for a writer who can't read; edit and delete of one's own note, and delete of any for `rush:manage`, by long-press or its ⋯. The section is not drawn at all on a prospect linked to the viewer's own account.
+
+The back capsule over the list names the chapter's word ("‹ Intake").
 
 ### s14 Notifications
 

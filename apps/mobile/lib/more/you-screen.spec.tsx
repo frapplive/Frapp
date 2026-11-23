@@ -48,6 +48,8 @@ const goalReadOptions: ({ enabled?: boolean } | undefined)[] = [];
 let permissionsLoading = false;
 const hiddenFeatureCalls: unknown[][] = [];
 let chapterModules: Record<string, boolean> = {};
+/** More of the chapter's member view: its archetype and words (#5924). */
+let chapterExtra: Record<string, unknown> = {};
 /** False while `useCurrentChapter` hasn't answered (#5281's slow-read case). */
 let chapterLoaded = true;
 /** What `useMyProfileStats` answers (#5281); its reads are its own spec's. */
@@ -157,6 +159,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       ? undefined
       : {
           name: "FIJI Tau Nu",
+          ...chapterExtra,
           enabled_modules: chapterModules,
           theme_palette: {
             "--signet-accent-text": "#7FB2FF",
@@ -933,5 +936,77 @@ describe("You tab standing (#5779)", () => {
     const tree = render();
     expect(tree.root.findAllByType(StandingCards)).toHaveLength(0);
     expect(screenText(tree)).not.toContain("This semester");
+  });
+});
+
+describe("You tab recruitment row (#5924)", () => {
+  const RUSH = ["members:view", "rush:view"];
+
+  afterEach(() => {
+    act(() => {
+      for (const tree of mounted.splice(0)) tree.unmount();
+    });
+    permissions = [];
+    chapterModules = {};
+    chapterExtra = {};
+    permissionsLoading = false;
+  });
+
+  const rowLabels = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(ListRow).map((row) => row.props.label);
+
+  it("draws the row, under the chapter's own word, for members:view and rush:view", () => {
+    permissions = RUSH;
+    chapterExtra = { org_archetype: "nphc" };
+    const tree = render();
+    expect(rowLabels(tree)).toContain("Intake");
+    const row = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Intake",
+    );
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    act(() => {
+      row.props.onPress();
+    });
+    expect(push).toHaveBeenCalledWith("/rush");
+  });
+
+  it("sits with the chapter's places, after the Directory", () => {
+    permissions = RUSH;
+    const labels = rowLabels(render());
+    expect(labels.indexOf("Rush")).toBe(labels.indexOf("Directory") + 1);
+  });
+
+  it("is left out without rush:view, or without members:view", () => {
+    permissions = ["members:view"];
+    expect(rowLabels(render())).not.toContain("Rush");
+    permissions = ["rush:view"];
+    expect(rowLabels(render())).not.toContain("Rush");
+  });
+
+  it("is left out while Recruitment is off", () => {
+    permissions = RUSH;
+    chapterModules = { rush: false };
+    expect(rowLabels(render())).not.toContain("Rush");
+  });
+
+  it("waits for the permissions and the chapter rather than flashing in", () => {
+    permissions = RUSH;
+    permissionsLoading = true;
+    expect(rowLabels(render())).not.toContain("Rush");
+    permissionsLoading = false;
+    chapterLoaded = false;
+    try {
+      expect(rowLabels(render())).not.toContain("Rush");
+    } finally {
+      chapterLoaded = true;
+    }
+  });
+
+  it("holds an officer's wildcard", () => {
+    permissions = ["*"];
+    expect(rowLabels(render())).toContain("Rush");
   });
 });

@@ -2,7 +2,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -40,6 +39,7 @@ import type {
 } from '#domain/entities/rush-pipeline.entity';
 import type { RushBidStatus } from '#domain/entities/rush-candidate.entity';
 import type { AssertNever } from './drift-guard';
+import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 
 export class RushStageDto implements RushStage {
   @ApiProperty({ format: 'uuid' })
@@ -187,7 +187,7 @@ export class RushStageInputDto {
   category: RushStageCategory;
 
   @ApiProperty()
-  @IsBoolean()
+  @IsStrictBoolean()
   hidden: boolean;
 }
 

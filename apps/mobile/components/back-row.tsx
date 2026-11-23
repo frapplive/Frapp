@@ -179,7 +179,9 @@ function BackRowView({
   // leaves the screen goes back through the stack.
   const below = useScreenBelow();
   const popsTo = onPress ? null : below;
-  const shown = popsTo ? popsTo.title : label;
+  // A screen titled with the chapter's word (the recruitment list) has no
+  // fixed title; the label its screen passed names it.
+  const shown = popsTo ? (popsTo.title ?? label) : label;
   // Held state drives the capsule's lift. The glass, not the target, is what
   // lifts, so the feedback keeps the capsule's shape on every platform rather
   // than an Android ripple filling the 44pt rectangle around it.
