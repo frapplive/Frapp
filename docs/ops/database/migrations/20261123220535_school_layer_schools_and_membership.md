@@ -9,7 +9,7 @@ School layer 1 ([#5929](https://github.com/frapplive/Frapp/issues/5929), plan on
 
 ## Promotion
 
-- **Purpose**: Six new tables, each with RLS on and no policies: `schools`, `school_email_domains`, `school_slugs`, `school_members`, `school_email_verifications`, `school_chapters`. It seeds one `unverified` school per distinct `chapter_directory.university` (retired rows aside; 1,281 on 2026-11-23), each with one current slug: its short name when only it carries that short name in the directory (`rpi`), else its full name (`arizona-state-university`). It adds service-role-only functions: `verify_school_domain`, `search_schools`, `start_school_email_verification` and `confirm_school_email_verification`. It adds a trigger that deletes a person's school rows when `users.deleted_at` is set, and one expression index on `chapter_directory`. No existing row is written.
+- **Purpose**: Six new tables, each with RLS on and no policies: `schools`, `school_email_domains`, `school_slugs`, `school_members`, `school_email_verifications`, `school_chapters`. It seeds one `unverified` school per distinct `chapter_directory.university` (retired rows aside; 1,281 on 2026-11-23), each with one current slug: its short name when only it carries that short name in the directory (`rpi`), else its full name (`arizona-state-university`). It adds service-role-only functions: `verify_school_domain`, `search_schools`, `start_school_email_verification`, `confirm_school_email_verification` and `discard_school_email_verification`. It adds a trigger that deletes a person's school rows when `users.deleted_at` is set, and one expression index on `chapter_directory`. No existing row is written.
 - **Checks**:
   - `select count(*) from schools;` matches `select count(distinct university) from chapter_directory where source <> 'retired';`.
   - `select count(*) from schools s where not exists (select 1 from school_slugs ss where ss.school_id = s.id and ss.retired_at is null);` returns 0.
@@ -28,6 +28,7 @@ Worth reverting only if the seed or the tables are wrong before any student has 
 ```sql
 drop trigger if exists users_drop_school_rows on public.users;
 drop function if exists public.users_drop_school_rows();
+drop function if exists public.discard_school_email_verification(uuid, uuid);
 drop function if exists public.confirm_school_email_verification(uuid, uuid, uuid, text, integer);
 drop function if exists public.start_school_email_verification(uuid, uuid, text, text, text, text, integer, integer, integer, integer, integer, integer);
 drop function if exists public.search_schools(text, integer);
@@ -41,5 +42,7 @@ drop function if exists public.schools_assign_school_slug();
 drop function if exists public.school_slugs_keep_owner();
 drop function if exists public.assign_default_school_slug(uuid);
 drop function if exists public.default_school_slug_base(uuid);
+drop function if exists public.school_email_key(text);
+drop function if exists public.school_email_domain(text);
 drop index if exists public.idx_chapter_directory_short_slug_part;
 ```

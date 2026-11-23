@@ -907,9 +907,22 @@ It was s03's first beat, shown only when the photo or the name was missing, unti
 
 | State | Title | Copy |
 |---|---|---|
-| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`. |
+| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` when the school step follows (a member with no verified school, both apps) or, on the phone, the notifications screen, else `Go to chat`. _(Changed for #5929 by gampheadband, 2026-11-23.)_ |
 | No name | as above | Under the field: `Add your name so the chapter knows who's talking.` |
 | Save failed | as above | Under the field: `Couldn't save your name. Check your connection and try again.` The member stays with what they typed. |
+
+### School (after a join)
+
+The optional step after the name, on web (`/welcome`) and the phone (s03), for a member with no verified school (#5929). Copy in `SCHOOL_STEP_COPY` and its line helpers (`packages/validation/src/school-verification.ts`), shared by both apps; refusals are the API's sentences from the same file. No privacy line sits on it: the Privacy Policy's school-email wording is pending Paul (Q2 in `school-layer.md` § 8).
+
+| State | Title | Copy |
+|---|---|---|
+| Pick | `Where do you go to school?` | A search, placeholder `Search for your school`, pre-filled with the chapter's school, over a row per school (name, short name under it). Under it the quiet `Not a student? Skip for now`. |
+| No match | as above | In the list: `No school matches that. Check the spelling, or skip for now.` |
+| Not set up | as above | Under the list: `Your school isn't set up for verification yet.`, and the button is `Go to chat`. |
+| Email | as above | The picked school as a row with `Change`, then `School email`, placeholder `you@<domain>`, and `Send code`. A wrong domain: `Use your <school> email, ending in @<domain>.` |
+| Code | as above | `Enter the 6-digit code we sent to <address>.`, the code field, `Verify`, then `Send a new code` (`Send a new code in 42s` while it waits) and `Use another email`. A wrong code: `That code isn't right. Check the email and try again.` |
+| Verified | `You're verified at <school>` | One button: `Go to chat`. |
 
 ### Display step (onboarding)
 
@@ -1248,7 +1261,7 @@ It had no states at all until the Profile & pre-auth slice, so a failed fetch re
 | Checking the session | — | `Verifying your session…` (announced, not drawn) |
 | Session check failed, offline | `Can't check your session` | `Reconnect to confirm you're signed in, then redeem the invite.` |
 | Session check failed, error | `Couldn't check your session` | `Frapp couldn't be reached to confirm you're signed in. Try again in a moment.` |
-| Redeemed | `Chapter joined` | No line under it since #5627 (it was `You're in. Opening chat.`). From the invite card (#5625), web toasts `Welcome to <chapter>` instead. Web then opens [§ Name and photo (after a join)](#name-and-photo-after-a-join), then chat. Mobile goes to s03, the same name and photo screen, then notifications only when push is off, and then goes to chat. Both open the chapter's default channel with the [§ Welcome card](#welcome-card) at its top. |
+| Redeemed | `Chapter joined` | No line under it since #5627 (it was `You're in. Opening chat.`). From the invite card (#5625), web toasts `Welcome to <chapter>` instead. Web then opens [§ Name and photo (after a join)](#name-and-photo-after-a-join), then [§ School (after a join)](#school-after-a-join) for a member with no verified school, then chat. Mobile goes to s03, the same name and photo screen, then the school step on the same terms, then notifications only when push is off, and then goes to chat. Both open the chapter's default channel with the [§ Welcome card](#welcome-card) at its top. |
 | Mobile s02, the question (#3350; Paste since #5626) | `Joining a chapter?` | `If you tapped an invite link before installing Frapp, paste it here.` (`Have a different invite link? Paste it here.` when an emailed invite is offered above it), then Paste, pinned, and the quiet line `Starting a chapter?` `Create a chapter` (web's words). Paste is the system button on iOS 16 and later, whose word and mark Apple fixes. A paste with no invite in it replaces the line with `That isn't a Frapp invite. Copy the whole link, then tap Paste.`; an empty clipboard with `Nothing to paste yet. Copy the invite link, then tap Paste.` (`INVITE_PASTE_COPY` in `@repo/validation`). No field: the rows above are web `/join`'s. |
 | Mobile s01, Joining a chapter? strip (#5626) | `Joining a chapter?` | The question's line and Paste, in a quiet row above the ways in, with the same two answers to a paste that holds no invite, in the line's place. |
 | Mobile s02 invite for this account (#3782) | `You've been invited to <chapter>` | The same title and ` · `-joined line as web's (school, `from <inviter>`, role), on a row with the chapter mark, one per invite, above Paste. A tap opens the invite card on that invite, whose `‹ Back` returns to the question. Not shown when an invite link opened the screen. |

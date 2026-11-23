@@ -113,7 +113,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useCurrentChapter: () => ({
     data: { university: "Rensselaer Polytechnic Institute" },
   }),
-  useMySchools: () => ({ data: mySchools }),
+  useMySchools: () => ({ data: mySchools, isFetched: true, isError: false }),
   useUpdateOnboarding: () => ({ mutateAsync: completeOnboarding }),
   useCurrentUser: () => ({
     data: currentUser,

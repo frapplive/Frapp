@@ -172,30 +172,36 @@ export class ResendEmailProvider implements IEmailProvider {
   }
 
   sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
-    return this.send('invite', {
+    return this.send('invite', () => ({
       to: params.to,
       subject: inviteSubject(params),
       html: inviteEmailHtml(params),
       text: inviteEmailText(params),
-    });
+    }));
   }
 
   sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean> {
-    return this.send('school code', {
+    return this.send('school code', () => ({
       to: params.to,
       subject: schoolCodeSubject(params),
       html: schoolCodeEmailHtml(params),
       text: schoolCodeEmailText(params),
-    });
+    }));
   }
 
+  /**
+   * One POST to Resend. The message is built inside the `try`, so a throw
+   * while building it is a `false` like any other failure, never an escape
+   * from the provider's never-throw contract.
+   */
   private async send(
     kind: string,
-    message: { to: string; subject: string; html: string; text: string },
+    build: () => { to: string; subject: string; html: string; text: string },
   ): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
+      const message = build();
       const response = await fetch(RESEND_API_URL, {
         method: 'POST',
         headers: {

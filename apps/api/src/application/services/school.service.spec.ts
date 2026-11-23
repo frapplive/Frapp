@@ -83,6 +83,7 @@ describe('SchoolService', () => {
     repo = {
       search: jest.fn().mockResolvedValue([]),
       findById: jest.fn().mockResolvedValue(school()),
+      findByIds: jest.fn().mockResolvedValue([school()]),
       findCurrentSlugs: jest
         .fn()
         .mockResolvedValue(new Map([[SCHOOL_ID, 'rpi']])),
@@ -91,7 +92,7 @@ describe('SchoolService', () => {
         .mockResolvedValue(new Map([[SCHOOL_ID, ['rpi.edu']]])),
       findLiveMembershipsByUser: jest.fn().mockResolvedValue([]),
       findLiveMembership: jest.fn().mockResolvedValue(membership()),
-      findOpenVerification: jest.fn().mockResolvedValue({
+      findLatestVerification: jest.fn().mockResolvedValue({
         id: 'v-1',
         email: 'student@rpi.edu',
         code_salt: 'salt',
@@ -105,6 +106,7 @@ describe('SchoolService', () => {
       confirmVerification: jest
         .fn()
         .mockResolvedValue({ ok: true, member_id: 'm-1' }),
+      discardVerification: jest.fn().mockResolvedValue(undefined),
       findSchoolIdForDirectoryRow: jest.fn().mockResolvedValue(SCHOOL_ID),
       proposeChapterLink: jest.fn().mockResolvedValue(undefined),
     };
@@ -281,7 +283,7 @@ describe('SchoolService', () => {
       },
     );
 
-    it('answers 503 when the email did not go out', async () => {
+    it('answers 503 when the email did not go out, and discards the unsent code', async () => {
       email.sendSchoolCodeEmail.mockResolvedValue(false);
 
       const { status, body } = await refusal(
@@ -290,7 +292,26 @@ describe('SchoolService', () => {
 
       expect(status).toBe(503);
       expect(body.code).toBe(SCHOOL_REFUSAL.sendFailed);
+      // Neither spends the ceilings nor hides the code already sent.
+      expect(repo.discardVerification).toHaveBeenCalledWith(USER_ID, 'v-1');
     });
+
+    it.each(['"a@rpi.edu@x"@evil.com', 'a b@rpi.edu', 'a@rpi'])(
+      'refuses %s, which is not a plain address, before anything is written',
+      async (address) => {
+        const { status, body } = await refusal(
+          service.startVerification(USER_ID, SCHOOL_ID, address, undefined),
+        );
+
+        expect(status).toBe(400);
+        expect(body).toEqual({
+          code: SCHOOL_REFUSAL.invalidEmail,
+          message: SCHOOL_STEP_COPY.notAnEmail,
+        });
+        expect(repo.startVerification).not.toHaveBeenCalled();
+        expect(email.sendSchoolCodeEmail).not.toHaveBeenCalled();
+      },
+    );
 
     it('skips only the IP ceiling when there is no IP', async () => {
       await service.startVerification(USER_ID, SCHOOL_ID, 'a@rpi.edu', '');
@@ -329,7 +350,7 @@ describe('SchoolService', () => {
     });
 
     it('asks for a code first when none is open', async () => {
-      repo.findOpenVerification.mockResolvedValue(null);
+      repo.findLatestVerification.mockResolvedValue(null);
 
       const { status, body } = await refusal(
         service.confirmVerification(USER_ID, SCHOOL_ID, '123456'),
@@ -364,10 +385,26 @@ describe('SchoolService', () => {
     });
   });
 
+  it('answers the written membership when the read-back misses, rather than an error', async () => {
+    repo.findLiveMembership.mockResolvedValue(null);
+
+    const mine = await service.confirmVerification(
+      USER_ID,
+      SCHOOL_ID,
+      '123456',
+    );
+
+    expect(mine).toMatchObject({
+      school: { id: SCHOOL_ID },
+      status: 'member',
+      verified_email: 'student@rpi.edu',
+    });
+  });
+
   describe('listMine', () => {
     it('asks nothing more when the person has no school', async () => {
       await expect(service.listMine(USER_ID)).resolves.toEqual([]);
-      expect(repo.findById).not.toHaveBeenCalled();
+      expect(repo.findByIds).not.toHaveBeenCalled();
     });
 
     it('returns each live membership with its school', async () => {

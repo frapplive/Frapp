@@ -60,18 +60,25 @@ export function SchoolStep({
   initialQuery,
   onLeave,
   busy = false,
+  alreadyVerified = null,
 }: {
   /** The chapter's school name, so the member's school is usually first. */
   initialQuery: string;
   onLeave: () => void;
   /** The screen behind is already leaving (notifications or chat next). */
   busy?: boolean;
+  /**
+   * A school the member just verified at, when they come back to this beat
+   * (Android back from notifications): it opens on the verified line rather
+   * than an empty search.
+   */
+  alreadyVerified?: SchoolSummary | null;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
-  const [stage, setStage] = useState<Stage>("pick");
+  const [stage, setStage] = useState<Stage>(alreadyVerified ? "done" : "pick");
   const [query, setQuery] = useState(initialQuery);
-  const [school, setSchool] = useState<SchoolSummary | null>(null);
+  const [school, setSchool] = useState<SchoolSummary | null>(alreadyVerified);
   const [email, setEmail] = useState("");
   const [sentTo, setSentTo] = useState("");
   const [code, setCode] = useState("");

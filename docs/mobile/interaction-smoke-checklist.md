@@ -38,7 +38,7 @@ came with #2302 (PR #2611).
 | Terms (`/(auth)/terms`) | Agree and continue, box unticked | Shows `Agree to the Terms of Service and Privacy Policy to continue.`; records nothing |
 | Terms (`/(auth)/terms`) | Tick the box, Agree and continue | `POST /v1/users/me/legal-acceptance`; the gate moves on to welcome or `/` |
 | Terms (`/(auth)/terms`) | Sign out / Delete account | Sign out routes to sign-in; Delete account confirms, deletes, and signs out (Settings is unreachable from here) |
-| Welcome (`/(auth)/welcome`) | How the chapter sees you: the name pre-filled from Apple or Google, empty for an email sign-up; Continue (or Go to chat when push is already on) | An empty name says `Add your name so the chapter knows who's talking.`; a changed name saves, then the notifications screen or chat |
+| Welcome (`/(auth)/welcome`) | How the chapter sees you: the name pre-filled from Apple or Google, empty for an email sign-up; Continue (or Go to chat when the member is verified at a school and push is already on) | An empty name says `Add your name so the chapter knows who's talking.`; a changed name saves, then `Where do you go to school?` for a member with no verified school (skippable), then the notifications screen or chat |
 | Welcome (`/(auth)/welcome`) | Go to chat (the one button, pinned at the bottom) | PATCHes `has_completed_onboarding: true` and replaces into `/` |
 | Chapter picker (empty) | Join or start a chapter | Opens join (s02), which asks invite or start |
 | Create chapter (`/(auth)/create-chapter`) | Directory row → Continue → color + Terms → Create; or Not in our directory? → fields + archetype → Continue | `POST /v1/chapters/onboard`; the later steps stay on this route. A FIJI row shows no letters anywhere |

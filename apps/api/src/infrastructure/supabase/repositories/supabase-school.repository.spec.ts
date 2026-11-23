@@ -132,9 +132,9 @@ describe('SupabaseSchoolRepository — school scope', () => {
     expect(row).toMatchObject({ school_id: SCHOOL_A, user_id: PERSON });
   });
 
-  it("findOpenVerification reads one school's open code for the person", async () => {
+  it("findLatestVerification reads one school's newest code for the person", async () => {
     const row = await harness.expectTenantScoped(SCHOOL_B, () =>
-      repo.findOpenVerification(SCHOOL_B, PERSON),
+      repo.findLatestVerification(SCHOOL_B, PERSON),
     );
 
     expect(row).toMatchObject({ id: 'v-' + SCHOOL_B.slice(-4) });
@@ -173,5 +173,88 @@ describe("SupabaseSchoolRepository — a person's own schools", () => {
     );
 
     expect(rows.map((r) => r.user_id)).toEqual([CHAPTER_A]);
+  });
+});
+
+describe("SupabaseSchoolRepository — chapter setup's school link", () => {
+  const SCHOOL = '00000000-0000-4000-8000-0000000000c1';
+  const OTHER_SCHOOL = '00000000-0000-4000-8000-0000000000c2';
+  const linkRow = (chapterId: string) => ({
+    id: `link-${chapterId.slice(-4)}`,
+    school_id: OTHER_SCHOOL,
+    chapter_id: chapterId,
+    is_primary: true,
+    status: 'active',
+    proposed_by: null,
+    confirmed_by: null,
+    confirmed_at: null,
+    created_at: '2026-11-23T00:00:00Z',
+  });
+
+  function harnessWithDirectory() {
+    return createTenantHarness({
+      tables: {
+        school_chapters: [linkRow(CHAPTER_A), linkRow(CHAPTER_B)],
+        chapter_directory: [
+          {
+            id: 'dir-rpi',
+            university: 'Rensselaer Polytechnic Institute',
+            source: 'wikipedia',
+          },
+          { id: 'dir-old', university: 'RPI', source: 'retired' },
+          {
+            id: 'dir-none',
+            university: 'Nowhere College',
+            source: 'wikipedia',
+          },
+        ],
+        schools: [
+          {
+            id: SCHOOL,
+            name: 'Rensselaer Polytechnic Institute',
+            directory_university: 'Rensselaer Polytechnic Institute',
+          },
+          { id: OTHER_SCHOOL, name: 'RPI', directory_university: 'RPI' },
+        ],
+      },
+      untenantedTables: ['chapter_directory', 'schools'],
+    });
+  }
+
+  it("finds the school seeded from a directory row's university, and none for a retired row or one with no school", async () => {
+    const repo = new SupabaseSchoolRepository(harnessWithDirectory().client);
+
+    await expect(repo.findSchoolIdForDirectoryRow('dir-rpi')).resolves.toBe(
+      SCHOOL,
+    );
+    await expect(
+      repo.findSchoolIdForDirectoryRow('dir-old'),
+    ).resolves.toBeNull();
+    await expect(
+      repo.findSchoolIdForDirectoryRow('dir-none'),
+    ).resolves.toBeNull();
+    await expect(
+      repo.findSchoolIdForDirectoryRow('dir-missing'),
+    ).resolves.toBeNull();
+  });
+
+  it('proposes the link for that chapter only, as proposed, never active', async () => {
+    const harness = harnessWithDirectory();
+    const repo = new SupabaseSchoolRepository(harness.client);
+
+    await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.proposeChapterLink(SCHOOL, CHAPTER_A, 'user-1'),
+    );
+
+    const written = harness
+      .rows('school_chapters')
+      .filter((row) => row.school_id === SCHOOL);
+    expect(written).toEqual([
+      expect.objectContaining({
+        chapter_id: CHAPTER_A,
+        status: 'proposed',
+        proposed_by: 'user-1',
+      }),
+    ]);
   });
 });

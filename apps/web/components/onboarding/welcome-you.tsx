@@ -162,9 +162,13 @@ export function WelcomeYou() {
     // The welcome card in the default channel shows once (#5627).
     if (me?.id && chapterId) markWelcomeDue(me.id, chapterId);
     // A member already verified at a school goes straight to chat; anyone
-    // else is asked, and can skip (#5929). A failed read asks too: the step
-    // itself can be skipped.
-    if ((mySchools.data?.length ?? 0) > 0) {
+    // else is asked, and can skip (#5929). A list still loading is waited
+    // for, not read as "no school"; a failed read asks, since the step can
+    // be skipped.
+    const schools =
+      mySchools.data ??
+      (await mySchools.refetch().catch(() => undefined))?.data;
+    if ((schools?.length ?? 0) > 0) {
       // Stays busy: the page is on its way to chat.
       router.replace("/chat");
       return;

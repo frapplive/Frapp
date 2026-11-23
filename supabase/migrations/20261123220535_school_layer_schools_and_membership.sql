@@ -36,11 +36,15 @@
 --    never touches it.
 --
 -- 5. `school_email_verifications`: the one-time codes. The code itself is
---    never stored, only a salted SHA-256 of it. Codes are counted per address,
---    per IP (hashed) and per account over a rolling hour, under advisory locks,
---    by `start_school_email_verification`, and checked by
---    `confirm_school_email_verification`, which also writes the
---    `school_members` row. Rows older than a day are deleted as new ones come.
+--    never stored, only a salted SHA-256 of it. Codes are counted per mailbox
+--    (`school_email_key`, which folds `+tags`), per IP and per account over a
+--    rolling hour, under advisory locks, by `start_school_email_verification`,
+--    and checked by `confirm_school_email_verification`, which also writes the
+--    `school_members` row. An address's domain is read after its last `@`
+--    (`school_email_domain`). The IP is an unkeyed hash: it keeps the raw
+--    address out of the table but is not anonymous. Rows older than a day are
+--    deleted when the next code is asked for. A code whose email didn't go
+--    out is deleted (`discard_school_email_verification`).
 --
 -- 6. `search_schools` finds a school by name, short name or alias for the
 --    onboarding step.
@@ -151,6 +155,36 @@ comment on table public.school_slugs is
 
 -- 4. school_members -------------------------------------------------------------
 
+-- An address's domain, read after its LAST `@`, the way mail is delivered and
+-- `@IsEmail` reads it. (`split_part(…, '@', 2)` would read after the first,
+-- and a quoted local part such as `"a@rpi.edu@x"@evil.com` would pass the
+-- school's domain check while the code went to evil.com.)
+create or replace function public.school_email_domain(p_email text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select coalesce(substring(lower(btrim(p_email)) from '@([^@]*)$'), '');
+$$;
+
+-- The mailbox an address reaches, for "one address proves one account" and
+-- the per-address ceiling: lower case, with a `+tag` dropped from the local
+-- part, since Google Workspace and Microsoft 365 deliver `alice+b@` to
+-- `alice@`. Without it one mailbox could verify an account per tag.
+create or replace function public.school_email_key(p_email text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select regexp_replace(
+           substring(lower(btrim(p_email)) from '^(.*)@[^@]*$'),
+           '\+.*$', ''
+         )
+         || '@' || public.school_email_domain(p_email);
+$$;
+
 create table if not exists public.school_members (
   id                   uuid primary key default gen_random_uuid(),
   school_id            uuid not null references public.schools(id) on delete cascade,
@@ -171,8 +205,10 @@ create table if not exists public.school_members (
   constraint school_members_school_user_key unique (school_id, user_id)
 );
 
+-- One mailbox proves one account per school (`school_email_key` folds
+-- `+tags`), whatever its spelling.
 create unique index if not exists school_members_verified_email_key
-  on public.school_members (school_id, verified_email)
+  on public.school_members (school_id, public.school_email_key(verified_email))
   where verified_email is not null;
 
 create index if not exists idx_school_members_user_id
@@ -207,7 +243,7 @@ create table if not exists public.school_email_verifications (
 create index if not exists idx_school_email_verifications_user_school
   on public.school_email_verifications (user_id, school_id, created_at desc);
 create index if not exists idx_school_email_verifications_email
-  on public.school_email_verifications (email, created_at);
+  on public.school_email_verifications (public.school_email_key(email), created_at);
 create index if not exists idx_school_email_verifications_ip
   on public.school_email_verifications (ip_hash, created_at);
 create index if not exists idx_school_email_verifications_school_id
@@ -218,7 +254,7 @@ create index if not exists idx_school_email_verifications_created_at
 alter table public.school_email_verifications enable row level security;
 
 comment on table public.school_email_verifications is
-  'School-email one-time codes (school-layer.md § 2.2). Stores a salted hash, never the code; rows older than a day are deleted.';
+  'School-email one-time codes (school-layer.md § 2.2). Stores a salted hash, never the code; rows older than a day are deleted when the next code is asked for.';
 
 -- 6. school_chapters (minimal) ------------------------------------------------------
 
@@ -684,7 +720,8 @@ set search_path = public, pg_temp
 as $$
 declare
   v_email text := lower(btrim(p_email));
-  v_domain text := split_part(lower(btrim(p_email)), '@', 2);
+  v_domain text := public.school_email_domain(p_email);
+  v_key text := public.school_email_key(p_email);
   v_since timestamptz := now() - make_interval(secs => p_window_seconds);
   v_last timestamptz;
   v_oldest timestamptz;
@@ -707,7 +744,7 @@ begin
   end if;
 
   -- Fixed order: address, IP, account.
-  perform pg_advisory_xact_lock(hashtextextended('school_email_code:addr:' || v_email, 0));
+  perform pg_advisory_xact_lock(hashtextextended('school_email_code:addr:' || v_key, 0));
   if p_ip_hash is not null then
     perform pg_advisory_xact_lock(hashtextextended('school_email_code:ip:' || p_ip_hash, 0));
   end if;
@@ -730,7 +767,7 @@ begin
 
   select count(*), min(created_at) into v_count, v_oldest
     from public.school_email_verifications
-   where email = v_email and created_at > v_since;
+   where public.school_email_key(email) = v_key and created_at > v_since;
   if v_count >= p_max_per_address then
     return jsonb_build_object(
       'ok', false, 'reason', 'address_limit',
@@ -763,10 +800,9 @@ begin
     );
   end if;
 
-  update public.school_email_verifications
-     set closed_at = now(), outcome = 'superseded'
-   where user_id = p_user_id and school_id = p_school_id and closed_at is null;
-
+  -- Earlier open codes stay open: the API checks only the newest, and
+  -- deletes this row if its email doesn't go out, so a failed send leaves
+  -- the code already in the member's inbox working. A match closes them all.
   v_expires := now() + make_interval(secs => p_ttl_seconds);
   insert into public.school_email_verifications (
     user_id, school_id, email, code_salt, code_hash, ip_hash, expires_at
@@ -855,17 +891,21 @@ begin
     select 1 from public.schools s
      where s.id = p_school_id and s.status = 'verified'
   ) or not public.school_accepts_email_domain(
-    p_school_id, split_part(v_row.email, '@', 2)
+    p_school_id, public.school_email_domain(v_row.email)
   ) then
     return jsonb_build_object('ok', false, 'reason', 'school_not_verifiable');
   end if;
 
   -- One school address proves one account. Checked only after the code
-  -- matched, so only the address's holder learns it is taken.
+  -- matched, so only the address's holder learns it is taken, and under a
+  -- lock on the school and mailbox, so two accounts confirming the same
+  -- address at once can't both pass and meet the unique index.
+  perform pg_advisory_xact_lock(hashtextextended(
+    'school_email_member:' || p_school_id::text || ':' || public.school_email_key(v_row.email), 0));
   if exists (
     select 1 from public.school_members m
      where m.school_id = p_school_id
-       and m.verified_email = v_row.email
+       and public.school_email_key(m.verified_email) = public.school_email_key(v_row.email)
        and m.user_id <> p_user_id
   ) then
     update public.school_email_verifications
@@ -891,6 +931,9 @@ begin
   update public.school_email_verifications
      set closed_at = now(), outcome = 'verified'
    where id = v_row.id;
+  update public.school_email_verifications
+     set closed_at = now(), outcome = 'superseded'
+   where user_id = p_user_id and school_id = p_school_id and closed_at is null;
 
   return jsonb_build_object('ok', true, 'member_id', v_member_id);
 end;
@@ -899,6 +942,26 @@ $$;
 revoke all on function public.confirm_school_email_verification(uuid, uuid, uuid, text, integer)
   from public, anon, authenticated;
 grant execute on function public.confirm_school_email_verification(uuid, uuid, uuid, text, integer)
+  to service_role;
+
+-- Deletes a code whose email didn't go out, so it neither counts toward the
+-- ceilings nor hides the account's earlier, still-working code.
+create or replace function public.discard_school_email_verification(
+  p_user_id uuid,
+  p_verification_id uuid
+)
+returns void
+language sql
+security definer
+set search_path = public, pg_temp
+as $$
+  delete from public.school_email_verifications
+   where id = p_verification_id and user_id = p_user_id and closed_at is null;
+$$;
+
+revoke all on function public.discard_school_email_verification(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.discard_school_email_verification(uuid, uuid)
   to service_role;
 
 -- 11. Account deletion -------------------------------------------------------------

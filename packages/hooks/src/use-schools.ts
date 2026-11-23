@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
+import { SCHOOL_SEARCH_MIN_LENGTH } from "@repo/validation";
+import { errorCopy } from "./error-copy";
 import { useFrappClient } from "./use-frapp-client";
 
 /** A school as search and the caller's own list show it (#5929). */
@@ -11,8 +13,7 @@ export type MySchool = components["schemas"]["MySchoolDto"];
 /** A code that went out. */
 export type SentSchoolCode = components["schemas"]["SentSchoolCodeDto"];
 
-/** Fewer characters than this asks nothing (the API answers `[]` too). */
-export const SCHOOL_SEARCH_MIN_LENGTH = 2;
+export { SCHOOL_SEARCH_MIN_LENGTH } from "@repo/validation";
 
 const MINE_KEY = ["schools", "mine"] as const;
 
@@ -104,9 +105,12 @@ export function useConfirmSchoolVerification() {
 /**
  * What a school step shows for a failed send or check. Every `school.*`
  * refusal's message is one of `@repo/validation`'s school sentences, written
- * for members (`SCHOOL_REFUSAL_COPY`, `schoolWrongDomainLine`, …), so it is
- * shown as sent. Anything else, a dropped connection included, gets the
- * step's own `fallback`.
+ * for members (`SCHOOL_REFUSAL_COPY`, `schoolWrongDomainLine`, the ceilings'
+ * wait), so it is shown as sent; its 429s say how long to wait, which the
+ * generic status copy can't. Anything else goes through `errorCopy`, the one
+ * map from a failed call to what a member reads (a dropped connection, a
+ * busy server, a lapsed session, the global throttle), with the step's own
+ * `fallback` for what that map leaves to the screen.
  */
 export function schoolStepErrorCopy(error: unknown, fallback: string): string {
   if (error && typeof error === "object") {
@@ -120,5 +124,5 @@ export function schoolStepErrorCopy(error: unknown, fallback: string): string {
       return message;
     }
   }
-  return fallback;
+  return errorCopy(error, fallback);
 }

@@ -41,6 +41,7 @@ export interface ISchoolRepository {
   /** Schools by name, short name or alias, best match first. */
   search(query: string, limit: number): Promise<SchoolSearchRow[]>;
   findById(schoolId: string): Promise<School | null>;
+  findByIds(schoolIds: string[]): Promise<School[]>;
   /** The current slug of each of these schools that has one, by school id. */
   findCurrentSlugs(schoolIds: string[]): Promise<Map<string, string>>;
   /** The verified domains of each of these schools, by school id. */
@@ -52,8 +53,11 @@ export interface ISchoolRepository {
     schoolId: string,
     userId: string,
   ): Promise<SchoolMember | null>;
-  /** The user's newest open code at the school, or null. */
-  findOpenVerification(
+  /**
+   * The user's newest code at the school, open or closed, or null. Only the
+   * newest is ever checked, and a closed one answers why it no longer works.
+   */
+  findLatestVerification(
     schoolId: string,
     userId: string,
   ): Promise<Pick<
@@ -66,6 +70,8 @@ export interface ISchoolRepository {
   confirmVerification(
     input: ConfirmSchoolVerificationInput,
   ): Promise<ConfirmSchoolVerificationResult>;
+  /** Deletes the user's open code whose email didn't go out. */
+  discardVerification(userId: string, verificationId: string): Promise<void>;
   /** The school seeded from a directory row's university, or null. */
   findSchoolIdForDirectoryRow(directoryId: string): Promise<string | null>;
   /**

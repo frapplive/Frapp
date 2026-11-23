@@ -716,6 +716,14 @@ export interface Database {
         } | null;
       };
       /**
+       * `20261123220535` (#5929). Deletes the user's open school-email code
+       * whose email didn't go out.
+       */
+      discard_school_email_verification: {
+        Args: { p_user_id: string; p_verification_id: string };
+        Returns: undefined;
+      };
+      /**
        * `20261106170000`. An import's rows being imported, added up per
        * Discord category, a thread under its parent's category.
        */

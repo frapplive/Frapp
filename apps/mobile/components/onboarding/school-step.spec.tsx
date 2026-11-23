@@ -63,12 +63,20 @@ import { SchoolStep } from "./school-step";
 
 type Node = ReactTestRenderer["root"];
 
-function render(onLeave: () => void, initialQuery = "Rensselaer") {
+function render(
+  onLeave: () => void,
+  initialQuery = "Rensselaer",
+  alreadyVerified: typeof RPI | null = null,
+) {
   let tree!: ReactTestRenderer;
   act(() => {
     tree = create(
       <FrappThemeProvider>
-        <SchoolStep initialQuery={initialQuery} onLeave={onLeave} />
+        <SchoolStep
+          initialQuery={initialQuery}
+          onLeave={onLeave}
+          alreadyVerified={alreadyVerified}
+        />
       </FrappThemeProvider>,
     );
   });
@@ -191,13 +199,22 @@ describe("SchoolStep (phone)", () => {
       "Use your Rensselaer Polytechnic Institute email, ending in @rpi.edu.",
     );
 
-    mocks.start.mockRejectedValueOnce(new TypeError("Network request failed"));
+    mocks.start.mockRejectedValueOnce(new Error("internal detail"));
     await press(button(root, "Send code"));
 
     expect(texts(root)).toContain(
       "Couldn't send the code. Check your connection and try again.",
     );
-    expect(texts(root)).not.toContain("Network request failed");
+    expect(texts(root)).not.toContain("internal detail");
+  });
+
+  it("opens on the verified line when the member comes back after verifying", () => {
+    const root = render(onLeave, "Rensselaer", RPI);
+
+    expect(texts(root)).toContain(
+      "You're verified at Rensselaer Polytechnic Institute",
+    );
+    expect(input(root, "School")).toBeUndefined();
   });
 
   it("skips from the first stage", async () => {

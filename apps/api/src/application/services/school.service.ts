@@ -21,8 +21,9 @@ import {
   SCHOOL_CODES_PER_IP,
   SCHOOL_REFUSAL,
   SCHOOL_REFUSAL_COPY,
+  SCHOOL_SEARCH_MIN_LENGTH,
   SCHOOL_STEP_COPY,
-  emailDomainOf,
+  isPlainSchoolEmail,
   schoolRateLimitedLine,
   schoolWrongDomainLine,
 } from '@repo/validation';
@@ -72,8 +73,10 @@ export function hashSchoolCode(salt: string, code: string): string {
 }
 
 /**
- * The IP the ceilings count by, hashed so the table holds no address. Null
- * when Express has none (a test request), which skips the IP ceiling only.
+ * The IP the ceilings count by, hashed so the raw address isn't in the table.
+ * Unkeyed, so it isn't anonymous: every IPv4 address can be hashed and
+ * matched. The rows go a day after they're made. Null when Express has none
+ * (a test request), which skips the IP ceiling only.
  */
 export function hashSchoolCodeIp(ip: string | undefined): string | null {
   const value = ip?.trim();
@@ -111,7 +114,7 @@ export class SchoolService {
 
   async search(query: string): Promise<SchoolSummary[]> {
     const text = query.trim();
-    if (text.length < 2) return [];
+    if (text.length < SCHOOL_SEARCH_MIN_LENGTH) return [];
     const rows = await this.schools.search(text, SCHOOL_SEARCH_LIMIT);
     return rows.map((row) => ({
       id: row.id,
@@ -128,7 +131,7 @@ export class SchoolService {
     if (!memberships.length) return [];
     const ids = memberships.map((m) => m.school_id);
     const [schools, slugs, domains] = await Promise.all([
-      Promise.all(ids.map((id) => this.schools.findById(id))),
+      this.schools.findByIds(ids),
       this.schools.findCurrentSlugs(ids),
       this.schools.findVerifiedDomains(ids),
     ]);
@@ -162,8 +165,13 @@ export class SchoolService {
       (await this.schools.findVerifiedDomains([school.id])).get(school.id) ??
       [];
     if (school.status !== 'verified' || !domains.length) throw unavailable();
-    if (!emailDomainOf(email)) {
-      throw this.wrongDomain(school, domains);
+    // Only a plain `local@domain` address: a quoted local part could carry
+    // a second `@` and name a domain other than the one mail goes to.
+    if (!isPlainSchoolEmail(email)) {
+      throw new BadRequestException({
+        code: SCHOOL_REFUSAL.invalidEmail,
+        message: SCHOOL_STEP_COPY.notAnEmail,
+      });
     }
 
     const code = randomInt(0, 10 ** SCHOOL_CODE_LENGTH)
@@ -222,6 +230,14 @@ export class SchoolService {
       validMinutes: Math.round(SCHOOL_CODE_TTL_SECONDS / 60),
     });
     if (!sent) {
+      // Undo the row, so a provider outage neither spends the ceilings nor
+      // hides the code already in the member's inbox, which stays the one
+      // checked. A failed delete only leaves the row counting.
+      if (result.id) {
+        await this.schools
+          .discardVerification(userId, result.id)
+          .catch(() => undefined);
+      }
       this.logger.warn(
         `School code email did not go out (school ${school.id})`,
       );
@@ -248,7 +264,9 @@ export class SchoolService {
     code: string,
   ): Promise<MySchool> {
     const school = await this.requireSchool(schoolId);
-    const open = await this.schools.findOpenVerification(school.id, userId);
+    // The newest code, open or closed: only it is checked, and a closed one
+    // (exhausted, used) answers why it no longer works.
+    const open = await this.schools.findLatestVerification(school.id, userId);
     if (!open) {
       throw new BadRequestException({
         code: SCHOOL_REFUSAL.noCode,
@@ -303,14 +321,23 @@ export class SchoolService {
       }
     }
 
-    const membership = await this.schools.findLiveMembership(school.id, userId);
-    if (!membership) {
-      // The function just wrote it; a read that misses is a replica lag or a
-      // concurrent account deletion, not a refusal.
-      throw new ServiceUnavailableException(
-        'Your school was verified, but it could not be read back. Reload to see it.',
-      );
-    }
+    // The function just wrote it. A read that misses (a concurrent account
+    // deletion) still answers what was written rather than an error, since
+    // the code is spent and a retry would only say "Send a code first."
+    const membership =
+      (await this.schools.findLiveMembership(school.id, userId)) ??
+      ({
+        id: result.member_id ?? '',
+        school_id: school.id,
+        user_id: userId,
+        status: 'member',
+        verified_via: 'email_code',
+        verified_email: open.email,
+        verified_at: new Date().toISOString(),
+        directory_visibility: 'hidden',
+        left_at: null,
+        created_at: new Date().toISOString(),
+      } satisfies SchoolMember);
     const [slugs, domains] = await Promise.all([
       this.schools.findCurrentSlugs([school.id]),
       this.schools.findVerifiedDomains([school.id]),

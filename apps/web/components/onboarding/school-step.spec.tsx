@@ -168,7 +168,7 @@ describe("SchoolStep", () => {
   });
 
   it("never shows a raw error that isn't a school refusal", async () => {
-    mocks.start.mockRejectedValue(new TypeError("Failed to fetch"));
+    mocks.start.mockRejectedValue(new Error("internal detail"));
     render(<SchoolStep initialQuery="Rensselaer" onLeave={onLeave} />);
 
     fireEvent.click(screen.getByText("Rensselaer Polytechnic Institute"));
@@ -182,7 +182,7 @@ describe("SchoolStep", () => {
         "Couldn't send the code. Check your connection and try again.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText("Failed to fetch")).toBeNull();
+    expect(screen.queryByText("internal detail")).toBeNull();
   });
 
   it("clears a wrong code and says so", async () => {

@@ -17,7 +17,8 @@ import type {
   StartSchoolVerificationResult,
 } from '#domain/entities/school.entity';
 
-const MEMBER_COLUMNS =
+/** Every `school_members` column, for the reads here and `SchoolGuard`'s. */
+export const SCHOOL_MEMBER_COLUMNS =
   'id, school_id, user_id, status, verified_via, verified_email, verified_at, directory_visibility, left_at, created_at';
 
 /**
@@ -51,6 +52,18 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
       .maybeSingle();
     if (error) throw new SupabaseQueryError(error);
     return data;
+  }
+
+  async findByIds(schoolIds: string[]): Promise<School[]> {
+    if (!schoolIds.length) return [];
+    const { data, error } = await this.supabase
+      .from('schools')
+      .select(
+        'id, name, short_name, aliases, status, directory_university, created_by, created_at, updated_at',
+      )
+      .in('id', schoolIds);
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
   }
 
   async findCurrentSlugs(schoolIds: string[]): Promise<Map<string, string>> {
@@ -92,7 +105,7 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
   async findLiveMembershipsByUser(userId: string): Promise<SchoolMember[]> {
     const { data, error } = await this.supabase
       .from('school_members')
-      .select(MEMBER_COLUMNS)
+      .select(SCHOOL_MEMBER_COLUMNS)
       .eq('user_id', userId)
       .is('left_at', null)
       .order('verified_at', { ascending: false });
@@ -106,7 +119,7 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
   ): Promise<SchoolMember | null> {
     const { data, error } = await this.supabase
       .from('school_members')
-      .select(MEMBER_COLUMNS)
+      .select(SCHOOL_MEMBER_COLUMNS)
       .eq('school_id', schoolId)
       .eq('user_id', userId)
       .is('left_at', null)
@@ -115,7 +128,7 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
     return data;
   }
 
-  async findOpenVerification(
+  async findLatestVerification(
     schoolId: string,
     userId: string,
   ): Promise<Pick<
@@ -127,7 +140,6 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
       .select('id, email, code_salt, expires_at')
       .eq('school_id', schoolId)
       .eq('user_id', userId)
-      .is('closed_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -174,6 +186,17 @@ export class SupabaseSchoolRepository implements ISchoolRepository {
     );
     if (error) throw new SupabaseQueryError(error);
     return data as unknown as ConfirmSchoolVerificationResult;
+  }
+
+  async discardVerification(
+    userId: string,
+    verificationId: string,
+  ): Promise<void> {
+    const { error } = await this.supabase.rpc(
+      'discard_school_email_verification',
+      { p_user_id: userId, p_verification_id: verificationId },
+    );
+    if (error) throw new SupabaseQueryError(error);
   }
 
   async findSchoolIdForDirectoryRow(

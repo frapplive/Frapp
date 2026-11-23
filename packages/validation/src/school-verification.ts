@@ -40,11 +40,29 @@ export const SCHOOL_CODES_PER_IP = 20;
 /** Codes one account can ask for per window, across addresses and schools. */
 export const SCHOOL_CODES_PER_ACCOUNT = 10;
 
+/** School search asks nothing for fewer characters (the API answers `[]`). */
+export const SCHOOL_SEARCH_MIN_LENGTH = 2;
+
+/**
+ * A plain `local@domain` address: one `@`, no quotes, spaces or other
+ * characters a quoted local part needs. School-issued addresses are always
+ * this shape, and refusing the rest means the domain the database checks
+ * (after the last `@`) is the only domain in the address.
+ */
+const PLAIN_EMAIL =
+  /^[^\s@"(),:;<>[\]\\]+@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+
+/** Whether an address is the plain shape a school code goes to. */
+export function isPlainSchoolEmail(email: string): boolean {
+  return PLAIN_EMAIL.test(email.trim());
+}
+
 /** The refusal codes the school routes answer with. */
 export const SCHOOL_REFUSAL = {
   notFound: "school.not_found",
   unavailable: "school.verification_unavailable",
   wrongDomain: "school.email.wrong_domain",
+  invalidEmail: "school.email.invalid",
   emailTaken: "school.email.taken",
   cooldown: "school.code.cooldown",
   rateLimited: "school.code.rate_limited",
@@ -143,14 +161,3 @@ export const SCHOOL_REFUSAL_COPY = {
   contextRequired: "Open a school page to do this.",
   contextInvalid: "You're not verified at that school.",
 } as const;
-
-/** The part of an address after its last `@`, lower case; empty without one. */
-export function emailDomainOf(email: string): string {
-  const at = email.lastIndexOf("@");
-  return at < 0
-    ? ""
-    : email
-        .slice(at + 1)
-        .trim()
-        .toLowerCase();
-}

@@ -75,9 +75,35 @@ try {
   )?.n;
 
   // ── School slugs ──
+  // RPI renames (retires `rpi`, takes another), and MIT retires its own
+  // current slug, so only the primary key stands between MIT and `rpi`.
+  const mitSlug = (
+    await one(
+      `select slug from school_slugs where school_id = $1 and retired_at is null`,
+      [mit],
+    )
+  )?.slug;
+  await db.query(
+    `update school_slugs set retired_at = now() where slug in ($1, $2)`,
+    [rpiSlug, mitSlug],
+  );
+  await db.query(
+    `insert into school_slugs (slug, school_id) values ('rpi-renamed-tier', $1)`,
+    [rpi],
+  );
   const stealSlug = await fails(
     `insert into school_slugs (slug, school_id) values ($1, $2)`,
     [rpiSlug, mit],
+  );
+  const stealUpsert = await fails(
+    `insert into school_slugs (slug, school_id) values ($1, $2)
+     on conflict (slug) do update set school_id = excluded.school_id, retired_at = null`,
+    [rpiSlug, mit],
+  );
+  await db.query(`delete from school_slugs where slug = 'rpi-renamed-tier'`);
+  await db.query(
+    `update school_slugs set retired_at = null where slug in ($1, $2)`,
+    [rpiSlug, mitSlug],
   );
   const renameSlug = await fails(
     `update school_slugs set slug = 'rpi-renamed' where slug = $1`,
@@ -123,18 +149,25 @@ try {
   );
   // (user, school, email, salt, hash, ip, ttl, window, per address, per ip,
   //  per account, cooldown)
-  const startArgs = (user, school, email, hash, cooldown = 0) => [
+  const startArgs = (
+    user,
+    school,
+    email,
+    hash,
+    cooldown = 0,
+    { ip = "ip-hash", perIp = 20, perAccount = 10 } = {},
+  ) => [
     user,
     school,
     email,
     "salt",
     hash,
-    "ip-hash",
+    ip,
     600,
     3600,
     2,
-    20,
-    10,
+    perIp,
+    perAccount,
     cooldown,
   ];
   const start = async (...args) =>
@@ -144,6 +177,13 @@ try {
         startArgs(...args),
       )
     )?.r;
+  const outcomeOf = async (id) =>
+    (
+      await one(
+        `select outcome from school_email_verifications where id = $1`,
+        [id],
+      )
+    )?.outcome ?? null;
   const confirm = async (user, school, id, hash, max = 3) =>
     (
       await one(
@@ -160,6 +200,8 @@ try {
   const onUnverified = (await start(U1, unverifiedSchool, "a@rpi.edu", "h"))
     ?.reason;
   const wrongDomain = (await start(U1, rpi, "a@gmail.com", "h"))?.reason;
+  // The domain is read after the last `@`, as mail is delivered.
+  const quoted = (await start(U1, rpi, '"a@rpi.edu@x"@evil.com', "h"))?.reason;
   const subdomain = await start(U1, rpi, "A@Student.RPI.edu", "h1");
   const subdomainEmail = (
     await one(`select email from school_email_verifications where id = $1`, [
@@ -172,11 +214,10 @@ try {
   const second = await start(U1, rpi, "a@student.rpi.edu", "h3");
   const addressLimit = (await start(U2, rpi, "a@student.rpi.edu", "h4"))
     ?.reason;
-  const superseded = (
-    await one(`select outcome from school_email_verifications where id = $1`, [
-      subdomain?.id,
-    ])
-  )?.outcome;
+  // A `+tag` reaches the same mailbox, so it counts as the same address.
+  const plusLimit = (await start(U2, rpi, "a+x@student.rpi.edu", "h4"))?.reason;
+  // A new code leaves the earlier one open until a match.
+  const earlierOpen = await outcomeOf(subdomain?.id);
 
   const wrong1 = await confirm(U1, rpi, second?.id, "nope");
   const otherUser = (await confirm(U2, rpi, second?.id, "h3"))?.reason;
@@ -187,14 +228,43 @@ try {
     [rpi, U1],
   );
   const reuse = (await confirm(U1, rpi, second?.id, "h3"))?.reason;
+  const earlierAfterMatch = await outcomeOf(subdomain?.id);
 
   // U2 proves the same address: refused after the code matches.
   const u2Code = await start(U2, rpi, "b@rpi.edu", "h5");
+  // The same mailbox, spelled with a `+tag` and capitals.
   await db.query(
-    `update school_email_verifications set email = 'a@student.rpi.edu' where id = $1`,
+    `update school_email_verifications set email = 'A+tag@Student.rpi.edu' where id = $1`,
     [u2Code?.id],
   );
   const taken = (await confirm(U2, rpi, u2Code?.id, "h5"))?.reason;
+
+  // A code whose email didn't go out is discarded: the earlier code stays
+  // open and still works, and the discarded one counts toward nothing.
+  const kept = await start(U2, rpi, "c@rpi.edu", "h7");
+  const unsent = await start(U2, rpi, "c@rpi.edu", "h8");
+  await db.query(`select public.discard_school_email_verification($1, $2)`, [
+    U2,
+    unsent?.id,
+  ]);
+  const afterDiscard = await one(
+    `select
+       (select count(*)::int from school_email_verifications where id = $1) as unsent,
+       (select count(*)::int from school_email_verifications
+         where public.school_email_key(email) = 'c@rpi.edu') as counted`,
+    [unsent?.id],
+  );
+  const keptWorks = (await confirm(U2, rpi, kept?.id, "h7"))?.ok;
+
+  // The per-IP and per-account ceilings, each alone (fresh addresses).
+  const ipLimit = (await start(U2, mit, "d@mit.edu", "h9", 0, { perIp: 1 }))
+    ?.reason;
+  const accountLimit = (
+    await start(U2, mit, "e@mit.edu", "h9", 0, {
+      ip: "another-ip",
+      perAccount: 1,
+    })
+  )?.reason;
 
   // Exhaustion: three wrong tries close the code.
   const u2Again = await start(U2, mit, "b@mit.edu", "h6");
@@ -289,11 +359,12 @@ try {
       want: "0",
     },
     {
-      name: "another school can't take a school's slug",
-      got: /school_slugs_pkey|school_slugs_one_current/.test(stealSlug)
-        ? "refused"
-        : stealSlug,
-      want: "refused",
+      name: "another school can't take a retired slug, by insert or upsert",
+      got: JSON.stringify([
+        /school_slugs_pkey/.test(stealSlug) ? "refused" : stealSlug,
+        /never moves/.test(stealUpsert) ? "refused" : stealUpsert,
+      ]),
+      want: JSON.stringify(["refused", "refused"]),
     },
     {
       name: "a school slug is never renamed or moved in place",
@@ -318,9 +389,13 @@ try {
       want: "succeeded",
     },
     {
-      name: "an unverified school and an address off the domains get no code",
-      got: JSON.stringify([onUnverified, wrongDomain]),
-      want: JSON.stringify(["school_not_verifiable", "wrong_domain"]),
+      name: "an unverified school, an address off the domains, and a quoted one naming the domain first get no code",
+      got: JSON.stringify([onUnverified, wrongDomain, quoted]),
+      want: JSON.stringify([
+        "school_not_verifiable",
+        "wrong_domain",
+        "wrong_domain",
+      ]),
     },
     {
       name: "a subdomain counts under include_subdomains, stored in lower case",
@@ -328,14 +403,29 @@ try {
       want: JSON.stringify([true, "a@student.rpi.edu"]),
     },
     {
-      name: "the resend wait, then the per-address ceiling, whoever asks",
-      got: JSON.stringify([cooldown, second?.ok, addressLimit]),
-      want: JSON.stringify(["cooldown", true, "address_limit"]),
+      name: "the resend wait, then the per-address ceiling, whoever asks and however a +tag spells it",
+      got: JSON.stringify([cooldown, second?.ok, addressLimit, plusLimit]),
+      want: JSON.stringify([
+        "cooldown",
+        true,
+        "address_limit",
+        "address_limit",
+      ]),
     },
     {
-      name: "a new code closes the account's earlier one",
-      got: superseded,
-      want: "superseded",
+      name: "a new code leaves the earlier one open; a match closes it",
+      got: JSON.stringify([earlierOpen, earlierAfterMatch]),
+      want: JSON.stringify([null, "superseded"]),
+    },
+    {
+      name: "a discarded unsent code is gone, counts toward nothing, and the earlier code works",
+      got: JSON.stringify([afterDiscard, keptWorks]),
+      want: JSON.stringify([{ unsent: 0, counted: 1 }, true]),
+    },
+    {
+      name: "the per-IP and per-account ceilings each refuse on their own",
+      got: JSON.stringify([ipLimit, accountLimit]),
+      want: JSON.stringify(["ip_limit", "account_limit"]),
     },
     {
       name: "a wrong code counts down; another account can't use the code",
@@ -356,7 +446,7 @@ try {
       ]),
     },
     {
-      name: "an address another account verified is refused after its code matches",
+      name: "an address another account verified, even with a +tag, is refused after its code matches",
       got: taken,
       want: "address_taken",
     },

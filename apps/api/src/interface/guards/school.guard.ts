@@ -10,6 +10,7 @@ import { SCHOOL_REFUSAL, SCHOOL_REFUSAL_COPY } from '@repo/validation';
 import { SUPABASE_CLIENT } from '../../infrastructure/supabase/supabase.provider';
 import type { FrappSupabaseClient } from '../../infrastructure/supabase/database.types';
 import { SupabaseQueryError } from '../../infrastructure/supabase/supabase-query-error';
+import { SCHOOL_MEMBER_COLUMNS } from '../../infrastructure/supabase/repositories/supabase-school.repository';
 import type { SchoolMember } from '#domain/entities/school.entity';
 import {
   authUserIdOf,
@@ -27,9 +28,6 @@ const UUID_PATTERN = new RegExp(
   '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   'i',
 );
-
-const MEMBER_COLUMNS =
-  'id, school_id, user_id, status, verified_via, verified_email, verified_at, directory_visibility, left_at, created_at';
 
 /** The refusal for a school the caller may not act in, whatever the reason. */
 function notAMember(): ForbiddenException {
@@ -98,7 +96,7 @@ export class SchoolGuard implements CanActivate {
     const [member, school] = await Promise.all([
       this.supabase
         .from('school_members')
-        .select(MEMBER_COLUMNS)
+        .select(SCHOOL_MEMBER_COLUMNS)
         .eq('school_id', schoolId)
         .eq('user_id', user.data.id)
         .is('left_at', null)

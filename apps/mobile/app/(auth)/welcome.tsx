@@ -46,7 +46,7 @@ import { useLatestTrack } from "@/lib/use-latest-track";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * s03, the two screens after a member joins (`spec/ui/mobile/screens.md`,
+ * s03, the screens after a member joins (`spec/ui/mobile/screens.md`,
  * #5627; Paul's pick 2026-11-19, "Two: name, then notifications"):
  *
  * 1. **How the chapter sees you**, always: the name, pre-filled when sign-in
@@ -161,8 +161,12 @@ export default function Welcome() {
 
   const profileKnown =
     userQuery.data !== undefined || userQuery.isError || waitedOut;
+  // Whether the school beat comes next waits on the member's schools too, so
+  // a list still loading isn't read as "no school" (#5929).
+  const schoolsKnown = mySchools.isFetched || mySchools.isError || waitedOut;
+  const hasSchool = (mySchools.data?.length ?? 0) > 0;
   const primerKnown = primer.ready || waitedOut;
-  if (step === "deciding" && profileKnown && primerKnown) {
+  if (step === "deciding" && profileKnown && primerKnown && schoolsKnown) {
     setHadPhoto(!!profile?.photoUrl);
     setStep("you");
   }
@@ -199,9 +203,9 @@ export default function Welcome() {
         nameChanged,
       }),
     );
-    // A member already verified at a school isn't asked again; a failed
-    // read asks, since the beat can be skipped (#5929).
-    if ((mySchools.data?.length ?? 0) === 0) {
+    // A member already verified at a school isn't asked again; a failed or
+    // given-up read asks, since the beat can be skipped (#5929).
+    if (askedSchool || !hasSchool) {
       setAskedSchool(true);
       setStep("school");
       return;
@@ -243,6 +247,7 @@ export default function Welcome() {
     return (
       <SchoolStep
         initialQuery={chapter.data?.university ?? ""}
+        alreadyVerified={mySchools.data?.[0]?.school ?? null}
         busy={leaving}
         onLeave={leaveSchool}
       />
@@ -345,7 +350,7 @@ export default function Welcome() {
           ) : (
             <OnboardingPrimaryButton
               label={
-                primer.showPrimer || (mySchools.data?.length ?? 0) === 0
+                primer.showPrimer || askedSchool || !hasSchool
                   ? ONBOARDING_YOU_COPY.continue
                   : ONBOARDING_YOU_COPY.goToChat
               }
