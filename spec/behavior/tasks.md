@@ -146,6 +146,16 @@ So a member's own open task offers Mark done alone, a member's completion offers
 - **On the web.** The add line's More and the task panel hold **From**: "Just you", then the tiers, roles and groups the officer is in, each under its own heading with how many are in it, and under it "Everyone in Exec board can see this task and how it's going. Officers still confirm it." A followed task's row and tile say "From Exec board", and its review says "Submitted to Exec board". A member who follows another member's task gets the My tasks / Everyone's choice (§ Views). Picking a tier whole in the Who picker is § The Who picker's.
 - **Not yet.** Every member of the following group confirming (option 2) waits on Paul (#5474). On the phone, a followed-tasks list on the board is a later step; until then a phone member reaches a followed task from its push or Activity.
 
+## Attached
+
+(Paul 2026-11-22, "Make Ask Frapp task creation richer".)
+
+- **What.** A task holds a list of Frapp links (`attachments`, at most 10): web links, and the chapter's documents, minutes, events and chat messages. [`frapp-links.md`](frapp-links.md) owns what an entry stores, how each name is read for the member looking (a record they can't open says "You don't have access", never its name), and the checks on a write.
+- **Who.** A `tasks:manage` holder attaches and removes; everyone who can read the task reads the list. A group task's copies share one list, and a group edit changes it on every copy. A repeating task's copies are made with the series' list.
+- **On the web.** The task panel's **Attached** row, under Notes: the links, each opening where it points, and for an officer a quiet **Attach** that opens the shared picker, with a remove control on each row. A change shows at once and saves like any panel field (a repeating copy asks "This task only" or "All upcoming tasks"). Hidden for a member when nothing is attached.
+- **On the phone.** The task screen's **ATTACHED** section, under the description, the same rows and picker, edited in place by an officer as the steps are. Hidden for a member when nothing is attached.
+- **Not yet.** New task forms and Ask's card don't attach yet; Ask attaching the docs a member names is the next step ([`frapp-links.md` § Not yet](frapp-links.md#not-yet)).
+
 ## Up for grabs
 
 (Paul, 2026-11-18: "someone in X", one task that a member of a committee or the chapter takes, which can offer points, and which an officer can hand to someone.)

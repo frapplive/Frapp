@@ -24,7 +24,12 @@ import {
   useTasks,
   useViewerUserId,
 } from "@repo/hooks";
-import { can, TASK_AUDIENCE_COPY, TASK_FOLLOWER_COPY } from "@repo/validation";
+import {
+  can,
+  FRAPP_LINK_COPY,
+  TASK_AUDIENCE_COPY,
+  TASK_FOLLOWER_COPY,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_TASKS } from "@/components/back-row";
@@ -104,6 +109,8 @@ import {
   RELEASED_PARAM,
 } from "@/lib/tasks/open-tasks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { FrappLinksEditor } from "@/components/frapp-links";
+import { ListPanel } from "@/components/list-section";
 
 /** A following tier, role or group since deleted, as a fact's value. */
 const FOLLOWER_DELETED =
@@ -771,6 +778,24 @@ function TaskScreen({
         ) : null}
 
         {row.meetingId ? <TaskMinutesFact meetingId={row.meetingId} /> : null}
+
+        {/* Attached (`spec/behavior/frapp-links.md`): web's task panel row.
+            An officer attaches and removes in place, as with the steps. */}
+        {edit.attachments.length > 0 || controls.edit ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel} accessibilityRole="header">
+              {FRAPP_LINK_COPY.field.toUpperCase()}
+            </Text>
+            <ListPanel>
+              <FrappLinksEditor
+                links={edit.attachments}
+                canEdit={controls.edit}
+                keepDocumentNames={false}
+                onChange={edit.changeAttachments}
+              />
+            </ListPanel>
+          </View>
+        ) : null}
 
         {row.subtasks.length > 0 || (controls.edit && !row.pointsAwarded) ? (
           <SubtaskChecklist

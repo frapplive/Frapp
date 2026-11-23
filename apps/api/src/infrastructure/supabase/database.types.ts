@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { FrappLink } from '@repo/validation';
 import type {
   ActivityItemRead,
   ActivityItemSnooze,
@@ -561,7 +562,8 @@ export interface Database {
       /**
        * `20261117172708` (#4295 step 3) — a task for everyone: its group, a
        * copy per member and each copy's checklist in one transaction.
-       * Returns the copies. `p_followed_by` since `20261119162318` (#5473).
+       * Returns the copies. `p_followed_by` since `20261119162318` (#5473);
+       * `p_attachments` since `20261123183858`.
        */
       create_task_group: {
         Args: {
@@ -579,12 +581,14 @@ export interface Database {
           p_proof_kind: string;
           p_subtask_titles: string[];
           p_followed_by: string | null;
+          p_attachments?: FrappLink[];
         };
         Returns: Task[];
       };
       /**
        * `20261116044044` (#5119) — a repeating task's series and its first
-       * copy in one transaction. Returns the first copy.
+       * copy in one transaction. Returns the first copy. `p_attachments`
+       * since `20261123183858`.
        */
       create_task_series: {
         Args: {
@@ -602,6 +606,7 @@ export interface Database {
           p_first_due_at: string | null;
           p_latest_due_at: string;
           p_next_due_date: string;
+          p_attachments?: FrappLink[];
         };
         Returns: Task[];
       };

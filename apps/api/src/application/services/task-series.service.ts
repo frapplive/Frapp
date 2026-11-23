@@ -122,6 +122,19 @@ export class TaskSeriesService {
     ) {
       patch.proof_kind = input.proof_kind;
     }
+    // Checked against the template's own list; the open copy then takes the
+    // same list as a task edit.
+    const attachments = await this.taskService.checkedAttachments(
+      chapterId,
+      input.attachments,
+      series.attachments ?? [],
+    );
+    if (
+      attachments !== undefined &&
+      JSON.stringify(attachments) !== JSON.stringify(series.attachments ?? [])
+    ) {
+      patch.attachments = attachments;
+    }
     if (
       input.assignee_id !== undefined &&
       input.assignee_id !== series.assignee_id
@@ -216,6 +229,7 @@ export class TaskSeriesService {
         assignee_id: input.assignee_id,
         point_reward: input.point_reward,
         proof_kind: input.proof_kind,
+        attachments: input.attachments,
       };
       if ('due_time' in patch) {
         // On the copy's own day, in the series' zone: built here, so it

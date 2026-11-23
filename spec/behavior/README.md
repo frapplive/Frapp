@@ -35,6 +35,7 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Observability                                        | [`observability.md`](observability.md)     |
 | Service hours (philanthropy)                         | [`service-hours.md`](service-hours.md)     |
 | Tasks                                                | [`tasks.md`](tasks.md)                     |
+| Frapp links: what a task or event points at          | [`frapp-links.md`](frapp-links.md)         |
 | Chapter documents                                    | [`chapter-docs.md`](chapter-docs.md)       |
 | Semester rollover                                    | [`semester-rollover.md`](semester-rollover.md) |
 | Reports and export                                   | [`reports.md`](reports.md)                 |

@@ -28,10 +28,8 @@ import {
   MAX_SERIES_MEETINGS,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
-  EVENT_ATTACHMENT_KINDS,
-  EVENT_ATTACHMENT_TITLE_MAX,
-  EVENT_ATTACHMENTS_MAX,
-  TASK_PROOF_LINK_MAX,
+  FRAPP_LINKS_MAX,
+  FRAPP_LINK_TITLE_MAX,
   EVENT_DESCRIPTION_MAX_LENGTH,
   EVENT_LOCATION_MAX_LENGTH,
   EVENT_NAME_MAX_LENGTH,
@@ -46,6 +44,7 @@ import { IsRepeatRule } from '../decorators/is-repeat-rule.decorator';
 import type { Event } from '#domain/entities/event.entity';
 import type { GeofenceCoordinate } from '#domain/entities/study.entity';
 import { GeofenceCoordinateDto } from './study.dto';
+import { FrappLinkDto } from './frapp-link.dto';
 import type { AssertNever } from './drift-guard';
 import {
   EVENT_ROLE_ID_MAX_LENGTH,
@@ -134,53 +133,21 @@ export class EventAgendaItemDto implements EventAgendaItem {
 }
 
 /**
- * One attachment (#4934): a titled link, or one of the chapter's Chapter
- * Files documents. A flat shape rather than a `oneOf`, so the SDK type stays
- * one object; `kind` says which of `url` and `document_id` it carries.
+ * One attachment (#4934): a Frapp link (`FrappLinkDto`), the object tasks
+ * share. Named for events so the SDK's event types keep their name.
  */
-export class EventAttachmentDto {
+export class EventAttachmentDto extends FrappLinkDto {
   @ApiProperty({
-    maxLength: 64,
-    description: "The client's id for the attachment. Unique within the event.",
-  })
-  @IsString()
-  @MaxLength(64)
-  id: string;
-
-  @ApiProperty({ enum: EVENT_ATTACHMENT_KINDS })
-  @IsIn([...EVENT_ATTACHMENT_KINDS])
-  kind: EventAttachment['kind'];
-
-  @ApiPropertyOptional({
-    maxLength: TASK_PROOF_LINK_MAX,
-    description: "A `link` attachment's address: http or https only.",
-  })
-  @ValidateIf((o: EventAttachmentDto) => o.kind === 'link')
-  @IsString()
-  @MaxLength(TASK_PROOF_LINK_MAX)
-  url?: string;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
+    required: true,
+    maxLength: FRAPP_LINK_TITLE_MAX,
     description:
-      "A `document` attachment's Chapter Files document (`GET /v1/documents/{id}` opens it). An id that isn't the chapter's is a 400.",
+      "What the list shows before the record's live name is read: a link's title, a document's name when it was attached, the kind's word for minutes, events and messages (the API sets that word whatever is sent).",
   })
-  @ValidateIf((o: EventAttachmentDto) => o.kind === 'document')
-  @IsUUID()
-  document_id?: string;
-
-  @ApiProperty({
-    maxLength: EVENT_ATTACHMENT_TITLE_MAX,
-    description:
-      'What the list shows. For a document, its name when it was attached.',
-  })
-  @IsString()
-  @MaxLength(EVENT_ATTACHMENT_TITLE_MAX)
   title: string;
 }
 
 const AGENDA_DESCRIPTION = `This meeting's agenda, in order: at most ${EVENT_AGENDA_MAX} short items. Sent whole; it replaces the stored list, and \`[]\` clears it (null is refused). Belongs to this one meeting: with \`scope: 'series'\` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none.`;
-const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${EVENT_ATTACHMENTS_MAX} titled links or Chapter Files documents. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.`;
+const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${FRAPP_LINKS_MAX} Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a \`title\` (its name), which phone builds from before Frapp links draw.`;
 
 export class CreateEventDto {
   @ApiProperty({ maxLength: EVENT_NAME_MAX_LENGTH })
@@ -326,7 +293,7 @@ export class CreateEventDto {
   // it, send [] to clear it.
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(EVENT_ATTACHMENTS_MAX)
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
   @ValidateNested({ each: true })
   @Type(() => EventAttachmentDto)
   attachments?: EventAttachmentDto[];
@@ -715,7 +682,7 @@ export class UpdateEventDto {
   // it, send [] to clear it.
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(EVENT_ATTACHMENTS_MAX)
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
   @ValidateNested({ each: true })
   @Type(() => EventAttachmentDto)
   attachments?: EventAttachmentDto[];

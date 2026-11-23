@@ -4751,6 +4751,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/frapp-links/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone */
+        post: operations["FrappLinkController_resolve_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/{channelId}/polls": {
         parameters: {
             query?: never;
@@ -7892,18 +7909,38 @@ export interface components {
             tabled_from?: components["schemas"]["EventAgendaTabledFromDto"] | null;
         };
         EventAttachmentDto: {
-            /** @description The client's id for the attachment. Unique within the event. */
+            /** @description The client's id for the entry. Unique within its list. */
             id: string;
             /** @enum {string} */
-            kind: "link" | "document";
-            /** @description A `link` attachment's address: http or https only. */
+            kind: "link" | "document" | "minutes" | "event" | "message";
+            /** @description A `link`'s address: http or https only. Never fetched. */
             url?: string;
             /**
              * Format: uuid
-             * @description A `document` attachment's Chapter Files document (`GET /v1/documents/{id}` opens it). An id that isn't the chapter's is a 400.
+             * @description A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400.
              */
             document_id?: string;
-            /** @description What the list shows. For a document, its name when it was attached. */
+            /**
+             * Format: uuid
+             * @description `minutes`: the meeting whose minutes it opens.
+             */
+            meeting_id?: string;
+            /**
+             * Format: uuid
+             * @description `event`: the event.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message's channel. On a save it is taken from the message, whatever is sent.
+             */
+            channel_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message.
+             */
+            message_id?: string;
+            /** @description What the list shows before the record's live name is read: a link's title, a document's name when it was attached, the kind's word for minutes, events and messages (the API sets that word whatever is sent). */
             title: string;
         };
         GeofenceCoordinateDto: {
@@ -7937,7 +7974,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -7984,7 +8021,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8035,7 +8072,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
@@ -8080,7 +8117,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8123,7 +8160,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A document needs a `title` (its name), which phone builds from before Frapp links draw. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. Send an empty array to clear an existing zone. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
@@ -9949,6 +9986,41 @@ export interface components {
             /** @description Short-lived signed URL to view the photo. */
             url: string;
         };
+        FrappLinkDto: {
+            /** @description The client's id for the entry. Unique within its list. */
+            id: string;
+            /** @enum {string} */
+            kind: "link" | "document" | "minutes" | "event" | "message";
+            /** @description A `link`'s address: http or https only. Never fetched. */
+            url?: string;
+            /**
+             * Format: uuid
+             * @description A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400.
+             */
+            document_id?: string;
+            /**
+             * Format: uuid
+             * @description `minutes`: the meeting whose minutes it opens.
+             */
+            meeting_id?: string;
+            /**
+             * Format: uuid
+             * @description `event`: the event.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message's channel. On a save it is taken from the message, whatever is sent.
+             */
+            channel_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message.
+             */
+            message_id?: string;
+            /** @description A `link`'s title (its domain when empty). An event's `document` keeps the name it had when attached, for older phone builds; every other record's name is read live with `POST /v1/frapp-links/resolve` and never stored. */
+            title?: string;
+        };
         CreateTaskDto: {
             title: string;
             description?: string;
@@ -9978,6 +10050,8 @@ export interface components {
             audience_tier_id?: string;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. */
             followed_by?: string;
+            /** @description What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. */
+            attachments?: components["schemas"]["FrappLinkDto"][];
             /** @description Due date (YYYY-MM-DD). Omit, or send null, for a task with no due date (#5761): it is never overdue, gets no due reminders and can't repeat. */
             due_date?: string | null;
             /**
@@ -10090,6 +10164,8 @@ export interface components {
             meeting_id: string | null;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. */
             followed_by: string | null;
+            /** @description What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open. */
+            attachments: components["schemas"]["FrappLinkDto"][];
             /** Format: date-time */
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the task row committed and the card did not, so no Realtime echo will arrive to reconcile the caller’s optimistic placeholder — drop it and warn, without implying the create failed. Absent means the server reported no outcome (a dashboard create, or a request that did not attempt a card) — leave the placeholder for the echo. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
@@ -10137,6 +10213,8 @@ export interface components {
             proof_kind?: "none" | "photo" | "link";
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. Null takes it off. A new one must name a tier, role or group the editor is in; the one the task has stays whoever edits. With `scope: group` it changes every copy, confirmed ones too. Not with `scope: series`. */
             followed_by?: string | null;
+            /** @description What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. With `scope: group` every copy not yet confirmed takes it; with `scope: series` the next copies are made with it. */
+            attachments?: components["schemas"]["FrappLinkDto"][];
             /**
              * @description On a copy of a repeating task (#5119): `instance` (default) edits this task only; `series` ("All upcoming tasks") edits what the next copies are made from and the series’ open copy, while it is still to come and not marked done. Done and overdue copies never change, and a copy keeps its day: a `due_date` other than its own is a 400 (move one copy with `instance`). On a copy of a group task (#4295 step 3): `group` ("Everyone’s copy") makes the edit to every copy not yet confirmed; `assignee_id` and `reference_photo_paths` change one copy only, so they are a 400 with it.
              * @enum {string}
@@ -11161,6 +11239,42 @@ export interface components {
         SetDocumentAccessDto: {
             /** @description Who can see the file (#3642): null or left out for the same as its folder, or the tiers, roles and groups named, which narrow the folder's (a member passes both). Not empty. The caller's own tier and every tier above it are always kept. */
             who_can_see?: string[] | null;
+        };
+        FrappLinkTargetDto: {
+            /** @enum {string} */
+            kind: "document" | "minutes" | "event" | "message";
+            /** Format: uuid */
+            document_id?: string;
+            /** Format: uuid */
+            meeting_id?: string;
+            /** Format: uuid */
+            event_id?: string;
+            /** Format: uuid */
+            channel_id?: string;
+            /** Format: uuid */
+            message_id?: string;
+        };
+        ResolveFrappLinksDto: {
+            /** @description The records to read, at most 40. A record asked twice is answered once. */
+            targets: components["schemas"]["FrappLinkTargetDto"][];
+        };
+        FrappLinkResolvedDto: {
+            /** @description Which target this answers: `document:<id>`, `minutes:<id>`, `event:<id>` or `message:<message id>`. */
+            key: string;
+            /**
+             * @description `ok`: the caller may open it. `hidden`: it exists but they may not, and its name is not sent. `removed`: deleted, or not this chapter’s.
+             * @enum {string}
+             */
+            state: "ok" | "removed" | "hidden";
+            /** @description The document's, meeting's or event's name; a message's channel name. Null unless `ok`. */
+            title: string | null;
+            /** @description The meeting's or event's start, or when the message was sent (ISO 8601). Null unless `ok`, and on a document. */
+            date: string | null;
+            /** @description Who sent the message. Null on every other kind. */
+            author: string | null;
+        };
+        ResolveFrappLinksResponseDto: {
+            links: components["schemas"]["FrappLinkResolvedDto"][];
         };
         CreatePollDto: {
             /** @description Poll question */
@@ -24370,6 +24484,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    FrappLinkController_resolve_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveFrappLinksDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveFrappLinksResponseDto"];
+                };
             };
             /** @description Error */
             default: {

@@ -154,13 +154,13 @@ describe('EventService — agenda and attachments', () => {
         'A link attachment needs a web address starting with http:// or https://.',
       ],
       [
-        'an attachment with no title',
+        'a document attachment with no title',
         {
           attachments: [
             {
               id: 'x1',
-              kind: 'link' as const,
-              url: 'https://a.example',
+              kind: 'document' as const,
+              document_id: '00000000-0000-4000-8000-000000000001',
               title: '  ',
             },
           ],
@@ -174,7 +174,7 @@ describe('EventService — agenda and attachments', () => {
             { id: 'x1', kind: 'document' as const, title: 'Agenda' },
           ],
         },
-        'A document attachment needs the document it points at.',
+        'A document link needs the document it points at.',
       ],
     ])('refuses %s with a 400 naming it', async (_label, extra, message) => {
       await expect(service.create({ ...createBase, ...extra })).rejects.toThrow(

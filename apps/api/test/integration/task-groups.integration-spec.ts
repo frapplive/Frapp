@@ -50,6 +50,7 @@ describeIntegration(
         point_reward: null,
         proof_kind: 'none',
         subtask_titles: [],
+        attachments: [],
       });
 
     const confirm = async (copy: Task) =>

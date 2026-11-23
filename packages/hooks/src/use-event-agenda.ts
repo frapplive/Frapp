@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { EventAgendaItem, EventAttachment } from "@repo/validation";
+import {
+  withEventLinkTitles,
+  type EventAgendaItem,
+  type EventAttachment,
+  type FrappTitledLink,
+} from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 /**
@@ -74,12 +79,15 @@ export function useEventListsEditor(
       timer.current = null;
     }
     if (inFlight.current || dirty.current.size === 0) return;
-    const body: Partial<EventLists> = {};
+    const body: {
+      agenda?: EventAgendaItem[];
+      attachments?: FrappTitledLink[];
+    } = {};
     for (const field of dirty.current) {
       const value = editedRef.current[field];
       if (field === "agenda" && value) body.agenda = value as EventAgendaItem[];
       if (field === "attachments" && value) {
-        body.attachments = value as EventAttachment[];
+        body.attachments = withEventLinkTitles(value as EventAttachment[]);
       }
     }
     dirty.current.clear();

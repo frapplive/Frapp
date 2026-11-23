@@ -46,11 +46,10 @@ import {
   attendanceUpdate,
   keepAgendaTabledFrom,
   normalizeAgenda,
-  normalizeAttachments,
   normalizeCheckInZone,
 } from './event-input';
-import { CHAPTER_DOCUMENT_REPOSITORY } from '#domain/repositories/chapter-document.repository.interface';
-import type { IChapterDocumentRepository } from '#domain/repositories/chapter-document.repository.interface';
+import { normalizeFrappLinks } from './frapp-link/frapp-link-input';
+import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 import {
   EVENT_AGENDA_MAX,
   type EventAgendaItem,
@@ -90,54 +89,26 @@ export class EventService {
     private readonly eventTypes: EventTypeService,
     @Inject(EVENT_CHECK_IN_SCREEN_REPOSITORY)
     private readonly screenRepo: IEventCheckInScreenRepository,
-    @Inject(CHAPTER_DOCUMENT_REPOSITORY)
-    private readonly documentRepo: IChapterDocumentRepository,
+    private readonly links: FrappLinkChecker,
   ) {}
 
   /**
-   * A request's attachments, normalized, with every newly attached document
-   * one of this chapter's Chapter Files (#4934). A new document id from
-   * another chapter, or one already deleted, is a 400, so an event never
-   * starts pointing at a file its members can't open. A document the meeting
-   * already held (`stored`) passes unchecked: the list is sent whole, and a
-   * file deleted since it was attached must not block every later save
-   * (`spec/behavior/events.md` § Agenda and attachments).
+   * A request's attachments, normalized, with every newly attached record
+   * this chapter's (#4934, `FrappLinkChecker`): a new id from another
+   * chapter, or one already deleted, is a 400, so an event never starts
+   * pointing at something its members can't open. One the meeting already
+   * held (`stored`) passes unchecked: the list is sent whole, and a record
+   * deleted since must not block every later save (`spec/behavior/events.md`
+   * § Agenda and attachments).
    */
   private async attachmentsFor(
     input: CreateEventInput['attachments'],
     chapterId: string,
     stored: readonly EventAttachment[] = [],
   ): Promise<EventAttachment[] | undefined> {
-    const attachments = normalizeAttachments(input);
+    const attachments = normalizeFrappLinks(input, 'event');
     if (!attachments) return attachments;
-    const held = new Set(
-      stored.flatMap((a) => (a.kind === 'document' ? [a.document_id] : [])),
-    );
-    const documentIds = [
-      ...new Set(
-        attachments.flatMap((a) =>
-          a.kind === 'document' && !held.has(a.document_id)
-            ? [a.document_id]
-            : [],
-        ),
-      ),
-    ];
-    if (documentIds.length > 0) {
-      const found = await this.documentRepo.findByIds(documentIds, chapterId);
-      const known = new Set(found.map((doc) => doc.id));
-      const missing = attachments.find(
-        (a) =>
-          a.kind === 'document' &&
-          documentIds.includes(a.document_id) &&
-          !known.has(a.document_id),
-      );
-      if (missing) {
-        throw new BadRequestException(
-          `"${missing.title}" isn't one of this chapter's files any more. Remove it, or attach it again from Chapter Files.`,
-        );
-      }
-    }
-    return attachments;
+    return this.links.checked(chapterId, attachments, stored);
   }
 
   /**

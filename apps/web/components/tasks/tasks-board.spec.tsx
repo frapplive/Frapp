@@ -191,6 +191,9 @@ const TASKS = [
 vi.mock("@repo/hooks", async (importOriginal) => ({
   // `actionStatus` stays real; only the data hooks are stubbed.
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Attached (Frapp links): no names to read, nothing offered.
+  useFrappLinks: () => ({ resolved: new Map(), isLoading: false }),
+  useFrappLinkCandidates: () => ({ candidates: [], isLoading: false }),
   // Task photos (#4565): no photo reads or uploads in these cases.
   useRequestTaskPhotoUploadUrl: () => ({ mutateAsync: vi.fn() }),
   useTaskPhotoUrl: () => ({ data: undefined }),

@@ -1,4 +1,6 @@
 import { CHAPTER_DOCUMENT_REPOSITORY } from '#domain/repositories/chapter-document.repository.interface';
+import { FrappLinkChecker } from '../../src/application/services/frapp-link/frapp-link-checker.service';
+import { frappLinkRepoMocks } from './frapp-link-repos.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EVENT_REPOSITORY } from '#domain/repositories/event.repository.interface';
 import type { IEventRepository } from '#domain/repositories/event.repository.interface';
@@ -157,6 +159,8 @@ export async function createEventServiceFixture() {
       { provide: RbacService, useValue: mockRbacService },
       { provide: EVENT_CHECK_IN_SCREEN_REPOSITORY, useValue: mockScreenRepo },
       { provide: CHAPTER_DOCUMENT_REPOSITORY, useValue: mockDocumentRepo },
+      FrappLinkChecker,
+      ...frappLinkRepoMocks({ events: false, documents: false }).providers,
     ],
   }).compile();
 

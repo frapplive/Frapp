@@ -20,8 +20,10 @@ import {
   type MyTasksGroup,
 } from "@repo/hooks";
 import {
+  readFrappLinks,
   taskNeedsSignOff,
   taskSignedOffAutomatically,
+  type FrappLink,
   type TaskProofKind,
   type TaskSeriesLine,
 } from "@repo/validation";
@@ -94,6 +96,8 @@ export interface TaskRowModel {
   followedBy: string | null;
   /** That tier's, role's or group's name now; `null` once deleted. */
   followedByName: string | null;
+  /** Its Frapp links (`spec/behavior/frapp-links.md`), ids only for a record. */
+  attachments: FrappLink[];
   /**
    * The group this copy is one of (#4295 step 3; 2026-11-18): who the task
    * went to and how far along the copies are, or `null` for one person's.
@@ -261,6 +265,7 @@ export function toTaskRow(row: Record<string, unknown>): TaskRowModel | null {
     meetingId: str(row, "meeting_id"),
     followedBy: str(row, "followed_by"),
     followedByName: str(row, "followed_by_name"),
+    attachments: readFrappLinks(row.attachments),
     group: toGroup(row.group),
     openTaskId: str(row, "open_task_id"),
     series: readTaskSeries(row.series),
