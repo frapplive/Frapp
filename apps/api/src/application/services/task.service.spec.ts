@@ -47,6 +47,9 @@ import {
 } from '@repo/validation';
 import { memberFixture, userFixture } from '#test/helpers/entity-fixtures';
 
+/** A send-back's caller: an officer who isn't the assignee (#5917). */
+const ADMIN = { actorUserId: 'admin-1' };
+
 describe('TaskService', () => {
   let service: TaskService;
   let mockTaskRepo: jest.Mocked<ITaskRepository>;
@@ -2957,6 +2960,7 @@ describe('TaskService', () => {
         'task-1',
         'ch-1',
         'Needs more work',
+        ADMIN,
       );
 
       // Stamped with when it was sent back, which Activity reads as the
@@ -3019,15 +3023,32 @@ describe('TaskService', () => {
       'refuses a send-back with no reason (%p)',
       async (comment) => {
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', comment),
+          service.rejectCompletion('task-1', 'ch-1', comment, ADMIN),
         ).rejects.toThrow('Say what needs to change to send it back');
         expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
       },
     );
 
+    it("refuses an officer's send-back of their own task with a 403, writing nothing (#5917)", async () => {
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        assignee_id: 'admin-1',
+        status: TaskStatus.COMPLETED,
+      });
+
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow('Admins cannot send back their own task completions');
+      expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
     it('refuses a reason over 200 characters', async () => {
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201)),
+        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201), ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
     });
@@ -3045,6 +3066,7 @@ describe('TaskService', () => {
       });
 
       await service.rejectCompletion('task-1', 'ch-1', '  Blurry  ', {
+        ...ADMIN,
         requirePhoto: true,
       });
 
@@ -3074,7 +3096,7 @@ describe('TaskService', () => {
         status: TaskStatus.IN_PROGRESS,
       });
 
-      await service.rejectCompletion('task-1', 'ch-1', 'Not finished');
+      await service.rejectCompletion('task-1', 'ch-1', 'Not finished', ADMIN);
 
       expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
         'task-1',
@@ -3092,7 +3114,7 @@ describe('TaskService', () => {
       mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
     });
@@ -3108,10 +3130,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(confirmed);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(
         'Cannot reject a task that has already been confirmed and points awarded',
       );
@@ -3123,10 +3145,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(baseTask);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow('Only completed tasks can be rejected');
 
       expect(mockTaskRepo.update).not.toHaveBeenCalled();
@@ -4742,7 +4764,7 @@ describe('TaskService', () => {
         mockTaskRepo.deletePhotos.mockResolvedValue([proofRow]);
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.deletePhotos).toHaveBeenCalledWith(
           'ch-1',
@@ -4760,7 +4782,7 @@ describe('TaskService', () => {
         mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+          service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
         ).rejects.toThrow(BadRequestException);
         expect(mockTaskRepo.deletePhotos).not.toHaveBeenCalled();
         expect(mockStorage.deleteFiles).not.toHaveBeenCalled();
@@ -4790,7 +4812,7 @@ describe('TaskService', () => {
         it('send-back refuses it', async () => {
           mockTaskRepo.findById.mockResolvedValue(officerConfirmed);
           await expect(
-            service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+            service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
           ).rejects.toThrow('already been confirmed');
           expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
         });
@@ -4807,7 +4829,7 @@ describe('TaskService', () => {
         );
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
           'task-1',

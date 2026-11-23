@@ -1329,8 +1329,11 @@ function StatusActions({
   // Fails closed, as the list does: an unknown viewer might be the assignee.
   const cannotConfirm = isMine || viewerUnknown;
   const controls = gate.controlProps(pending);
+  // Someone else's completion only: no one confirms or sends back their own
+  // task (#5917); Mark not done takes your own "done" back.
   const reviewable =
     canManage &&
+    !cannotConfirm &&
     status === "COMPLETED" &&
     (!task.points_awarded || autoSignedOff);
   return (
@@ -1380,7 +1383,7 @@ function StatusActions({
             {TASK_ACTION_LABELS.reopen}
           </Button>
         ) : null}
-        {reviewable && !cannotConfirm && needsSignOff ? (
+        {reviewable && needsSignOff ? (
           <Button
             size="sm"
             className="gap-1.5"

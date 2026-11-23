@@ -586,10 +586,10 @@ describe("TasksBoard subscription gating", () => {
     expect(liveStatus()).not.toBeInTheDocument();
   });
 
-  it("hides Confirm on your own completed task but keeps Send back (#1056)", () => {
-    // The API refuses a self-confirmation, so offering the control would be a
-    // guaranteed 403 plus an optimistic flip-and-revert. Send back is untouched:
-    // it withholds points rather than awarding them.
+  it("hides Confirm and Send back on your own completed task, keeping Mark not done (#1056, #5917)", () => {
+    // The API refuses a self-confirmation and a self-send-back, so offering
+    // either would be a guaranteed 403. Mark not done takes your own "done"
+    // back.
     chapter.active();
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
     render(<TasksBoard />);
@@ -597,7 +597,12 @@ describe("TasksBoard subscription gating", () => {
     expect(
       screen.queryByRole("button", { name: /^confirm$/i }),
     ).not.toBeInTheDocument();
-    expect(sendBackButton()).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /^send back$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^mark not done$/i }),
+    ).toBeEnabled();
     // The missing control is explained on the tile it is missing from.
     expect(
       screen.getByText("You can't confirm your own task."),

@@ -2573,7 +2573,7 @@ export class TaskService {
     id: string,
     chapterId: string,
     comment: string | null | undefined,
-    options: { requirePhoto?: boolean; actorUserId?: string } = {},
+    options: { requirePhoto?: boolean; actorUserId: string },
   ): Promise<TaskView> {
     // A send-back says why (#4635): the reason stays on the task for the
     // assignee, and the push carries it.
@@ -2589,6 +2589,15 @@ export class TaskService {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    // No one sends back their own task (#5917), as no one confirms it
+    // ({@link confirmCompletion}): an officer's own completion is undone with
+    // Mark not done. Before the status guard, as there.
+    if (task.assignee_id === options.actorUserId) {
+      throw new ForbiddenException(
+        'Admins cannot send back their own task completions',
+      );
     }
 
     if (task.status !== TaskStatus.COMPLETED) {
@@ -2624,9 +2633,7 @@ export class TaskService {
     await this.notificationService.retractTaskCompletion(chapterId, id);
 
     const sender =
-      (options.actorUserId &&
-        (await this.displayNameOf(options.actorUserId))) ||
-      'An officer';
+      (await this.displayNameOf(options.actorUserId)) || 'An officer';
     await this.safeNotifyUser(
       task.assignee_id,
       chapterId,

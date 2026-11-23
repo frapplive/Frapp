@@ -1757,9 +1757,9 @@ function TaskCard({
              * 403, and the optimistic write would flip the label to
              * "Confirmed" and snap back. A confirmed task carries neither
              * control: it sits in the Confirmed list, which says so, and the
-             * API refuses a reject once points are awarded. Reject stays on
-             * your own unconfirmed task: it withholds points rather than
-             * awarding them, so the self-confirm rule does not cover it.
+             * API refuses a reject once points are awarded. Send back is
+             * hidden on your own task too (#5917): the API refuses it, and
+             * Mark not done takes your own "done" back.
              */}
             {cannotConfirm || !needsSignOff ? null : (
               <Button
@@ -1772,16 +1772,18 @@ function TaskCard({
                 {TASK_ACTION_LABELS.confirm}
               </Button>
             )}
-            <Button
-              size="toolbar"
-              variant="secondary"
-              className="gap-1.5"
-              {...gate.controlProps(lifecycleWritePending)}
-              onClick={onReject}
-            >
-              <Undo2 className="h-4 w-4" />
-              {TASK_ACTION_LABELS.reject}
-            </Button>
+            {cannotConfirm ? null : (
+              <Button
+                size="toolbar"
+                variant="secondary"
+                className="gap-1.5"
+                {...gate.controlProps(lifecycleWritePending)}
+                onClick={onReject}
+              >
+                <Undo2 className="h-4 w-4" />
+                {TASK_ACTION_LABELS.reject}
+              </Button>
+            )}
           </>
         ) : null}
         {/*

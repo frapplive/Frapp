@@ -197,9 +197,10 @@ On mobile's task board only the row's checkbox changes a task; a tap elsewhere o
   a single endpoint. The API returns 403; the check runs before the COMPLETED-status guard, so
   the refusal does not depend on the task's state. Clients hide the Confirm control on
   the viewer's own task rather than letting it 403 (`tasks-board.tsx`, chat `task-card.tsx`).
+- **No one sends back their own task** (#5917, asked by Winston, 2026-11-23: an officer could send their own completed task back to themselves over and over). Send back is for someone else's completion; on your own, **Mark not done** takes it back. `POST /v1/tasks/:id/reject` on the caller's own task returns 403 ("You can't send back your own task. Use Mark not done."), checked before the status guard as the self-confirm is, and an officer's own copy of a group task follows the same rule. Web's board tile and task panel, chat's task card on both apps (`taskCardControls`), and the phone's task screen and long-press menu don't offer it there.
 - **Consequence in a single-admin chapter.** Where the assignee is the chapter's only
   `tasks:manage` holder, a self-assigned task with a point reward cannot be confirmed by
-  anyone. Rejection only cycles it back to IN_PROGRESS. This is the accepted cost of the
+  anyone. Mark not done only cycles it back to IN_PROGRESS. This is the accepted cost of the
   rule above: the alternative is a single-officer chapter where one member both earns and
   authorises every task award, which is the thing being prevented. The way out is the
   edit: the officer reassigns the task, which starts it over at To do for the new assignee
