@@ -316,12 +316,14 @@ describe('MemberController', () => {
       const values = [{ field_id: 'f-1', value: 'M' }];
       await controller.updateOwnCustomFields(
         'chapter-1',
+        'user-1',
         { id: 'member-1' },
         { values },
       );
       expect(customFieldService.updateOwnValues).toHaveBeenCalledWith(
         'chapter-1',
         'member-1',
+        'user-1',
         values,
       );
       // Own only: the route takes no member id, so no permission beyond the

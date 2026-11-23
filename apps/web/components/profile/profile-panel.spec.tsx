@@ -748,4 +748,14 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     render(<ProfilePanel />);
     expect(mocks.memberByUserId).not.toHaveBeenCalledWith("u-1");
   });
+
+  it("draws More details behind the Directory's permission (#581)", () => {
+    const { unmount } = render(<ProfilePanel />);
+    expect(screen.getByTestId("own-custom-fields")).toBeInTheDocument();
+    unmount();
+
+    mocks.permissions = [];
+    render(<ProfilePanel />);
+    expect(screen.queryByTestId("own-custom-fields")).toBeNull();
+  });
 });

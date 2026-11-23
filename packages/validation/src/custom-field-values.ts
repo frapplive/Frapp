@@ -49,7 +49,23 @@ export type CustomFieldValueRule = {
 export const CUSTOM_FIELD_BOOLEAN_VALUES = ["true", "false"] as const;
 
 const INTEGER = /^-?\d+$/;
-const DECIMAL = /^-?(\d+(\.\d*)?|\.\d+)$/;
+const DECIMAL = /^(-?)(\d*)(?:\.(\d*))?$/;
+
+/**
+ * A typed decimal in one written form: no leading zeros on the whole part,
+ * no trailing zeros after the point, a 0 before a bare point ("3.40" is
+ * "3.4", ".5" is "0.5", "-0" is "0"). `null` for anything that isn't one.
+ */
+function canonicalDecimal(value: string): string | null {
+  const match = DECIMAL.exec(value);
+  if (!match) return null;
+  const [, sign, whole = "", fraction = ""] = match;
+  if (whole === "" && fraction === "") return null;
+  const int = whole.replace(/^0+(?=\d)/, "") || "0";
+  const frac = fraction.replace(/0+$/, "");
+  const body = frac ? `${int}.${frac}` : int;
+  return sign && /[1-9]/.test(body) ? `-${body}` : body;
+}
 
 /** The longest text a field of this definition takes. */
 export function customFieldTextMaxLength(rule: CustomFieldValueRule): number {
@@ -96,11 +112,11 @@ export function checkCustomFieldValue(
         ? { ok: true, value: String(Number(value)) }
         : { ok: false, message: `${rule.label} takes a whole number.` };
     case "decimal": {
-      const parsed = Number(value);
-      return DECIMAL.test(value) &&
-        Number.isFinite(parsed) &&
-        value.length <= 32
-        ? { ok: true, value: String(parsed) }
+      // Canonicalized as text, never through `Number`: `String(Number(x))`
+      // writes 0.0000001 as "1e-7" and drops digits past about 17.
+      const decimal = canonicalDecimal(value);
+      return decimal !== null && value.length <= 32
+        ? { ok: true, value: decimal }
         : { ok: false, message: `${rule.label} takes a number, like 3.42.` };
     }
     case "phone":
@@ -182,6 +198,12 @@ export function ownCustomFieldRule(
 export function ownCustomFieldChanges(
   fields: readonly OwnCustomFieldShape[],
   draft: Readonly<Record<string, string>>,
+  /**
+   * What the form showed for the stored value, which a draft is compared
+   * with: the stored text unless the form reformats it (a phone stored
+   * E.164 shows as "(518) 555-0142"), so an untouched field is never sent.
+   */
+  shown: (field: OwnCustomFieldShape) => string = (field) => field.value ?? "",
 ): {
   values: { field_id: string; value: string | null }[];
   problems: Record<string, string>;
@@ -191,9 +213,9 @@ export function ownCustomFieldChanges(
   for (const field of fields) {
     const typed = draft[field.field_id];
     if (typed === undefined) continue;
-    const saved = field.value ?? "";
+    const saved = shown(field);
     if (typed.trim() === saved.trim()) continue;
-    if (typed.trim() === "" && saved === "") continue;
+    if (typed.trim() === "" && (field.value ?? "") === "") continue;
     const checked = checkCustomFieldValue(ownCustomFieldRule(field), typed);
     if (!checked.ok) {
       problems[field.field_id] = checked.message;

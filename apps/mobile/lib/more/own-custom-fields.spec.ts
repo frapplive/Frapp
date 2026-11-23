@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OwnCustomField } from "@repo/hooks";
 import {
-  ownCustomFieldDraft,
   ownCustomFieldKeyboard,
   ownCustomFieldOptions,
   ownCustomFieldRows,
@@ -84,12 +83,9 @@ describe("ownCustomFieldRows (#581)", () => {
     ).toEqual(["S", "M"]);
   });
 
-  it("opens the keyboard for the type, and a phone formatted", () => {
+  it("opens the keyboard for the type", () => {
     expect(ownCustomFieldKeyboard("decimal")).toBe("decimal-pad");
     expect(ownCustomFieldKeyboard("phone")).toBe("phone-pad");
     expect(ownCustomFieldKeyboard("text")).toBe("default");
-    expect(
-      ownCustomFieldDraft(field({ type: "phone", value: "+15185550142" })),
-    ).toBe("(518) 555-0142");
   });
 });

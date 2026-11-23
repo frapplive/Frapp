@@ -1,5 +1,5 @@
-import type { OwnCustomField } from "@repo/hooks";
-import { formatCustomFieldValue, formatPhone } from "@repo/formatting";
+import { type OwnCustomField, ownCustomFieldOffersNotSet } from "@repo/hooks";
+import { formatCustomFieldValue } from "@repo/formatting";
 import {
   CUSTOM_FIELD_AUDIENCE_LINE,
   OWN_CUSTOM_FIELDS_COPY,
@@ -54,9 +54,9 @@ export function ownCustomFieldOptions(field: OwnCustomField): SheetOption[] {
     value: choice,
     label: choice,
   }));
-  return field.required && field.value !== null
-    ? choices
-    : [{ value: null, label: OWN_CUSTOM_FIELDS_COPY.notSet }, ...choices];
+  return ownCustomFieldOffersNotSet(field)
+    ? [{ value: null, label: OWN_CUSTOM_FIELDS_COPY.notSet }, ...choices]
+    : choices;
 }
 
 /** The keyboard a typed field opens with. */
@@ -67,10 +67,4 @@ export function ownCustomFieldKeyboard(
   if (type === "decimal") return "decimal-pad";
   if (type === "phone") return "phone-pad";
   return "default";
-}
-
-/** What the one-field sheet opens with: a phone formatted, the rest as stored. */
-export function ownCustomFieldDraft(field: OwnCustomField): string {
-  if (field.value === null) return "";
-  return field.type === "phone" ? formatPhone(field.value) : field.value;
 }

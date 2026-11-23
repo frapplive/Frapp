@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
 }));
 
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks")>()),
   useOwnCustomFields: () => mocks.query,
   useUpdateOwnCustomFields: () => ({
     mutateAsync: mocks.mutateAsync,
@@ -25,7 +26,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 import { OwnCustomFieldsSection } from "./own-custom-fields-section";
 
-const field = (over: Record<string, unknown>) => ({
+const field = <T extends Record<string, unknown>>(over: T) => ({
   key: "k",
   visibility: "chapter",
   required: false,
@@ -114,6 +115,27 @@ describe("OwnCustomFieldsSection (#581)", () => {
       ]),
     );
     expect(mocks.toast).toHaveBeenCalledWith({ title: "Details saved" });
+  });
+
+  it("doesn't re-send a stored phone it shows formatted", async () => {
+    mocks.query.data = FIELDS.map((f) =>
+      f.field_id === "ec" ? { ...f, value: "+15185550142" } : f,
+    );
+    render(<OwnCustomFieldsSection enabled />);
+
+    expect(screen.getByLabelText("Emergency contact (phone)")).toHaveValue(
+      "(518) 555-0142",
+    );
+    fireEvent.change(screen.getByLabelText("Allergies"), {
+      target: { value: "Shellfish" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+
+    await waitFor(() =>
+      expect(mocks.mutateAsync).toHaveBeenCalledWith([
+        { field_id: "allergy", value: "Shellfish" },
+      ]),
+    );
   });
 
   it("refuses a bad value on Save, under its field, and sends nothing", () => {

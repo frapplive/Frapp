@@ -54,6 +54,8 @@ const ACTION_PHRASES: Readonly<Record<string, string>> = {
   member_profile_corrected: "edited a member's profile",
   // A member renaming themselves (#5801).
   member_renamed: "changed their name",
+  // A member setting their own More details (#581): which fields, never values.
+  member_custom_fields_updated: "updated their profile details",
   presidency_transferred: "handed over the presidency",
   presidency_claimed: "claimed the presidency",
   president_orphaned: "left the chapter without a president",
@@ -110,6 +112,7 @@ export const CHAPTER_LOG_KINDS = [
       "member_removed",
       "member_profile_corrected",
       "member_renamed",
+      "member_custom_fields_updated",
       "presidency_transferred",
       "presidency_claimed",
       "president_orphaned",

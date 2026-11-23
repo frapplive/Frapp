@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import {
   type OwnCustomField,
+  ownCustomFieldFormChanges,
+  ownCustomFieldShownValue,
   useOwnCustomFields,
   usePermissionList,
   useUpdateOwnCustomFields,
@@ -14,7 +16,6 @@ import {
   CUSTOM_FIELD_AUDIENCE_LINE,
   customFieldTextMaxLength,
   OWN_CUSTOM_FIELDS_COPY as COPY,
-  ownCustomFieldChanges,
   ownCustomFieldRule,
   PHONE_MAX_LENGTH,
 } from "@repo/validation";
@@ -33,7 +34,6 @@ import {
 } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import {
-  ownCustomFieldDraft,
   ownCustomFieldKeyboard,
   ownCustomFieldOptions,
   ownCustomFieldRows,
@@ -207,7 +207,7 @@ const OwnCustomFieldSheet = forwardRef<
 
   const commit = () => {
     if (!field) return;
-    const { values, problems } = ownCustomFieldChanges([field], {
+    const { values, problems } = ownCustomFieldFormChanges([field], {
       [field.field_id]: draft,
     });
     const refused = problems[field.field_id];
@@ -238,7 +238,7 @@ const OwnCustomFieldSheet = forwardRef<
       // value, not the last visit's refused draft.
       onChange={(index) => {
         if (index >= 0 && field) {
-          setDraft(ownCustomFieldDraft(field));
+          setDraft(ownCustomFieldShownValue(field));
           setProblem(null);
         }
       }}

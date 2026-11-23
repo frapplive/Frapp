@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
+import { formatPhone } from "@repo/formatting";
+import { ownCustomFieldChanges } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 /**
@@ -17,6 +19,38 @@ export type OwnCustomFieldValue =
 /** Its own root, so a directory invalidation doesn't refetch it. */
 const ownCustomFieldsKey = (chapterId: string | null) =>
   ["own-custom-fields", chapterId] as const;
+
+/**
+ * What a form shows for a stored value, the text it starts from: a phone
+ * formatted as every screen shows it, the rest as stored. One rule for both
+ * apps' forms.
+ */
+export function ownCustomFieldShownValue(field: OwnCustomField): string {
+  if (field.value === null) return "";
+  return field.type === "phone" ? formatPhone(field.value) : field.value;
+}
+
+/**
+ * Whether a pick offers "Not set": always, except on a required field that
+ * already has a value, which can't go back to empty.
+ */
+export function ownCustomFieldOffersNotSet(field: OwnCustomField): boolean {
+  return !(field.required && field.value !== null);
+}
+
+/**
+ * What a save sends from a form's draft: only the fields whose text differs
+ * from what the form showed ({@link ownCustomFieldShownValue}), each checked
+ * by type, with each refused field's message.
+ */
+export function ownCustomFieldFormChanges(
+  fields: readonly OwnCustomField[],
+  draft: Readonly<Record<string, string>>,
+) {
+  return ownCustomFieldChanges(fields, draft, (field) =>
+    ownCustomFieldShownValue(field as OwnCustomField),
+  );
+}
 
 export function useOwnCustomFields(options: { enabled?: boolean } = {}) {
   const client = useFrappClient();
@@ -38,8 +72,11 @@ export function useOwnCustomFields(options: { enabled?: boolean } = {}) {
 /**
  * Save some of your values; fields left out keep theirs. One refused value
  * refuses the save (400 with the field's message). The answer is all your
- * fields, which goes straight into the cache, and the directory's reads of
- * you refetch so your profile there shows the new values.
+ * fields, which goes into the cache of the chapter the save was sent for,
+ * captured when it is sent: TanStack hands a running mutation the latest
+ * render's options, so a chapter switched mid-save would otherwise get
+ * another chapter's fields. Your profile and search reads in that chapter,
+ * the ones that carry custom-field values, refetch.
  */
 export function useUpdateOwnCustomFields() {
   const client = useFrappClient();
@@ -55,9 +92,16 @@ export function useUpdateOwnCustomFields() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (saved) => {
-      queryClient.setQueryData(ownCustomFieldsKey(chapterId), saved);
-      void queryClient.invalidateQueries({ queryKey: ["members", chapterId] });
+    onMutate: () => ({ sentFor: chapterId }),
+    onSuccess: (saved, _values, context) => {
+      const sentFor = context?.sentFor ?? null;
+      if (!sentFor) return;
+      queryClient.setQueryData(ownCustomFieldsKey(sentFor), saved);
+      for (const read of ["by-user", "search"]) {
+        void queryClient.invalidateQueries({
+          queryKey: ["members", sentFor, read],
+        });
+      }
     },
   });
 }

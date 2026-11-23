@@ -740,7 +740,7 @@ export interface paths {
         head?: never;
         /**
          * Set your own custom-field values
-         * @description Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Answers with all your fields, as GET does.
+         * @description Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.
          */
         patch: operations["MemberController_updateOwnCustomFields_v1"];
         trace?: never;

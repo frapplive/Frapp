@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   type OwnCustomField,
+  ownCustomFieldFormChanges,
+  ownCustomFieldOffersNotSet,
+  ownCustomFieldShownValue,
   useOwnCustomFields,
   useUpdateOwnCustomFields,
 } from "@repo/hooks";
@@ -12,7 +15,6 @@ import {
   CUSTOM_FIELD_AUDIENCE_LINE,
   customFieldTextMaxLength,
   OWN_CUSTOM_FIELDS_COPY as COPY,
-  ownCustomFieldChanges,
   ownCustomFieldRule,
   PHONE_MAX_LENGTH,
 } from "@repo/validation";
@@ -50,7 +52,7 @@ const NOT_SET = "__not_set__";
  * server profile draw theirs: a menu for a pick, a switch for yes or no, a
  * phone field that formats the number, and a text box for the rest. It saves
  * with its own button, like the Directory profile form above it, and sends
- * only what changed (`ownCustomFieldChanges`), checked on Save, not per key.
+ * only what changed (`ownCustomFieldFormChanges`), checked on Save, not per key.
  *
  * Nothing draws for a chapter with no fields, or before the member can read
  * the directory (`members:view`, the route's gate).
@@ -69,7 +71,7 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!fields) return;
     const next = Object.fromEntries(
-      fields.map((field) => [field.field_id, shownValue(field)]),
+      fields.map((field) => [field.field_id, ownCustomFieldShownValue(field)]),
     );
     const previous = seededFrom.current;
     seededFrom.current = next;
@@ -110,7 +112,7 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const { values, problems: refused } = ownCustomFieldChanges(
+    const { values, problems: refused } = ownCustomFieldFormChanges(
       fields ?? [],
       draft,
     );
@@ -157,12 +159,6 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
       </form>
     </ProfileSection>
   );
-}
-
-/** What the form shows for a stored value: a phone number formatted. */
-function shownValue(field: OwnCustomField): string {
-  if (field.value === null) return "";
-  return field.type === "phone" ? formatPhone(field.value) : field.value;
 }
 
 function OwnCustomFieldControl({
@@ -231,10 +227,9 @@ function OwnCustomFieldControl({
             <SelectValue placeholder={COPY.notSet} />
           </SelectTrigger>
           <SelectContent>
-            {/* A required field, once set, has no way back to empty. */}
-            {field.required && field.value !== null ? null : (
+            {ownCustomFieldOffersNotSet(field) ? (
               <SelectItem value={NOT_SET}>{COPY.notSet}</SelectItem>
-            )}
+            ) : null}
             {(field.choices ?? []).map((choice) => (
               <SelectItem key={choice} value={choice}>
                 {choice}

@@ -162,17 +162,19 @@ export class MemberController {
   @ApiOperation({
     summary: 'Set your own custom-field values',
     description:
-      "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Answers with all your fields, as GET does.",
+      "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.",
   })
   @ApiOkResponse({ type: OwnCustomFieldDto, isArray: true })
   async updateOwnCustomFields(
     @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
     @CurrentMember() member: { id: string },
     @Body() dto: UpdateOwnCustomFieldsDto,
   ) {
     return this.customFieldService.updateOwnValues(
       chapterId,
       member.id,
+      userId,
       dto.values,
     );
   }

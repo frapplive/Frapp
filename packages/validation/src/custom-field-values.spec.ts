@@ -94,6 +94,24 @@ describe("checkCustomFieldValue", () => {
     expect(checkCustomFieldValue(rule("decimal"), "3,4").ok).toBe(false);
     expect(checkCustomFieldValue(rule("decimal"), "Infinity").ok).toBe(false);
     expect(checkCustomFieldValue(rule("decimal"), "1e5").ok).toBe(false);
+    // Never through Number: no exponent, no lost digits.
+    expect(checkCustomFieldValue(rule("decimal"), "0.0000001")).toEqual({
+      ok: true,
+      value: "0.0000001",
+    });
+    expect(
+      checkCustomFieldValue(rule("decimal"), "1.23456789012345678"),
+    ).toEqual({ ok: true, value: "1.23456789012345678" });
+    expect(checkCustomFieldValue(rule("decimal"), "-007.50")).toEqual({
+      ok: true,
+      value: "-7.5",
+    });
+    expect(checkCustomFieldValue(rule("decimal"), "-0.0")).toEqual({
+      ok: true,
+      value: "0",
+    });
+    expect(checkCustomFieldValue(rule("decimal"), ".").ok).toBe(false);
+    expect(checkCustomFieldValue(rule("decimal"), "-").ok).toBe(false);
   });
 
   it("takes a phone number for phone", () => {
@@ -166,6 +184,23 @@ describe("ownCustomFieldChanges", () => {
         kids: "",
       }),
     ).toEqual({ values: [{ field_id: "shirt", value: "M" }], problems: {} });
+  });
+
+  it("compares with what the form showed, so a reformatted value isn't sent", () => {
+    const phone: OwnCustomFieldShape = {
+      field_id: "ph",
+      label: "Phone",
+      type: "phone",
+      required: false,
+      value: "+15185550142",
+    };
+    const shown = () => "(518) 555-0142";
+    expect(
+      ownCustomFieldChanges([phone], { ph: "(518) 555-0142" }, shown).values,
+    ).toEqual([]);
+    expect(
+      ownCustomFieldChanges([phone], { ph: "(518) 555-0199" }, shown).values,
+    ).toEqual([{ field_id: "ph", value: "(518) 555-0199" }]);
   });
 
   it("sends a cleared optional value as null", () => {

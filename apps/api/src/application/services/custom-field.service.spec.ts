@@ -58,7 +58,6 @@ function makeRepo(
     findValuesForMember: jest.fn().mockResolvedValue([]),
     findValuesByFieldIds: jest.fn().mockResolvedValue([]),
     upsertValues: jest.fn().mockResolvedValue(undefined),
-    deleteValues: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -93,8 +92,8 @@ describe('CustomFieldService', () => {
       const created = {
         id: 'f1',
         chapter_id: CHAPTER_ID,
-        key: 'major',
-        label: 'Major',
+        key: 'hometown',
+        label: 'Hometown',
         type: 'text',
         required: false,
         visibility: 'chapter',
@@ -107,8 +106,8 @@ describe('CustomFieldService', () => {
       const service = await buildService(repo);
 
       const result = await service.create(CHAPTER_ID, ACTOR_ID, {
-        key: 'major',
-        label: 'Major',
+        key: 'hometown',
+        label: 'Hometown',
         type: 'text',
       });
 
@@ -116,7 +115,7 @@ describe('CustomFieldService', () => {
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           chapter_id: CHAPTER_ID,
-          key: 'major',
+          key: 'hometown',
           type: 'text',
           required: false,
           visibility: 'chapter',
@@ -387,6 +386,23 @@ describe('CustomFieldService', () => {
    * A member's own values (#581). The seeded chapter set, one field per type
    * and tier, so each rule is exercised against the definition it reads.
    */
+  it.each(['major', 'graduation_year'])(
+    'refuses creating a field keyed %s, which the profile already owns (#581)',
+    async (key) => {
+      const repo = makeRepo();
+      const service = await buildService(repo);
+
+      await expect(
+        service.create(CHAPTER_ID, ACTOR_ID, {
+          key,
+          label: 'Major',
+          type: 'text',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.create).not.toHaveBeenCalled();
+    },
+  );
+
   describe('own values', () => {
     const MEMBER_ID = 'member-1';
     const def = <T extends Record<string, unknown>>(over: T) => ({
@@ -508,11 +524,11 @@ describe('CustomFieldService', () => {
       ]);
     });
 
-    it('writes valid values for the caller member, normalized, and clears blanks', async () => {
+    it('writes valid values for the caller member in one upsert, normalized, with a blank stored as null', async () => {
       const repo = repoWith([{ field_id: 'f-allergy', value: 'Peanuts' }]);
       const service = await buildService(repo);
 
-      await service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+      await service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
         { field_id: 'f-shirt', value: 'M' },
         { field_id: 'f-ec-phone', value: '(518) 555-0142' },
         { field_id: 'f-gpa', value: '3.40' },
@@ -552,11 +568,61 @@ describe('CustomFieldService', () => {
           field_id: 'f-kids',
           value: '2',
         },
+        {
+          chapter_id: CHAPTER_ID,
+          member_id: MEMBER_ID,
+          field_id: 'f-allergy',
+          value: null,
+        },
       ]);
-      expect(repo.deleteValues).toHaveBeenCalledWith(CHAPTER_ID, MEMBER_ID, [
-        'f-allergy',
+      expect(repo.upsertValues).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs which fields changed, never their values', async () => {
+      const repo = repoWith([{ field_id: 'f-allergy', value: 'Peanuts' }]);
+      const service = await buildService(repo);
+
+      const own = await service.updateOwnValues(
+        CHAPTER_ID,
+        MEMBER_ID,
+        ACTOR_ID,
+        [
+          { field_id: 'f-allergy', value: 'Shellfish' },
+          { field_id: 'f-shirt', value: 'M' },
+        ],
+      );
+
+      expect(auditLog.record).toHaveBeenCalledTimes(1);
+      const entry = auditLog.record.mock.calls[0][0];
+      expect(entry).toMatchObject({
+        chapterId: CHAPTER_ID,
+        actorUserId: ACTOR_ID,
+        action: 'member_custom_fields_updated',
+        targetType: 'member',
+        targetId: MEMBER_ID,
+        diff: {
+          allergies: { from: { set: true }, to: { set: true } },
+          t_shirt_size: { from: { set: false }, to: { set: true } },
+        },
+      });
+      expect(JSON.stringify(entry)).not.toMatch(/Shellfish|Peanuts|"M"/);
+      // The answer is built from what was written, with no second read.
+      expect(own.find((f) => f.key === 'allergies')?.value).toBe('Shellfish');
+      expect(repo.findByChapter).toHaveBeenCalledTimes(1);
+      expect(repo.findValuesForMember).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes and logs nothing when no value changed', async () => {
+      const repo = repoWith([
+        { field_id: 'f-ec-phone', value: '+15185550142' },
       ]);
-      // A member's own profile edit is not a chapter settings change.
+      const service = await buildService(repo);
+
+      await service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
+        { field_id: 'f-ec-phone', value: '(518) 555-0142' },
+      ]);
+
+      expect(repo.upsertValues).not.toHaveBeenCalled();
       expect(auditLog.record).not.toHaveBeenCalled();
     });
 
@@ -574,13 +640,12 @@ describe('CustomFieldService', () => {
       await expect(
         // A valid value rides beside the refused one: one refusal refuses
         // the whole save.
-        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
           ...(fieldId === 'f-kids' ? [] : [{ field_id: 'f-kids', value: '2' }]),
           { field_id: fieldId, value },
         ]),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(repo.upsertValues).not.toHaveBeenCalled();
-      expect(repo.deleteValues).not.toHaveBeenCalled();
     });
 
     it('refuses clearing a required field that has a value', async () => {
@@ -590,23 +655,22 @@ describe('CustomFieldService', () => {
       const service = await buildService(repo);
 
       await expect(
-        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
           { field_id: 'f-ec-phone', value: '' },
         ]),
       ).rejects.toThrow('Emergency contact (phone) is required.');
-      expect(repo.deleteValues).not.toHaveBeenCalled();
+      expect(repo.upsertValues).not.toHaveBeenCalled();
     });
 
     it('lets a required field with no value stay empty', async () => {
       const repo = repoWith();
       const service = await buildService(repo);
 
-      await service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+      await service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
         { field_id: 'f-ec-phone', value: null },
       ]);
 
-      expect(repo.upsertValues).toHaveBeenCalledWith([]);
-      expect(repo.deleteValues).toHaveBeenCalledWith(CHAPTER_ID, MEMBER_ID, []);
+      expect(repo.upsertValues).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -617,7 +681,7 @@ describe('CustomFieldService', () => {
       const service = await buildService(repo);
 
       await expect(
-        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
           { field_id: fieldId, value: '2027' },
         ]),
       ).rejects.toBeInstanceOf(BadRequestException);
@@ -660,7 +724,7 @@ describe('CustomFieldService', () => {
       const service = await buildService(repoWith());
 
       await expect(
-        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, [
+        service.updateOwnValues(CHAPTER_ID, MEMBER_ID, ACTOR_ID, [
           { field_id: 'f-shirt', value: 'M' },
           { field_id: 'f-shirt', value: 'L' },
         ]),

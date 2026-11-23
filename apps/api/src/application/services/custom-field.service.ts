@@ -207,14 +207,16 @@ export class CustomFieldService {
    * value, and clearing one that has none is a no-op.
    *
    * Own values only, by construction: `memberId` is the caller's membership
-   * from `ChapterGuard`, never a request parameter. Not audit-logged, like
-   * `PATCH /v1/users/me`: a member editing their own profile is not a chapter
-   * settings change, and the audit log is mirrored into `#chapter-audit`,
-   * where a sensitive value would reach readers its tier excludes.
+   * from `ChapterGuard`, never a request parameter. Every write is one
+   * upsert, a cleared field stored as null, so a save lands whole or not at
+   * all. Logged as `member_custom_fields_updated` naming the fields that
+   * changed and never their values, since the chapter's Logs are read by
+   * officers a sensitive field's tier may exclude.
    */
   async updateOwnValues(
     chapterId: string,
     memberId: string,
+    actorUserId: string,
     entries: OwnCustomFieldValueInput[],
   ): Promise<OwnCustomField[]> {
     const defs = await this.ownEditableFields(chapterId);
@@ -236,46 +238,72 @@ export class CustomFieldService {
       pairs.push({ def, value: entry.value });
     }
 
-    const stored = entries.length
+    // Every field's stored value, read once: it decides whether a required
+    // field may stay empty, and the answer is built from it after the write.
+    const stored = defs.length
       ? await this.fields.findValuesForMember(
           memberId,
-          entries.map((entry) => entry.field_id),
+          defs.map((def) => def.id),
         )
       : [];
-    const hasStoredValue = new Set(
-      stored.filter((row) => row.value !== null).map((row) => row.field_id),
+    const valueByFieldId = new Map(
+      stored.map((row) => [row.field_id, row.value]),
     );
+    const storedBefore = new Map(valueByFieldId);
 
-    const upserts: {
+    const rows: {
       chapter_id: string;
       member_id: string;
       field_id: string;
-      value: string;
+      value: string | null;
     }[] = [];
-    const clears: string[] = [];
     for (const { def, value } of pairs) {
+      const before = valueByFieldId.get(def.id) ?? null;
       const blank = (value ?? '').trim() === '';
-      if (blank && def.required && !hasStoredValue.has(def.id)) continue;
+      if (blank && def.required && before === null) continue;
       const checked = checkCustomFieldValue(def, value);
       if (!checked.ok) throw new BadRequestException(checked.message);
-      if (checked.value === null) {
-        clears.push(def.id);
-        continue;
-      }
-      upserts.push({
+      // Stored E.164 when it is a whole number, as the profile's own Phone
+      // is (#5798), so every screen formats it alike. A cleared field is
+      // stored as null in the same write, so a save is one statement.
+      const next =
+        checked.value !== null && def.type === 'phone'
+          ? normalizePhone(checked.value)
+          : checked.value;
+      if (next === before) continue;
+      rows.push({
         chapter_id: chapterId,
         member_id: memberId,
         field_id: def.id,
-        // Stored E.164 when it is a whole number, as the profile's own Phone
-        // is (#5798), so every screen formats it alike.
-        value:
-          def.type === 'phone' ? normalizePhone(checked.value) : checked.value,
+        value: next,
       });
     }
 
-    await this.fields.upsertValues(upserts);
-    await this.fields.deleteValues(chapterId, memberId, clears);
-    return this.findOwnFields(chapterId, memberId);
+    if (rows.length > 0) {
+      await this.fields.upsertValues(rows);
+      for (const row of rows) valueByFieldId.set(row.field_id, row.value);
+      // Which fields changed, never their values: a sensitive field's value
+      // must not reach the officers who read Logs when its tier excludes
+      // them. Each key is a changed field, `{ set }` before and after.
+      const diff: AuditDiff = {};
+      for (const row of rows) {
+        const def = defById.get(row.field_id);
+        if (!def) continue;
+        diff[def.key] = {
+          from: { set: (storedBefore.get(row.field_id) ?? null) !== null },
+          to: { set: row.value !== null },
+        };
+      }
+      await this.auditLog.record({
+        chapterId,
+        actorUserId,
+        action: 'member_custom_fields_updated',
+        targetType: 'member',
+        targetId: memberId,
+        diff,
+      });
+    }
+    return defs.map((def) => toOwnField(def, valueByFieldId.get(def.id)));
   }
 
   async create(
@@ -283,6 +311,14 @@ export class CustomFieldService {
     actorUserId: string,
     dto: CreateCustomFieldInput,
   ): Promise<ChapterCustomField> {
+    // Major and Graduation year are the profile's own fields (#581): a field
+    // keyed for them would be one no member is ever asked for.
+    if (PROFILE_OWNED_CUSTOM_FIELD_KEYS.includes(dto.key)) {
+      throw new BadRequestException(
+        'Major and graduation year are already on every profile. Name this field something else.',
+      );
+    }
+
     // Defense-in-depth: a select field is meaningless without choices (the
     // shared zod schema enforces the same on the client/contract boundary).
     if (dto.type === 'select' && !(dto.options?.choices?.length ?? 0)) {
