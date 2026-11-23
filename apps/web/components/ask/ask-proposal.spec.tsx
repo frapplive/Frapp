@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -28,6 +28,9 @@ const state = vi.hoisted(() => ({
     | undefined
     | {
         open: boolean;
+        onOpenChange: (open: boolean) => void;
+        onCloseAutoFocus?: (event: Event) => void;
+        docked?: unknown;
         template?: Record<string, unknown> | null;
         initialStartAt?: string;
         initialEndAt?: string;
@@ -51,7 +54,7 @@ vi.mock("@/components/ai/report-ai", () => ({
 vi.mock("@/components/events/event-editor-dialog", () => ({
   EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
     state.eventForm = props;
-    return null;
+    return props.open ? <div data-testid="event-form" /> : null;
   },
 }));
 
@@ -402,6 +405,11 @@ describe("AskProposal", () => {
       );
       const form = state.eventForm!;
       expect(form.open).toBe(true);
+      // The card grows into the form in place (Paul, 2026-11-22): the form
+      // stands where the card's lines were, nothing slides over the page.
+      expect(form.docked).toBe("inline");
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(screen.queryByRole("button", { name: ACT_COPY.edit })).toBeNull();
       expect(form.template).toMatchObject({
         name: "Chapter",
         is_mandatory: false,
@@ -419,6 +427,27 @@ describe("AskProposal", () => {
         newEventId: "event-9",
       });
       expect(await screen.findByText(ACT_COPY.done_event)).toBeDefined();
+    });
+
+    it("folds the form back into the card and puts focus on Edit when it closes", async () => {
+      series();
+      await userEvent.click(
+        await screen.findByRole("button", { name: ACT_COPY.edit }),
+      );
+      const form = state.eventForm!;
+      act(() => {
+        const closing = new Event("focus.closeAutoFocus", { cancelable: true });
+        form.onCloseAutoFocus?.(closing);
+        expect(closing.defaultPrevented).toBe(true);
+        form.onOpenChange(false);
+      });
+      expect(screen.queryByTestId("event-form")).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(
+        screen.getByRole("button", { name: ACT_COPY.create_event }),
+      ).toBeDefined();
     });
 
     it("turns a points card's amount and reason into fields, and sends only what changed", async () => {

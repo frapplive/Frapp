@@ -265,7 +265,9 @@ describe('Panel docked "here"', () => {
 
   it("covers the host it was opened in, and leaves the page beside it alone", async () => {
     render(<HereHarness />);
-    const region = await screen.findByRole("region", { name: "Create channel" });
+    const region = await screen.findByRole("region", {
+      name: "Create channel",
+    });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(region.parentElement).toBe(screen.getByTestId("chat"));
     // Covered: inert, and hidden so a focus trap around the host skips it.
@@ -288,6 +290,69 @@ describe('Panel docked "here"', () => {
       </Panel>,
     );
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Create channel");
+  });
+});
+
+describe('Panel docked "inline"', () => {
+  function InlineHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div data-testid="card">
+        <button type="button" onClick={() => setOpen(true)}>
+          Edit
+        </button>
+        <p>Other line</p>
+        <Panel
+          open={open}
+          onOpenChange={setOpen}
+          docked="inline"
+          backLabel="Close the form"
+        >
+          <PanelContent>
+            <PanelHeader>New event</PanelHeader>
+            <PanelBody>
+              <input aria-label="Name" />
+            </PanelBody>
+          </PanelContent>
+        </Panel>
+      </div>
+    );
+  }
+
+  it("draws in place, covering nothing, and closes with its X and with Escape", () => {
+    render(<InlineHarness />);
+    expect(screen.queryByRole("region")).toBeNull();
+    const edit = screen.getByRole("button", { name: "Edit" });
+    edit.focus();
+    fireEvent.click(edit);
+    const region = screen.getByRole("region", { name: "New event" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(region.parentElement).toBe(screen.getByTestId("card"));
+    expect(region.hasAttribute("data-docked-panel")).toBe(false);
+    expect(screen.getByText("Other line").inert).not.toBe(true);
+    expect(document.activeElement).toBe(region);
+
+    // Escape in a field is the field's.
+    fireEvent.keyDown(screen.getByLabelText("Name"), { key: "Escape" });
+    expect(screen.getByRole("region", { name: "New event" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close the form" }));
+    expect(screen.queryByRole("region")).toBeNull();
+    // Focus goes back to what opened it.
+    expect(document.activeElement).toBe(edit);
+
+    fireEvent.click(edit);
+    fireEvent.keyDown(screen.getByRole("region", { name: "New event" }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("region")).toBeNull();
+  });
+
+  it("lets the body grow with the page rather than scroll on its own", () => {
+    render(<InlineHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const body = screen.getByLabelText("Name").parentElement!;
+    expect(body.className).not.toContain("overflow-y-auto");
   });
 });
 

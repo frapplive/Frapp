@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -63,6 +63,13 @@ import { cn } from "@/lib/utils";
  * Ask page). It covers that box with a back arrow, as a thread covers the chat
  * on a narrow window, and the page beside it stays live.
  *
+ * **In place** (`docked="inline"`, Paul, 2026-11-22: Edit on an Ask card
+ * "expands the card in place"). A panel opened from a card that is itself
+ * the thing being made (an event Ask proposed) draws where it is rendered,
+ * in the page's flow, so the card grows into the form and the conversation
+ * above it stays readable, as Linear's triage and Notion AI's suggestions
+ * edit in place. Nothing is covered; the title row closes it with an X.
+ *
  * The sheet is left only as the fallback for a panel with nowhere to dock (a
  * test, a page outside the shell). A yes/no question stays a centred dialog:
  * there, blocking the screen is the point.
@@ -73,6 +80,8 @@ type PanelDock = {
   titleId: string;
   /** The id `PanelDescription` takes, read as the panel's description. */
   descriptionId: string;
+  /** Drawn in place, in the page's flow (`docked="inline"`). */
+  inline?: boolean;
 };
 
 const PanelDockContext = React.createContext<PanelDock | null>(null);
@@ -90,8 +99,11 @@ const TOOL_COLUMN_SELECTOR = "[data-tool-column]";
  */
 export const PANEL_HOST_ATTRIBUTE = "data-panel-host";
 
-/** `true` docks in the tool column; `"here"` in the surface it opened from. */
-export type PanelDocking = boolean | "here";
+/**
+ * `true` docks in the tool column; `"here"` over the surface it opened from;
+ * `"inline"` in place, where it is rendered.
+ */
+export type PanelDocking = boolean | "here" | "inline";
 
 /**
  * The panel's root: the sheet, or with `docked` the page's own column. Use it
@@ -113,7 +125,7 @@ export function Panel({
 }) {
   const titleId = React.useId();
   const descriptionId = React.useId();
-  useOpenerTracking(docked !== false);
+  useOpenerTracking(docked === true || docked === "here");
   // `undefined` on the server and in the first hydrating render, so the
   // markup matches; then the column, or `null` when there is none.
   const toolColumn = React.useSyncExternalStore<Element | null | undefined>(
@@ -132,15 +144,24 @@ export function Panel({
   }, [docked]);
   const column = docked === "here" ? host : toolColumn;
 
+  const inline = docked === "inline";
   const dock = React.useMemo<PanelDock>(
     () => ({
       onClose: () => onOpenChange(false),
       backLabel,
       titleId,
       descriptionId,
+      inline,
     }),
-    [onOpenChange, backLabel, titleId, descriptionId],
+    [onOpenChange, backLabel, titleId, descriptionId, inline],
   );
+  if (inline) {
+    return open ? (
+      <PanelDockContext.Provider value={dock}>
+        {children}
+      </PanelDockContext.Provider>
+    ) : null;
+  }
 
   const hereMarker =
     docked === "here" ? (
@@ -262,6 +283,74 @@ function openerOf(box: HTMLElement): HTMLElement | null {
   return active instanceof HTMLElement && active !== document.body
     ? active
     : null;
+}
+
+/**
+ * The in-place panel's box (`docked="inline"`): a region in the page's flow.
+ * Focus moves in on open unless a field already took it (a create form's
+ * name), and goes back to what opened it on close. Escape closes it, unless a
+ * field or an open popover had it first.
+ */
+function InlinePanel({
+  dock,
+  className,
+  onCloseAutoFocus,
+  onKeyDown,
+  children,
+}: {
+  dock: PanelDock;
+  className?: string;
+  onCloseAutoFocus?: (event: Event) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLElement>(null);
+  const closeFocus = React.useRef(onCloseAutoFocus);
+  React.useEffect(() => {
+    closeFocus.current = onCloseAutoFocus;
+  }, [onCloseAutoFocus]);
+  const descriptionId = dock.descriptionId;
+  React.useEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const active = document.activeElement;
+    const returnTo =
+      active instanceof HTMLElement && !box.contains(active) ? active : null;
+    if (box.querySelector(`[id="${descriptionId}"]`)) {
+      box.setAttribute("aria-describedby", descriptionId);
+    }
+    if (!box.contains(document.activeElement)) {
+      box.focus({ preventScroll: true });
+    }
+    return () => {
+      // Left while the member was working elsewhere: focus is theirs.
+      const now = document.activeElement;
+      if (now && now !== document.body && !box.contains(now)) return;
+      const event = new Event("focus.closeAutoFocus", { cancelable: true });
+      closeFocus.current?.(event);
+      if (event.defaultPrevented) return;
+      if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
+    };
+  }, [descriptionId]);
+  return (
+    <section
+      ref={ref}
+      aria-labelledby={dock.titleId}
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        const target = event.target as HTMLElement;
+        if (target.closest(FIELD_SELECTOR)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dock.onClose();
+      }}
+      className={cn("flex flex-col outline-none", className)}
+    >
+      {children}
+    </section>
+  );
 }
 
 function DockedPanel({
@@ -445,6 +534,17 @@ export const PanelContent = React.forwardRef<
   Omit<React.ComponentPropsWithoutRef<typeof SheetContent>, "side">
 >(({ className, onEscapeKeyDown, ...props }, ref) => {
   const dock = React.useContext(PanelDockContext);
+  if (dock?.inline) {
+    return (
+      <InlinePanel
+        dock={dock}
+        onCloseAutoFocus={props.onCloseAutoFocus}
+        onKeyDown={props.onKeyDown}
+      >
+        {props.children}
+      </InlinePanel>
+    );
+  }
   if (dock) {
     return (
       <DockedPanel
@@ -510,6 +610,37 @@ export function PanelHeader({
   className?: string;
 }) {
   const dock = React.useContext(PanelDockContext);
+  if (dock?.inline) {
+    // In place: the card's own title row, with the actions and an X that
+    // folds the form back into the card.
+    return (
+      <div className="flex min-h-9 shrink-0 items-center gap-2 pb-2">
+        {children ? (
+          <h3
+            id={dock.titleId}
+            className={cn(
+              "min-w-0 flex-1 truncate text-body font-semibold",
+              className,
+            )}
+          >
+            {children}
+          </h3>
+        ) : (
+          <div className="flex-1" />
+        )}
+        {actions ? (
+          <div className="flex shrink-0 items-center">{actions}</div>
+        ) : null}
+        <IconButton
+          label={dock.backLabel}
+          onClick={dock.onClose}
+          className="shrink-0 text-muted-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </IconButton>
+      </div>
+    );
+  }
   if (dock) {
     // The tool page header's row (`tool-page-header.tsx`), so the form's title
     // sits level with chat's channel header beside it. The title truncates
@@ -630,12 +761,15 @@ export function PanelBody<T extends "div" | "form" = "div">({
   ...props
 }: { as?: T } & React.ComponentPropsWithoutRef<T>) {
   const Component = (as ?? "div") as React.ElementType;
-  const docked = React.useContext(PanelDockContext) !== null;
+  const dock = React.useContext(PanelDockContext);
   return (
     <Component
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5 pt-1",
-        docked && DOCKED_INSET_CLASS,
+        // In place it grows with the page, which scrolls it.
+        dock?.inline
+          ? "flex flex-col gap-4"
+          : "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5 pt-1",
+        dock && !dock.inline && DOCKED_INSET_CLASS,
         className,
       )}
       {...props}
@@ -655,12 +789,13 @@ export function PanelFooter({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const docked = React.useContext(PanelDockContext) !== null;
+  const dock = React.useContext(PanelDockContext);
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-4",
-        docked && DOCKED_INSET_CLASS,
+        "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border",
+        dock?.inline ? "pt-3" : "px-5 py-4",
+        dock && !dock.inline && DOCKED_INSET_CLASS,
         className,
       )}
       {...props}

@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlignLeft,
   Award,
@@ -88,6 +95,7 @@ import { SegmentedChoice } from "@/components/ui/segmented";
 import { deferredPanel } from "@/components/chat/deferred-panel";
 import { isoToLocalInput } from "@/components/events/local-input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/shared/async-states";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionMenuButton } from "@/components/shared/row-menu";
@@ -122,12 +130,13 @@ import { cn } from "@/lib/utils";
  *
  * **Every card has Edit beside Cancel** (Paul, 2026-11-15, #5117: "it got
  * the general idea down, but I'd love to be able to add attendance and change
- * the time"). Google Calendar's "Add to calendar" on an event found in mail
- * opens the full event editor, and Linear's issue-from-text opens its own
- * issue form, so an event's Edit opens the ordinary event form filled in from
- * the card (attendance by role, the end, notes, the repeat), and its Create
- * is the confirm. A points or task card is a few fields, so Edit turns its
- * words into fields on the card itself, as Linear's triage edits in place.
+ * the time"). Every Edit happens on the card itself, as Linear's triage and
+ * Notion AI's suggestions edit in place (Paul, 2026-11-22: the card "expands
+ * in place"). An event's card grows into the ordinary event form's rows,
+ * filled in from the card (attendance by role, the end, notes, the repeat),
+ * with the conversation still above it, and the form's Create is the
+ * confirm. A points or task card is a few fields, so Edit turns its words
+ * into fields.
  *
  * **Every card in the thread stays live.** A card is not replaced by the next
  * thing asked. Once it is confirmed or dismissed it becomes one line saying
@@ -138,10 +147,10 @@ type Member = NonNullable<ReturnType<typeof useMembers>["data"]>[number];
 
 /** Where a confirmed change can be seen, by the page the card named. */
 /**
- * The full event form an event card's Edit opens, loaded on first open: Ask
+ * The event form an event card's Edit grows into, loaded on first open: Ask
  * is drawn on every dashboard route, and the form is a large download. Not the
  * chat shell's own deferred copy, which would import the shell's panels and
- * make a cycle back to Ask.
+ * make a cycle back to Ask. While it loads, the card holds its place.
  */
 const EventEditorDialog = deferredPanel(
   () =>
@@ -149,6 +158,9 @@ const EventEditorDialog = deferredPanel(
       (m) => m.EventEditorDialog,
     ),
   "dialog",
+  function EventFormLoading({ open }: { open: boolean }) {
+    return open ? <Skeleton className="h-48 w-full rounded-md" /> : null;
+  },
 );
 
 const RESULT_LINKS: Record<string, { href: string; label: string }> = {
@@ -932,9 +944,19 @@ function ActCard({
     field: "amount" | "reason" | "taskName" | "taskPoints" | "eventPoints";
     error: string;
   } | null>(null);
-  // The event form: mounted on the first Edit and kept, so it can animate
-  // closed; what was typed is kept under the card's name (#4593).
+  // The event form: mounted on the first Edit and kept; what was typed is
+  // kept under the card's name (#4593). While it is open it is the card.
   const [eventForm, setEventForm] = useState<boolean | null>(null);
+  const formOpen = !!event && eventForm === true;
+  // Closing the form brings the card back: focus returns to its Edit, which
+  // was gone while the form stood in its place.
+  const editButton = useRef<HTMLButtonElement>(null);
+  const refocusEdit = useRef(false);
+  useEffect(() => {
+    if (formOpen || !refocusEdit.current) return;
+    refocusEdit.current = false;
+    editButton.current?.focus({ preventScroll: true });
+  }, [formOpen]);
   // One object for the proposal: the form fills again when it changes.
   // Points typed on the card, and the event type it matched, go with it
   // into the form (#5148), so Edit never makes something Confirm wouldn't.
@@ -1216,6 +1238,38 @@ function ActCard({
       </p>
     </div>
   ) : null;
+
+  const eventFormPanel =
+    event && eventForm !== null ? (
+      <EventEditorDialog
+        open={eventForm}
+        onOpenChange={setEventForm}
+        // In the card, which grows into the form (Paul, 2026-11-22), on the
+        // Ask page and in a channel alike.
+        docked="inline"
+        backLabel={ACT_COPY.close_event_form}
+        onCloseAutoFocus={(closing) => {
+          closing.preventDefault();
+          refocusEdit.current = true;
+        }}
+        mode="create"
+        event={null}
+        usingPreviewData={false}
+        template={eventTemplate}
+        initialStartAt={isoToLocalInput(event.start_time)}
+        initialEndAt={isoToLocalInput(event.end_time)}
+        initialRepeatRule={event.recurrence_rule}
+        keptDraft={`ask-event:${suggestion.id}`}
+        onCreated={recordMadeEvent}
+        onSaved={() => undefined}
+      />
+    ) : null;
+
+  // The form names itself ("New event"), so the frame around it is no
+  // second region with the same name.
+  if (formOpen) {
+    return <div className={CARD_FRAME}>{eventFormPanel}</div>;
+  }
 
   return (
     <section aria-label={title} className={cn(CARD_FRAME, "space-y-3")}>
@@ -1518,6 +1572,7 @@ function ActCard({
       <div className="flex items-center justify-end gap-2">
         {editing ? null : (
           <Button
+            ref={editButton}
             type="button"
             variant="secondary"
             size="sm"
@@ -1538,26 +1593,7 @@ function ActCard({
           {action}
         </Button>
       </div>
-      {event && eventForm !== null ? (
-        <EventEditorDialog
-          open={eventForm}
-          onOpenChange={setEventForm}
-          // Over Ask's card, or the chat column for an answer in a channel:
-          // never a card sliding over the window (Paul, 2026-11-19).
-          docked="here"
-          backLabel="Back to the conversation"
-          mode="create"
-          event={null}
-          usingPreviewData={false}
-          template={eventTemplate}
-          initialStartAt={isoToLocalInput(event.start_time)}
-          initialEndAt={isoToLocalInput(event.end_time)}
-          initialRepeatRule={event.recurrence_rule}
-          keptDraft={`ask-event:${suggestion.id}`}
-          onCreated={recordMadeEvent}
-          onSaved={() => undefined}
-        />
-      ) : null}
+      {eventFormPanel}
     </section>
   );
 }

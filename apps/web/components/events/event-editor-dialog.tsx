@@ -1996,7 +1996,11 @@ export function EventEditorDialog({
                 }}
               />
             ) : (
-              <span>Going back keeps your draft.</span>
+              <span>
+                {docked === "inline"
+                  ? "Closing keeps your draft."
+                  : "Going back keeps your draft."}
+              </span>
             )}
             <span>
               <kbd className="font-sans">Ctrl</kbd> +{" "}
