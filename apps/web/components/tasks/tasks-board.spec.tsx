@@ -282,6 +282,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useClaimOpenTask: () => ({ mutateAsync: claimMutate, isPending: false }),
   useAssignOpenTask: () => ({ mutateAsync: assignMutate, isPending: false }),
   useReleaseTask: () => ({ mutateAsync: releaseMutate, isPending: false }),
+  useAddToTaskGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -2510,8 +2511,12 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     await user.click(
       within(row).getByRole("button", { name: "Fill out the tabling form" }),
     );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    // The group's Who offers Add people to an officer (#5905).
     expect(
-      await screen.findByRole("dialog", { name: "Fill out the tabling form" }),
+      within(panel).getByRole("button", { name: "Add people" }),
     ).toBeInTheDocument();
   });
 
@@ -2580,6 +2585,39 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     expect(
       within(panel).getByText("Everyone · 14 of 20 done"),
     ).toBeInTheDocument();
+    // An officer can add people from a copy's For (#5905).
+    expect(
+      within(panel).getByRole("button", { name: "Add people" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Add people on a copy without tasks:manage (#5905)", async () => {
+    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
+    resetListLayoutForTests();
+    permissionsRef.current = [];
+    const user = userEvent.setup();
+    tasksRef.current = GROUP.map((task) => ({
+      ...task,
+      group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
+    }));
+    render(<TasksBoard />);
+    const everyone = screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.includes("Fill out the tabling form"))!;
+    await user.click(
+      within(everyone).getByRole("button", {
+        name: "Fill out the tabling form",
+      }),
+    );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    expect(
+      within(panel).getByText("Everyone · 14 of 20 done"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Add people" }),
+    ).toBeNull();
   });
 
   it("says who a copy went to on a My tasks Grid card too (#5699)", () => {

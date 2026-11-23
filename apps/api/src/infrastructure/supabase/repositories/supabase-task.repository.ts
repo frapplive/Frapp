@@ -463,6 +463,22 @@ export class SupabaseTaskRepository implements ITaskRepository {
     return copies.map((copy) => byId.get(copy.id) ?? copy);
   }
 
+  async addGroupCopies(
+    chapterId: string,
+    groupId: string,
+    templateId: string,
+    assigneeIds: string[],
+  ): Promise<Task[]> {
+    const { data, error } = await this.supabase.rpc('add_task_group_copies', {
+      p_chapter_id: chapterId,
+      p_group_id: groupId,
+      p_template_id: templateId,
+      p_assignee_ids: assigneeIds,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
+  }
+
   async findGroups(chapterId: string, ids: string[]): Promise<TaskGroup[]> {
     if (ids.length === 0) return [];
     const groups: TaskGroup[] = [];

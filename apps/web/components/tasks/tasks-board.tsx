@@ -1494,6 +1494,9 @@ export function TasksBoard() {
         onReject={(task) => rejectCompletion(task)}
         onDelete={(task) => void removeTask(task)}
         onDeleteGroup={(tile) => void removeGroup(tile)}
+        groupCopies={(groupId) =>
+          tasks.filter((row) => row.group_id === groupId)
+        }
       />
       {canManage ? (
         <OpenTaskPanel

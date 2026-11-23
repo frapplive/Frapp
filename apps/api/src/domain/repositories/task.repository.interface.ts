@@ -181,6 +181,18 @@ export interface ITaskRepository {
    * copy's checklist, in one transaction. Returns the copies.
    */
   createGroup(input: CreateTaskGroupInput): Promise<Task[]>;
+  /**
+   * New members' copies of an existing group (#5905), in one transaction
+   * that locks the group: each at To do, made from `templateId` (one of the
+   * group's copies) with its checklist titles. A member who already has a
+   * copy is skipped. Returns the copies made.
+   */
+  addGroupCopies(
+    chapterId: string,
+    groupId: string,
+    templateId: string,
+    assigneeIds: string[],
+  ): Promise<Task[]>;
   /** These groups of the chapter, any order. */
   findGroups(chapterId: string, ids: string[]): Promise<TaskGroup[]>;
   /** Every copy of these groups, any order. */

@@ -1558,6 +1558,66 @@ export class TaskService {
   }
 
   /**
+   * Add members to a group task after it's made (#5905), the mirror of
+   * {@link removeFromGroup}: each gets a copy at To do, made from the
+   * group's current title, notes, due, points, proof, checklist and
+   * follower. A cabinet member who sent a task to four brothers hands it
+   * to a fifth (Winston, 2026-11-23).
+   *
+   * The copy it's made from is the one asked on, unless that one is
+   * confirmed: a confirmed copy kept what it was paid on while later
+   * edits to everyone's copy passed it by ({@link updateGroup}), so an
+   * open copy is the group as it stands. Everyone listed must be an active
+   * member, as when the task was made. A member who already has a copy is
+   * skipped, so a retry finishes the job; the repository holds the group
+   * locked while it writes, so two adds can't give one member two copies.
+   * Each member added gets the usual assignment push. Returns them and the
+   * group as it now stands.
+   */
+  async addToGroup(
+    id: string,
+    chapterId: string,
+    actorId: string,
+    assigneeIds: string[],
+  ): Promise<{ added: string[]; group: TaskGroupSummary }> {
+    const { task, groupId } = await this.groupCopyOrThrow(id, chapterId);
+    const asked = [...new Set(assigneeIds)];
+    const { activeIds } = await this.audiences.reader(chapterId);
+    if (asked.some((userId) => !activeIds.has(userId))) {
+      throw new BadRequestException(
+        'Everyone you pick must be an active member of the chapter',
+      );
+    }
+    const copies = await this.taskRepo.findGroupCopies(chapterId, [groupId]);
+    const has = new Set(copies.map((copy) => copy.assignee_id));
+    const fresh = asked.filter((userId) => !has.has(userId));
+    let made: Task[] = [];
+    if (fresh.length > 0) {
+      const template = task.points_awarded
+        ? (copies.find((copy) => !copy.points_awarded) ?? task)
+        : task;
+      made = await this.taskRepo.addGroupCopies(
+        chapterId,
+        groupId,
+        template.id,
+        fresh,
+      );
+      // `notifyAssigned` reports its own failures, so one member's push
+      // can't stop the rest.
+      for (let i = 0; i < made.length; i += GROUP_NOTIFY_CONCURRENCY) {
+        await Promise.all(
+          made
+            .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
+            .map((copy) => this.notifyAssigned(copy, actorId)),
+        );
+      }
+    }
+    const summary = (await this.groupSummaries(chapterId, [task])).get(groupId);
+    if (!summary) throw new NotFoundException('Task not found');
+    return { added: made.map((copy) => copy.assignee_id), group: summary };
+  }
+
+  /**
    * A new task's repeat (#5119): its rule, checked, and the schedule its
    * series starts with. Null for a task that doesn't repeat.
    */

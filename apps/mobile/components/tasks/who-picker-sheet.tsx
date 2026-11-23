@@ -22,7 +22,8 @@ import {
   SHEET_STACK_BEHAVIOR,
 } from "@/components/sheet-scaffold";
 import { Segmented } from "@/components/segmented";
-import { DisclosureGlyph } from "@/components/control-glyphs";
+import { DisclosureGlyph, PlusGlyph } from "@/components/control-glyphs";
+import { TaskBarPill } from "@/components/tasks/task-action-bar";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
 import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
 import {
@@ -37,6 +38,7 @@ import {
   pickerMode,
   setTick,
   tickChecked,
+  tickedIds,
   toggleChapter,
   togglePerson,
   toggleSet,
@@ -63,6 +65,18 @@ export interface WhoPickerSheetProps {
    * always did.
    */
   single?: boolean;
+  /**
+   * Add people to a group task (#5905): several people, no roles, groups or
+   * Everyone. Who already has a copy is ticked and fixed, `alreadyNote`
+   * beside them; the footer's button is `label(count)` of the new picks and
+   * calls `onAdd`, which closes the sheet.
+   */
+  add?: {
+    marked: ReadonlySet<string>;
+    alreadyNote: string;
+    label: (count: number) => string;
+    onAdd: () => void;
+  };
   title?: string;
   /** Fired once the sheet has closed, however it closed. */
   onDismiss?: () => void;
@@ -100,7 +114,14 @@ const TAB_OPTIONS: readonly { value: WhoTab; label: string }[] = [
  */
 export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
   function WhoPickerSheet(props, ref) {
-    const { value, onChange, directory, single = false, onDismiss } = props;
+    const {
+      value,
+      onChange,
+      directory,
+      single = false,
+      add,
+      onDismiss,
+    } = props;
     const backgroundStyle = useSheetBackgroundStyle();
     const tall = useTallSheetProps();
     const close = useSheetClose(ref);
@@ -110,7 +131,8 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
       pickerMode(value, "each"),
     );
     const mode = pickerMode(value, heldMode);
-    const showFooter = !single && isGroupWho(value);
+    const showFooter = !single && !add && isGroupWho(value);
+    const addCount = add ? tickedIds(value, directory).length : 0;
 
     const setMode = (next: WhoMode) => {
       setHeldMode(next);
@@ -128,18 +150,31 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
         backdropComponent={SheetScrim}
         onDismiss={onDismiss}
         footerComponent={
-          showFooter
+          add
             ? (footer: BottomSheetFooterProps) => (
                 <BottomSheetFooter {...footer}>
-                  <WhoPickerFooter
-                    value={value}
-                    directory={directory}
-                    mode={mode}
-                    onMode={setMode}
+                  <AddFooter
+                    label={add.label(addCount)}
+                    disabled={addCount === 0}
+                    onPress={() => {
+                      add.onAdd();
+                      close();
+                    }}
                   />
                 </BottomSheetFooter>
               )
-            : undefined
+            : showFooter
+              ? (footer: BottomSheetFooterProps) => (
+                  <BottomSheetFooter {...footer}>
+                    <WhoPickerFooter
+                      value={value}
+                      directory={directory}
+                      mode={mode}
+                      onMode={setMode}
+                    />
+                  </BottomSheetFooter>
+                )
+              : undefined
         }
       >
         <SheetBackToClose onClose={close} />
@@ -149,7 +184,7 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
           {...props}
           mode={mode}
           onDone={close}
-          footerRoom={showFooter}
+          footerRoom={showFooter || !!add}
           onPick={(next) => {
             onChange(next);
             if (single) close();
@@ -159,6 +194,36 @@ export const WhoPickerSheet = forwardRef<BottomSheetModal, WhoPickerSheetProps>(
     );
   },
 );
+
+/**
+ * Add people's one commit (#5905): the task bar's labelled pill, sized to
+ * "Add 2" and centred, as the rulebook keeps a commit off the full width.
+ */
+function AddFooter({
+  label,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const { tokens } = useFrappTheme();
+  const brand = useChapterBranding();
+  const styles = createStyles(tokens, brand.accent);
+  return (
+    <View style={[styles.footer, styles.addFooter]}>
+      <TaskBarPill
+        label={label}
+        glyph={(ink) => <PlusGlyph color={ink} />}
+        fill={brand.accent}
+        ink={tokens.color.gold.onHouse}
+        disabled={disabled}
+        onPress={onPress}
+      />
+    </View>
+  );
+}
 
 /** The line, the mode and what it makes: shown once more than one is in. */
 export function WhoPickerFooter({
@@ -204,6 +269,7 @@ export function WhoPickerBody({
   people,
   sets,
   single = false,
+  add,
   title = WHO_PICKER_COPY.title,
   mode,
   onPick,
@@ -226,11 +292,20 @@ export function WhoPickerBody({
     initialOpenTiers(value, directory),
   );
 
+  // Add people lists people only, as a one-person picker does.
+  const peopleOnly = single || !!add;
   const rows = useMemo(
-    () => whoRows(directory, { tab, search, single, expanded, openTiers }),
-    [directory, tab, search, single, expanded, openTiers],
+    () =>
+      whoRows(directory, {
+        tab,
+        search,
+        single: peopleOnly,
+        expanded,
+        openTiers,
+      }),
+    [directory, tab, search, peopleOnly, expanded, openTiers],
   );
-  const state = single || tab === "people" || search.trim() ? people : sets;
+  const state = peopleOnly || tab === "people" || search.trim() ? people : sets;
 
   const flip = (set: Set<string>, key: string) => {
     const next = new Set(set);
@@ -244,23 +319,24 @@ export function WhoPickerBody({
       <TallSheetHeader
         title={title}
         onClose={onDone}
-        doneAccent={brand.accent}
+        // Add people's button is in the footer; the header only closes.
+        doneAccent={add ? undefined : brand.accent}
       />
       <BottomSheetTextInput
         value={search}
         onChangeText={setSearch}
         placeholder={
-          single ? WHO_PICKER_COPY.searchPeople : WHO_PICKER_COPY.search
+          peopleOnly ? WHO_PICKER_COPY.searchPeople : WHO_PICKER_COPY.search
         }
         placeholderTextColor={tokens.color.text.muted}
         accessibilityLabel={
-          single ? WHO_PICKER_COPY.searchPeople : WHO_PICKER_COPY.search
+          peopleOnly ? WHO_PICKER_COPY.searchPeople : WHO_PICKER_COPY.search
         }
         autoCapitalize="none"
         autoCorrect={false}
         style={styles.field}
       />
-      {single ? null : (
+      {peopleOnly ? null : (
         <Segmented
           options={TAB_OPTIONS}
           value={tab}
@@ -342,6 +418,18 @@ export function WhoPickerBody({
                 {on ? <CheckGlyph color={brand.accent} size={16} /> : null}
               </View>
             </Pressable>
+          );
+        }
+        if (add?.marked.has(person.userId)) {
+          return (
+            <TickRow
+              label={label}
+              count={add.alreadyNote}
+              tick="all"
+              disabled
+              onPress={() => undefined}
+              styles={styles}
+            />
           );
         }
         return (
@@ -613,6 +701,9 @@ function createStyles(tokens: SignetTokens, accent: string) {
       backgroundColor: tokens.color.surface.popover,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: tokens.color.border.hairline,
+    },
+    addFooter: {
+      alignItems: "center",
     },
     summary: {
       ...typeRole(tokens.typography.role.label),

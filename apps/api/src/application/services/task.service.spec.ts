@@ -171,6 +171,7 @@ describe('TaskService', () => {
       ),
       deleteGroup: jest.fn().mockResolvedValue(undefined),
       deleteGroupCopies: jest.fn().mockResolvedValue([]),
+      addGroupCopies: jest.fn().mockResolvedValue([]),
       setGroupFollower: jest.fn().mockResolvedValue(undefined),
     };
     mockRbac = {
@@ -1777,6 +1778,152 @@ describe('TaskService', () => {
 
       await expect(
         service.removeFromGroup('task-1', 'ch-1', ['user-2']),
+      ).rejects.toThrow('Task not found');
+    });
+  });
+
+  describe('addToGroup (#5905)', () => {
+    const member = (userId: string, roleIds: string[] = ['role-1']) =>
+      memberFixture({ ...baseMember, user_id: userId, role_ids: roleIds });
+    const copyOf = (assigneeId: string, over: Partial<Task> = {}): Task => ({
+      ...baseTask,
+      id: `copy-${assigneeId}`,
+      assignee_id: assigneeId,
+      group_id: 'group-1',
+      ...over,
+    });
+    const group = {
+      id: 'group-1',
+      chapter_id: 'ch-1',
+      created_by: 'admin-1',
+      audience: 'people' as const,
+      target_id: null,
+      target_name: null,
+      created_at: '2026-11-17T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        member('admin-1'),
+        member('user-1'),
+        member('user-2'),
+        member('user-3'),
+        member('alum-1', ['role-alumni']),
+      ]);
+      mockRbac.getAlumniRoleId.mockResolvedValue('role-alumni');
+      mockTaskRepo.findById.mockResolvedValue(copyOf('user-1'));
+      mockTaskRepo.findGroups.mockResolvedValue([group]);
+    });
+
+    it('gives each new member a copy made from the one asked on, pushes them, and counts them in the group', async () => {
+      mockTaskRepo.findGroupCopies
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+        ])
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+          copyOf('user-2'),
+          copyOf('user-3'),
+        ]);
+      mockTaskRepo.addGroupCopies.mockResolvedValue([
+        copyOf('user-2'),
+        copyOf('user-3'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2', 'user-3', 'user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-1',
+        ['user-2', 'user-3'],
+      );
+      const pushed = mockNotificationService.notifyUser.mock.calls.map(
+        ([id]) => id,
+      );
+      expect(pushed).toEqual(expect.arrayContaining(['user-2', 'user-3']));
+      expect(result).toEqual({
+        added: ['user-2', 'user-3'],
+        group: {
+          id: 'group-1',
+          audience: 'people',
+          target_id: null,
+          target_name: null,
+          total: 3,
+          done: 1,
+          confirmed: 0,
+        },
+      });
+    });
+
+    it('skips a member who already has a copy, writing nothing when that is everyone asked', async () => {
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1'),
+        copyOf('user-2'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+      expect(result.added).toEqual([]);
+      expect(result.group.total).toBe(2);
+    });
+
+    it('makes the copies from an open copy when the one asked on is confirmed', async () => {
+      mockTaskRepo.findById.mockResolvedValue(
+        copyOf('user-1', { points_awarded: true }),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1', { points_awarded: true }),
+        copyOf('user-2'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it.each([
+      ['an alum', ['user-3', 'alum-1']],
+      ['someone outside the chapter', ['stranger']],
+    ])('refuses a list with %s, writing nothing', async (_label, ids) => {
+      await expect(
+        service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ids),
+      ).rejects.toThrow(
+        'Everyone you pick must be an active member of the chapter',
+      );
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+    });
+
+    it("refuses a task that isn't for a group", async () => {
+      mockTaskRepo.findById.mockResolvedValue({ ...baseTask, group_id: null });
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
+      ).rejects.toThrow("This task isn't for a group");
+    });
+
+    it('is a 404 for a task not in the chapter', async () => {
+      mockTaskRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
       ).rejects.toThrow('Task not found');
     });
   });

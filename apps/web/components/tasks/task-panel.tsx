@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, Undo2, Users } from "lucide-react";
+import { CheckCircle2, Undo2, UserPlus, Users } from "lucide-react";
 import {
   TASK_ACTION_LABELS,
   actionStatus,
@@ -10,6 +10,7 @@ import {
   isSentBack,
   taskStatusLabel,
   taskHandedInLine,
+  useAddToTaskGroup,
   useMeeting,
   useReleaseTask,
   useUpdateTask,
@@ -85,7 +86,8 @@ import {
   useUploadTaskPhotos,
   type CompletionProof,
 } from "./task-photo";
-import { WhoPicker } from "./who-picker";
+import { WhoPicker, useWhoDirectory } from "./who-picker";
+import { tickedIds } from "@repo/hooks/task-who-picker";
 import { copyAudience, type RowPerson } from "./task-row";
 import { movesDayTo } from "./task-edit-form";
 
@@ -111,6 +113,11 @@ export interface TaskPanelProps {
   onReject: (task: BoardTask) => void;
   onDelete: (task: BoardTask) => void;
   onDeleteGroup: (tile: GroupTileData) => void;
+  /**
+   * A group's copies the viewer can read (#5905), for marking who already
+   * has one in Add people. A copy's panel has only itself otherwise.
+   */
+  groupCopies?: (groupId: string) => readonly BoardTask[];
 }
 
 /**
@@ -212,6 +219,7 @@ function TaskPanelBody({
   onChangeStatus,
   onConfirm,
   onReject,
+  groupCopies,
 }: TaskPanelProps & { target: TaskPanelTarget }) {
   const { toast } = useToast();
   const updateTask = useUpdateTask();
@@ -370,6 +378,22 @@ function TaskPanelBody({
       sentBack={sentBack}
     />
   );
+  // Add people (#5905): an officer hands a group task to more members, from
+  // the group's Who and a copy's For.
+  const addPeople =
+    canManage && task.group_id ? (
+      <AddPeople
+        taskId={task.id}
+        holders={
+          isGroup
+            ? target.copies.map((copy) => copy.assignee_id)
+            : (groupCopies?.(task.group_id) ?? [task]).map(
+                (copy) => copy.assignee_id,
+              )
+        }
+        disabled={!!gate.controlProps().disabled}
+      />
+    ) : null;
   const groupLabel = isGroup
     ? taskGroupLabel({
         audience: task.group?.audience ?? "everyone",
@@ -412,12 +436,20 @@ function TaskPanelBody({
       <dl className="grid gap-1">
         <FieldRow label="Who">
           {isGroup ? (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-sm">
-              <Users
-                className="h-4 w-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              {`${groupLabel} · ${target.tile.total}`}
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 px-2 py-1.5 text-sm">
+                <Users
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate">
+                  {/* "7 people" already counts them; don't say 7 twice. */}
+                  {task.group?.audience === "people"
+                    ? groupLabel
+                    : `${groupLabel} · ${target.tile.total}`}
+                </span>
+              </span>
+              {addPeople}
             </span>
           ) : editable ? (
             <WhoPicker
@@ -449,16 +481,21 @@ function TaskPanelBody({
           // For says who else got the same task and how far they are, as
           // the phone's task screen does.
           <FieldRow label="For">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-sm">
-              <Users
-                className="h-4 w-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              {TASK_AUDIENCE_COPY.groupLine(
-                copyOf.label,
-                copyOf.done,
-                copyOf.total,
-              )}
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="inline-flex min-w-0 items-center gap-1.5 px-2 py-1.5 text-sm">
+                <Users
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="truncate">
+                  {TASK_AUDIENCE_COPY.groupLine(
+                    copyOf.label,
+                    copyOf.done,
+                    copyOf.total,
+                  )}
+                </span>
+              </span>
+              {addPeople}
             </span>
           </FieldRow>
         ) : null}
@@ -664,6 +701,74 @@ function FollowerRow({
         </StaticValue>
       )}
     </FieldRow>
+  );
+}
+
+/**
+ * Add people to a group task (#5905): the Who picker, people only, with
+ * everyone who already has a copy ticked and fixed, and an Add button that
+ * gives each one picked a To do copy. Asana's and Microsoft Planner's
+ * assignee menus add people to a task that exists; here each gets their own
+ * copy, as Remove people takes one away. Nothing is optimistic: the new
+ * copies are rows the server makes, and the board redraws once it answers.
+ */
+export function AddPeople({
+  taskId,
+  holders,
+  disabled,
+}: {
+  taskId: string;
+  holders: readonly string[];
+  disabled: boolean;
+}) {
+  const { toast } = useToast();
+  const add = useAddToTaskGroup();
+  const [picked, setPicked] = useState<TaskWho | null>(null);
+  const { directory } = useWhoDirectory({ enabled: picked !== null });
+  const marked = new Set(holders);
+
+  async function submit() {
+    const assigneeIds = tickedIds(picked, directory).filter(
+      (userId) => !marked.has(userId),
+    );
+    setPicked(null);
+    if (assigneeIds.length === 0) return;
+    try {
+      const result = await add.mutateAsync({ id: taskId, assigneeIds });
+      toast({ title: TASK_AUDIENCE_COPY.addedLine(result.added.length) });
+    } catch (error) {
+      toastFailure({
+        title: TASK_AUDIENCE_COPY.addFailed,
+        error,
+        fallback: "Retry in a moment.",
+      });
+    }
+  }
+
+  return (
+    <WhoPicker
+      allow="people"
+      label={TASK_AUDIENCE_COPY.addPeople}
+      value={picked}
+      onChange={setPicked}
+      marked={marked}
+      markedNote={TASK_AUDIENCE_COPY.alreadyHasIt}
+      doneLabel={TASK_AUDIENCE_COPY.addButton}
+      onDone={() => void submit()}
+      align="end"
+      trigger={
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="shrink-0 gap-1.5"
+          disabled={disabled || add.isPending}
+        >
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
+          {TASK_AUDIENCE_COPY.addPeople}
+        </Button>
+      }
+    />
   );
 }
 
