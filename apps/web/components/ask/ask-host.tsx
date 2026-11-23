@@ -23,7 +23,6 @@ import {
 import type { AskAccess } from "@repo/validation";
 import { AskInChannelBridge } from "@/components/ask/ask-in-channel";
 import { ASK_ROUTE, isAskRoute } from "@/components/layout/shell-layout";
-import { PANEL_HOST_ATTRIBUTE } from "@/components/shared/panel";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 
 /**
@@ -128,10 +127,6 @@ export function AskHost({ children }: { children: ReactNode }) {
       router.push(ASK_ROUTE);
       return;
     }
-    // Not under a form an answer docked over the page: typing would go
-    // into a field the member can't see.
-    if (document.querySelector(`[${PANEL_HOST_ATTRIBUTE}] [data-docked-panel]`))
-      return;
     document
       .querySelector<HTMLElement>(`[${ASK_FIELD_ATTRIBUTE}]`)
       ?.focus({ preventScroll: true });

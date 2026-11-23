@@ -144,10 +144,13 @@ export const ACT_COPY = {
   more: "More",
   dismiss: "Dismiss",
   /**
-   * Opens the ordinary form on the proposal, filled in from the card, for
-   * everything the card does not show (#5117).
+   * Turns the card into its fields, filled in from the card, for everything
+   * the card does not show (#5117); an event's card grows into the ordinary
+   * event form in place on web (2026-11-22).
    */
   edit: "Edit",
+  /** The X that folds an event card's form back into the card (web). */
+  close_event_form: "Close the form",
   mine_only: "Only you see this.",
   no_members: "Add at least one member to confirm.",
   /** The points field under a points card's Edit (#5117). */

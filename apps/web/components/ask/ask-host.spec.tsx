@@ -242,25 +242,6 @@ describe("the way in", () => {
     expect(screen.getByRole("textbox", { name: "field" })).toHaveFocus();
   });
 
-  it("leaves the cursor where it is while a form docked from an answer covers the page", async () => {
-    nav.pathname = "/ask";
-    render(
-      <AskHost>
-        <Page />
-        <div data-panel-host="">
-          <textarea data-ask-field="" aria-label="field" />
-          <div data-docked-panel="">
-            <input aria-label="title" />
-          </div>
-        </div>
-      </AskHost>,
-    );
-    screen.getByRole("textbox", { name: "title" }).focus();
-    await userEvent.setup().click(entry()!);
-    expect(nav.push).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox", { name: "field" })).not.toHaveFocus();
-  });
-
   it("takes a member who loses Ask on the Ask page to chat", () => {
     nav.pathname = "/ask";
     const view = render(host());

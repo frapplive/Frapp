@@ -645,8 +645,9 @@ type EventEditorDialogProps = {
   onLeftEvent?: () => void;
   /**
    * Open inside the Events page instead of over the app (`shared/panel.tsx`
-   * § Docked). Opened from chat's + card or an Ask answer, it docks `"here"`:
-   * over the chat column or Ask's card it came from.
+   * § Docked). Opened from chat's + card, it docks `"here"`: over the chat
+   * column it came from. From an Ask event card's Edit it is `"inline"`: the
+   * card grows into it.
    */
   docked?: PanelDocking;
   /** The docked back arrow's name: where it returns to. */
@@ -1997,7 +1998,11 @@ export function EventEditorDialog({
                 }}
               />
             ) : (
-              <span>Going back keeps your draft.</span>
+              <span>
+                {docked === "inline"
+                  ? "Closing keeps your draft."
+                  : "Going back keeps your draft."}
+              </span>
             )}
             <span>
               <kbd className="font-sans">Ctrl</kbd> +{" "}

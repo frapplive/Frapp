@@ -466,11 +466,6 @@ describe("AskConversation", () => {
       expect(field).toHaveAttribute("data-ask-field");
     });
 
-    it("hosts a form docked from an answer, over the page", () => {
-      open();
-      expect(document.querySelector("[data-panel-host]")).not.toBeNull();
-    });
-
     it("goes on answering a question when the member leaves the page, and keeps every turn", () => {
       state.exchanges = [
         DONE,
@@ -490,20 +485,24 @@ describe("AskConversation", () => {
       expect(field).not.toHaveAttribute("data-escape-leaves");
     });
 
-    it("offers no new conversation while a form docked from an answer covers the page", async () => {
+    it("offers no new conversation while a card's form is open in the thread", async () => {
       state.exchanges = [DONE];
       open();
       expect(
         screen.getByRole("button", { name: ASK_COPY.new_conversation }),
       ).toBeInTheDocument();
-      const docked = document.createElement("div");
-      docked.setAttribute("data-docked-panel", "");
-      document.querySelector("[data-panel-host]")?.appendChild(docked);
+      const form = document.createElement("section");
+      form.setAttribute("data-inline-panel", "");
+      document.querySelector("[data-ask-thread-view]")?.appendChild(form);
       await waitFor(() =>
         expect(
           screen.queryByRole("button", { name: ASK_COPY.new_conversation }),
         ).toBeNull(),
       );
+      form.remove();
+      expect(
+        await screen.findByRole("button", { name: ASK_COPY.new_conversation }),
+      ).toBeInTheDocument();
     });
   });
 });

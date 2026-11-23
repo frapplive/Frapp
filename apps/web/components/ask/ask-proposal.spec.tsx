@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -28,6 +28,9 @@ const state = vi.hoisted(() => ({
     | undefined
     | {
         open: boolean;
+        onOpenChange: (open: boolean) => void;
+        onCloseAutoFocus?: (event: Event) => void;
+        docked?: unknown;
         template?: Record<string, unknown> | null;
         initialStartAt?: string;
         initialEndAt?: string;
@@ -35,6 +38,7 @@ const state = vi.hoisted(() => ({
         keptDraft?: string;
         onCreated?: (eventId: string) => Promise<void> | void;
       },
+  formMounts: 0,
   cards: {
     byId: new Map<string, unknown>(),
     settled: true,
@@ -48,12 +52,29 @@ vi.mock("@/components/ai/report-ai", () => ({
 }));
 
 // The form itself has its own spec (`event-editor-dialog.spec.tsx`).
-vi.mock("@/components/events/event-editor-dialog", () => ({
-  EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
-    state.eventForm = props;
-    return null;
-  },
-}));
+// Its open form hands focus back on close as the in-place panel does, from
+// its unmount, after the render that closed it.
+vi.mock("@/components/events/event-editor-dialog", async () => {
+  const { useEffect } = await vi.importActual<typeof import("react")>("react");
+  function OpenForm({ onClosed }: { onClosed?: (event: Event) => void }) {
+    useEffect(
+      () => () => {
+        onClosed?.(new Event("focus.closeAutoFocus", { cancelable: true }));
+      },
+      [onClosed],
+    );
+    return <div data-testid="event-form" />;
+  }
+  return {
+    EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
+      state.eventForm = props;
+      useEffect(() => {
+        state.formMounts += 1;
+      }, []);
+      return props.open ? <OpenForm onClosed={props.onCloseAutoFocus} /> : null;
+    },
+  };
+});
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -383,6 +404,7 @@ describe("AskProposal", () => {
 
     beforeEach(() => {
       state.eventForm = undefined;
+      state.formMounts = 0;
     });
 
     it("says a series repeats, written out", async () => {
@@ -402,6 +424,11 @@ describe("AskProposal", () => {
       );
       const form = state.eventForm!;
       expect(form.open).toBe(true);
+      // The card grows into the form in place (Paul, 2026-11-22): the form
+      // stands where the card's lines were, nothing slides over the page.
+      expect(form.docked).toBe("inline");
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(screen.queryByRole("button", { name: ACT_COPY.edit })).toBeNull();
       expect(form.template).toMatchObject({
         name: "Chapter",
         is_mandatory: false,
@@ -419,6 +446,29 @@ describe("AskProposal", () => {
         newEventId: "event-9",
       });
       expect(await screen.findByText(ACT_COPY.done_event)).toBeDefined();
+    });
+
+    it("folds the form back into the card and puts focus on Edit when it closes", async () => {
+      series();
+      await userEvent.click(
+        await screen.findByRole("button", { name: ACT_COPY.edit }),
+      );
+      await screen.findByTestId("event-form");
+      act(() => state.eventForm!.onOpenChange(false));
+      expect(screen.queryByTestId("event-form")).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(
+        screen.getByRole("button", { name: ACT_COPY.create_event }),
+      ).toBeDefined();
+      // Opened again, it is the same form, so a save still out when it closed
+      // is still that form's, not a fresh Create.
+      await userEvent.click(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(state.formMounts).toBe(1);
     });
 
     it("turns a points card's amount and reason into fields, and sends only what changed", async () => {
