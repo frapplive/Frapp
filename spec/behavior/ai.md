@@ -277,7 +277,7 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
   On web the top bar's find field, which reads "Search or ask Frapp", asks from any page and opens the conversation as a dialog where Find opens (changed in #4904 by pdcarlson, 2026-11-13, Paul's pick;
   until then a button in the chat composer opened it over the thread;
   [`../ui/web-dashboard/README.md`](../ui/web-dashboard/README.md) § Top bar).
-  Changed in #5476 by pdcarlson, 2026-11-18 (Paul's pick, after Shawn and he didn't want Ask in the search bar): on web the field only finds, and a floating Ask bar with the crest opens Ask, as on the phone: at the bottom of every tool page, or at the foot of the Channels column when chat is alone, never over a message box (in a channel, `@Frapp` asks); from `lg` up it sits at the foot of the sidebar on every layout instead (changed in #5560 by pdcarlson, 2026-11-19). It opens the same dialog;
+  Changed in #5476 by pdcarlson, 2026-11-18 (Paul's pick, after Shawn and he didn't want Ask in the search bar): on web the field only finds, and a floating Ask bar with the crest opens Ask, as on the phone: at the bottom of every tool page, or at the foot of the Channels column when chat is alone, never over a message box (in a channel, `@Frapp` asks); from `lg` up it sits at the foot of the sidebar on every layout instead (changed in #5560 by pdcarlson, 2026-11-19). It opens the same dialog (changed 2026-11-22, Paul's pick: it opens the Ask page, `/ask`, with chat beside it, and a question still being answered goes on when the member leaves the page);
   on the phone the Ask Frapp bar above the tab bar, on all four tabs, opens it as a full-height sheet whose field only asks, and the Search screen's last row opens it with the searched words (changed in #5139 by pdcarlson, 2026-11-16; from #4904 the field also listed places that matched what was typed;
   [`../ui/mobile/navigation.md`](../ui/mobile/navigation.md) § Global entries).
   With Ask off for the chapter, for a member without `ai:use`, or on a server with no AI, there is no entry anywhere.
@@ -463,6 +463,7 @@ Decided 2026-11-13 by Paul (no Ask and Do tabs, and "all proposed cards show up 
 - **A question still being answered when Ask closes is dropped.**
   The turns before it stay.
   Changed in #4713 by pdcarlson, 2026-11-13: a question asked from a channel is left to finish, because its answer is drawn in the channel and closing Ask is not walking away from it.
+  Changed for the web by pdcarlson, 2026-11-22 (Ask as a page): leaving or closing the Ask page drops nothing; the question goes on being answered and is there when the member comes back. The phone sheet still drops it.
 - **A request has already been searched for.**
   Frapp reads what was typed as a question and as a request at the same moment, so a question waits on nothing.
   When it turns out to be a request, the search has already run and is thrown away: nothing it found is shown, no live data is read and no answer is written.

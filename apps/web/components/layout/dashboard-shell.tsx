@@ -16,6 +16,8 @@ import { SKIP_LINK_CLASSES } from "@/components/ui/focus";
 import { AppNav } from "@/components/layout/app-nav";
 import { NavColumn } from "@/components/layout/nav-column";
 import {
+  ESCAPE_LEAVES_ATTRIBUTE,
+  isAskRoute,
   isChatRoute,
   isFullWidthToolRoute,
   PANE_FLOOR,
@@ -162,9 +164,10 @@ export function DashboardShell({
 }: DashboardShellProps) {
   // Ask Frapp's bar (#5476) floats at the bottom of the page below `lg`,
   // where there is no sidebar to hold it (#5560), so a page there reserves
-  // room under its last row.
-  const askBar = useAskEntry() !== null;
+  // room under its last row. Not on the Ask page itself, whose own field is
+  // there.
   const pathname = usePathname();
+  const askBar = useAskEntry() !== null && !isAskRoute(pathname);
   const searchParams = useSearchParams();
   const router = useRouter();
   // Chapter accent, shell-wide: maps the persisted engine roles onto the
@@ -357,7 +360,8 @@ export function DashboardShell({
   /*
     Escape inside the tool page closes it, from the side-by-side width up.
     Not from a field, where Escape means "stop typing" and closing would throw
-    the draft away, and not when something inside already used the key: a
+    the draft away (unless the field says Escape is the page's: Ask's, while
+    empty), and not when something inside already used the key: a
     Radix dialog, menu or popover handles Escape first and marks it handled.
   */
   const onToolKeyDown = useCallback(
@@ -368,7 +372,8 @@ export function DashboardShell({
       if (
         target.closest(
           "input, textarea, select, [contenteditable=''], [contenteditable='true']",
-        )
+        ) &&
+        !target.closest(`[${ESCAPE_LEAVES_ATTRIBUTE}]`)
       ) {
         return;
       }

@@ -197,7 +197,7 @@ vi.mock("@/components/onboarding/welcome-gate", () => ({
 // Whether this member has Ask (`ask-host.tsx`); null, as for one without it,
 // unless a test says otherwise.
 const askEntry = vi.hoisted(() => ({
-  current: null as { open: boolean; openWith: () => void } | null,
+  current: null as { open: boolean; openAsk: () => void } | null,
 }));
 vi.mock("@/components/ask/ask-host", () => ({
   useAskEntry: () => askEntry.current,
@@ -604,7 +604,7 @@ describe("DashboardShell", () => {
     expect(page.className).not.toContain("pb-24");
     view.unmount();
 
-    askEntry.current = { open: false, openWith: vi.fn() };
+    askEntry.current = { open: false, openAsk: vi.fn() };
     const { container } = render(<DashboardShell>content</DashboardShell>);
     // Named by its own words (WCAG 2.5.3).
     const bar = screen.getByRole("button", { name: "Ask Frapp anything" });
@@ -619,6 +619,18 @@ describe("DashboardShell", () => {
     // And tells a control it pins to its own bottom how far to rise.
     expect(page.className).toContain("max-lg:[--ask-bar-room:4.5rem]");
     expect(page).not.toContainElement(bar);
+  });
+
+  it("floats no Ask bar over the Ask page, whose own field is at its foot (Paul, 2026-11-22)", () => {
+    mockPathname.value = "/ask";
+    askEntry.current = { open: true, openAsk: vi.fn() };
+    const { container } = render(<DashboardShell>content</DashboardShell>);
+    const column = container.querySelector("[data-tool-column]") as HTMLElement;
+    expect(
+      within(column).queryByRole("button", { name: "Ask Frapp anything" }),
+    ).toBeNull();
+    const page = container.querySelector("[data-tool-page]") as HTMLElement;
+    expect(page.className).not.toContain("pb-24");
   });
 
   it("insets and scrolls a tool page, inside the one main landmark", () => {
@@ -1033,6 +1045,20 @@ describe("DashboardShell", () => {
         expect(routerPush).not.toHaveBeenCalled();
       });
 
+      it("closes on Escape from a field that leaves Escape to the page: Ask's, while empty (2026-11-22)", () => {
+        setWindowWidth(1440);
+        mockPathname.value = "/ask";
+        render(
+          <DashboardShell>
+            <textarea aria-label="Ask field" data-escape-leaves="" />
+          </DashboardShell>,
+        );
+        fireEvent.keyDown(screen.getByRole("textbox", { name: "Ask field" }), {
+          key: "Escape",
+        });
+        expect(routerPush).toHaveBeenCalledWith("/chat");
+      });
+
       it("closes the page when the divider is let go at the left edge", () => {
         setWindowWidth(1440);
         mockPathname.value = "/events";
@@ -1266,7 +1292,7 @@ describe("DashboardShell", () => {
     it("keeps Ask Frapp in the sidebar's foot, not over the home view (#5560)", () => {
       setWindowWidth(1440);
       mockPathname.value = "/chat";
-      askEntry.current = { open: false, openWith: vi.fn() };
+      askEntry.current = { open: false, openAsk: vi.fn() };
       const { container } = render(
         <DashboardShell defaultChatOpen={false}>{null}</DashboardShell>,
       );

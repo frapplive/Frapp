@@ -70,6 +70,23 @@ export function isChatRoute(pathname: string | null): boolean {
 }
 
 /**
+ * A field that leaves Escape to the page: Escape there closes the tool page
+ * as it does from the page's blank space. Ask's field carries it while empty,
+ * where the cursor starts.
+ */
+export const ESCAPE_LEAVES_ATTRIBUTE = "data-escape-leaves";
+
+/** Ask Frapp's page (Paul's pick of 2026-11-22), opened by the Ask bar. */
+export const ASK_ROUTE = "/ask";
+
+/** Whether `pathname` is Ask Frapp's page. */
+export function isAskRoute(pathname: string | null): boolean {
+  return (
+    pathname === ASK_ROUTE || Boolean(pathname?.startsWith(`${ASK_ROUTE}/`))
+  );
+}
+
+/**
  * Tool routes that take the whole row: chat closes beside them and comes back
  * on leaving (decision 3 of #4068, Paul 2026-11-10). Chapter settings is a
  * grouped rail beside a form; beside chat at a 1280px window its Chapter form
