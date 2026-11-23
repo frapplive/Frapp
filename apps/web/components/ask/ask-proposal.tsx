@@ -193,6 +193,11 @@ interface CardEdits {
   from: string | null;
   /** Points typed into an event card's empty field (#5148). */
   eventPoints: string;
+  /**
+   * An event card's form is open in it (2026-11-22). Kept, so a card drawn
+   * again (a channel's row scrolled back into view) opens on its form.
+   */
+  eventFormOpen: boolean;
 }
 
 /**
@@ -909,6 +914,21 @@ function ActCard({
   const fromShown = who?.kind === "someone" ? null : from;
   // An event's points when nobody said them and nothing matched (#5148).
   const [eventPoints, setEventPoints] = useState(kept?.eventPoints ?? "");
+  // The event form: mounted on the first Edit and kept, so a save still out
+  // when it closes is the same form's when it opens again; what was typed is
+  // kept under the card's name (#4593). While it is open it is the card.
+  const [eventForm, setEventForm] = useState<boolean | null>(
+    kept?.eventFormOpen ? true : null,
+  );
+  const formOpen = !!event && eventForm === true;
+  // An event card's Edit opens at once: its code is fetched with the card.
+  useEffect(() => {
+    if (!event) return;
+    void import("@/components/events/event-editor-dialog").then(
+      (m) => EventEditorDialog.adopt(m.EventEditorDialog),
+      () => undefined,
+    );
+  }, [event]);
   useEffect(() => {
     store?.set(suggestion.id, {
       targets,
@@ -923,6 +943,7 @@ function ActCard({
       proof,
       from,
       eventPoints,
+      eventFormOpen: eventForm === true,
     });
   }, [
     store,
@@ -939,15 +960,12 @@ function ActCard({
     proof,
     from,
     eventPoints,
+    eventForm,
   ]);
   const [fieldProblem, setFieldProblem] = useState<{
     field: "amount" | "reason" | "taskName" | "taskPoints" | "eventPoints";
     error: string;
   } | null>(null);
-  // The event form: mounted on the first Edit and kept; what was typed is
-  // kept under the card's name (#4593). While it is open it is the card.
-  const [eventForm, setEventForm] = useState<boolean | null>(null);
-  const formOpen = !!event && eventForm === true;
   // Closing the form brings the card back: focus returns to its Edit, which
   // was gone while the form stood in its place.
   const editButton = useRef<HTMLButtonElement>(null);
@@ -1242,6 +1260,9 @@ function ActCard({
   const eventFormPanel =
     event && eventForm !== null ? (
       <EventEditorDialog
+        // The same form whether it stands alone in the card or waits,
+        // closed, after the card's lines.
+        key="event-form"
         open={eventForm}
         onOpenChange={setEventForm}
         // In the card, which grows into the form (Paul, 2026-11-22), on the
@@ -1266,9 +1287,10 @@ function ActCard({
     ) : null;
 
   // The form names itself ("New event"), so the frame around it is no
-  // second region with the same name.
+  // second region with the same name. The same element as the card, so the
+  // form in it is not mounted afresh.
   if (formOpen) {
-    return <div className={CARD_FRAME}>{eventFormPanel}</div>;
+    return <section className={CARD_FRAME}>{eventFormPanel}</section>;
   }
 
   return (

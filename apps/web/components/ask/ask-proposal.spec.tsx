@@ -38,6 +38,7 @@ const state = vi.hoisted(() => ({
         keptDraft?: string;
         onCreated?: (eventId: string) => Promise<void> | void;
       },
+  formMounts: 0,
   cards: {
     byId: new Map<string, unknown>(),
     settled: true,
@@ -51,12 +52,29 @@ vi.mock("@/components/ai/report-ai", () => ({
 }));
 
 // The form itself has its own spec (`event-editor-dialog.spec.tsx`).
-vi.mock("@/components/events/event-editor-dialog", () => ({
-  EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
-    state.eventForm = props;
-    return props.open ? <div data-testid="event-form" /> : null;
-  },
-}));
+// Its open form hands focus back on close as the in-place panel does, from
+// its unmount, after the render that closed it.
+vi.mock("@/components/events/event-editor-dialog", async () => {
+  const { useEffect } = await vi.importActual<typeof import("react")>("react");
+  function OpenForm({ onClosed }: { onClosed?: (event: Event) => void }) {
+    useEffect(
+      () => () => {
+        onClosed?.(new Event("focus.closeAutoFocus", { cancelable: true }));
+      },
+      [onClosed],
+    );
+    return <div data-testid="event-form" />;
+  }
+  return {
+    EventEditorDialog: (props: NonNullable<typeof state.eventForm>) => {
+      state.eventForm = props;
+      useEffect(() => {
+        state.formMounts += 1;
+      }, []);
+      return props.open ? <OpenForm onClosed={props.onCloseAutoFocus} /> : null;
+    },
+  };
+});
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -386,6 +404,7 @@ describe("AskProposal", () => {
 
     beforeEach(() => {
       state.eventForm = undefined;
+      state.formMounts = 0;
     });
 
     it("says a series repeats, written out", async () => {
@@ -434,13 +453,8 @@ describe("AskProposal", () => {
       await userEvent.click(
         await screen.findByRole("button", { name: ACT_COPY.edit }),
       );
-      const form = state.eventForm!;
-      act(() => {
-        const closing = new Event("focus.closeAutoFocus", { cancelable: true });
-        form.onCloseAutoFocus?.(closing);
-        expect(closing.defaultPrevented).toBe(true);
-        form.onOpenChange(false);
-      });
+      await screen.findByTestId("event-form");
+      act(() => state.eventForm!.onOpenChange(false));
       expect(screen.queryByTestId("event-form")).toBeNull();
       expect(document.activeElement).toBe(
         screen.getByRole("button", { name: ACT_COPY.edit }),
@@ -448,6 +462,13 @@ describe("AskProposal", () => {
       expect(
         screen.getByRole("button", { name: ACT_COPY.create_event }),
       ).toBeDefined();
+      // Opened again, it is the same form, so a save still out when it closed
+      // is still that form's, not a fresh Create.
+      await userEvent.click(
+        screen.getByRole("button", { name: ACT_COPY.edit }),
+      );
+      expect(await screen.findByTestId("event-form")).toBeDefined();
+      expect(state.formMounts).toBe(1);
     });
 
     it("turns a points card's amount and reason into fields, and sends only what changed", async () => {

@@ -57,10 +57,9 @@ import { cn } from "@/lib/utils";
  * **Docked where it was opened** (`docked="here"`, Paul, 2026-11-19: "I
  * NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS"). A panel opened from a
  * surface with no page of its own (a profile from a name in chat, + New
- * channel, an event form from chat's + card or from an Ask answer) docks
- * into the surface around it instead of sliding over the window: the nearest
- * `PANEL_HOST_ATTRIBUTE` box it is rendered inside (chat's own column, the
- * Ask page). It covers that box with a back arrow, as a thread covers the chat
+ * channel, an event form from chat's + card) docks into the surface around
+ * it instead of sliding over the window: the nearest `PANEL_HOST_ATTRIBUTE`
+ * box it is rendered inside (chat's own column). It covers that box with a back arrow, as a thread covers the chat
  * on a narrow window, and the page beside it stays live.
  *
  * **In place** (`docked="inline"`, Paul, 2026-11-22: Edit on an Ask card
@@ -68,7 +67,9 @@ import { cn } from "@/lib/utils";
  * the thing being made (an event Ask proposed) draws where it is rendered,
  * in the page's flow, so the card grows into the form and the conversation
  * above it stays readable, as Linear's triage and Notion AI's suggestions
- * edit in place. Nothing is covered; the title row closes it with an X.
+ * edit in place. Nothing is covered; the title row closes it with an X. The
+ * box carries `INLINE_PANEL_ATTRIBUTE`, so a page around it can tell one is
+ * open (the Ask page holds New conversation while it is).
  *
  * The sheet is left only as the fallback for a panel with nowhere to dock (a
  * test, a page outside the shell). A yes/no question stays a centred dialog:
@@ -94,10 +95,13 @@ const TOOL_COLUMN_SELECTOR = "[data-tool-column]";
 
 /**
  * Marks a box a `docked="here"` panel opened inside it covers: chat's column
- * (`chat-shell.tsx`) and the Ask page (`ask-page.tsx`). The box must be a
+ * (`chat-shell.tsx`). The box must be a
  * containing block (`relative`, or `fixed`) so the panel fills it.
  */
 export const PANEL_HOST_ATTRIBUTE = "data-panel-host";
+
+/** On an open `docked="inline"` panel's box. */
+export const INLINE_PANEL_ATTRIBUTE = "data-inline-panel";
 
 /**
  * `true` docks in the tool column; `"here"` over the surface it opened from;
@@ -125,7 +129,7 @@ export function Panel({
 }) {
   const titleId = React.useId();
   const descriptionId = React.useId();
-  useOpenerTracking(docked === true || docked === "here");
+  useOpenerTracking(docked !== false);
   // `undefined` on the server and in the first hydrating render, so the
   // markup matches; then the column, or `null` when there is none.
   const toolColumn = React.useSyncExternalStore<Element | null | undefined>(
@@ -286,6 +290,57 @@ function openerOf(box: HTMLElement): HTMLElement | null {
 }
 
 /**
+ * A stable reader of the latest value, for an effect that runs once and must
+ * see what the caller passes at its cleanup.
+ */
+function useLatest<T>(value: T): () => T {
+  const ref = React.useRef(value);
+  React.useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return React.useCallback(() => ref.current, []);
+}
+
+/**
+ * A `PanelDescription` is the panel's description, as a sheet's is its
+ * dialog's, so a screen reader reads it with the title when focus lands. Set
+ * only when one is drawn, so the id never points at nothing.
+ */
+function describeBy(box: HTMLElement, descriptionId: string) {
+  if (box.querySelector(`[id="${descriptionId}"]`)) {
+    box.setAttribute("aria-describedby", descriptionId);
+  }
+}
+
+/**
+ * The caller's close-focus hook, as a sheet's `onCloseAutoFocus`: true when it
+ * sent focus somewhere itself (`preventDefault()`).
+ */
+function handOffCloseFocus(hook: ((event: Event) => void) | undefined) {
+  const event = new Event("focus.closeAutoFocus", { cancelable: true });
+  hook?.(event);
+  return event.defaultPrevented;
+}
+
+/**
+ * Escape closes a docked or in-place panel, unless the content's own keys, a
+ * field, or an open popover had it first.
+ */
+function closeOnEscape(
+  event: React.KeyboardEvent<HTMLElement>,
+  dock: PanelDock,
+  onKeyDown: React.KeyboardEventHandler<HTMLElement> | undefined,
+) {
+  onKeyDown?.(event);
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  const target = event.target as HTMLElement;
+  if (target.closest(FIELD_SELECTOR)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dock.onClose();
+}
+
+/**
  * The in-place panel's box (`docked="inline"`): a region in the page's flow.
  * Focus moves in on open unless a field already took it (a create form's
  * name), and goes back to what opened it on close. Escape closes it, unless a
@@ -305,20 +360,15 @@ function InlinePanel({
   children: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLElement>(null);
-  const closeFocus = React.useRef(onCloseAutoFocus);
-  React.useEffect(() => {
-    closeFocus.current = onCloseAutoFocus;
-  }, [onCloseAutoFocus]);
+  const closeFocus = useLatest(onCloseAutoFocus);
   const descriptionId = dock.descriptionId;
   React.useEffect(() => {
     const box = ref.current;
     if (!box) return;
-    const active = document.activeElement;
-    const returnTo =
-      active instanceof HTMLElement && !box.contains(active) ? active : null;
-    if (box.querySelector(`[id="${descriptionId}"]`)) {
-      box.setAttribute("aria-describedby", descriptionId);
-    }
+    // What opened it, as a docked panel finds it (Safari leaves a clicked
+    // button unfocused).
+    const returnTo = openerOf(box);
+    describeBy(box, descriptionId);
     if (!box.contains(document.activeElement)) {
       box.focus({ preventScroll: true });
     }
@@ -326,26 +376,17 @@ function InlinePanel({
       // Left while the member was working elsewhere: focus is theirs.
       const now = document.activeElement;
       if (now && now !== document.body && !box.contains(now)) return;
-      const event = new Event("focus.closeAutoFocus", { cancelable: true });
-      closeFocus.current?.(event);
-      if (event.defaultPrevented) return;
+      if (handOffCloseFocus(closeFocus())) return;
       if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
     };
-  }, [descriptionId]);
+  }, [descriptionId, closeFocus]);
   return (
     <section
       ref={ref}
       aria-labelledby={dock.titleId}
       tabIndex={-1}
-      onKeyDown={(event) => {
-        onKeyDown?.(event);
-        if (event.key !== "Escape" || event.defaultPrevented) return;
-        const target = event.target as HTMLElement;
-        if (target.closest(FIELD_SELECTOR)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        dock.onClose();
-      }}
+      {...{ [INLINE_PANEL_ATTRIBUTE]: "" }}
+      onKeyDown={(event) => closeOnEscape(event, dock, onKeyDown)}
       className={cn("flex flex-col outline-none", className)}
     >
       {children}
@@ -373,10 +414,7 @@ function DockedPanel({
   children: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLElement>(null);
-  const closeFocus = React.useRef(onCloseAutoFocus);
-  React.useEffect(() => {
-    closeFocus.current = onCloseAutoFocus;
-  }, [onCloseAutoFocus]);
+  const closeFocus = useLatest(onCloseAutoFocus);
   const descriptionId = dock.descriptionId;
   React.useEffect(() => {
     const box = ref.current;
@@ -417,13 +455,8 @@ function DockedPanel({
       }
     });
     joined.observe(column, { childList: true });
-    // A `PanelDescription` is the panel's description, as a sheet's is its
-    // dialog's, so a screen reader reads it with the title when focus lands.
-    // Set before the focus, and only when one is drawn, so the id never
-    // points at nothing.
-    if (box.querySelector(`[id="${descriptionId}"]`)) {
-      box.setAttribute("aria-describedby", descriptionId);
-    }
+    // Before the focus, so it is read when focus lands.
+    describeBy(box, descriptionId);
     box.focus({ preventScroll: true });
 
     // Focus that was in the panel and fell to `<body>` comes back to it. A
@@ -470,12 +503,10 @@ function DockedPanel({
       // Closed while the member was working elsewhere (an upload finishing
       // while they type in chat): focus is theirs, so leave it there.
       if (!ours) return;
-      const event = new Event("focus.closeAutoFocus", { cancelable: true });
-      closeFocus.current?.(event);
-      if (event.defaultPrevented) return;
+      if (handOffCloseFocus(closeFocus())) return;
       if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
     };
-  }, [descriptionId]);
+  }, [descriptionId, closeFocus]);
 
   return (
     <section
@@ -483,15 +514,7 @@ function DockedPanel({
       aria-labelledby={dock.titleId}
       data-docked-panel=""
       tabIndex={-1}
-      onKeyDown={(event) => {
-        onKeyDown?.(event);
-        if (event.key !== "Escape" || event.defaultPrevented) return;
-        const target = event.target as HTMLElement;
-        if (target.closest(FIELD_SELECTOR)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        dock.onClose();
-      }}
+      onKeyDown={(event) => closeOnEscape(event, dock, onKeyDown)}
       className={cn(
         "absolute inset-0 z-20 flex flex-col bg-background outline-none",
         className,

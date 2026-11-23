@@ -40,7 +40,7 @@ import { PageSkeleton } from "@/components/shared/page-skeletons";
 import { PageActions } from "@/components/layout/page-actions";
 import { ESCAPE_LEAVES_ATTRIBUTE } from "@/components/layout/shell-layout";
 import { NewButton } from "@/components/ui/new-button";
-import { PANEL_HOST_ATTRIBUTE } from "@/components/shared/panel";
+import { INLINE_PANEL_ATTRIBUTE } from "@/components/shared/panel";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { JumpToLatestButton } from "@/components/chat/jump-to-latest-button";
@@ -67,8 +67,8 @@ import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
  *
  * A source, a channel an answer names and the page a confirmed card leaves
  * for are ordinary links: following one leaves the page, and the Ask bar
- * comes back to the same thread. An event form opened from an answer docks
- * over this page (`Panel`'s `docked="here"`).
+ * comes back to the same thread. Edit on an event card grows the card into
+ * the event form in place (`Panel`'s `docked="inline"`).
  *
  * The conversation is owned by `AskHost` above the whole dashboard, so it is
  * the same thread on every visit, and a question still being answered when
@@ -217,21 +217,6 @@ export function AskConversation() {
     void refetchStatus({ cancelRefetch: false });
   }, [refetchStatus]);
 
-  // Whether a form an answer opened is docked over the page. New
-  // conversation, in the page's header beside it, would clear the turn the
-  // form belongs to and take the form with it, so it waits.
-  const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [docked, setDocked] = useState(false);
-  useEffect(() => {
-    if (!host || typeof MutationObserver === "undefined") return;
-    const check = () =>
-      setDocked(host.querySelector(":scope > [data-docked-panel]") !== null);
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(host, { childList: true });
-    return () => observer.disconnect();
-  }, [host]);
-
   // The field takes focus when the page opens, as ChatGPT's and Claude's do.
   useEffect(() => {
     field.current?.focus({ preventScroll: true });
@@ -265,6 +250,34 @@ export function AskConversation() {
   const newestWords = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+
+  // Whether a card's form is open in the thread (Edit on an event card
+  // grows the card into it). New conversation, in the page's header, would
+  // clear the turn the form belongs to and take the form with it, so it
+  // waits. The view stops following the end while one opens, and shows the
+  // form's top: following would hold its last row at the bottom of the view
+  // with the name being typed above it.
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  useEffect(() => {
+    if (!host || typeof MutationObserver === "undefined") return;
+    let open = false;
+    const check = () => {
+      const form = host.querySelector<HTMLElement>(
+        `[${INLINE_PANEL_ATTRIBUTE}]`,
+      );
+      if (form && !open) {
+        pinned.current = false;
+        form.scrollIntoView?.({ block: "nearest" });
+      }
+      open = form !== null;
+      setFormOpen(open);
+    };
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(host, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [host]);
   const placed = useRef<string | null>(null);
   const [behind, setBehind] = useState(false);
   // The view's height, which the newest turn fills at least, so its
@@ -405,7 +418,7 @@ export function AskConversation() {
 
   return (
     <>
-      {exchanges.length > 0 && !docked ? (
+      {exchanges.length > 0 && !formOpen ? (
         <PageActions>
           {/* The app's one New button (Paul, 2026-11-19), beside the X. */}
           <NewButton
@@ -422,12 +435,9 @@ export function AskConversation() {
         The whole page, edge to edge (the tool page's padding is taken back
         so the thread's scrollbar sits at the page's edge), with the thread
         and the field in one centred 720px column.
-        `PANEL_HOST_ATTRIBUTE`: an event form opened from an answer docks
-        over this page.
       */}
       <div
         ref={setHost}
-        {...{ [PANEL_HOST_ATTRIBUTE]: "" }}
         className="relative -mx-4 -my-4 flex min-h-0 flex-1 flex-col sm:-mx-6"
       >
         <div

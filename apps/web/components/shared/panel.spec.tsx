@@ -323,7 +323,8 @@ describe('Panel docked "inline"', () => {
     render(<InlineHarness />);
     expect(screen.queryByRole("region")).toBeNull();
     const edit = screen.getByRole("button", { name: "Edit" });
-    edit.focus();
+    // A click alone, as Safari leaves it: the press is what finds the opener.
+    fireEvent.pointerDown(edit);
     fireEvent.click(edit);
     const region = screen.getByRole("region", { name: "New event" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -346,6 +347,49 @@ describe('Panel docked "inline"', () => {
       key: "Escape",
     });
     expect(screen.queryByRole("region")).toBeNull();
+  });
+
+  it("hands focus to the caller's close hook, after the render that closed it", () => {
+    const target = { current: null as HTMLButtonElement | null };
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <div>
+          <button type="button" ref={(node) => void (target.current = node)}>
+            Elsewhere
+          </button>
+          <Panel
+            open={open}
+            onOpenChange={setOpen}
+            docked="inline"
+            backLabel="Close"
+          >
+            <PanelContent
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                target.current?.focus();
+              }}
+            >
+              <PanelHeader>New event</PanelHeader>
+            </PanelContent>
+          </Panel>
+        </div>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region")).toBeNull();
+    expect(document.activeElement).toBe(target.current);
+  });
+
+  it("marks its box, so a page around it can tell a form is open", () => {
+    render(<InlineHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(
+      screen
+        .getByRole("region", { name: "New event" })
+        .hasAttribute("data-inline-panel"),
+    ).toBe(true);
   });
 
   it("lets the body grow with the page rather than scroll on its own", () => {
