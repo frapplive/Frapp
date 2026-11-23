@@ -10391,7 +10391,7 @@ export interface components {
              * @enum {string}
              */
             everyone: "required" | "optional" | "not_invited";
-            /** @description Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status. */
+            /** @description Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles. */
             roles: {
                 [key: string]: "required" | "optional" | "not_invited";
             };

@@ -51,7 +51,7 @@ vi.mock("@repo/hooks", async () => ({
   useEvent: (id: unknown) => useEventMock(id),
   useEvents: (options?: { enabled?: boolean }) => useEventsMock(options),
   useUpdateEvent: () => ({ mutateAsync: updateMutate, isPending: false }),
-  // The two chapter types the type picker and its Edit types list read.
+  // The two chapter types the Type menu reads.
   ...(await import("@/tests/events-page")).eventTypeHooks(),
   useCreateEventType: () => ({
     mutateAsync: createTypeMutate,

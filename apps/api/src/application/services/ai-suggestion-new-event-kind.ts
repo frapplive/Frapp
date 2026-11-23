@@ -13,7 +13,6 @@ import {
   eventOthersInvited,
   attendanceToWire,
   isRepeatRule,
-  othersInvitedForCreate,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
 } from '@repo/validation';
@@ -67,7 +66,8 @@ export interface NewEventSuggestionPayload {
   is_mandatory: boolean;
   /**
    * Who it invites, as the event form's draft: the default for everyone and
-   * each role (by id) or tier (`tier:<id>`) set apart from it. Null on a
+   * each role (by id) set apart from it. A tier is stored as its roles
+   * (`attendanceByRole`), since events take role ids only. Null on a
    * card saved before #5853, which invites everyone as `is_mandatory` says.
    */
   attendance: EventAttendanceDraft | null;
@@ -103,7 +103,7 @@ function pointsFromOrNull(value: unknown): NewEventPointsFrom | null {
 /** Roles and tiers one card may set apart. */
 const ATTENDANCE_ENTRIES_MAX = 100;
 const ATTENDANCE_KEY =
-  /^(?:tier:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ATTENDANCE_LINE_MAX = 300;
 
 function statusOrNull(value: unknown): EventAttendanceStatus | null {
@@ -233,6 +233,20 @@ function lengthMinutes(start: string, end: string): number | null {
 /** A stored proposal as the change log's fields. */
 export function newEventChangeView(payload: AiSuggestionPayload): ChangeView {
   const event = readNewEventPayload(payload);
+  // A card since #5853 proposes its list as `attendance`, sent as these
+  // fields on commit; read them the same way so kept reads as kept.
+  if (event.attendance) {
+    const wire = attendanceToWire(event.attendance);
+    return {
+      ...event,
+      length_minutes: lengthMinutes(event.start_time, event.end_time),
+      is_mandatory: wire.is_mandatory,
+      required_role_ids: wire.required_role_ids,
+      optional_role_ids: wire.optional_role_ids,
+      excluded_role_ids: wire.excluded_role_ids,
+      others_invited: wire.others_invited,
+    };
+  }
   return {
     ...event,
     length_minutes: lengthMinutes(event.start_time, event.end_time),
@@ -462,7 +476,6 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
     // Who it invites, as the event form would send it. A card from before
     // #5853 has no list: everyone, as `is_mandatory` says.
     const wire = event.attendance ? attendanceToWire(event.attendance) : null;
-    const others = wire ? othersInvitedForCreate(wire) : undefined;
     const created = await this.events.create({
       chapter_id: input.chapterId,
       created_by: input.userId,
@@ -477,7 +490,8 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
             required_role_ids: wire.required_role_ids,
             optional_role_ids: wire.optional_role_ids,
             excluded_role_ids: wire.excluded_role_ids,
-            ...(others === undefined ? {} : { others_invited: others }),
+            // Always said: the server and its event service ship together.
+            others_invited: wire.others_invited,
           }
         : {}),
       ...(event.point_value === null ? {} : { point_value: event.point_value }),

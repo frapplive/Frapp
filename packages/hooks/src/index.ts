@@ -148,5 +148,6 @@ export * from "./use-service-entries";
 export * from "./use-smooth-text";
 export * from "./use-study";
 export * from "./use-tasks";
+export * from "./use-type-editor";
 export * from "./use-user";
 export * from "./whats-new-seen";

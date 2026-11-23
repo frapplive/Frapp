@@ -48,6 +48,7 @@ import {
   actEventPointsLine,
   actPointsAction,
   actPointsFromLine,
+  attendanceToWire,
   actRepeatParts,
   actWhenParts,
   actMissingLine,
@@ -733,10 +734,14 @@ function EventFacts({
             {repeat.line}
           </Fact>
         ) : null}
-        <Fact icon={Users}>
-          {event.is_mandatory
-            ? ACT_COPY.everyone_required
-            : ACT_COPY.everyone_optional}
+        <Fact
+          icon={Users}
+          under={actPointsFromLine(event.attendance_from) || undefined}
+        >
+          {event.attendance_line ??
+            (event.is_mandatory
+              ? ACT_COPY.everyone_required
+              : ACT_COPY.everyone_optional)}
         </Fact>
         {pointsField ??
           (event.point_value === null ? null : (
@@ -945,6 +950,8 @@ function ActCard({
             location: event.location,
             point_value: templatePoints,
             is_mandatory: event.is_mandatory,
+            // Who the card invites, as the form's Who's coming (#5853).
+            ...(event.attendance ? attendanceToWire(event.attendance) : {}),
             event_type_id: event.event_type_id ?? null,
           }
         : null,

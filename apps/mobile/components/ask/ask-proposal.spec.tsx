@@ -453,6 +453,34 @@ describe("a proposal in the Ask conversation", () => {
     },
   };
 
+  it("says who the card invites, and Edit opens the form on that list (#5853)", () => {
+    const tree = show({
+      ...STUDY_NIGHT,
+      suggestion: {
+        ...STUDY_NIGHT.suggestion,
+        new_event: {
+          ...STUDY_NIGHT.suggestion.new_event,
+          attendance: {
+            everyone: "not_invited",
+            roles: { "role-president": "required" },
+          },
+          attendance_line: "Cabinet required, nobody else invited",
+          attendance_from: { kind: "event", name: "FSL Leaders Reception" },
+        },
+      },
+    });
+    const text = screenText(tree);
+    expect(text).toContain("Cabinet required, nobody else invited");
+    expect(text).not.toContain(ACT_COPY.everyone_optional);
+    act(() => byLabel(tree, ACT_COPY.edit).props.onPress());
+    expect(hooks.eventForm!.template).toMatchObject({
+      attendance: {
+        everyone: "not_invited",
+        roles: { "role-president": "required" },
+      },
+    });
+  });
+
   it("confirms an event proposal, and opens the event it made", async () => {
     hooks.accept.mockResolvedValue({
       result: { kind: "new_event", id: "ev-1" },

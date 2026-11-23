@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -40,7 +39,7 @@ import {
   useGatedDialog,
   type SubscriptionGate,
 } from "@/components/shared/subscription-gate";
-import { DocumentTypesEditor } from "@/components/documents/document-types-editor";
+import { DocumentTypeField } from "@/components/documents/document-type-field";
 import { ChannelAccessField } from "@/components/chat-admin/channel-access-field";
 import {
   FILE_ALWAYS_LINE,
@@ -62,8 +61,6 @@ import {
 import { KeptDraftNote } from "@/components/shared/kept-draft-note";
 import { ZIP_REFUSAL } from "@/lib/documents/folder-import";
 import {
-  DOCUMENT_TYPE_NAME_MAX_LENGTH,
-  DOCUMENT_TYPES_MAX,
   MAX_UPLOAD_LABEL,
   acceptAttribute,
   inspectUploadFile,
@@ -432,8 +429,8 @@ const NEW_FOLDER = "__new-folder__";
  * like the event editor and the Directory's member profile, led
  * by the file well, which also takes a dropped file. Picking a file fills the
  * title from its name, guesses the type from it, and files it into the folder
- * on screen. Type is a row of chips over the chapter's own list of types
- * (#3642), and folder a picker of the chapter's folders, where both used to be
+ * on screen. Type is the one Type menu over the chapter's own list of types
+ * (#3642; `document-type-field.tsx`), and folder a picker of the chapter's folders, where both used to be
  * free text that let "Bylaws", "bylaws" and "By-laws" pile up as three. The
  * effective date shows and starts on Today; the description waits behind one
  * line, because most uploads never set one.
@@ -444,6 +441,7 @@ export function UploadDocumentPanel({
   folders,
   typeOptions,
   typeRows = null,
+  canManageTypes = false,
   triggerClassName,
 }: {
   gate: SubscriptionGate;
@@ -452,11 +450,10 @@ export function UploadDocumentPanel({
   triggerClassName?: string;
   folders: readonly string[];
   typeOptions: readonly string[];
-  /**
-   * The chapter's types, for "Edit types"; null hides it (no
-   * `chapter_docs:manage`, or the list hasn't loaded).
-   */
+  /** The chapter's types; null until the list loads, or when it can't be read. */
   typeRows?: readonly DocumentTypeRow[] | null;
+  /** `chapter_docs:manage`: rename and delete types from the Type menu. */
+  canManageTypes?: boolean;
 }) {
   const {
     uploadDialog,
@@ -477,22 +474,22 @@ export function UploadDocumentPanel({
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const showNewFolder = newFolderOpen || folderIsNew;
 
-  const typeIsCustom =
-    uploadDraft.documentType !== "" &&
-    !typeOptions.includes(uploadDraft.documentType);
-  const [customTypeOpen, setCustomTypeOpen] = useState(false);
-  const showCustomType = customTypeOpen || typeIsCustom;
   /*
-    A type picked from the chips that then left the list (renamed or deleted
-    in Edit types) is not a new type to add back: let it go. One typed under
-    New type stays, since that is the officer's own.
+    A type typed with Create is the officer's own and stays held until the
+    upload adds it. One picked from the list (or guessed from the file name)
+    that then leaves it, renamed or deleted meanwhile, is let go rather than
+    re-added.
   */
+  const [typedType, setTypedType] = useState<string | null>(null);
   const staleType =
-    typeIsCustom && !customTypeOpen ? uploadDraft.documentType : null;
+    uploadDraft.documentType !== "" &&
+    uploadDraft.documentType !== typedType &&
+    !typeOptions.includes(uploadDraft.documentType)
+      ? uploadDraft.documentType
+      : null;
   useEffect(() => {
     if (staleType !== null) set("documentType", "");
   }, [staleType, set]);
-  const atTypeCap = typeOptions.length >= DOCUMENT_TYPES_MAX;
 
   const hasDetails = uploadDraft.description !== "";
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -507,7 +504,7 @@ export function UploadDocumentPanel({
   if (seenDraft !== upload.draftGeneration) {
     setSeenDraft(upload.draftGeneration);
     setNewFolderOpen(false);
-    setCustomTypeOpen(false);
+    setTypedType(null);
     setDetailsOpen(false);
   }
 
@@ -574,71 +571,20 @@ export function UploadDocumentPanel({
               />
             </UploadField>
 
-            <div className="grid content-start gap-1.5">
-              <Label id="doc-type-label">Type</Label>
-              <div
-                role="group"
-                aria-labelledby="doc-type-label"
-                className="flex flex-wrap gap-1.5"
-              >
-                {typeOptions.map((type) => {
-                  const on =
-                    !showCustomType && uploadDraft.documentType === type;
-                  return (
-                    <TypeChip
-                      key={type}
-                      on={on}
-                      onClick={() => {
-                        setCustomTypeOpen(false);
-                        set("documentType", on ? "" : type);
-                      }}
-                    >
-                      {type}
-                    </TypeChip>
-                  );
-                })}
-                {atTypeCap && !showCustomType ? null : (
-                  <TypeChip
-                    on={showCustomType}
-                    onClick={() => {
-                      if (showCustomType) {
-                        setCustomTypeOpen(false);
-                        set("documentType", "");
-                      } else {
-                        setCustomTypeOpen(true);
-                        set("documentType", "");
-                      }
-                    }}
-                  >
-                    New type
-                  </TypeChip>
-                )}
-                {typeRows ? (
-                  <DocumentTypesEditor
-                    types={typeRows}
-                    disabled={uploading}
-                    chipClassName={TYPE_CHIP_CLASS}
-                  />
-                ) : null}
-              </div>
-              {showCustomType ? (
-                <Input
-                  id="doc-type-other"
-                  aria-label="New type name"
-                  autoFocus={customTypeOpen && !typeIsCustom}
-                  className={UPLOAD_FIELD_CLASS}
-                  value={uploadDraft.documentType}
-                  onChange={(event) => set("documentType", event.target.value)}
-                  placeholder="Constitution, Contract, Schedule"
-                  maxLength={DOCUMENT_TYPE_NAME_MAX_LENGTH}
-                />
-              ) : null}
-              {showCustomType ? (
-                <p className="text-caption text-muted-foreground">
-                  Uploading adds it to the chapter&apos;s types.
-                </p>
-              ) : null}
-            </div>
+            <UploadField id="doc-type" label="Type">
+              <DocumentTypeField
+                id="doc-type"
+                value={uploadDraft.documentType}
+                onChange={(name, typed) => {
+                  setTypedType(typed ? name : null);
+                  set("documentType", name);
+                }}
+                typeOptions={typeOptions}
+                typeRows={typeRows}
+                canManage={canManageTypes}
+                disabled={uploading}
+              />
+            </UploadField>
 
             <UploadField id="doc-folder" label="Folder">
               <Select
@@ -753,41 +699,6 @@ export function UploadDocumentPanel({
         </PanelContent>
       </Panel>
     </>
-  );
-}
-
-/**
- * The find dialog's filter chip, one step taller to sit with the panel's
- * fields. "Edit types" wears it too, so it sits in the row as a chip.
- */
-const TYPE_CHIP_CLASS = cn(
-  "inline-flex h-8 items-center rounded-full border px-3 text-sm transition-colors pointer-coarse:h-10",
-  FOCUS_RING,
-);
-
-function TypeChip({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        TYPE_CHIP_CLASS,
-        on
-          ? "border-transparent bg-accent-subtle font-semibold text-accent-text"
-          : "border-border text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

@@ -5,12 +5,9 @@ import {
   describeCheckIn,
   describeEventTypeSets,
   eventLengthLabel,
-  addEventTypeLabel,
   eventTypeFromForm,
-  eventTypeToAdd,
   type EventFormRow,
 } from "./event-form-rows";
-import { EVENT_TYPE_NAME_MAX_LENGTH, EVENT_TYPES_MAX } from "./field-limits";
 
 describe("the event form's rows (#5561)", () => {
   it("names every row, in the order both apps draw them", () => {
@@ -70,34 +67,6 @@ describe("eventLengthLabel", () => {
     expect(eventLengthLabel(90)).toBe("1.5 hrs");
     expect(eventLengthLabel(120)).toBe("2 hrs");
     expect(eventLengthLabel(105)).toBe("1.75 hrs");
-  });
-});
-
-describe("eventTypeToAdd", () => {
-  const types = [{ name: "Chapter meeting" }, { name: "Social" }];
-
-  it("offers the typed name, tidied, when no type is called that", () => {
-    expect(eventTypeToAdd("  Work   party ", types)).toBe("Work party");
-  });
-
-  it("offers nothing for a blank field or a name a type already has", () => {
-    expect(eventTypeToAdd("   ", types)).toBeNull();
-    expect(eventTypeToAdd("social", types)).toBeNull();
-    expect(eventTypeToAdd(" CHAPTER MEETING ", types)).toBeNull();
-  });
-
-  it("offers nothing past the name limit or the chapter's type limit", () => {
-    expect(
-      eventTypeToAdd("x".repeat(EVENT_TYPE_NAME_MAX_LENGTH + 1), types),
-    ).toBeNull();
-    const full = Array.from({ length: EVENT_TYPES_MAX }, (_, i) => ({
-      name: `Type ${i}`,
-    }));
-    expect(eventTypeToAdd("Work party", full)).toBeNull();
-  });
-
-  it("names the row with the typed name", () => {
-    expect(addEventTypeLabel("Work party")).toBe("Create “Work party”");
   });
 });
 

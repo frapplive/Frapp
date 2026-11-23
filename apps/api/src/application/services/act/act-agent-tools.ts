@@ -150,7 +150,13 @@ const InviteArgs = z
       ),
   })
   .describe(
-    "Who is invited. Decide it from what the event is, in this chapter's own roles and tiers. An event for the chapter's leaders, officers, executive board, cabinet or a committee (a leadership reception, an officer training or transition, an exec or committee meeting, a council or FSL event for officers) invites that tier or those roles and nobody else. A chapter meeting requires everyone. A social, a philanthropy event or anything casual is optional for everyone. When a recent event of the same kind invited a set list, follow it. Make a role required only when the member said so, a source says attendance is expected, or that kind of event requires it.",
+    [
+      "Who is invited. Decide it from what the event is, in this chapter's own roles and tiers, never by inviting everyone out of habit.",
+      "An event for the chapter's leaders (a leadership or leaders reception, an FSL, council or national event for officers, an officer training or transition, an exec board meeting) is for the top tier, the executive board or cabinet, and nobody else; add the chairs' tier only when the member or a source names chairs too. A committee's meeting is for that committee's roles. Those it is for are expected there: make them required, and everyone else not invited.",
+      'A chapter meeting requires everyone. A social, a philanthropy event, study hours or anything casual is optional for everyone. When the whole chapter is meant, set only everyone_else and name no roles or tiers.',
+      'An event for alumni invites their role or tier.',
+      'When a recent event of the same name or kind invited a set list, follow it over these defaults.',
+    ].join(' '),
   );
 
 const EventArgs = z.object({
@@ -320,7 +326,7 @@ export function proposalNote(outcome: ActOutcome): string {
         return 'No card was made: that is more members than one card can hold.';
       }
       if (outcome.missing === 'invitees') {
-        return "No card was made: a name in invite is not one of the chapter's roles or tiers, or could be two of them. Call chapter_roles with for_card event and use its names exactly.";
+        return "No card was made: a name in invite is not one of the chapter's roles or tiers, or could be two of them, or the list invites nobody (a tier with no roles counts as nobody). Call chapter_roles with for_card event and use its names exactly.";
       }
       if (outcome.missing === 'audience') {
         return "No card was made: for_set is not one of the chapter's roles, tiers or groups, or could be two of them. Call chapter_roles with for_card task and use its names exactly, or name the members in people instead.";

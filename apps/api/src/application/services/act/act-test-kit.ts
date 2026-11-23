@@ -1,3 +1,9 @@
+import {
+  resolveAudience,
+  type ActAudienceResolver,
+  type AudienceKind,
+  type AudienceOptions,
+} from './act-audience';
 import type { ActPlan } from './act-prompt';
 import type { ActToolContext } from './act-tool';
 
@@ -67,4 +73,21 @@ export function profile(
     role_ids: roleIds,
     custom_role_ids: [],
   };
+}
+
+/**
+ * An audience resolver over fixed tiers and roles, for a spec that does not
+ * read them (#5853). Matching is the product's (`resolveAudience`).
+ */
+export function audienceOver(
+  options: AudienceOptions = { tiers: [], untiered: [], groups: [] },
+): ActAudienceResolver {
+  return {
+    options: () => Promise.resolve(options),
+    resolve: (
+      names: readonly string[],
+      _chapterId: string,
+      kinds: readonly AudienceKind[],
+    ) => Promise.resolve(resolveAudience(names, options, kinds)),
+  } as unknown as ActAudienceResolver;
 }

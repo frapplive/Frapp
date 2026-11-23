@@ -39,6 +39,7 @@ import {
   ScriptedLanguageModel,
   type ScriptedReply,
 } from '../../src/infrastructure/ai/scripted-language-model';
+import { audienceOver } from '../../src/application/services/act/act-test-kit';
 import { createEvalGateway } from './harness/eval-gateway';
 
 const HOME = '11111111-1111-4111-8111-111111111111';
@@ -184,6 +185,7 @@ function build(options: {
       new CreateEventActTool(
         events as never,
         { list: async () => [] } as never,
+        audienceOver(),
       ),
     ],
   );

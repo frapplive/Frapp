@@ -1,14 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import {
   attendanceFromEvent,
   describeAttendance,
+  eventLimitsAudience,
   eventSetsRolesApart,
+  isModuleEnabled,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { Event } from '#domain/entities/event.entity';
 import type { EventType } from '#domain/entities/event-type.entity';
-import { reportCaughtFailure } from '../../../../../infrastructure/observability/report-caught-failure';
 import {
   ActAudienceResolver,
   type AudienceRole,
@@ -40,10 +41,10 @@ const ROWS_LIMIT = 220;
 
 const input = z.object({
   for_card: z
-    .enum(['event', 'task'])
-    .optional()
+    .enum(['event', 'task', 'none'])
+    .default('none')
     .describe(
-      'event: also the event types and who recent events invited. task: also the groups, classes and class years a task can be for. Left out: tiers and roles only.',
+      'event: also the event types and who recent events invited. task: also the groups, classes and class years a task can be for. none: tiers and roles only.',
     ),
 });
 type Args = z.infer<typeof input>;
@@ -71,8 +72,6 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
   readonly input = input;
   readonly reading = 'Reading the chapter roles';
 
-  private readonly logger = new Logger(ChapterRolesAgentTool.name);
-
   constructor(
     private readonly audience: ActAudienceResolver,
     private readonly eventTypes: EventTypeService,
@@ -80,12 +79,19 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
   ) {}
 
   async run(args: Args, context: AgentToolContext): Promise<AgentToolResult> {
-    const forEvent = args.for_card === 'event';
+    // Event types and events stay out when the chapter has events off, as
+    // `GET /v1/events` and `GET /v1/event-types` do.
+    const forEvent =
+      args.for_card === 'event' &&
+      isModuleEnabled(context.enabledModules, 'events');
     const [options, types, recent] = await Promise.all([
       this.audience.options(context.chapterId, {
         groups: args.for_card === 'task',
+        holders: true,
       }),
-      forEvent ? this.typesOf(context) : Promise.resolve([]),
+      forEvent
+        ? this.eventTypes.list(context.chapterId)
+        : Promise.resolve([] as EventType[]),
       forEvent ? this.recentOf(context) : Promise.resolve([]),
     ]);
 
@@ -93,6 +99,8 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
       'Tiers, highest first, each with its roles and how many members hold each:',
     ];
     const rows: string[] = [];
+    // Kept apart: these are read as the asker, not as any member.
+    const eventRows: string[] = [];
     for (const tier of options.tiers) {
       rows.push(
         `- Tier ${quoted(tier.name)}: ${tier.roles.length > 0 ? tier.roles.map(roleLine).join(', ') : 'no roles'}`,
@@ -134,20 +142,20 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
         names.set(role.id, role.name);
       }
       for (const tier of options.tiers) names.set(`tier:${tier.id}`, tier.name);
-      rows.push(
+      eventRows.push(
         recent.length > 0
           ? 'Recent events that did not invite everyone the same way:'
           : 'No recent event invited only some members, or set roles apart.',
       );
       for (const event of recent) {
-        rows.push(
+        eventRows.push(
           `- ${quoted(event.name)} on ${longDay(event.start_time, context.timeZone)}: ${describeAttendance(attendanceFromEvent(event), (id) => names.get(id))}`,
         );
       }
     }
 
     const shown = fitRows(summary, rows, ROWS_LIMIT);
-    return found(
+    const result = found(
       context,
       liveSource({
         id: listSourceId(this.name, args.for_card),
@@ -162,57 +170,51 @@ export class ChapterRolesAgentTool implements AgentReadTool<Args> {
         ? `Showing ${shown.length} of ${rows.length} lines.`
         : null,
     );
-  }
-
-  private async typesOf(context: AgentToolContext): Promise<EventType[]> {
-    try {
-      return await this.eventTypes.list(context.chapterId);
-    } catch (error) {
-      reportCaughtFailure(this.logger, {
-        level: 'warning',
-        site: 'ask-chapter-roles-types',
-        message: `Ask could not read event types for chapter ${context.chapterId}`,
-        error,
-      });
-      return [];
+    if (eventRows.length > 0) {
+      // Who recent events invited, read as the asker: a post to a channel
+      // checks these as it checks the events tool's.
+      result.sources.push(
+        liveSource({
+          id: listSourceId(this.name, args.for_card, 'events'),
+          kind: 'events',
+          audience: {
+            type: 'events',
+            limited: recent.filter(eventLimitsAudience).map(({ id }) => id),
+          },
+          title: 'Recent invite lists',
+          page: 'events',
+          lines: eventRows,
+        }),
+      );
     }
+    return result;
   }
 
   /** Events the asker can see that set roles apart, newest first. */
   private async recentOf(context: AgentToolContext): Promise<Event[]> {
-    try {
-      const events = await this.events.findByChapter(
-        context.chapterId,
-        context.userId,
-        {
-          endsAfter: new Date(
-            context.now.getTime() - RECENT_BACK_DAYS * DAY_MS,
-          ).toISOString(),
-          startsBefore: new Date(
-            context.now.getTime() + RECENT_BACK_DAYS * DAY_MS,
-          ).toISOString(),
-        },
-      );
-      // One line for a series, not one for each meeting of it.
-      const seen = new Set<string>();
-      return events
-        .filter((event) => eventSetsRolesApart(event))
-        .sort((a, b) => b.start_time.localeCompare(a.start_time))
-        .filter((event) => {
-          const key = event.name.trim().toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, RECENT_EVENTS_MAX);
-    } catch (error) {
-      reportCaughtFailure(this.logger, {
-        level: 'warning',
-        site: 'ask-chapter-roles-events',
-        message: `Ask could not read recent events for chapter ${context.chapterId}`,
-        error,
-      });
-      return [];
-    }
+    const events = await this.events.findByChapter(
+      context.chapterId,
+      context.userId,
+      {
+        endsAfter: new Date(
+          context.now.getTime() - RECENT_BACK_DAYS * DAY_MS,
+        ).toISOString(),
+        startsBefore: new Date(
+          context.now.getTime() + RECENT_BACK_DAYS * DAY_MS,
+        ).toISOString(),
+      },
+    );
+    // One line for a series, not one for each meeting of it.
+    const seen = new Set<string>();
+    return events
+      .filter((event) => eventSetsRolesApart(event))
+      .sort((a, b) => b.start_time.localeCompare(a.start_time))
+      .filter((event) => {
+        const key = event.name.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, RECENT_EVENTS_MAX);
   }
 }

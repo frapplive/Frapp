@@ -32711,7 +32711,7 @@
                 "not_invited"
               ]
             },
-            "description": "Each role (by id) or tier (`tier:<id>`) set apart from `everyone`, with its status."
+            "description": "Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles."
           }
         },
         "required": [

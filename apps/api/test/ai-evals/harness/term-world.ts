@@ -1374,7 +1374,7 @@ export function createTermWorld(
       ? (tierRows.find((tier) => `tier:${tier.id}` === key)?.name ?? key)
       : (roles.find((role) => role.id === key)?.name ?? key);
   /** A proposed event's who and what, by the chapter's names. */
-  const eventOf = (
+  const cardEventOf = (
     payload: Record<string, unknown>,
   ): NonNullable<ProposedCard['event']> => {
     const draft = (payload.attendance ?? null) as {
@@ -1429,7 +1429,7 @@ export function createTermWorld(
             title: titleOf(proposal.payload, proposal.kind),
             owner: ownerOf(proposal.payload),
             ...(proposal.kind === 'new_event'
-              ? { event: eventOf(proposal.payload) }
+              ? { event: cardEventOf(proposal.payload) }
               : {}),
           });
           return { id, ...proposal };
