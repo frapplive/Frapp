@@ -54,6 +54,15 @@ const ScrollRevealContext = createContext<ScrollReveal | null>(null);
 /** Provided around a screen's `ScreenShell`, with `useScrollReveal`'s value. */
 export const ScrollRevealProvider = ScrollRevealContext.Provider;
 
+/**
+ * The reveal of the scroll view around this view, or `null` outside one: for
+ * a part that opens in place (the Ask card's event form) and brings its own
+ * top into view.
+ */
+export function useEnclosingScrollReveal(): ScrollReveal | null {
+  return useContext(ScrollRevealContext);
+}
+
 type Band = {
   /** The scroll view's current offset. */
   offset: number;
@@ -128,8 +137,8 @@ export function useScrollReveal(
   return useCallback(
     (target: View) => {
       const scroll = scrollRef.current as ScrollWithContent | null;
-      const frame = scroll?.getNativeScrollRef();
-      const content = scroll?.getInnerViewRef();
+      const frame = scroll?.getNativeScrollRef?.();
+      const content = scroll?.getInnerViewRef?.();
       if (!scroll || !frame || !content) return;
       void Promise.all([measure(frame), measure(content), measure(target)])
         .then(([framed, contained, aimed]) => {

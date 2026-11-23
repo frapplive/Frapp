@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react";
 import {
   type GestureResponderEvent,
@@ -81,6 +82,7 @@ import {
   useTallSheetProps,
 } from "@/components/sheet-scaffold";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
+import { useFocusOnOpen } from "@/lib/overlay";
 import {
   NewTaskSheet,
   type TaskSuggestionSeed,
@@ -123,7 +125,9 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
  * "Add to calendar" on an event found in mail opens the full event editor.
  * So Edit opens the form the officer already uses: an event opens New event
  * filled in from the card (attendance by role, the end, notes, the repeat),
- * and its Create is the confirm; a task opens the task form. A points card
+ * in the card itself, with the question still above it (2026-11-23, Paul
+ * picked "Card expands in place", as web's card does), and its Create is
+ * the confirm; a task opens the task form. A points card
  * has no form of its own on the phone, so Edit turns its amount and reason
  * into fields on the card. Both forms keep what was typed when closed (#4593).
  *
@@ -659,14 +663,17 @@ function QuietButton({
   onPress,
   disabled = false,
   styles,
+  buttonRef,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   styles: Styles;
+  buttonRef?: Ref<View>;
 }) {
   return (
     <Pressable
+      ref={buttonRef}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
@@ -972,13 +979,16 @@ function ActCard({
   const [problem, setProblem] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const formRef = useRef<BottomSheetModal>(null);
-  // The event form mounts on the first Edit and stays, so what the officer
-  // typed is still there when they open it again (#4593).
-  const [eventFormMounted, setEventFormMounted] = useState(false);
-  const eventFormRef = useRef<BottomSheetModal>(null);
-  useEffect(() => {
-    if (eventFormMounted) eventFormRef.current?.present();
-  }, [eventFormMounted]);
+  // The event form opens in the card on the first Edit and stays mounted
+  // after, so what the officer typed is still there when they open it again
+  // (#4593). `null` until then; then whether it shows.
+  const [eventForm, setEventForm] = useState<boolean | null>(null);
+  const eventFormShown = !!event && eventForm === true;
+  // Closing the form gives a screen reader's focus back to Edit, which the
+  // form had taken the place of.
+  const editButton = useRef<View>(null);
+  const [backFromForm, setBackFromForm] = useState(false);
+  useFocusOnOpen(editButton, backFromForm && !eventFormShown);
   // A points card's Edit: its amount and reason as fields.
   const [editingPoints, setEditingPoints] = useState(false);
   const [amountInput, setAmountInput] = useState(
@@ -1131,8 +1141,8 @@ function ActCard({
   function edit() {
     setProblem(null);
     if (event) {
-      if (eventFormMounted) eventFormRef.current?.present();
-      else setEventFormMounted(true);
+      setBackFromForm(false);
+      setEventForm(true);
     } else if (task) {
       setFormOpen(true);
     } else if (points) {
@@ -1250,6 +1260,36 @@ function ActCard({
       </Text>
     </View>
   ) : null;
+
+  // The same element, by key, open or not: React keeps one form across the
+  // two shapes of the card below, so what was typed survives a close.
+  const eventFormPanel =
+    event && eventForm !== null ? (
+      <NewEventSheet
+        key="event-form"
+        presentation="inline"
+        open={eventForm}
+        template={proposedEventTemplate({
+          ...event,
+          // Points typed on the card go with it into the form (#5148).
+          point_value:
+            event.point_value ??
+            (typedEventPoints.ok ? typedEventPoints.value : null),
+        })}
+        onCreated={(created) => void recordMadeEvent(created.id)}
+        onClosed={() => {
+          setEventForm(false);
+          setBackFromForm(true);
+        }}
+      />
+    ) : null;
+
+  // While it is open the form is the card: the card's own words and buttons
+  // would only repeat it. The frame stays, so the question above it stays
+  // where it was.
+  if (eventFormShown) {
+    return <View style={styles.card}>{eventFormPanel}</View>;
+  }
 
   return (
     <View accessibilityLabel={title} style={styles.card}>
@@ -1499,6 +1539,7 @@ function ActCard({
             disabled={busy}
             onPress={edit}
             styles={styles}
+            buttonRef={editButton}
           />
         )}
         <Pressable
@@ -1535,19 +1576,7 @@ function ActCard({
           }}
         />
       ) : null}
-      {event && eventFormMounted ? (
-        <NewEventSheet
-          ref={eventFormRef}
-          template={proposedEventTemplate({
-            ...event,
-            // Points typed on the card go with it into the form (#5148).
-            point_value:
-              event.point_value ??
-              (typedEventPoints.ok ? typedEventPoints.value : null),
-          })}
-          onCreated={(created) => void recordMadeEvent(created.id)}
-        />
-      ) : null}
+      {eventFormPanel}
       {formOpen && seed ? (
         <NewTaskSheet
           ref={formRef}

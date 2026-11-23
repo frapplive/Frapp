@@ -1,7 +1,11 @@
 /** @vitest-environment jsdom */
 import React from "react";
 import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import {
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+} from "react-test-renderer";
 import { Alert } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
@@ -418,6 +422,48 @@ describe("New event", () => {
     expect(cancelWord()).toEqual(["Cancel"]);
     type(tree, "Event name", "Formal");
     expect(cancelWord()).toEqual(["Discard"]);
+    act(() => tree.unmount());
+  });
+
+  it("draws in place, and its Close keeps what was typed (2026-11-23)", () => {
+    const onClosed = vi.fn();
+    const inline = (open: boolean) => (
+      <FrappThemeProvider>
+        <NewEventSheet
+          now={NOW}
+          presentation="inline"
+          open={open}
+          onClosed={onClosed}
+        />
+      </FrappThemeProvider>
+    );
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(inline(true));
+    });
+    // No sheet around it: the host's card is its frame. (The Type and
+    // attendance pickers stay sheets of their own.)
+    let node: ReactTestInstance | null = tree.root.findByProps({
+      testID: "event-form-inline",
+    });
+    while (node) {
+      expect(node.type).not.toBe("BottomSheetModal");
+      node = node.parent;
+    }
+    type(tree, "Event name", "Formal");
+    const close = tree.root.find(
+      (node) =>
+        node.type === ("Pressable" as never) && drawnText(node) === "Close",
+    );
+    act(() => close.props.onPress());
+    expect(onClosed).toHaveBeenCalledTimes(1);
+
+    act(() => tree.update(inline(false)));
+    expect(
+      tree.root.findAllByProps({ testID: "event-form-inline" }),
+    ).toHaveLength(0);
+    act(() => tree.update(inline(true)));
+    expect(byLabel(tree, "Event name").props.value).toBe("Formal");
     act(() => tree.unmount());
   });
 

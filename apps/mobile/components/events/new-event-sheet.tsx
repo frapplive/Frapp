@@ -1,4 +1,11 @@
-import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
   Keyboard,
@@ -6,8 +13,10 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
-import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
 import type { EventCardTrack } from "@repo/chat-core/dispatch";
 import {
@@ -101,6 +110,11 @@ import { MODULE_REFUSAL_COPY } from "@/lib/module-refusal";
 import { useNotesLabel } from "@/lib/minutes/meetings-on";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
+import { FormTextInput } from "@/components/form-text-input";
+import {
+  ScrollRevealProvider,
+  useEnclosingScrollReveal,
+} from "@/lib/keep-above-keyboard";
 import { askSeriesScope } from "@/lib/series-scope";
 
 /**
@@ -205,6 +219,16 @@ export interface NewEventSheetProps {
    * kept: the rest comes from the event as it is when the sheet opens again.
    */
   keptDraft?: string;
+  /**
+   * `"inline"` draws the form where its host puts it, with no sheet: the Ask
+   * card's Edit opens it in the card (2026-11-23, Paul picked "Card expands
+   * in place"; web's `docked="inline"`). The host keeps it mounted and says
+   * whether it shows with `open`, so what was typed is still there when it
+   * opens again; its Close keeps the draft, and `onClosed` tells the host.
+   */
+  presentation?: "sheet" | "inline";
+  /** Inline only: whether the form shows. */
+  open?: boolean;
 }
 
 /** What a kept edit holds: the form, and the event as it opened. */
@@ -329,6 +353,8 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       onDeleted,
       onClosed,
       keptDraft,
+      presentation = "sheet",
+      open = false,
     },
     ref,
   ) {
@@ -487,11 +513,19 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       onClosed?.();
     }, [markClosed, onClosed]);
 
+    // In place there is no sheet to dismiss: closing is the host's, told
+    // through `onClosed`.
+    const inline = presentation === "inline";
+    const close = useCallback(() => {
+      if (inline) closed();
+      else dismiss();
+    }, [inline, closed, dismiss]);
+
     const cancel = useCallback(() => {
       if (sending.current) return;
       reset();
-      dismiss();
-    }, [reset, dismiss]);
+      close();
+    }, [reset, close]);
 
     async function saveEdit(target: EventEditTarget) {
       const result = validateEventEdit(
@@ -515,7 +549,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       // Nothing changed: there is nothing to send, and nobody to notify.
       if (isEmptyEventPatch(result.patch)) {
         reset();
-        dismiss();
+        close();
         return;
       }
       Keyboard.dismiss();
@@ -554,7 +588,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
               saved && typeof saved === "object" && "id" in saved
                 ? String((saved as { id: unknown }).id)
                 : null;
-            if (isSameVisit(sentFrom)) dismiss();
+            if (isSameVisit(sentFrom)) close();
             onSaved?.({ leave: leavesAfterSave(request, target, savedId) });
           },
           onError: (error) => {
@@ -596,7 +630,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
             successHaptic();
             // The event is gone, and its kept edit with it.
             clearKept();
-            if (isSameVisit(sentFrom)) dismiss();
+            if (isSameVisit(sentFrom)) close();
             onDeleted?.();
           },
           onError: (error) => {
@@ -657,7 +691,7 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
           successHaptic();
           // Saved, so the draft goes whichever visit is on screen.
           reset();
-          if (isSameVisit(sentFrom)) dismiss();
+          if (isSameVisit(sentFrom)) close();
           onCreated?.({
             id: typeof created?.id === "string" ? created.id : null,
             name: result.body.name,
@@ -729,378 +763,382 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
       }));
     };
 
-    return (
+    const form = (
       <>
-        <BottomSheetModal
-          ref={modalRef}
-          stackBehavior={SHEET_STACK_BEHAVIOR}
-          enableDynamicSizing
-          keyboardBehavior="interactive"
-          backgroundStyle={backgroundStyle}
-          handleComponent={SheetGrabber}
-          backdropComponent={SheetScrim}
-          onAnimate={onAnimate}
-          onDismiss={closed}
-          // A held agenda row: the drag, not the sheet, follows the finger.
-          enableContentPanningGesture={!draggingAgenda}
-        >
-          <SheetBackToClose onClose={closeSheet} />
-          <BottomSheetScrollView
-            scrollEnabled={!draggingAgenda}
-            onAccessibilityEscape={closeSheet}
-            contentContainerStyle={styles.body}
-            keyboardShouldPersistTaps="handled"
-          >
-            <SheetHeader
-              title={editing ? "Edit event" : "New event"}
-              onCancel={cancel}
-              cancelLabel={touched ? "Discard" : "Cancel"}
-              cancelDisabled={pending}
-              action={{
-                label: editing
-                  ? updateEvent.isPending
-                    ? "Saving"
-                    : "Save"
-                  : pending
-                    ? "Creating"
-                    : "Create",
-                accessibilityLabel: editing ? "Save changes" : "Create event",
-                accessibilityHint: refusal ?? undefined,
-                onPress: submit,
-                disabled: !canSubmit,
-                accent: brand.accent,
-                onAccent: tokens.color.gold.onHouse,
-              }}
-            />
+        <SheetHeader
+          title={editing ? "Edit event" : "New event"}
+          // In place, the card has no swipe to put the form away while
+          // keeping it: its Close keeps what was typed, as web's X does.
+          onCancel={inline ? close : cancel}
+          cancelLabel={inline ? "Close" : touched ? "Discard" : "Cancel"}
+          cancelDisabled={pending}
+          action={{
+            label: editing
+              ? updateEvent.isPending
+                ? "Saving"
+                : "Save"
+              : pending
+                ? "Creating"
+                : "Create",
+            accessibilityLabel: editing ? "Save changes" : "Create event",
+            accessibilityHint: refusal ?? undefined,
+            onPress: submit,
+            disabled: !canSubmit,
+            accent: brand.accent,
+            onAccent: tokens.color.gold.onHouse,
+          }}
+        />
 
-            {/* The name first and largest, borderless, as Calendar's and
-                web's titles are (#5561). */}
-            <BottomSheetTextInput
-              value={draft.name}
-              onChangeText={(name) => update({ name }, ["name"])}
-              onFocus={() => setFocused("name")}
+        {/* The name first and largest, borderless, as Calendar's and
+            web's titles are (#5561). */}
+        <FormTextInput
+          value={draft.name}
+          onChangeText={(name) => update({ name }, ["name"])}
+          onFocus={() => setFocused("name")}
+          onBlur={() => setFocused(null)}
+          editable={!pending}
+          placeholder={EVENT_FORM_PLACEHOLDERS.name}
+          placeholderTextColor={tokens.color.text.muted}
+          accessibilityLabel="Event name"
+          maxLength={EVENT_NAME_MAX_LENGTH}
+          style={[
+            styles.title,
+            focused === "name" ? styles.titleFocused : null,
+            errors.name ? styles.fieldError : null,
+          ]}
+        />
+        {errors.name ? <Text style={styles.error}>{errors.name}</Text> : null}
+
+        {/* One row per setting, in web's order (`EVENT_FORM_ROWS`), each
+            saying what it is set to (#5561, Paul 2026-11-19: "make sure
+            we keep the MOBILE AND WEB UIs in sync"). */}
+        <View style={styles.group}>
+          {eventTypes.length > 0 || setsRequirements ? (
+            <>
+              <PropertyRow
+                glyph="type"
+                label={EVENT_FORM_ROW_LABELS.type}
+                value={heldType?.name ?? EVENT_FORM_PLACEHOLDERS.type}
+                empty={!heldType}
+                disabled={pending}
+                accessibilityHint="Picks a type, which fills in its points and who must come."
+                onPress={() => {
+                  Keyboard.dismiss();
+                  typeRef.current?.present();
+                }}
+              />
+              <RowDivider />
+            </>
+          ) : null}
+
+          {/* When, always open (Paul 2026-11-19): the day once, then the
+              start and end as times, as web's form sets them out. */}
+          <PropertyRow glyph="when" label={EVENT_FORM_ROW_LABELS.when}>
+            {null}
+          </PropertyRow>
+          <View style={styles.opened}>
+            <WhenTimes
+              start={start}
+              end={end}
+              now={at}
+              minimumDate={startFloor}
+              disabled={pending}
+              onStart={setStart}
+              onEnd={setEnd}
+            />
+          </View>
+          {errors.start ? (
+            <Text style={styles.error}>{errors.start}</Text>
+          ) : null}
+          {errors.end ? <Text style={styles.error}>{errors.end}</Text> : null}
+          <RowDivider />
+
+          <PropertyRow
+            glyph="repeat"
+            label={EVENT_FORM_ROW_LABELS.repeat}
+            value={repeatValue}
+            empty={!repeatUnknown && draft.repeat.preset === "NONE"}
+            invalid={!!errors.repeat}
+            disabled={pending || repeatUnknown}
+            accessibilityHint="Shows how the event repeats."
+            onPress={() => toggleRow("repeat")}
+          />
+          {/* A generated occurrence whose series couldn't be read
+              doesn't know its rule, so it doesn't offer to change it. */}
+          {draft.openRow === "repeat" && !repeatUnknown ? (
+            <View style={styles.opened}>
+              <RepeatOptions
+                draft={
+                  repeatSeries
+                    ? repeatEditDraft(draft.repeat, repeatSeries)
+                    : draft.repeat
+                }
+                start={repeatStart}
+                onChange={(repeat) => update({ repeat }, ["repeat"])}
+                disabled={pending}
+                error={errors.repeat}
+                showCaption={showRepeatLength}
+                series={repeatSeries}
+                input={FormTextInput}
+              />
+            </View>
+          ) : null}
+          <RowDivider />
+
+          <PropertyRow glyph="location" label={EVENT_FORM_ROW_LABELS.location}>
+            <FormTextInput
+              value={draft.location}
+              onChangeText={(location) => update({ location }, [])}
+              onFocus={() => setFocused("location")}
               onBlur={() => setFocused(null)}
               editable={!pending}
-              placeholder={EVENT_FORM_PLACEHOLDERS.name}
+              placeholder={EVENT_FORM_PLACEHOLDERS.location}
+              maxLength={EVENT_LOCATION_MAX_LENGTH}
               placeholderTextColor={tokens.color.text.muted}
-              accessibilityLabel="Event name"
-              maxLength={EVENT_NAME_MAX_LENGTH}
-              style={[
-                styles.title,
-                focused === "name" ? styles.titleFocused : null,
-                errors.name ? styles.fieldError : null,
-              ]}
+              accessibilityLabel="Location"
+              style={styles.rowInput}
             />
-            {errors.name ? (
-              <Text style={styles.error}>{errors.name}</Text>
-            ) : null}
+          </PropertyRow>
+        </View>
 
-            {/* One row per setting, in web's order (`EVENT_FORM_ROWS`), each
-                saying what it is set to (#5561, Paul 2026-11-19: "make sure
-                we keep the MOBILE AND WEB UIs in sync"). */}
-            <View style={styles.group}>
-              {eventTypes.length > 0 || setsRequirements ? (
-                <>
-                  <PropertyRow
-                    glyph="type"
-                    label={EVENT_FORM_ROW_LABELS.type}
-                    value={heldType?.name ?? EVENT_FORM_PLACEHOLDERS.type}
-                    empty={!heldType}
-                    disabled={pending}
-                    accessibilityHint="Picks a type, which fills in its points and who must come."
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      typeRef.current?.present();
-                    }}
-                  />
-                  <RowDivider />
-                </>
+        {/* Who's coming and points as their own group, as web's
+            form sets them (#5742). */}
+        <View style={styles.group}>
+          <PropertyRow
+            glyph="attendance"
+            label={EVENT_FORM_ROW_LABELS.attendance}
+            value={describeAttendance(draft.attendance, roleName)}
+            invalid={!!errors.attendance}
+            disabled={pending}
+            accessibilityHint="Sets who must attend, by role."
+            onPress={() => {
+              Keyboard.dismiss();
+              attendanceRef.current?.present();
+            }}
+          />
+          {errors.attendance ? (
+            <Text style={styles.error}>{errors.attendance}</Text>
+          ) : null}
+
+          {setsRequirements ? (
+            <>
+              <RowDivider />
+              <PropertyRow glyph="points" label={EVENT_FORM_ROW_LABELS.points}>
+                <FormTextInput
+                  value={draft.pointsInput}
+                  onChangeText={(pointsInput) =>
+                    update({ pointsInput }, ["points"])
+                  }
+                  onFocus={() => setFocused("points")}
+                  onBlur={() => setFocused(null)}
+                  editable={!pending}
+                  placeholder="0"
+                  placeholderTextColor={tokens.color.text.muted}
+                  accessibilityLabel="Points for attending"
+                  keyboardType="number-pad"
+                  selectTextOnFocus
+                  style={[
+                    styles.rowInput,
+                    errors.points ? styles.rowInputError : null,
+                  ]}
+                />
+              </PropertyRow>
+              {errors.points ? (
+                <Text style={styles.error}>{errors.points}</Text>
               ) : null}
+            </>
+          ) : null}
+        </View>
 
-              {/* When, always open (Paul 2026-11-19): the day once, then the
-                  start and end as times, as web's form sets them out. */}
-              <PropertyRow glyph="when" label={EVENT_FORM_ROW_LABELS.when}>
+        <View style={styles.group}>
+          {/* The agenda while the event is made (Paul 2026-11-19:
+              "where is the ability to add agenda items"). Only on
+              create: an event's agenda is edited on Event details and
+              checked off there during the meeting, so an edit here would
+              race that one. Web's form does the same. */}
+          {editing ? null : (
+            <>
+              <PropertyRow glyph="agenda" label={EVENT_FORM_ROW_LABELS.agenda}>
                 {null}
               </PropertyRow>
               <View style={styles.opened}>
-                <WhenTimes
-                  start={start}
-                  end={end}
-                  now={at}
-                  minimumDate={startFloor}
+                <AgendaDraftList
+                  agenda={draft.agenda ?? []}
+                  draft={draft.agendaPending ?? ""}
+                  onDraftChange={(agendaPending) =>
+                    update({ agendaPending }, [])
+                  }
                   disabled={pending}
-                  onStart={setStart}
-                  onEnd={setEnd}
+                  input={FormTextInput}
+                  onDragging={setDraggingAgenda}
+                  onChange={(agenda) => update({ agenda }, [])}
                 />
+                {draft.repeat.preset !== "NONE" &&
+                (draft.agenda?.length ?? 0) > 0 ? (
+                  <Text style={styles.note}>
+                    {EVENT_FORM_AGENDA_REPEAT_NOTE}
+                  </Text>
+                ) : null}
               </View>
-              {errors.start ? (
-                <Text style={styles.error}>{errors.start}</Text>
-              ) : null}
-              {errors.end ? (
-                <Text style={styles.error}>{errors.end}</Text>
-              ) : null}
               <RowDivider />
+            </>
+          )}
 
-              <PropertyRow
-                glyph="repeat"
-                label={EVENT_FORM_ROW_LABELS.repeat}
-                value={repeatValue}
-                empty={!repeatUnknown && draft.repeat.preset === "NONE"}
-                invalid={!!errors.repeat}
-                disabled={pending || repeatUnknown}
-                accessibilityHint="Shows how the event repeats."
-                onPress={() => toggleRow("repeat")}
-              />
-              {/* A generated occurrence whose series couldn't be read
-                  doesn't know its rule, so it doesn't offer to change it. */}
-              {draft.openRow === "repeat" && !repeatUnknown ? (
-                <View style={styles.opened}>
-                  <RepeatOptions
-                    draft={
-                      repeatSeries
-                        ? repeatEditDraft(draft.repeat, repeatSeries)
-                        : draft.repeat
-                    }
-                    start={repeatStart}
-                    onChange={(repeat) => update({ repeat }, ["repeat"])}
-                    disabled={pending}
-                    error={errors.repeat}
-                    showCaption={showRepeatLength}
-                    series={repeatSeries}
-                    input={BottomSheetTextInput}
-                  />
-                </View>
-              ) : null}
-              <RowDivider />
+          <PropertyRow
+            glyph="description"
+            label={EVENT_FORM_ROW_LABELS.description}
+          >
+            <FormTextInput
+              value={draft.description}
+              onChangeText={(description) => update({ description }, [])}
+              onFocus={() => setFocused("description")}
+              onBlur={() => setFocused(null)}
+              editable={!pending}
+              placeholder={EVENT_FORM_PLACEHOLDERS.description}
+              maxLength={EVENT_DESCRIPTION_MAX_LENGTH}
+              placeholderTextColor={tokens.color.text.muted}
+              accessibilityLabel="Description"
+              multiline
+              style={[styles.rowInput, styles.rowInputMultiline]}
+            />
+          </PropertyRow>
+          <RowDivider />
 
-              <PropertyRow
-                glyph="location"
-                label={EVENT_FORM_ROW_LABELS.location}
-              >
-                <BottomSheetTextInput
-                  value={draft.location}
-                  onChangeText={(location) => update({ location }, [])}
-                  onFocus={() => setFocused("location")}
-                  onBlur={() => setFocused(null)}
-                  editable={!pending}
-                  placeholder={EVENT_FORM_PLACEHOLDERS.location}
-                  maxLength={EVENT_LOCATION_MAX_LENGTH}
-                  placeholderTextColor={tokens.color.text.muted}
-                  accessibilityLabel="Location"
-                  style={styles.rowInput}
-                />
-              </PropertyRow>
-            </View>
+          {/* Notes (#4934): every member the event invites reads them on
+              Event details, named as that screen names them. */}
+          <PropertyRow glyph="notes" label={notesLabel}>
+            <FormTextInput
+              value={draft.notes ?? ""}
+              onChangeText={(notes) => update({ notes }, [])}
+              onFocus={() => setFocused("notes")}
+              onBlur={() => setFocused(null)}
+              editable={!pending}
+              placeholder={EVENT_FORM_PLACEHOLDERS.notes}
+              maxLength={EVENT_NOTES_MAX_LENGTH}
+              placeholderTextColor={tokens.color.text.muted}
+              accessibilityLabel={notesLabel}
+              multiline
+              style={[styles.rowInput, styles.rowInputMultiline]}
+            />
+          </PropertyRow>
+          <RowDivider />
 
-            {/* Who's coming and points as their own group, as web's
-                form sets them (#5742). */}
-            <View style={styles.group}>
-              <PropertyRow
-                glyph="attendance"
-                label={EVENT_FORM_ROW_LABELS.attendance}
-                value={describeAttendance(draft.attendance, roleName)}
-                invalid={!!errors.attendance}
-                disabled={pending}
-                accessibilityHint="Sets who must attend, by role."
-                onPress={() => {
-                  Keyboard.dismiss();
-                  attendanceRef.current?.present();
-                }}
-              />
-              {errors.attendance ? (
-                <Text style={styles.error}>{errors.attendance}</Text>
-              ) : null}
-
-              {setsRequirements ? (
-                <>
-                  <RowDivider />
-                  <PropertyRow
-                    glyph="points"
-                    label={EVENT_FORM_ROW_LABELS.points}
-                  >
-                    <BottomSheetTextInput
-                      value={draft.pointsInput}
-                      onChangeText={(pointsInput) =>
-                        update({ pointsInput }, ["points"])
-                      }
-                      onFocus={() => setFocused("points")}
-                      onBlur={() => setFocused(null)}
-                      editable={!pending}
-                      placeholder="0"
-                      placeholderTextColor={tokens.color.text.muted}
-                      accessibilityLabel="Points for attending"
-                      keyboardType="number-pad"
-                      selectTextOnFocus
-                      style={[
-                        styles.rowInput,
-                        errors.points ? styles.rowInputError : null,
-                      ]}
-                    />
-                  </PropertyRow>
-                  {errors.points ? (
-                    <Text style={styles.error}>{errors.points}</Text>
-                  ) : null}
-                </>
-              ) : null}
-            </View>
-
-            <View style={styles.group}>
-              {/* The agenda while the event is made (Paul 2026-11-19:
-                  "where is the ability to add agenda items"). Only on
-                  create: an event's agenda is edited on Event details and
-                  checked off there during the meeting, so an edit here would
-                  race that one. Web's form does the same. */}
-              {editing ? null : (
-                <>
-                  <PropertyRow
-                    glyph="agenda"
-                    label={EVENT_FORM_ROW_LABELS.agenda}
-                  >
-                    {null}
-                  </PropertyRow>
-                  <View style={styles.opened}>
-                    <AgendaDraftList
-                      agenda={draft.agenda ?? []}
-                      draft={draft.agendaPending ?? ""}
-                      onDraftChange={(agendaPending) =>
-                        update({ agendaPending }, [])
-                      }
-                      disabled={pending}
-                      input={BottomSheetTextInput}
-                      onDragging={setDraggingAgenda}
-                      onChange={(agenda) => update({ agenda }, [])}
-                    />
-                    {draft.repeat.preset !== "NONE" &&
-                    (draft.agenda?.length ?? 0) > 0 ? (
-                      <Text style={styles.note}>
-                        {EVENT_FORM_AGENDA_REPEAT_NOTE}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <RowDivider />
-                </>
-              )}
-
-              <PropertyRow
-                glyph="description"
-                label={EVENT_FORM_ROW_LABELS.description}
-              >
-                <BottomSheetTextInput
-                  value={draft.description}
-                  onChangeText={(description) => update({ description }, [])}
-                  onFocus={() => setFocused("description")}
-                  onBlur={() => setFocused(null)}
-                  editable={!pending}
-                  placeholder={EVENT_FORM_PLACEHOLDERS.description}
-                  maxLength={EVENT_DESCRIPTION_MAX_LENGTH}
-                  placeholderTextColor={tokens.color.text.muted}
-                  accessibilityLabel="Description"
-                  multiline
-                  style={[styles.rowInput, styles.rowInputMultiline]}
-                />
-              </PropertyRow>
-              <RowDivider />
-
-              {/* Notes (#4934): every member the event invites reads them on
-                  Event details, named as that screen names them. */}
-              <PropertyRow glyph="notes" label={notesLabel}>
-                <BottomSheetTextInput
-                  value={draft.notes ?? ""}
-                  onChangeText={(notes) => update({ notes }, [])}
-                  onFocus={() => setFocused("notes")}
-                  onBlur={() => setFocused(null)}
-                  editable={!pending}
-                  placeholder={EVENT_FORM_PLACEHOLDERS.notes}
-                  maxLength={EVENT_NOTES_MAX_LENGTH}
-                  placeholderTextColor={tokens.color.text.muted}
-                  accessibilityLabel={notesLabel}
-                  multiline
-                  style={[styles.rowInput, styles.rowInputMultiline]}
-                />
-              </PropertyRow>
-              <RowDivider />
-
-              {/* #3703: members arrive early, so check-in opens ahead of the
-                  start; 10 minutes unless the officer says. The check-in zone
-                  is drawn on web, where a map belongs. */}
-              <PropertyRow
-                glyph="checkIn"
-                label={EVENT_FORM_ROW_LABELS.checkIn}
-                value={describeCheckIn(
-                  parseCheckInOpens(draft.checkInOpensInput),
-                )}
-                invalid={
-                  !!errors.checkInOpens ||
-                  parseCheckInOpens(draft.checkInOpensInput) === null
+          {/* #3703: members arrive early, so check-in opens ahead of the
+              start; 10 minutes unless the officer says. The check-in zone
+              is drawn on web, where a map belongs. */}
+          <PropertyRow
+            glyph="checkIn"
+            label={EVENT_FORM_ROW_LABELS.checkIn}
+            value={describeCheckIn(parseCheckInOpens(draft.checkInOpensInput))}
+            invalid={
+              !!errors.checkInOpens ||
+              parseCheckInOpens(draft.checkInOpensInput) === null
+            }
+            disabled={pending}
+            accessibilityHint="Shows how many minutes early check-in opens."
+            onPress={() => toggleRow("checkIn")}
+          />
+          {draft.openRow === "checkIn" ? (
+            <View style={[styles.opened, styles.checkInValue]}>
+              <FormTextInput
+                value={draft.checkInOpensInput}
+                onChangeText={(checkInOpensInput) =>
+                  update({ checkInOpensInput }, ["checkInOpens"])
                 }
-                disabled={pending}
-                accessibilityHint="Shows how many minutes early check-in opens."
-                onPress={() => toggleRow("checkIn")}
+                onFocus={() => setFocused("checkInOpens")}
+                onBlur={() => setFocused(null)}
+                editable={!pending}
+                placeholder="10"
+                placeholderTextColor={tokens.color.text.muted}
+                accessibilityLabel="Minutes before the start that check-in opens"
+                keyboardType="number-pad"
+                selectTextOnFocus
+                style={[
+                  styles.minutesInput,
+                  errors.checkInOpens ? styles.rowInputError : null,
+                ]}
               />
-              {draft.openRow === "checkIn" ? (
-                <View style={[styles.opened, styles.checkInValue]}>
-                  <BottomSheetTextInput
-                    value={draft.checkInOpensInput}
-                    onChangeText={(checkInOpensInput) =>
-                      update({ checkInOpensInput }, ["checkInOpens"])
-                    }
-                    onFocus={() => setFocused("checkInOpens")}
-                    onBlur={() => setFocused(null)}
-                    editable={!pending}
-                    placeholder="10"
-                    placeholderTextColor={tokens.color.text.muted}
-                    accessibilityLabel="Minutes before the start that check-in opens"
-                    keyboardType="number-pad"
-                    selectTextOnFocus
-                    style={[
-                      styles.minutesInput,
-                      errors.checkInOpens ? styles.rowInputError : null,
-                    ]}
-                  />
-                  <Text style={styles.rowSuffix}>minutes early</Text>
-                </View>
-              ) : null}
-              {errors.checkInOpens ? (
-                <Text style={styles.error}>{errors.checkInOpens}</Text>
-              ) : null}
+              <Text style={styles.rowSuffix}>minutes early</Text>
             </View>
+          ) : null}
+          {errors.checkInOpens ? (
+            <Text style={styles.error}>{errors.checkInOpens}</Text>
+          ) : null}
+        </View>
 
-            {setsRequirements ? null : (
-              <Text style={styles.note}>{EVENT_FORM_MEMBER_NOTE}</Text>
-            )}
+        {setsRequirements ? null : (
+          <Text style={styles.note}>{EVENT_FORM_MEMBER_NOTE}</Text>
+        )}
 
-            {refusal ? <Text style={styles.error}>{refusal}</Text> : null}
-            {rejected ? <Text style={styles.error}>{rejected}</Text> : null}
-            {unconfirmed ? (
-              <Text style={styles.error}>
-                We couldn&apos;t confirm it saved. Check Events before you
-                create it again: it may already be there.
-              </Text>
-            ) : null}
-            {submitFailed ? (
-              <Text style={styles.error}>
-                That didn&apos;t save. Your{" "}
-                {editing ? "changes are" : "event is"} still here, so try again.
-              </Text>
-            ) : null}
+        {refusal ? <Text style={styles.error}>{refusal}</Text> : null}
+        {rejected ? <Text style={styles.error}>{rejected}</Text> : null}
+        {unconfirmed ? (
+          <Text style={styles.error}>
+            We couldn&apos;t confirm it saved. Check Events before you create it
+            again: it may already be there.
+          </Text>
+        ) : null}
+        {submitFailed ? (
+          <Text style={styles.error}>
+            That didn&apos;t save. Your {editing ? "changes are" : "event is"}{" "}
+            still here, so try again.
+          </Text>
+        ) : null}
 
-            {editing && grants.delete ? (
-              // Quiet, and last: a couple of taps away and never next to Save.
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete event"
-                accessibilityState={{ disabled: pending }}
-                disabled={pending}
-                onPress={() => void confirmDelete(editing)}
-                style={styles.deleteRow}
-              >
-                <Text style={styles.deleteText}>
-                  {deleteEvent.isPending ? "Deleting…" : "Delete event"}
-                </Text>
-              </Pressable>
-            ) : null}
-          </BottomSheetScrollView>
-        </BottomSheetModal>
+        {editing && grants.delete ? (
+          // Quiet, and last: a couple of taps away and never next to Save.
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete event"
+            accessibilityState={{ disabled: pending }}
+            disabled={pending}
+            onPress={() => void confirmDelete(editing)}
+            style={styles.deleteRow}
+          >
+            <Text style={styles.deleteText}>
+              {deleteEvent.isPending ? "Deleting…" : "Delete event"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </>
+    );
+
+    return (
+      <>
+        {inline ? (
+          open ? (
+            <InlineEventForm style={styles.inlineBody} onClose={close}>
+              {form}
+            </InlineEventForm>
+          ) : null
+        ) : (
+          <BottomSheetModal
+            ref={modalRef}
+            stackBehavior={SHEET_STACK_BEHAVIOR}
+            enableDynamicSizing
+            keyboardBehavior="interactive"
+            backgroundStyle={backgroundStyle}
+            handleComponent={SheetGrabber}
+            backdropComponent={SheetScrim}
+            onAnimate={onAnimate}
+            onDismiss={closed}
+            // A held agenda row: the drag, not the sheet, follows the finger.
+            enableContentPanningGesture={!draggingAgenda}
+          >
+            <SheetBackToClose onClose={closeSheet} />
+            <BottomSheetScrollView
+              scrollEnabled={!draggingAgenda}
+              onAccessibilityEscape={closeSheet}
+              contentContainerStyle={styles.body}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* The sheet's fields are its own: a reveal from the
+                  screen behind (event details' agenda) must not scroll
+                  that screen when one takes focus. */}
+              <ScrollRevealProvider value={null}>{form}</ScrollRevealProvider>
+            </BottomSheetScrollView>
+          </BottomSheetModal>
+        )}
 
         <EventTypeSheet
           ref={typeRef}
@@ -1159,12 +1197,51 @@ export const NewEventSheet = forwardRef<BottomSheetModal, NewEventSheetProps>(
   },
 );
 
+/**
+ * The form in place: a plain view where its host draws it. When it opens,
+ * its top is brought into view in the scroll view around it (the Ask
+ * sheet's thread), so the name and Create show rather than the end of the
+ * form. Escape on it closes it, as the sheet's does.
+ */
+function InlineEventForm({
+  style,
+  onClose,
+  children,
+}: {
+  style: StyleProp<ViewStyle>;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const reveal = useEnclosingScrollReveal();
+  const box = useRef<View>(null);
+  const shown = useRef(false);
+  return (
+    <View
+      ref={box}
+      style={style}
+      testID="event-form-inline"
+      onAccessibilityEscape={onClose}
+      onLayout={() => {
+        if (shown.current || !box.current) return;
+        shown.current = true;
+        reveal?.(box.current);
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
 function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
   const fieldStyles = sheetFieldStyles(tokens, brand.accent);
   return StyleSheet.create({
     body: {
       paddingHorizontal: tokens.spacing.lg,
       paddingBottom: tokens.spacing.xl,
+      gap: tokens.spacing.sm,
+    },
+    // In place, the host's frame is the edge: no padding of its own.
+    inlineBody: {
       gap: tokens.spacing.sm,
     },
     // The name: the sheet's largest text, borderless until it holds the
