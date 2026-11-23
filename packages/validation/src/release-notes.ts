@@ -126,6 +126,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Event cards from Ask now invite the right people, such as only your cabinet for a leaders reception, and follow who an earlier event of the same name invited.",
       "An event's page now follows its clock on web and phone: before check-in opens it shows the details and who's coming, while check-in is open it leads with check-in and gives officers the attendance list, and afterwards officers see who came.",
       "Picking a type for an event or a document now happens in one menu you can search, where you can also make a new type and rename or delete one without leaving it.",
+      "Ask Frapp can make a task for several people, a role, a tier or a group, and set its points, proof, steps and who it is from.",
+      "Who's coming on an event can now be set for a whole tier, such as Cabinet, and roles added to that tier later are included.",
     ],
     web: [
       "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
