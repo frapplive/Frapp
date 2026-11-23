@@ -27,6 +27,16 @@ export interface CreateRushCandidateInput {
   client_message_id?: string;
 }
 
+/**
+ * Who is reading a candidate, and whether they may see its vote count
+ * (`rush:view_results`, #4084). The count is left out of the view, not
+ * zeroed, so no client can mistake a hidden count for none.
+ */
+export interface RushViewer {
+  id: string;
+  canViewResults: boolean;
+}
+
 export type CreateRushCandidateResult = RushCandidate & {
   card_posted?: boolean;
 };
@@ -45,18 +55,18 @@ export class RushService {
   async findView(
     id: string,
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const candidate = await this.rushRepo.findById(id, chapterId);
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewerId);
+    return this.toView(candidate, viewer);
   }
 
   async findViewByName(
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
     name: string,
   ): Promise<RushCandidateView> {
     const nameKey = lowerTrim(name ?? '');
@@ -67,7 +77,7 @@ export class RushService {
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewerId);
+    return this.toView(candidate, viewer);
   }
 
   async create(
@@ -109,20 +119,20 @@ export class RushService {
   async vote(
     id: string,
     chapterId: string,
-    voterId: string,
+    voter: RushViewer,
   ): Promise<RushCandidateView> {
     const candidate = await this.rushRepo.findById(id, chapterId);
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    await this.rushRepo.insertVote(id, chapterId, voterId);
-    return this.toView(candidate, voterId);
+    await this.rushRepo.insertVote(id, chapterId, voter.id);
+    return this.toView(candidate, voter);
   }
 
   async bid(
     id: string,
     chapterId: string,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const existing = await this.rushRepo.findById(id, chapterId);
     if (!existing) {
@@ -132,24 +142,26 @@ export class RushService {
       existing.bid_status === 'extended'
         ? existing
         : await this.rushRepo.setBidExtended(id, chapterId);
-    return this.toView(candidate, viewerId);
+    return this.toView(candidate, viewer);
   }
 
   private async toView(
     candidate: RushCandidate,
-    viewerId: string,
+    viewer: RushViewer,
   ): Promise<RushCandidateView> {
     const [voteCount, viewerHasVoted] = await Promise.all([
-      this.rushRepo.countVotes(candidate.id, candidate.chapter_id),
+      viewer.canViewResults
+        ? this.rushRepo.countVotes(candidate.id, candidate.chapter_id)
+        : undefined,
       this.rushRepo.viewerHasVoted(
         candidate.id,
         candidate.chapter_id,
-        viewerId,
+        viewer.id,
       ),
     ]);
     return {
       ...candidate,
-      vote_count: voteCount,
+      ...(voteCount === undefined ? {} : { vote_count: voteCount }),
       viewer_has_voted: viewerHasVoted,
     };
   }

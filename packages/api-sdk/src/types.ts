@@ -10899,8 +10899,8 @@ export interface components {
             created_by: string;
             /** Format: date-time */
             created_at: string;
-            /** @description Ballot count. Voter names are never returned. */
-            vote_count: number;
+            /** @description Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0. */
+            vote_count?: number;
             /** @description Whether the authenticated caller has already voted. */
             viewer_has_voted: boolean;
         };

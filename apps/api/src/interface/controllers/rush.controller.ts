@@ -15,7 +15,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { RushService } from '../../application/services/rush.service';
+import {
+  RushService,
+  type RushViewer,
+} from '../../application/services/rush.service';
+import { RbacService } from '../../application/services/rbac.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
@@ -42,6 +46,9 @@ import { SystemPermissions } from '#domain/constants/permissions';
  * its own `rush:*` permission (#4070); `PermissionsGuard` requires the class
  * and handler lists together. The slash commands and the chat card call these
  * routes, so they carry the same gates.
+ *
+ * `rush:view_results` gates no route: it decides whether a candidate read,
+ * vote or bid answers with `vote_count` (#4084), so it is resolved here.
  */
 @ApiTags('Rush')
 @ApiBearerAuth()
@@ -50,7 +57,19 @@ import { SystemPermissions } from '#domain/constants/permissions';
 @RequireModule('rush')
 @Controller('rush/candidates')
 export class RushController {
-  constructor(private readonly rushService: RushService) {}
+  constructor(
+    private readonly rushService: RushService,
+    private readonly rbacService: RbacService,
+  ) {}
+
+  private async viewer(chapterId: string, userId: string): Promise<RushViewer> {
+    const canViewResults = await this.rbacService.memberHasAnyPermission(
+      chapterId,
+      userId,
+      [SystemPermissions.RUSH_VIEW_RESULTS],
+    );
+    return { id: userId, canViewResults };
+  }
 
   @Get()
   @RequirePermissions(SystemPermissions.RUSH_VIEW)
@@ -61,7 +80,11 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Query() query: LookupRushCandidateQueryDto,
   ) {
-    return this.rushService.findViewByName(chapterId, userId, query.name);
+    return this.rushService.findViewByName(
+      chapterId,
+      await this.viewer(chapterId, userId),
+      query.name,
+    );
   }
 
   @Get(':id')
@@ -73,7 +96,11 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.findView(id, chapterId, userId);
+    return this.rushService.findView(
+      id,
+      chapterId,
+      await this.viewer(chapterId, userId),
+    );
   }
 
   @Post()
@@ -122,7 +149,11 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.vote(id, chapterId, userId);
+    return this.rushService.vote(
+      id,
+      chapterId,
+      await this.viewer(chapterId, userId),
+    );
   }
 
   @Post(':id/bid')
@@ -138,6 +169,10 @@ export class RushController {
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.rushService.bid(id, chapterId, userId);
+    return this.rushService.bid(
+      id,
+      chapterId,
+      await this.viewer(chapterId, userId),
+    );
   }
 }

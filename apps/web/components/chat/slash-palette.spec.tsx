@@ -158,6 +158,34 @@ describe("SlashPalette", () => {
     expect(screen.queryByText("/announce")).not.toBeInTheDocument();
   });
 
+  // #4084: `/rush` lists only the subcommands the member's role holds.
+  it("narrows /rush to the subcommands the role holds, and leaves it out when none", () => {
+    const { rerender } = render(
+      <SlashPalette
+        open
+        isModuleEnabled={() => true}
+        permissions={["members:view", "rush:view", "rush:vote"]}
+        status="ready"
+        onSelect={noop}
+        onOpenChange={noop}
+      />,
+    );
+    expect(screen.getByText("/rush")).toBeInTheDocument();
+    expect(screen.getByText("Vote on a candidate")).toBeInTheDocument();
+
+    rerender(
+      <SlashPalette
+        open
+        isModuleEnabled={() => true}
+        permissions={["members:view", "rush:view"]}
+        status="ready"
+        onSelect={noop}
+        onOpenChange={noop}
+      />,
+    );
+    expect(screen.queryByText("/rush")).not.toBeInTheDocument();
+  });
+
   // #396: Radix's `DialogContent` never sets `aria-modal` on its own
   // (verified against @radix-ui/react-dialog@1.1.23 — only `role="dialog"`
   // comes for free), so a screen reader could treat this as a non-modal

@@ -16,6 +16,8 @@
  * dispatch + parsers below.
  */
 
+import { can } from "@repo/validation";
+
 export * from "./parsers";
 export * from "./payloads";
 
@@ -112,6 +114,60 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   },
 ]);
 
+/**
+ * `/rush`'s subcommands and the key each one's route needs (#4070). The
+ * palette offers only the ones a role holds (#4084): `rushSubcommandsFor`.
+ */
+export const RUSH_SUBCOMMANDS = [
+  { name: "add", permission: "rush:add", usage: "add @candidate" },
+  { name: "vote", permission: "rush:vote", usage: "vote <candidate-id>" },
+  { name: "bid", permission: "rush:bid", usage: "bid @candidate" },
+] as const;
+export type RushSubcommand = (typeof RUSH_SUBCOMMANDS)[number]["name"];
+
+/**
+ * The `/rush` subcommands `permissions` allows, in catalog order. `undefined`
+ * (not read yet, or the read failed) allows all three, as `canAnnounce`'s
+ * absence does: the server refuses what the role can't do anyway.
+ */
+export function rushSubcommandsFor(
+  permissions: readonly string[] | undefined,
+): RushSubcommand[] {
+  return RUSH_SUBCOMMANDS.filter(
+    (sub) => permissions === undefined || can(sub.permission, permissions),
+  ).map((sub) => sub.name);
+}
+
+const RUSH_SUBCOMMAND_PHRASE: Record<RushSubcommand, string> = {
+  add: "add a candidate",
+  vote: "vote on a candidate",
+  bid: "extend a bid",
+};
+
+/**
+ * The `/rush` row narrowed to `allowed`: its usage lists only those
+ * subcommands and its description says only what they do. The catalog row
+ * as it is when all three are allowed.
+ */
+function narrowRushCommand(
+  command: SlashCommand,
+  allowed: readonly RushSubcommand[],
+): SlashCommand {
+  if (allowed.length === RUSH_SUBCOMMANDS.length) return command;
+  const phrases = allowed.map((name) => RUSH_SUBCOMMAND_PHRASE[name]);
+  const joined =
+    phrases.length <= 1
+      ? phrases.join("")
+      : `${phrases.slice(0, -1).join(", ")} or ${phrases[phrases.length - 1]}`;
+  return {
+    ...command,
+    description: joined.charAt(0).toUpperCase() + joined.slice(1),
+    usage: RUSH_SUBCOMMANDS.filter((sub) => allowed.includes(sub.name))
+      .map((sub) => sub.usage)
+      .join(" | "),
+  };
+}
+
 /** Vocab aliases that dispatch as the canonical `rush` command. */
 const RUSH_COMMAND_ALIASES = ["recruitment", "intake", "induction"] as const;
 
@@ -183,14 +239,23 @@ export function getSlashCommand(
  * can't post in the announcements channel; the server refuses their
  * announcement anyway (#3414), so offering it would only lead to a refusal.
  * Absent reads as allowed.
+ *
+ * Pass `options.permissions`, the member's permission list, so the rush row
+ * offers only the subcommands their role holds the key for, and is left out
+ * when it holds none (#4084). Absent (not read yet) offers all three.
  */
 export function filterSlashCommands(
   query: string,
   isModuleEnabled: (moduleKey: string) => boolean,
-  options?: { recruitment?: string; canAnnounce?: boolean },
+  options?: {
+    recruitment?: string;
+    canAnnounce?: boolean;
+    permissions?: readonly string[];
+  },
 ): SlashCommand[] {
   const needle = query.trim().toLowerCase();
   const displayName = recruitmentCommandSlug(options?.recruitment);
+  const rushAllowed = rushSubcommandsFor(options?.permissions);
   return SLASH_COMMANDS.filter((command) => {
     if (command.requiredModule && !isModuleEnabled(command.requiredModule)) {
       return false;
@@ -198,6 +263,7 @@ export function filterSlashCommands(
     if (command.name === "announce" && options?.canAnnounce === false) {
       return false;
     }
+    if (command.name === "rush" && rushAllowed.length === 0) return false;
     if (needle.length === 0) return true;
     // A command word with details after it (`event Chapter Dinner`): the
     // palette's search box is where a member types a whole command (#3773).
@@ -216,11 +282,11 @@ export function filterSlashCommands(
       command.name.includes(needle) ||
       command.description.toLowerCase().includes(needle)
     );
-  }).map((command) =>
-    command.name === "rush" && displayName !== "rush"
-      ? { ...command, displayName }
-      : command,
-  );
+  }).map((command) => {
+    if (command.name !== "rush") return command;
+    const narrowed = narrowRushCommand(command, rushAllowed);
+    return displayName !== "rush" ? { ...narrowed, displayName } : narrowed;
+  });
 }
 
 /**

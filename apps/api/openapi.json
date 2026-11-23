@@ -34157,7 +34157,7 @@
           },
           "vote_count": {
             "type": "number",
-            "description": "Ballot count. Voter names are never returned."
+            "description": "Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0."
           },
           "viewer_has_voted": {
             "type": "boolean",
@@ -34174,7 +34174,6 @@
           "bid_status",
           "created_by",
           "created_at",
-          "vote_count",
           "viewer_has_voted"
         ]
       },

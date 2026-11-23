@@ -121,3 +121,16 @@ GET /v1/activity the response property 'needs_you/task_confirmations/items/due_d
 GET /v1/activity the response property 'needs_you/tasks/items/due_date' became nullable for the status '200'
 GET /v1/activity/archive the response property 'tasks/items/due_date' became nullable for the status '200'
 POST /v1/tasks the response property 'due_date' became nullable for the status '201'
+
+# #4084 leaves `vote_count` out of the rush candidate view for a caller without `rush:view_results`.
+# Unlike the waivers above, shipped binaries do call these routes; waived because they tolerate the
+# missing field (Winston chose this, 2026-11-23; Paul reviews it in the PR). At every shipped SHA from
+# cca52dec through 0426149e, `git show <sha>:packages/hooks/src/rush-card.ts` has
+# `readLiveRushCandidate` returning null when `typeof r.vote_count !== "number"`, the only mobile reader
+# of the field: the card then shows the prospect with no tally, badge, Vote or Extend bid, as it does
+# before its read lands. At ea9bc12c, `git grep 'useRushCandidate\|rush/candidates' ea9bc12c -- apps/mobile`
+# finds no caller. The field is absent only in a chapter that took the key off a role.
+GET /v1/rush/candidates the response property 'vote_count' became optional for the status '200'
+GET /v1/rush/candidates/{id} the response property 'vote_count' became optional for the status '200'
+POST /v1/rush/candidates/{id}/vote the response property 'vote_count' became optional for the status '201'
+POST /v1/rush/candidates/{id}/bid the response property 'vote_count' became optional for the status '201'

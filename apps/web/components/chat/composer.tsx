@@ -329,6 +329,12 @@ interface ComposerBaseProps {
    */
   canAnnounce?: boolean;
   /**
+   * The member's permission list (`useMyPermissions`), so the palette's
+   * `/rush` row offers only the subcommands their role holds (#4084).
+   * Absent (not read yet) offers all; the server decides.
+   */
+  permissions?: readonly string[];
+  /**
    * Status of the read behind `isModuleEnabled`. `"loading"`, `"offline"`
    * and `"error"` surface explicit states inside the slash palette instead of
    * an empty filter, and refuse a typed module command with their own copy;
@@ -694,6 +700,7 @@ export function Composer({
   isModuleEnabled,
   recruitmentVocab,
   canAnnounce,
+  permissions,
   slashCommandsStatus = "ready",
   onRetrySlashCommands,
   isOffline,
@@ -2023,6 +2030,7 @@ export function Composer({
           isModuleEnabled={isModuleEnabled}
           recruitmentVocab={recruitmentVocab}
           canAnnounce={canAnnounce}
+          permissions={permissions}
           status={slashCommandsStatus}
           onRetry={onRetrySlashCommands}
           onSelect={onPaletteSelect}

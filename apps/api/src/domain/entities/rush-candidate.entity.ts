@@ -23,8 +23,9 @@ export interface RushCandidateVote {
 /**
  * Live card projection. `vote_count` and `viewer_has_voted` are the only
  * ballot fields the card may show — voter names stay off the wire.
+ * `vote_count` is left out for a viewer without `rush:view_results` (#4084).
  */
 export interface RushCandidateView extends RushCandidate {
-  vote_count: number;
+  vote_count?: number;
   viewer_has_voted: boolean;
 }

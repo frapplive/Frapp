@@ -5,6 +5,7 @@ import {
   getSlashCommand,
   parseNumericArg,
   parseSlashInput,
+  rushSubcommandsFor,
   SLASH_COMMANDS,
 } from "./index";
 
@@ -68,6 +69,53 @@ describe("filterSlashCommands", () => {
     expect(
       filterSlashCommands("announce", allEnabled, { canAnnounce: false }),
     ).toEqual([]);
+  });
+
+  // #4084: the server refuses a subcommand whose key the role lacks, so the
+  // palette's rush row lists only the ones it holds.
+  describe("rush subcommands by role", () => {
+    const rushRow = (permissions?: readonly string[]) =>
+      filterSlashCommands("", allEnabled, { permissions }).find(
+        (command) => command.name === "rush",
+      );
+    const catalogRow = SLASH_COMMANDS.find((c) => c.name === "rush");
+
+    it("is the catalog row for a role holding all three, or before permissions are read", () => {
+      expect(rushRow(["rush:add", "rush:vote", "rush:bid"])).toEqual(
+        catalogRow,
+      );
+      expect(rushRow(["*"])).toEqual(catalogRow);
+      expect(rushRow(undefined)).toEqual(catalogRow);
+    });
+
+    it("lists only the subcommands the role holds", () => {
+      const row = rushRow(["rush:view", "rush:vote"]);
+      expect(row?.usage).toBe("vote <candidate-id>");
+      expect(row?.description).toBe("Vote on a candidate");
+
+      const two = rushRow(["rush:add", "rush:bid"]);
+      expect(two?.usage).toBe("add @candidate | bid @candidate");
+      expect(two?.description).toBe("Add a candidate or extend a bid");
+    });
+
+    it("leaves the command out for a role holding none of them", () => {
+      expect(rushRow(["members:view", "rush:view"])).toBeUndefined();
+    });
+
+    it("keeps the chapter's word on a narrowed row", () => {
+      const row = filterSlashCommands("", allEnabled, {
+        recruitment: "Intake",
+        permissions: ["rush:vote"],
+      }).find((command) => command.name === "rush");
+      expect(row?.displayName).toBe("intake");
+      expect(row?.usage).toBe("vote <candidate-id>");
+    });
+
+    it("rushSubcommandsFor reads each key with can", () => {
+      expect(rushSubcommandsFor(["rush:bid"])).toEqual(["bid"]);
+      expect(rushSubcommandsFor([])).toEqual([]);
+      expect(rushSubcommandsFor(undefined)).toEqual(["add", "vote", "bid"]);
+    });
   });
 
   it("always includes commands with a null requiredModule regardless of gating", () => {

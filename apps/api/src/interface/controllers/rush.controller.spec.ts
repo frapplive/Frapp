@@ -5,6 +5,7 @@ import { RushController } from './rush.controller';
 import { PermissionsGuard } from '../guards/permissions.guard';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import type { RushService } from '../../application/services/rush.service';
+import type { RbacService } from '../../application/services/rbac.service';
 import type { FrappSupabaseClient } from '../../infrastructure/supabase/database.types';
 import {
   DEFAULT_SYSTEM_ROLES,
@@ -20,7 +21,10 @@ import {
  * to show a role without the key is refused.
  */
 describe('RushController permissions', () => {
-  const controller = new RushController({} as RushService);
+  const controller = new RushController(
+    {} as RushService,
+    {} as RbacService,
+  );
 
   const ROUTES = [
     ['lookup', SystemPermissions.RUSH_VIEW],
@@ -102,4 +106,59 @@ describe('RushController permissions', () => {
       ).resolves.toBe(true);
     });
   });
+});
+
+/**
+ * `rush:view_results` gates no route (#4084): each candidate read, vote and
+ * bid asks whether the caller holds it, and the service leaves the count out
+ * when not. Pinned here so a handler can't skip the question and show the
+ * count to everyone again.
+ */
+describe('RushController rush:view_results', () => {
+  const setup = (canViewResults: boolean) => {
+    const rushService = {
+      findView: jest.fn().mockResolvedValue({}),
+      findViewByName: jest.fn().mockResolvedValue({}),
+      vote: jest.fn().mockResolvedValue({}),
+      bid: jest.fn().mockResolvedValue({}),
+    };
+    const rbacService = {
+      memberHasAnyPermission: jest.fn().mockResolvedValue(canViewResults),
+    };
+    const controller = new RushController(
+      rushService as unknown as RushService,
+      rbacService as unknown as RbacService,
+    );
+    return { controller, rushService, rbacService };
+  };
+
+  it.each([true, false])(
+    'passes canViewResults=%s from the caller\'s roles to every read',
+    async (canViewResults) => {
+      const { controller, rushService, rbacService } = setup(canViewResults);
+      const viewer = { id: 'user-1', canViewResults };
+
+      await controller.lookup('ch-1', 'user-1', { name: 'Sam' });
+      await controller.getOne('ch-1', 'user-1', 'cand-1');
+      await controller.vote('ch-1', 'user-1', 'cand-1');
+      await controller.bid('ch-1', 'user-1', 'cand-1');
+
+      expect(rushService.findViewByName).toHaveBeenCalledWith(
+        'ch-1',
+        viewer,
+        'Sam',
+      );
+      expect(rushService.findView).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
+      expect(rushService.vote).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
+      expect(rushService.bid).toHaveBeenCalledWith('cand-1', 'ch-1', viewer);
+      expect(rbacService.memberHasAnyPermission).toHaveBeenCalledTimes(4);
+      for (const call of rbacService.memberHasAnyPermission.mock.calls) {
+        expect(call).toEqual([
+          'ch-1',
+          'user-1',
+          [SystemPermissions.RUSH_VIEW_RESULTS],
+        ]);
+      }
+    },
+  );
 });
