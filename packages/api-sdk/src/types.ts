@@ -791,7 +791,7 @@ export interface paths {
         head?: never;
         /**
          * Fix a member's name or graduation year (officers)
-         * @description Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked at or above you, and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.
+         * @description Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked above you (a member at your own rank is in reach, #5900), and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.
          */
         patch: operations["MemberController_correctProfile_v1"];
         trace?: never;

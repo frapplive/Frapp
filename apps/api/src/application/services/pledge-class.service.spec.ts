@@ -273,7 +273,7 @@ describe('PledgeClassService', () => {
         expect(rbac.memberHasAnyPermission).not.toHaveBeenCalled();
       });
 
-      it('refuses a class that holds a member ranked at or above the officer, and deletes nothing', async () => {
+      it('refuses a class that holds a member ranked above the officer, and deletes nothing', async () => {
         members = members.map((m) =>
           m.id === MEMBER.vicePresident ? withClass(m, 'CLASS-NEW', 2) : m,
         );
@@ -434,7 +434,7 @@ describe('PledgeClassService', () => {
         expect(rbac.memberHasAnyPermission).not.toHaveBeenCalled();
       });
 
-      it('refuses a member ranked at or above the officer, and writes nothing', async () => {
+      it('refuses a member ranked above the officer, and writes nothing', async () => {
         await expect(
           service.assign(CHAPTER, USER.riskChair, [
             {
