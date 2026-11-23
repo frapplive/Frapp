@@ -177,7 +177,11 @@ function build(options: {
     { track: async () => undefined } as never,
     [
       new GivePointsActTool(people, events as never, attendance as never),
-      new CreateTaskActTool(people),
+      new CreateTaskActTool(
+        people,
+        { resolve: async () => ({ entries: [], notes: [] }) } as never,
+        { followEntriesOf: async () => [] } as never,
+      ),
       new CreateEventActTool(
         events as never,
         { list: async () => [] } as never,

@@ -123,6 +123,19 @@ const dictating = vi.hoisted(() => ({
   cancel: vi.fn(),
   clean: vi.fn(async (text: string): Promise<string | null> => text),
 }));
+// A task card's who reads the chapter as the task form does.
+vi.mock("@/lib/tasks/use-who-directory", async () => {
+  const { buildWhoDirectory } = await import("@repo/hooks/task-who-picker");
+  const directory = buildWhoDirectory({ roster: [], viewerUserId: null });
+  return {
+    useWhoDirectory: () => ({
+      directory,
+      people: "ready",
+      sets: "ready",
+      followers: [],
+    }),
+  };
+});
 vi.mock("@/lib/dictation/speech", () => ({
   isDictationAvailable: () => dictating.available,
   requestDictationPermission: async () => dictating.granted,

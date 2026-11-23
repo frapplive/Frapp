@@ -57,6 +57,10 @@ vi.mock("@/components/events/event-editor-dialog", () => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Who a task card is for reads the chapter as the task form does.
+  useRoles: () => ({ data: [] }),
+  useRoleTiers: () => ({ data: [] }),
+  useGroups: () => ({ data: [] }),
   useActEventAudience: () => ({
     mutateAsync: state.audience,
     isPending: false,
@@ -482,6 +486,36 @@ describe("AskProposal", () => {
           description: "Two buses, 60 seats",
         },
       });
+    });
+  });
+
+  it("sets a task's points and proof under Edit, and sends only them (2026-11-22)", async () => {
+    state.accept.mockResolvedValue({ result: null });
+    show({
+      ...base,
+      action: "create_task",
+      suggestion: suggestion("task", {
+        title: "Book the bus",
+        description: null,
+        assignee_id: JORDAN,
+        due_date: "2099-11-13",
+        due_at: null,
+        subtasks: ["Call the company"],
+      }),
+    });
+    expect(screen.getByText("1 step")).toBeDefined();
+    await userEvent.click(
+      await screen.findByRole("button", { name: ACT_COPY.edit }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(ACT_COPY.field_task_points),
+      "20",
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Photo" }));
+    await userEvent.click(screen.getByRole("button", { name: CONFIRM }));
+    expect(state.accept).toHaveBeenCalledWith({
+      id: "suggestion-1",
+      task: { point_reward: 20, proof_kind: "photo" },
     });
   });
 

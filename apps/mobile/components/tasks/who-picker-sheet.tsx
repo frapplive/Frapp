@@ -63,11 +63,6 @@ export interface WhoPickerSheetProps {
    * always did.
    */
   single?: boolean;
-  /**
-   * Offer a tier whole, "Everyone in Exec board" first under its heading
-   * (#5473). Off for a suggested task, whose payload has no tier field yet.
-   */
-  tiers?: boolean;
   title?: string;
   /** Fired once the sheet has closed, however it closed. */
   onDismiss?: () => void;
@@ -209,7 +204,6 @@ export function WhoPickerBody({
   people,
   sets,
   single = false,
-  tiers = true,
   title = WHO_PICKER_COPY.title,
   mode,
   onPick,
@@ -233,9 +227,8 @@ export function WhoPickerBody({
   );
 
   const rows = useMemo(
-    () =>
-      whoRows(directory, { tab, search, single, expanded, openTiers, tiers }),
-    [directory, tab, search, single, expanded, openTiers, tiers],
+    () => whoRows(directory, { tab, search, single, expanded, openTiers }),
+    [directory, tab, search, single, expanded, openTiers],
   );
   const state = single || tab === "people" || search.trim() ? people : sets;
 
@@ -336,9 +329,7 @@ export function WhoPickerBody({
               accessibilityRole="button"
               accessibilityLabel={label}
               accessibilityState={{ selected: on }}
-              onPress={() =>
-                onPick({ kind: "person", userId: person.userId })
-              }
+              onPress={() => onPick({ kind: "person", userId: person.userId })}
               style={({ pressed }) => [
                 styles.row,
                 pressed ? styles.rowPressed : null,
@@ -356,7 +347,9 @@ export function WhoPickerBody({
         return (
           <TickRow
             label={label}
-            tick={personTicked(value, person.userId, directory) ? "all" : "none"}
+            tick={
+              personTicked(value, person.userId, directory) ? "all" : "none"
+            }
             nested={item.nested}
             onPress={() =>
               onPick(togglePerson(value, person.userId, mode, directory))
@@ -380,8 +373,7 @@ export function WhoPickerBody({
                 ? undefined
                 : {
                     open: item.open,
-                    onPress: () =>
-                      setExpanded((open) => flip(open, item.key)),
+                    onPress: () => setExpanded((open) => flip(open, item.key)),
                   }
             }
             styles={styles}

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -17,15 +18,18 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CHANNEL_ACCESS_ENTRY_PATTERN,
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
   TASK_SUBTASK_TITLE_MAX_LENGTH,
   TASK_SUBTASKS_MAX,
   TASK_PEOPLE_MAX,
+  TASK_PROOF_KINDS,
   TASK_SUGGESTION_AUDIENCES,
   TASK_TITLE_MAX_LENGTH,
   NEXT_AGENDA_OUTCOMES,
   type NextAgendaOutcomeKind,
+  type TaskProofKind,
   type TaskSuggestionAudience,
   EVENT_ATTENDANCE_STATUSES,
   type EventAttendanceStatus,
@@ -79,8 +83,8 @@ export class ListAiSuggestionsQueryDto {
 
 /**
  * An officer's changes to a suggested task before accepting it. Omitted
- * fields stay as suggested. There is no points field: a suggested task never
- * carries points, and the officer adds them on the task afterwards.
+ * fields stay as suggested. `point_reward` is the officer adding points by
+ * hand: a task suggested from minutes never proposes any itself.
  */
 export class TaskSuggestionEditsDto {
   @ApiPropertyOptional({ maxLength: TASK_TITLE_MAX_LENGTH })
@@ -154,6 +158,49 @@ export class TaskSuggestionEditsDto {
   @IsOptional()
   @IsUUID()
   audience_group_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    format: 'uuid',
+    description:
+      'With `audience`: only the members holding a role in this tier (#5473, 2026-11-22).',
+  })
+  @IsOptional()
+  @IsUUID()
+  audience_tier_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    description:
+      'Points awarded on completion (2026-11-22); null or 0 for none.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(POINTS_ADJUSTMENT_MAX)
+  point_reward?: number | null;
+
+  @ApiPropertyOptional({
+    enum: TASK_PROOF_KINDS,
+    nullable: true,
+    description: 'What Mark done needs (2026-11-22).',
+  })
+  @IsOptional()
+  @IsIn(TASK_PROOF_KINDS)
+  proof_kind?: TaskProofKind | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, or null for none. The officer accepting must be in it.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(CHANNEL_ACCESS_ENTRY_PATTERN)
+  followed_by?: string | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -389,6 +436,34 @@ export class TaskSuggestionDto {
 
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   audience_group_id: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    description:
+      'With `audience`: only the members holding a role in this tier (2026-11-22).',
+  })
+  audience_tier_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them.',
+  })
+  point_reward?: number;
+
+  @ApiPropertyOptional({
+    enum: TASK_PROOF_KINDS,
+    description:
+      'What Mark done needs, when it is more than nothing (2026-11-22).',
+  })
+  proof_kind?: TaskProofKind;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`.',
+  })
+  followed_by?: string;
 
   @ApiProperty({ type: String, nullable: true, format: 'date' })
   due_date: string | null;

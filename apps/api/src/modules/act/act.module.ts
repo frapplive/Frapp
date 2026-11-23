@@ -24,6 +24,7 @@ import { ChapterGroupModule } from '../chapter-group/chapter-group.module';
 import { EventModule } from '../event/event.module';
 import { MemberModule } from '../member/member.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { TaskModule } from '../task/task.module';
 
 /**
  * Asking Frapp to do something (#718).
@@ -48,6 +49,7 @@ import { RbacModule } from '../rbac/rbac.module';
     EventModule,
     AttendanceModule,
     ChapterGroupModule,
+    TaskModule,
   ],
   controllers: [ActController],
   providers: [

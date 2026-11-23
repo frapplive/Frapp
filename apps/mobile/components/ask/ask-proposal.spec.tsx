@@ -75,6 +75,28 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The hook has its own spec (`use-ask-cards.spec.tsx`).
   useAskCards: () => hooks.cards,
 }));
+// Who a task card is for reads the chapter as the task form does; here, the
+// roster above.
+vi.mock("@/lib/tasks/use-who-directory", async () => {
+  const { buildWhoDirectory } = await import("@repo/hooks/task-who-picker");
+  const directory = buildWhoDirectory({
+    roster: [
+      { user_id: "me", display_name: "Paul Carlson" },
+      { user_id: "u1", display_name: "Ana Ruiz" },
+      { user_id: "u2", display_name: "Jordan Lee" },
+      { user_id: "u3", display_name: "Sam Park" },
+    ],
+    viewerUserId: "me",
+  });
+  return {
+    useWhoDirectory: () => ({
+      directory,
+      people: "ready",
+      sets: "ready",
+      followers: [],
+    }),
+  };
+});
 vi.mock("@/components/tasks/new-task-sheet", async () => {
   const { forwardRef } = await import("react");
   return {
@@ -669,6 +691,7 @@ describe("a proposal in the Ask conversation", () => {
         audience: null,
         audience_role_id: null,
         audience_group_id: null,
+        audience_tier_id: null,
       },
     });
     expect(screenText(tree)).toContain(ACT_COPY.done_task);

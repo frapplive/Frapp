@@ -436,8 +436,6 @@ export function TaskForm({
             label="Assignee"
             placeholder="Pick a member"
             allow={who ? "any" : offerEveryone ? "personOrEveryone" : "person"}
-            // A suggestion's payload has no tier field yet (#5473).
-            tiers={!suggestion}
             className={cn(field, "w-full")}
             value={who ? who.value : whoOfAssignee(draft.assigneeId)}
             onChange={(next) => {

@@ -1291,7 +1291,8 @@ describe("New task's From (#5473)", () => {
   const fromSheet = (tree: ReactTestRenderer) =>
     tree.root.find(
       (node) =>
-        node.props.title === "From" && typeof node.props.onSelect === "function",
+        node.props.title === "From" &&
+        typeof node.props.onSelect === "function",
     );
 
   it("starts on Just you and sends no follower", () => {
@@ -1389,13 +1390,15 @@ describe("New task's From (#5473)", () => {
     expect(screenText(tree)).toContain(
       "A repeating task can't be from a group yet.",
     );
-    expect(tree.root.findAll((node) => node.props.title === "From")).toHaveLength(0);
+    expect(
+      tree.root.findAll((node) => node.props.title === "From"),
+    ).toHaveLength(0);
     submitTask(tree);
     expect(mutate.mock.calls.at(-1)![0]).not.toHaveProperty("followed_by");
     act(() => tree.unmount());
   });
 
-  it("offers no From to a suggestion, which can't carry one", () => {
+  it("offers no From to a minutes suggestion, which can't carry one", () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
@@ -1416,14 +1419,6 @@ describe("New task's From (#5473)", () => {
       );
     });
     expect(screenText(tree)).not.toContain("Just you");
-    // Nor a tier in its picker: its payload has no tier field yet.
-    expect(
-      tree.root.find(
-        (node) =>
-          typeof node.props.onChange === "function" &&
-          node.props.tiers !== undefined,
-      ).props.tiers,
-    ).toBe(false);
     act(() => tree.unmount());
   });
 });

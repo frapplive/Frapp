@@ -36,6 +36,7 @@ export function plan(overrides: Partial<ActPlan> = {}): ActPlan {
     repeats: null,
     invite: null,
     event_type: null,
+    task: null,
     ...overrides,
   };
 }

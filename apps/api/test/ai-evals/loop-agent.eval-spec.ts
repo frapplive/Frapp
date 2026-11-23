@@ -255,7 +255,7 @@ describe("what the loop's tools do with what a model asks for", () => {
         name: 'create_task',
         input: {
           title: 'Book the alumni board room',
-          assignee: 'Dante Reyes',
+          people: ['Dante Reyes'],
           due_date: '2026-11-20',
         },
       },

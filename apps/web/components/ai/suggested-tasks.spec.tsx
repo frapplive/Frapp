@@ -142,6 +142,7 @@ const noWho = {
   audience: null,
   audience_role_id: null,
   audience_group_id: null,
+  audience_tier_id: null,
 };
 
 const acceptButtons = () =>

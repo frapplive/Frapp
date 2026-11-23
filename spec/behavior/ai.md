@@ -832,7 +832,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   An event's Edit opens the ordinary New event form filled in from the card, every row showing what it holds (who's coming by role, the end, notes, the repeat; More options until #5561), and Create in that form is the confirm: the event is made through the event route and the proposal records it, without making a second.
   The event is made either way, and the card says it was added.
   If the form's answer carries no event id, or the proposal can no longer record it, the proposal is taken down instead, so it is never drawn again with a Confirm that would make the event a second time.
-  A task's Edit opens the task form on the phone (as Confirm on a task missing who or when already did) and turns the task's name and details into fields on web, where who and when are already fields on the card.
+  A task's Edit opens the task form on the phone (as Confirm on a task missing who or when already did), with its points, proof and From; on web, where who and when are already fields on the card, it turns the name, details, points, proof and From into fields on the card, and steps are changed on the task once made (2026-11-22; how web's Edit opens is waiting on Paul's pick between in place and the full form).
   A points card's Edit turns its amount and reason into fields on the card, on both; Confirm then sends only what changed.
   The forms keep what was typed when closed, as every form does (#4593).
   Comparable: Google Calendar's "Add to calendar" on an event found in mail opens its full editor; Siri's suggested reminders and Linear's issue-from-text hand the draft to the ordinary form.
@@ -852,7 +852,10 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   _(Changed in #5148 by pdcarlson, 2026-11-16: until then the card said "The chapter's usual amount" and the event was made with 10.)_
 - **What it can do** (three actions; each needs the permission and the module of the route it stands in for, and one the member lacks is not offered):
   - **Give or take away points** (`points:adjust`), for members named, for everyone who holds a role, or for everyone who came to an event.
-  - **Create a task** for one member (`tasks:manage`).
+  - **Create a task** (`tasks:manage`) for one member, several members, or a role, tier or group by the chapter's own name for it, where each of them does it (a copy each) or one of them claims it (up for grabs); with what marking it done needs (a photo or a link), its steps and the tier, role or group it is from, when the member or a source said them, and its points only when the member said them (points written in minutes or a document are not an instruction, [meetings.md § Suggested tasks](meetings.md#suggested-tasks)).
+    Ask reads the chapter's roles, tiers and groups (`chapter_roles` with `for_card task`) before it names one; a name that is none of them, or could be two, makes no card, and Ask is told to read the list again. A From the member is not in is left off, and a task up for grabs is from nobody.
+    The card names everyone it reaches and its points, proof, steps and From, before and after it is decided; its Who is the task form's Who picker on both.
+    _(Changed by pdcarlson, 2026-11-22: until then a task card was for one member only, and its points, proof, steps and From could not be set from Ask.)_
   - **Put one event, or a repeating series, on the calendar** (`events:create`), inviting whom the event is for.
     A series is weekly, every other week or monthly, on the first meeting's weekday or day of the month, as long as the event form's own default (13 meetings weekly or every other week, 7 monthly), and the card says so ("Every Sunday until February 7, 2027", with "13 times" under it).
     Who is invited is decided per event, in the chapter's own role and tier names, and the card's people row says it ("Cabinet required, nobody else invited") (#5853).

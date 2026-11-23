@@ -4,10 +4,13 @@ import Link from "next/link";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   AlignLeft,
+  Award,
   CalendarDays,
+  Camera,
   CircleCheck,
   CircleX,
   Clock,
+  Link2,
   ListChecks,
   Repeat,
   Star,
@@ -58,14 +61,30 @@ import {
   actPointsHeadline,
   actPointsTotalLine,
   actWhenLine,
+  actTaskFactLines,
   meetingDueLabel,
+  sameTaskWho,
+  TASK_PROOF_KIND_LABELS,
+  TASK_FOLLOWER_COPY,
+  TASK_PROOF_KINDS,
+  taskWhoOf,
+  taskWhoSuggestionFields,
   TASK_TITLE_MAX_LENGTH,
+  type TaskProofKind,
+  type TaskWho,
 } from "@repo/validation";
+import { followerName } from "@repo/hooks/task-who-picker";
 import { ReportAiDialog } from "@/components/ai/report-ai";
 import {
   DueDateField,
   dueEntryPassed,
 } from "@/components/tasks/due-date-field";
+import { WhoPicker, useWhoDirectory } from "@/components/tasks/who-picker";
+import {
+  FollowerSelect,
+  useFollowerChoices,
+} from "@/components/tasks/task-follower";
+import { SegmentedChoice } from "@/components/ui/segmented";
 import { deferredPanel } from "@/components/chat/deferred-panel";
 import { isoToLocalInput } from "@/components/events/local-input";
 import { Button } from "@/components/ui/button";
@@ -146,7 +165,8 @@ const CARD_FRAME = "rounded-[14px] border border-border bg-card p-3";
 /** What an officer changed on a waiting card, by the proposal's id. */
 interface CardEdits {
   targets: string[];
-  assigneeId: string;
+  /** Who the task is for, as the shared picker holds it (2026-11-22). */
+  who: TaskWho | null;
   due: string;
   /** Edit was pressed: the card's words are fields (#5117). */
   editing: boolean;
@@ -154,6 +174,11 @@ interface CardEdits {
   reason: string;
   taskName: string;
   details: string;
+  /** A task card's points and proof, as Edit's fields hold them (2026-11-22). */
+  taskPoints: string;
+  proof: TaskProofKind;
+  /** The tier, role or group a task is from (`followed_by`), or null. */
+  from: string | null;
   /** Points typed into an event card's empty field (#5148). */
   eventPoints: string;
 }
@@ -333,12 +358,55 @@ function FinishedCard({
   );
 }
 
+const TASK_FACT_ICONS: Record<
+  ReturnType<typeof actTaskFactLines>[number]["kind"],
+  LucideIcon
+> = {
+  points: Award,
+  proof: Camera,
+  steps: ListChecks,
+  from: Users,
+};
+
+/**
+ * A proposed task's points, proof, steps and the group it is from
+ * (2026-11-22), one fact each and only what was set, in the order the New
+ * task form asks for them. The phone's card says the same words.
+ */
+function TaskFacts({
+  task,
+  fromName,
+}: {
+  task: NonNullable<AiSuggestion["task"]>;
+  fromName: string | null;
+}) {
+  const lines = actTaskFactLines(task, fromName);
+  if (lines.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line) => (
+        <Fact
+          key={line.kind}
+          icon={
+            line.kind === "proof" && task.proof_kind === "link"
+              ? Link2
+              : TASK_FACT_ICONS[line.kind]
+          }
+        >
+          {line.text}
+        </Fact>
+      ))}
+    </div>
+  );
+}
+
 /**
  * What a finished card still shows under its name: the same rows the
  * waiting card had, as words.
  */
 function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
   const { points, task, new_event: event } = suggestion;
+  const { directory } = useWhoDirectory({ enabled: !!task?.followed_by });
   if (event) return <EventFacts event={event} />;
   if (task) {
     return (
@@ -351,6 +419,10 @@ function CardDetails({ suggestion }: { suggestion: AiSuggestion }) {
         {task.due_date ? (
           <Fact icon={Clock}>{meetingDueLabel(task.due_date)}</Fact>
         ) : null}
+        <TaskFacts
+          task={task}
+          fromName={followerName(task.followed_by, directory)}
+        />
       </div>
     );
   }
@@ -788,8 +860,11 @@ function ActCard({
   const [targets, setTargets] = useState<string[]>(
     kept?.targets ?? points?.target_user_ids ?? [],
   );
-  const [assigneeId, setAssigneeId] = useState(
-    kept?.assigneeId ?? task?.assignee_id ?? "",
+  // The card's own who: one person, several, or everyone or someone in a
+  // role, tier or group (2026-11-22), as the New task form picks it.
+  const suggestedWho = useMemo(() => (task ? taskWhoOf(task) : null), [task]);
+  const [who, setWho] = useState<TaskWho | null>(
+    kept ? kept.who : suggestedWho,
   );
   // The suggestion's own due: kept even once its time has passed (#4512).
   const suggestedDue = task?.due_date
@@ -805,35 +880,56 @@ function ActCard({
   const [details, setDetails] = useState(
     kept?.details ?? task?.description ?? "",
   );
+  // Names the group a task is from (`followed_by`) on its facts line.
+  const { directory: whoDirectory } = useWhoDirectory({ enabled: !!task });
+  const [taskPoints, setTaskPoints] = useState(
+    kept?.taskPoints ?? (task?.point_reward ? String(task.point_reward) : ""),
+  );
+  const [proof, setProof] = useState<TaskProofKind>(
+    kept?.proof ?? task?.proof_kind ?? "none",
+  );
+  const [from, setFrom] = useState<string | null>(
+    kept ? kept.from : (task?.followed_by ?? null),
+  );
+  // Read only once Edit shows From: the card's facts need just the names.
+  const fromChoices = useFollowerChoices({ enabled: !!task && editing });
+  // Up for grabs is from nobody (`spec/behavior/tasks.md`).
+  const fromShown = who?.kind === "someone" ? null : from;
   // An event's points when nobody said them and nothing matched (#5148).
   const [eventPoints, setEventPoints] = useState(kept?.eventPoints ?? "");
   useEffect(() => {
     store?.set(suggestion.id, {
       targets,
-      assigneeId,
+      who,
       due,
       editing,
       amount,
       reason,
       taskName,
       details,
+      taskPoints,
+      proof,
+      from,
       eventPoints,
     });
   }, [
     store,
     suggestion.id,
     targets,
-    assigneeId,
+    who,
     due,
     editing,
     amount,
     reason,
     taskName,
     details,
+    taskPoints,
+    proof,
+    from,
     eventPoints,
   ]);
   const [fieldProblem, setFieldProblem] = useState<{
-    field: "amount" | "reason" | "taskName" | "eventPoints";
+    field: "amount" | "reason" | "taskName" | "taskPoints" | "eventPoints";
     error: string;
   } | null>(null);
   // The event form: mounted on the first Edit and kept, so it can animate
@@ -923,14 +1019,30 @@ function ActCard({
         const said =
           details.trim().slice(0, TASK_SUGGESTION_DETAILS_MAX_LENGTH) || null;
         if (said !== (task.description ?? null)) changes.description = said;
+        // Blank is no points; anything else reads as an event's points do.
+        const read = taskPoints.trim()
+          ? actEventPointsInput(taskPoints)
+          : ({ ok: true, value: 0 } as const);
+        if (!read.ok) {
+          return setFieldProblem({ field: "taskPoints", error: read.error });
+        }
+        const pointsNow = read.value > 0 ? read.value : null;
+        if (pointsNow !== (task.point_reward ?? null)) {
+          changes.point_reward = pointsNow;
+        }
+        if (proof !== (task.proof_kind ?? "none")) changes.proof_kind = proof;
+      }
+      if (fromShown !== (task.followed_by ?? null)) {
+        changes.followed_by = fromShown;
       }
       // A task can be confirmed with no due date (#5761).
-      if (!assigneeId) return setFlagged(true);
+      if (!who) return setFlagged(true);
       if (dueEntryPassed(due, new Date(), suggestedDue)) {
         return setFlagged(true);
       }
-      if (assigneeId !== (task.assignee_id ?? "")) {
-        changes.assignee_id = assigneeId;
+      // "Who" is one answer: a changed pick sends every who-field.
+      if (!sameTaskWho(who, suggestedWho)) {
+        Object.assign(changes, taskWhoSuggestionFields(who));
       }
       const fields = due ? dueEntryFields(due) : null;
       const dueDate = fields?.due_date ?? null;
@@ -1269,33 +1381,21 @@ function ActCard({
                 aria-hidden="true"
               />
               <div className="min-w-0 flex-1 space-y-1">
-                <Select
-                  value={assigneeId}
-                  onValueChange={setAssigneeId}
+                <WhoPicker
+                  id={`${suggestion.id}-who`}
+                  label={ACT_COPY.field_for}
+                  placeholder={ACT_COPY.pick_member}
+                  allow="any"
+                  value={who}
+                  onChange={setWho}
                   disabled={busy}
-                >
-                  <SelectTrigger
-                    aria-label={ACT_COPY.field_for}
-                    aria-invalid={(flagged && !assigneeId) || undefined}
-                    className={cn(
-                      !assigneeId &&
-                        "border-[1.5px] border-warning/70 bg-warning-tint",
-                    )}
-                  >
-                    <SelectValue placeholder={ACT_COPY.pick_member} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((member) => (
-                      <SelectItem
-                        key={String(member.user_id)}
-                        value={String(member.user_id)}
-                      >
-                        {memberLabel(member.display_name, member.user_id)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {flagged && !assigneeId ? (
+                  invalid={flagged && !who}
+                  className={cn(
+                    "w-full",
+                    !who && "border-[1.5px] border-warning/70 bg-warning-tint",
+                  )}
+                />
+                {flagged && !who ? (
                   <p
                     role="alert"
                     className="text-caption text-destructive-text"
@@ -1324,6 +1424,70 @@ function ActCard({
               </div>
             </div>
           </div>
+          {editing ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <CardField
+                id={`${suggestion.id}-task-points`}
+                label={ACT_COPY.field_task_points}
+                problem={
+                  fieldProblem?.field === "taskPoints"
+                    ? fieldProblem.error
+                    : null
+                }
+              >
+                <Input
+                  id={`${suggestion.id}-task-points`}
+                  inputMode="numeric"
+                  value={taskPoints}
+                  placeholder="0"
+                  disabled={busy}
+                  aria-invalid={
+                    fieldProblem?.field === "taskPoints" || undefined
+                  }
+                  onChange={(change) => {
+                    setTaskPoints(change.target.value);
+                    if (fieldProblem?.field === "taskPoints") {
+                      setFieldProblem(null);
+                    }
+                  }}
+                />
+              </CardField>
+              <div className="grid content-start gap-1">
+                <SegmentedChoice
+                  label={ACT_COPY.field_task_proof}
+                  options={TASK_PROOF_KINDS.map((kind) => ({
+                    value: kind,
+                    label: TASK_PROOF_KIND_LABELS[kind],
+                  }))}
+                  value={proof}
+                  onChange={(next: TaskProofKind) => setProof(next)}
+                  disabled={busy}
+                  dense
+                />
+              </div>
+              {who?.kind === "someone" ? null : (
+                <CardField
+                  id={`${suggestion.id}-task-from`}
+                  label={TASK_FOLLOWER_COPY.field}
+                  problem={null}
+                >
+                  <FollowerSelect
+                    id={`${suggestion.id}-task-from`}
+                    value={from}
+                    currentName={followerName(from, whoDirectory)}
+                    choices={fromChoices}
+                    onChange={setFrom}
+                    disabled={busy}
+                  />
+                </CardField>
+              )}
+            </div>
+          ) : (
+            <TaskFacts
+              task={task}
+              fromName={followerName(fromShown, whoDirectory)}
+            />
+          )}
         </>
       ) : null}
 
@@ -1423,12 +1587,47 @@ function shownAfter(
           reason: changes.reason ?? points.reason,
         }
       : points,
-    task: task ? { ...task, ...changes.task } : task,
+    task: task ? editedTask(task, changes.task) : task,
     new_event:
       event && changes.eventPoints !== undefined
         ? { ...event, point_value: changes.eventPoints, points_from: null }
         : event,
   };
+}
+
+/**
+ * A task with the card's edits laid over it. A field the edit cleared
+ * (null) where the payload has no null leaves the key off, as the server
+ * stores it.
+ */
+function editedTask(
+  task: NonNullable<AiSuggestion["task"]>,
+  edits: TaskSuggestionEdits | undefined,
+): NonNullable<AiSuggestion["task"]> {
+  if (!edits) return task;
+  const {
+    audience_tier_id: tier,
+    point_reward: points,
+    followed_by: from,
+    proof_kind: proof,
+    ...rest
+  } = edits;
+  const next: NonNullable<AiSuggestion["task"]> = { ...task, ...rest };
+  const lay = <
+    K extends
+      "audience_tier_id" | "point_reward" | "followed_by" | "proof_kind",
+  >(
+    key: K,
+    value: NonNullable<AiSuggestion["task"]>[K] | null | undefined,
+  ) => {
+    if (value === null) delete next[key];
+    else if (value !== undefined) next[key] = value;
+  };
+  lay("audience_tier_id", tier);
+  lay("point_reward", points);
+  lay("followed_by", from);
+  lay("proof_kind", proof);
+  return next;
 }
 
 /** A field on the card under its Edit, with its label above. */

@@ -6,6 +6,9 @@ import {
   POINTS_ADJUSTMENT_MAX,
   POINTS_REASON_MAX_LENGTH,
   REPEAT_DEFAULT_COUNT,
+  TASK_PEOPLE_MAX,
+  TASK_SUBTASK_TITLE_MAX_LENGTH,
+  TASK_SUBTASKS_MAX,
   TASK_TITLE_MAX_LENGTH,
   WEEKDAY_CODES,
   attendanceFromEvent,
@@ -16,8 +19,11 @@ import {
   eventSetsRolesApart,
   formatRepeatRule,
   isModuleEnabled,
+  taskFollowerEntry,
+  taskWhoSuggestionFields,
   type EventAttendanceDraft,
   type EventAttendanceStatus,
+  type TaskWho,
 } from '@repo/validation';
 import { SystemPermissions, WILDCARD } from '#domain/constants/permissions';
 import type { Event } from '#domain/entities/event.entity';
@@ -32,6 +38,7 @@ import { POINTS_SUGGESTION_MAX_MEMBERS } from '../ai-suggestion-points-kind';
 import { TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH } from '../ai-suggestion-task-kind';
 import { AttendanceService } from '../attendance.service';
 import { EventService } from '../event.service';
+import { TaskAudienceService } from '../task-audience.service';
 import { reportCaughtFailure } from '../../../infrastructure/observability/report-caught-failure';
 import { EventTypeService } from '../event-type.service';
 import {
@@ -454,30 +461,50 @@ export class GivePointsActTool implements ActTool {
   }
 }
 
-/** Create a task for a member. Mirrors `POST /v1/tasks`. */
+/** A set name that means the whole chapter rather than a role or group. */
+const CHAPTER_NAMES = new Set([
+  'everyone',
+  'everybody',
+  'chapter',
+  'the chapter',
+  'all members',
+  'every member',
+  'the whole chapter',
+  'whole chapter',
+]);
+
+/**
+ * Create a task: for one member, several, or a role, tier or group (each
+ * of them doing it, or one claiming it), with its points, proof, steps and
+ * who it is from (2026-11-22). Mirrors `POST /v1/tasks`.
+ */
 @Injectable()
 export class CreateTaskActTool implements ActTool {
   readonly name = 'create_task';
   readonly description =
-    'Create a task for one member to do. Uses title, people (the one member it is for), date (the day it is due), start_time (the time it is due, when one was said) and details.';
+    'Create a task for members to do. Uses title, people (the members it is for), date (the day it is due), start_time (the time it is due, when one was said) and details.';
   readonly permission = SystemPermissions.TASKS_MANAGE;
   readonly module = 'tasks';
   readonly effect = 'propose' as const;
   readonly kind = 'task' as const;
 
-  constructor(private readonly people: ActPeopleResolver) {}
+  constructor(
+    private readonly people: ActPeopleResolver,
+    private readonly audience: ActAudienceResolver,
+    private readonly taskAudience: TaskAudienceService,
+  ) {}
 
   async draft(plan: ActPlan, context: ActToolContext): Promise<ActDraft> {
     const title = titled(clean(plan.title, TASK_TITLE_MAX_LENGTH));
     if (!title) return { status: 'unclear', missing: 'title' };
+    const task = plan.task ?? null;
 
-    const resolved = await this.people.resolve(plan.people, context, {
-      roles: false,
-    });
-    // A task has one owner. More than one name, or none that could be
-    // placed, leaves "Who?" for the officer to pick on the card.
-    const assigneeId =
-      resolved.userIds.length === 1 ? resolved.userIds[0] : null;
+    const read = await this.whoOf(plan, context);
+    // A role, tier or group that is none of the chapter's is sent back, so
+    // the loop reads the list again rather than a card asking about a
+    // "member" that was never one.
+    if (read === null) return { status: 'unclear', missing: 'audience' };
+    const { who, notes } = read;
 
     const dueDate = parseLocalDate(plan.date) ? plan.date : null;
     const dueAt =
@@ -488,6 +515,23 @@ export class CreateTaskActTool implements ActTool {
             context.timeZone,
           )?.toISOString() ?? null)
         : null;
+    const points =
+      task?.points !== null &&
+      task?.points !== undefined &&
+      Number.isInteger(task.points) &&
+      task.points > 0 &&
+      task.points <= POINTS_ADJUSTMENT_MAX
+        ? task.points
+        : null;
+    const steps = (task?.steps ?? [])
+      .map((step) => clean(step, TASK_SUBTASK_TITLE_MAX_LENGTH))
+      .filter((step): step is string => !!step)
+      .slice(0, TASK_SUBTASKS_MAX);
+    // Up for grabs is from nobody (`spec/behavior/tasks.md`).
+    const followedBy =
+      task?.from && who?.kind !== 'someone'
+        ? await this.fromOf(task.from, context)
+        : null;
     return {
       status: 'draft',
       payload: {
@@ -496,13 +540,85 @@ export class CreateTaskActTool implements ActTool {
           plan.details,
           TASK_SUGGESTION_DESCRIPTION_MAX_LENGTH,
         ),
-        assignee_id: assigneeId,
+        ...taskWhoSuggestionFields(who),
         due_date: dueDate,
         due_at: dueAt,
-        subtasks: [],
+        subtasks: steps,
+        ...(points !== null ? { point_reward: points } : {}),
+        ...(task?.proof && task.proof !== 'none'
+          ? { proof_kind: task.proof }
+          : {}),
+        ...(followedBy ? { followed_by: followedBy } : {}),
       },
-      notes: resolved.notes,
+      notes,
     };
+  }
+
+  /**
+   * A role, tier or group when one was named, else the people: one is the
+   * assignee, several each get a copy or one of them claims it. People who
+   * can't be placed leave "Who?" for the officer to pick on the card; a set
+   * name that is none of the chapter's, or could be two, is null.
+   */
+  private async whoOf(
+    plan: ActPlan,
+    context: ActToolContext,
+  ): Promise<{ who: TaskWho | null; notes: ActNote[] } | null> {
+    const task = plan.task ?? null;
+    const kind = task?.who_does === 'one' ? 'someone' : 'each';
+    const set = task?.for_set?.replace(/\s+/g, ' ').trim();
+    if (set) {
+      if (CHAPTER_NAMES.has(set.toLowerCase())) {
+        return { who: { kind, target: { kind: 'chapter' } }, notes: [] };
+      }
+      const resolved = await this.audience.resolve([set], context.chapterId, [
+        'role',
+        'tier',
+        'group',
+      ]);
+      if (resolved.entries.length !== 1) return null;
+      const entry = resolved.entries[0];
+      return {
+        who: { kind, target: { kind: entry.kind, id: entry.id } },
+        notes: [],
+      };
+    }
+    const resolved = await this.people.resolve(plan.people, context, {
+      roles: false,
+    });
+    const ids = resolved.userIds.slice(0, TASK_PEOPLE_MAX);
+    const who: TaskWho | null =
+      ids.length === 0
+        ? null
+        : ids.length === 1
+          ? { kind: 'person', userId: ids[0] }
+          : { kind, target: { kind: 'people', userIds: ids } };
+    return { who, notes: resolved.notes };
+  }
+
+  /**
+   * "From the Recruitment Committee": a tier, role or group the member
+   * asking is in, as the task form offers it (`TaskAudienceService
+   * .checkedFollower`). Any other name is left off; the officer can still
+   * set it on the card's Edit.
+   */
+  private async fromOf(
+    typed: string,
+    context: ActToolContext,
+  ): Promise<string | null> {
+    const resolved = await this.audience.resolve([typed], context.chapterId, [
+      'role',
+      'tier',
+      'group',
+    ]);
+    if (resolved.entries.length !== 1) return null;
+    const entry = resolved.entries[0];
+    const stored = taskFollowerEntry(entry.kind, entry.id);
+    const mine = await this.taskAudience.followEntriesOf(
+      context.chapterId,
+      context.userId,
+    );
+    return mine.includes(stored) ? stored : null;
   }
 }
 

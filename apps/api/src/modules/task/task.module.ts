@@ -49,7 +49,8 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
   // ActivityModule reads tasks through the service (#3897); the scheduled
   // jobs push each new repeating-task copy through it (#5119).
   // An accepted suggestion for "someone" posts a task up for grabs
-  // (AiSuggestionModule).
-  exports: [TaskService, OpenTaskService],
+  // (AiSuggestionModule). Ask's task card checks who a task may be from
+  // (ActModule, 2026-11-22).
+  exports: [TaskService, OpenTaskService, TaskAudienceService],
 })
 export class TaskModule {}

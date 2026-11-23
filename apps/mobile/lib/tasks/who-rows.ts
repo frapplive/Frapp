@@ -55,17 +55,14 @@ export function whoRows(
     /** Roles and groups whose members are shown, by `role:id` / `group:id`. */
     expanded: ReadonlySet<string>;
     openTiers: ReadonlySet<string>;
-    /**
-     * Offer a tier whole (#5473). Off for a suggested
-     * task, whose payload has no tier field yet, so a tier pick there would
-     * send nobody. On when absent.
-     */
-    tiers?: boolean;
   },
 ): WhoRow[] {
-  const tiers = options.tiers ?? true;
   const searching = normalizeWords(options.search).length > 0;
-  const personRow = (person: WhoPerson, prefix = "", nested = false): WhoRow => ({
+  const personRow = (
+    person: WhoPerson,
+    prefix = "",
+    nested = false,
+  ): WhoRow => ({
     kind: "person",
     key: `${prefix}person:${person.userId}`,
     person,
@@ -94,15 +91,13 @@ export function whoRows(
     );
     // A tier is found by its own name, and only where the browse view
     // offers it whole: a tier of one role is that role.
-    const tierPicks = tiers
-      ? directory.tiers.flatMap((tier) =>
-          tier.set &&
-          tier.roles.length > 1 &&
-          whoMatches(tier.set.name, options.search)
-            ? [wholeTier(tier.set)]
-            : [],
-        )
-      : [];
+    const tierPicks = directory.tiers.flatMap((tier) =>
+      tier.set &&
+      tier.roles.length > 1 &&
+      whoMatches(tier.set.name, options.search)
+        ? [wholeTier(tier.set)]
+        : [],
+    );
     const sets = [
       ...tierPicks,
       ...[...allRoles(directory), ...directory.groups].filter((set) =>
@@ -112,7 +107,11 @@ export function whoRows(
     return [
       ...(people.length > 0
         ? [
-            { kind: "heading", key: "h:people", label: WHO_PICKER_COPY.people } as const,
+            {
+              kind: "heading",
+              key: "h:people",
+              label: WHO_PICKER_COPY.people,
+            } as const,
             ...people.map((person) => personRow(person)),
           ]
         : []),
@@ -147,7 +146,7 @@ export function whoRows(
     // The tier as a whole first (#5473): everyone holding a role in it, as
     // Slack's user groups sit above their members. A tier of one role is
     // that role, so it gets no second row.
-    if (tiers && tier.set && tier.roles.length > 1) {
+    if (tier.set && tier.roles.length > 1) {
       rows.push(...setRows(wholeTier(tier.set)));
     }
     rows.push(...tier.roles.flatMap(setRows));

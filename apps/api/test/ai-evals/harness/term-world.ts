@@ -1444,7 +1444,11 @@ export function createTermWorld(
   );
   const acting = [
     new GivePointsActTool(people, events as never, attendance as never),
-    new CreateTaskActTool(people),
+    new CreateTaskActTool(
+      people,
+      held.ActAudienceResolver as ActAudienceResolver,
+      { followEntriesOf: async () => [] } as never,
+    ),
     new CreateEventActTool(
       events as never,
       eventTypes as never,

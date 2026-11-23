@@ -12,6 +12,7 @@ type SuggestedTask = NonNullable<AiSuggestion["task"]>;
 export function suggestionEdits(
   task: SuggestedTask,
   form: ValidatedNewTask,
+  options: { full?: boolean } = {},
 ): TaskSuggestionEdits | undefined {
   const edits: TaskSuggestionEdits = {};
   if (form.title !== task.title) edits.title = form.title;
@@ -36,5 +37,17 @@ export function suggestionEdits(
   ) {
     edits.subtasks = steps;
   }
+  // Points, proof and From (2026-11-22): only a form that offered them (an
+  // Ask Frapp card's, `full`) can change them; a minutes suggestion's sends
+  // none, so it never clears what it didn't show.
+  if (!options.full) {
+    return Object.keys(edits).length > 0 ? edits : undefined;
+  }
+  const points = form.point_reward ?? null;
+  if (points !== (task.point_reward ?? null)) edits.point_reward = points;
+  const proof = form.proof_kind ?? "none";
+  if (proof !== (task.proof_kind ?? "none")) edits.proof_kind = proof;
+  const from = form.followed_by ?? null;
+  if (from !== (task.followed_by ?? null)) edits.followed_by = from;
   return Object.keys(edits).length > 0 ? edits : undefined;
 }

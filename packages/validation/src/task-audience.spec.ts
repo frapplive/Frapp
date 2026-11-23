@@ -147,6 +147,7 @@ describe("who a task is for (2026-11-18)", () => {
       audience: null,
       audience_role_id: null,
       audience_group_id: null,
+      audience_tier_id: null,
     });
     expect(
       taskWhoSuggestionFields({
@@ -289,7 +290,7 @@ describe("a task for a tier (#5473)", () => {
     ).toBe("Someone in Exec board");
   });
 
-  it("never widens a tier pick on a suggestion to the chapter", () => {
+  it("sends a tier pick on a suggestion as the tier, never the chapter (2026-11-22)", () => {
     expect(
       taskWhoSuggestionFields({
         kind: "each",
@@ -298,9 +299,16 @@ describe("a task for a tier (#5473)", () => {
     ).toEqual({
       assignee_id: null,
       assignee_ids: null,
-      audience: null,
+      audience: "everyone",
       audience_role_id: null,
       audience_group_id: null,
+      audience_tier_id: "t-1",
     });
+    expect(
+      taskWhoSuggestionFields({
+        kind: "someone",
+        target: { kind: "tier", id: "t-1" },
+      }),
+    ).toMatchObject({ audience: "someone", audience_tier_id: "t-1" });
   });
 });

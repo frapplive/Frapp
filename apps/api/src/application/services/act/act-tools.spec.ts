@@ -7,9 +7,10 @@ import type { Event } from '#domain/entities/event.entity';
 import type { AttendanceService } from '../attendance.service';
 import type { EventService } from '../event.service';
 import type { EventTypeService } from '../event-type.service';
-import type { ActInvite, ActPlan } from './act-prompt';
+import type { TaskAudienceService } from '../task-audience.service';
+import type { ActAudienceResolver, AudienceOptions } from './act-audience';
+import type { ActInvite, ActPlan, ActTaskPlan } from './act-prompt';
 import type { ActPeopleResolver } from './act-people';
-import type { AudienceOptions } from './act-audience';
 import {
   CHAPTER,
   JACOB,
@@ -336,13 +337,54 @@ describe('GivePointsActTool', () => {
 });
 
 describe('CreateTaskActTool', () => {
-  function build(resolved: { userIds: string[]; notes: unknown[] }) {
+  const ROLE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+  const TIER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+  const GROUP = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3';
+  const NOBODY = {
+    assignee_ids: null,
+    audience: null,
+    audience_role_id: null,
+    audience_group_id: null,
+    audience_tier_id: null,
+  };
+  function build(
+    resolved: { userIds: string[]; notes: unknown[] },
+    sets: {
+      entries?: { kind: 'role' | 'tier' | 'group'; id: string; name: string }[];
+      notes?: unknown[];
+      mine?: string[];
+    } = {},
+  ) {
     const people = { resolve: jest.fn().mockResolvedValue(resolved) };
+    const audience = {
+      resolve: jest.fn().mockResolvedValue({
+        entries: sets.entries ?? [],
+        notes: sets.notes ?? [],
+      }),
+    };
+    const taskAudience = {
+      followEntriesOf: jest.fn().mockResolvedValue(sets.mine ?? []),
+    };
     return {
-      tool: new CreateTaskActTool(people as unknown as ActPeopleResolver),
+      tool: new CreateTaskActTool(
+        people as unknown as ActPeopleResolver,
+        audience as unknown as ActAudienceResolver,
+        taskAudience as unknown as TaskAudienceService,
+      ),
       people,
+      audience,
+      taskAudience,
     };
   }
+  const extras = (task: Partial<ActTaskPlan>): ActTaskPlan => ({
+    for_set: null,
+    who_does: null,
+    points: null,
+    proof: null,
+    steps: [],
+    from: null,
+    ...task,
+  });
 
   it('proposes a task for the one member named, due on the day said', async () => {
     const { tool, people } = build({ userIds: [JORDAN], notes: [] });
@@ -356,6 +398,7 @@ describe('CreateTaskActTool', () => {
         title: 'Book the bus',
         description: null,
         assignee_id: JORDAN,
+        ...NOBODY,
         due_date: '2026-11-13',
         due_at: null,
         subtasks: [],
@@ -383,14 +426,188 @@ describe('CreateTaskActTool', () => {
     });
   });
 
-  it('leaves the owner for the officer to pick when two were named', async () => {
+  it('gives each of several people their own copy', async () => {
     const { tool } = build({ userIds: [JORDAN, JACOB], notes: [] });
     expect(
       await tool.draft(
         plan({ title: 'Book the bus', people: ['Jordan', 'Jacob'] }),
         toolContext(['tasks:manage']),
       ),
-    ).toMatchObject({ status: 'draft', payload: { assignee_id: null } });
+    ).toMatchObject({
+      status: 'draft',
+      payload: {
+        assignee_id: null,
+        assignee_ids: [JORDAN, JACOB],
+        audience: null,
+      },
+    });
+  });
+
+  it('offers it to several people for one of them to claim', async () => {
+    const { tool } = build({ userIds: [JORDAN, JACOB], notes: [] });
+    expect(
+      await tool.draft(
+        plan({
+          title: 'Book the bus',
+          people: ['Jordan', 'Jacob'],
+          task: extras({ who_does: 'one' }),
+        }),
+        toolContext(['tasks:manage']),
+      ),
+    ).toMatchObject({
+      payload: { assignee_ids: [JORDAN, JACOB], audience: 'someone' },
+    });
+  });
+
+  it.each([
+    ['role', ROLE, { audience_role_id: ROLE, audience_group_id: null }],
+    ['group', GROUP, { audience_role_id: null, audience_group_id: GROUP }],
+    ['tier', TIER, { audience_role_id: null, audience_tier_id: TIER }],
+  ] as const)('is for everyone in a %s named', async (kind, id, fields) => {
+    const { tool, people, audience } = build(
+      { userIds: [], notes: [] },
+      { entries: [{ kind, id, name: 'Recruitment' }] },
+    );
+    const draft = await tool.draft(
+      plan({
+        title: 'Table at the fair',
+        task: extras({ for_set: 'the recruitment committee' }),
+      }),
+      toolContext(['tasks:manage']),
+    );
+    expect(draft).toMatchObject({
+      payload: { assignee_id: null, audience: 'everyone', ...fields },
+    });
+    expect(audience.resolve).toHaveBeenCalledWith(
+      ['the recruitment committee'],
+      expect.any(String),
+      ['role', 'tier', 'group'],
+    );
+    expect(people.resolve).not.toHaveBeenCalled();
+  });
+
+  it('puts it up for grabs in a set when one of them does it', async () => {
+    const { tool } = build(
+      { userIds: [], notes: [] },
+      { entries: [{ kind: 'tier', id: TIER, name: 'Exec' }] },
+    );
+    expect(
+      await tool.draft(
+        plan({
+          title: 'x',
+          task: extras({ for_set: 'exec', who_does: 'one' }),
+        }),
+        toolContext(['tasks:manage']),
+      ),
+    ).toMatchObject({
+      payload: { audience: 'someone', audience_tier_id: TIER },
+    });
+  });
+
+  it('reads "everyone" as the chapter', async () => {
+    const { tool, audience } = build({ userIds: [], notes: [] });
+    expect(
+      await tool.draft(
+        plan({ title: 'x', task: extras({ for_set: 'Everyone' }) }),
+        toolContext(['tasks:manage']),
+      ),
+    ).toMatchObject({ payload: { ...NOBODY, audience: 'everyone' } });
+    expect(audience.resolve).not.toHaveBeenCalled();
+  });
+
+  it("sends back a set that is not one of the chapter's, or could be two", async () => {
+    const note = { type: 'unmatched_name', name: 'the band' };
+    const { tool } = build({ userIds: [], notes: [] }, { notes: [note] });
+    expect(
+      await tool.draft(
+        plan({ title: 'x', task: extras({ for_set: 'the band' }) }),
+        toolContext(['tasks:manage']),
+      ),
+    ).toEqual({ status: 'unclear', missing: 'audience' });
+  });
+
+  it('leaves From off a task up for grabs, which is from nobody', async () => {
+    const { tool, audience, taskAudience } = build(
+      { userIds: [JORDAN, JACOB], notes: [] },
+      { mine: [`role:${ROLE}`] },
+    );
+    const draft = await tool.draft(
+      plan({
+        title: 'x',
+        people: ['Jordan', 'Jacob'],
+        task: extras({ who_does: 'one', from: 'exec' }),
+      }),
+      toolContext(['tasks:manage']),
+    );
+    expect(
+      (draft as { payload: Record<string, unknown> }).payload,
+    ).not.toHaveProperty('followed_by');
+    expect(audience.resolve).not.toHaveBeenCalled();
+    expect(taskAudience.followEntriesOf).not.toHaveBeenCalled();
+  });
+
+  it('carries points, proof and steps, dropping what is not one', async () => {
+    const { tool } = build({ userIds: [JORDAN], notes: [] });
+    const draft = await tool.draft(
+      plan({
+        title: 'x',
+        people: ['Jordan'],
+        task: extras({
+          points: 20,
+          proof: 'photo',
+          steps: ['Call the venue', '  ', 'Send the deposit'],
+        }),
+      }),
+      toolContext(['tasks:manage']),
+    );
+    expect(draft).toMatchObject({
+      payload: {
+        point_reward: 20,
+        proof_kind: 'photo',
+        subtasks: ['Call the venue', 'Send the deposit'],
+      },
+    });
+    const none = await tool.draft(
+      plan({
+        title: 'x',
+        task: extras({ points: 0.5, proof: 'none' }),
+      }),
+      toolContext(['tasks:manage']),
+    );
+    expect(none).toMatchObject({ status: 'draft' });
+    const payload = (none as { payload: Record<string, unknown> }).payload;
+    expect(payload).not.toHaveProperty('point_reward');
+    expect(payload).not.toHaveProperty('proof_kind');
+  });
+
+  it('is from a set only when the member asking is in it', async () => {
+    const entry = { kind: 'role' as const, id: ROLE, name: 'Exec' };
+    const mine = build(
+      { userIds: [JORDAN], notes: [] },
+      { entries: [entry], mine: [`role:${ROLE}`] },
+    );
+    expect(
+      await mine.tool.draft(
+        plan({
+          title: 'x',
+          people: ['Jordan'],
+          task: extras({ from: 'exec' }),
+        }),
+        toolContext(['tasks:manage']),
+      ),
+    ).toMatchObject({ payload: { followed_by: `role:${ROLE}` } });
+
+    const theirs = build(
+      { userIds: [JORDAN], notes: [] },
+      { entries: [entry], mine: [] },
+    );
+    const draft = await theirs.tool.draft(
+      plan({ title: 'x', people: ['Jordan'], task: extras({ from: 'exec' }) }),
+      toolContext(['tasks:manage']),
+    );
+    expect(
+      (draft as { payload: Record<string, unknown> }).payload,
+    ).not.toHaveProperty('followed_by');
   });
 
   it('asks what the task is', async () => {

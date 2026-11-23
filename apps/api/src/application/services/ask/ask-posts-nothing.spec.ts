@@ -113,6 +113,8 @@ const CALLS = new Set([
   'diagnostics.view',
   'suggestions.suggest',
   'people.resolve',
+  // The roles, groups and tiers a proposed task may say it is from (#5473).
+  'taskAudience.followEntriesOf',
   'tools.filter',
   'proposeTools.filter',
   // The tool loop (epic #4898): which reads to offer, and the loop itself,
