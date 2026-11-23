@@ -76,7 +76,8 @@ export const EVENT_ATTACHMENT_KINDS = ["link", "document"] as const;
 
 /**
  * A link attachment's URL as Frapp keeps it: trimmed, http or https only,
- * or `null` when it isn't one. The same rule as a task's proof link.
+ * or `null` when it isn't one: `normalizeProofLink`. A task's proof link
+ * must also pass `proofLinkOpens` (#5882); an attachment doesn't yet.
  */
 export function normalizeAttachmentUrl(value: string): string | null {
   return normalizeProofLink(value);

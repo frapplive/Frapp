@@ -88,6 +88,7 @@ describe("TaskProof (#4635)", () => {
         "Proof link, not a working web address: https://test",
       ),
     ).toHaveTextContent("https://test");
+    expect(screen.getByRole("note")).toHaveTextContent("not a working link");
   });
 
   it("splits reference photos from proof, each a button to view full size", () => {

@@ -124,6 +124,7 @@ describe("TaskProof (#4635)", () => {
     expect(chips.length).toBeGreaterThan(0);
     expect(chips.every((node) => node.props.onPress === undefined)).toBe(true);
     expect(screenText(tree)).toContain("https://test");
+    expect(screenText(tree)).toContain("not a working link");
     expect(
       tree.root.findAll((node) => node.props.accessibilityRole === "link"),
     ).toHaveLength(0);

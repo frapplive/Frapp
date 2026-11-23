@@ -5,7 +5,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { TASK_REPEAT_NEEDS_DUE_DATE } from '@repo/validation';
+import {
+  TASK_PROOF_LINK_INVALID_MESSAGE,
+  TASK_REPEAT_NEEDS_DUE_DATE,
+} from '@repo/validation';
 import { TaskService, type CreateTaskInput } from './task.service';
 import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface';
 import type { ITaskRepository } from '#domain/repositories/task.repository.interface';
@@ -4148,7 +4151,7 @@ describe('TaskService', () => {
           inProgress({ proof_kind: 'link' }),
         );
         await expect(markDone({ proof_link: link })).rejects.toThrow(
-          'proof_link must be a full web link',
+          TASK_PROOF_LINK_INVALID_MESSAGE,
         );
         expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
       });

@@ -208,9 +208,9 @@ function TaskPhotoStrip({
 /**
  * A proof link as a chip showing its domain; opens in the in-app browser.
  * One stored before Mark done refused names that resolve nowhere
- * (`https://test`) is the same chip as plain text, the link as typed, with
- * nothing to tap: opened, it was the browser's "server can't be found"
- * (#5882).
+ * (`https://test`) is the same chip as plain text, the link as typed (to
+ * copy) and "not a working link", with nothing to tap: opened, it was the
+ * browser's "server can't be found" (#5882).
  */
 function ProofLinkChip({ link }: { link: string }) {
   const { tokens } = useFrappTheme();
@@ -223,9 +223,10 @@ function ProofLinkChip({ link }: { link: string }) {
         accessibilityLabel={`Proof link, not a working web address: ${link}`}
       >
         <LinkGlyph color={tokens.color.text.mutedForeground} size={14} />
-        <Text style={styles.chipTextMuted} numberOfLines={1}>
+        <Text style={styles.chipTextMuted} numberOfLines={1} selectable>
           {link}
         </Text>
+        <Text style={styles.chipTextMuted}>· not a working link</Text>
       </View>
     );
   }

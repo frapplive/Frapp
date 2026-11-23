@@ -43,6 +43,7 @@ describe("proofLinkOpens (#5882)", () => {
     "  https://photos.app.goo.gl/AbC  ",
     "https://xn--bcher-kva.example/x",
     "https://sub.example.co.uk:8443/a?b=c",
+    "https://foo_bar.example.com/x",
   ])("opens %j", (link) => {
     expect(proofLinkOpens(link)).toBe(true);
   });
@@ -54,6 +55,10 @@ describe("proofLinkOpens (#5882)", () => {
     ["an IPv6 address", "http://[::1]/x"],
     ["a numeric top-level domain", "https://example.123"],
     ["a trailing dot", "https://example.com./x"],
+    ["a .localhost name", "https://app.localhost/x"],
+    ["a .local name", "https://printer.local/p"],
+    ["a .test name", "https://photos.test/a"],
+    ["an .invalid name", "https://x.invalid"],
     ["no scheme", "docs.google.com/x"],
     ["javascript", "javascript:alert(1)"],
   ])("refuses %s", (_, link) => {
@@ -165,6 +170,21 @@ describe("taskMarkDoneCheck mirrors the server's refusals (#4635)", () => {
       taskMarkDoneCheck(
         { proofKind: "link", sentBack: false },
         { ...draft, link: "not a link" },
+      ),
+    ).toEqual({ ok: false, problem: TASK_PROOF_LINK_INVALID_MESSAGE });
+    expect(
+      taskMarkDoneCheck(
+        { proofKind: "link", sentBack: false },
+        { ...draft, link: "docs.google.com:443/x" },
+      ),
+    ).toEqual({
+      ok: true,
+      proof: { proofLink: "https://docs.google.com:443/x" },
+    });
+    expect(
+      taskMarkDoneCheck(
+        { proofKind: "link", sentBack: false },
+        { ...draft, link: "javascript:alert(1)" },
       ),
     ).toEqual({ ok: false, problem: TASK_PROOF_LINK_INVALID_MESSAGE });
   });

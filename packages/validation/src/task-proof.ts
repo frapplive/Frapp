@@ -100,7 +100,19 @@ export function taskSignedOffAutomatically(task: {
  * address or `example.com.`, which no officer's phone can open (#5882).
  */
 const PUBLIC_HOSTNAME =
-  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+  /^(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+/**
+ * Top-level names reserved for a device or network of its own (RFC 6761,
+ * RFC 6762, ICANN's `.internal`), which resolve nowhere on the open web.
+ */
+const PRIVATE_TLDS = new Set([
+  "localhost",
+  "local",
+  "test",
+  "invalid",
+  "internal",
+]);
 
 /**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
@@ -130,14 +142,18 @@ export function normalizeProofLink(value: string): string | null {
  * Whether a proof link names a public site an officer's phone can open:
  * http or https on a dotted name ending in a top-level domain. A link to a
  * name that resolves nowhere (`https://test`, `https://localhost`, an IP
- * address) opened in the officer's browser as "server can't be found"
+ * address, a `.local` or `.test` name) opened in the officer's browser as "server can't be found"
  * (#5882), so Mark done refuses one, and a stored one shows as text rather
  * than a chip that opens.
  */
 export function proofLinkOpens(link: string): boolean {
   if (!normalizeProofLink(link)) return false;
   try {
-    return PUBLIC_HOSTNAME.test(new URL(link.trim()).hostname);
+    const host = new URL(link.trim()).hostname;
+    return (
+      PUBLIC_HOSTNAME.test(host) &&
+      !PRIVATE_TLDS.has(host.slice(host.lastIndexOf(".") + 1))
+    );
   } catch {
     return false;
   }
@@ -180,10 +196,14 @@ export function taskMarkDoneCheck(
   | { ok: true; proof: { proofLink?: string; completionNote?: string } }
   | { ok: false; problem: string } {
   const typed = draft.link.trim();
-  // A link typed as a phone's share sheet or a member writes it,
-  // `drive.google.com/…`, takes https:// rather than a refusal (#5882).
+  // A link typed as a member writes it, `drive.google.com/…` (or with a
+  // port, `club.org:8443/x`), takes https:// rather than a refusal (#5882).
+  // Only `scheme://` counts as one typed: `javascript:…` gains https:// and
+  // is still refused, as no host.
   const withScheme =
-    typed && !/^[a-z][a-z0-9+.-]*:/i.test(typed) ? `https://${typed}` : typed;
+    typed && !/^[a-z][a-z0-9+.-]*:\/\//i.test(typed)
+      ? `https://${typed}`
+      : typed;
   const normalized = withScheme ? normalizeProofLink(withScheme) : null;
   const link = normalized && proofLinkOpens(normalized) ? normalized : null;
   if (typed && !link) {

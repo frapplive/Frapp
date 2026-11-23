@@ -10136,7 +10136,7 @@ export interface components {
             status: "TODO" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
             /** @description With `status: COMPLETED` only: proof photos, each a `storage_path` from `POST /v1/tasks/photo-upload-url` (#4635), 1 to 6. Required when the task's `proof_kind` is `photo`; a completion without it is a 400 with the code `task.proof_required`. */
             proof_photo_paths?: string[];
-            /** @description With `status: COMPLETED` only: a link proof, http or https (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it). */
+            /** @description With `status: COMPLETED` only: a link proof, http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5882; 400 otherwise) (#4635). Required when the task's `proof_kind` is `link` (400 `task.proof_required` without it). */
             proof_link?: string;
             /** @description With `status: COMPLETED` only: a reply to the officer (#4635). On a task an officer sent back, a completion with neither new proof nor this is a 400 with the code `task.resubmit_needs_change`. */
             completion_note?: string;

@@ -291,18 +291,21 @@ export function TaskProofGallery({
 /**
  * A proof link as a chip showing its domain; opens in a new tab. One stored
  * before Mark done refused names that resolve nowhere (`https://test`) is
- * the same chip as plain text, the link as typed, with nothing to click:
+ * the same chip as plain text, the link as typed and "not a working link",
+ * with nothing to click:
  * opened, it was the browser's "server can't be found" (#5882).
  */
 export function ProofLinkChip({ link }: { link: string }) {
   if (!proofLinkOpens(link)) {
     return (
       <span
+        role="note"
         className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-caption text-muted-foreground"
         aria-label={`Proof link, not a working web address: ${link}`}
       >
         <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="truncate">{link}</span>
+        <span className="shrink-0">· not a working link</span>
       </span>
     );
   }
