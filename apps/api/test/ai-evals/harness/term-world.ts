@@ -519,6 +519,7 @@ export function createTermWorld(
     others_invited: termEvent.invites
       ? termEvent.invites.everyoneElse !== 'not_invited'
       : null,
+    attendance_picks: null,
     notes: null,
     check_in_zone: null,
     check_in_zone_name: null,

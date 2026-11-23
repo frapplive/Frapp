@@ -100,6 +100,7 @@ export async function eventsPageHooks(overrides: Record<string, unknown> = {}) {
     useUpdateEvent: idleMutation,
     ...eventTypeHooks(),
     useRoles: () => ({ data: [{ id: "r1", name: "Exec" }], isError: false }),
+    useRoleTiers: () => ({ data: [], isSuccess: true }),
     useAttendance: loadedEmpty,
     useMembers: loadedEmpty,
     useUpdateAttendanceStatus: idleMutation,

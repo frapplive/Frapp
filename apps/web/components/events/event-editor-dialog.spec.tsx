@@ -46,6 +46,7 @@ const {
 }));
 
 vi.mock("@repo/hooks", async () => ({
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   EVENT_CREATE_UNCONFIRMED: "unconfirmed-sentinel",
   useCreateEvent: () => ({ mutateAsync: createMutate, isPending: false }),
   useEvent: (id: unknown) => useEventMock(id),

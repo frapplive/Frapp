@@ -1031,9 +1031,9 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
       payload: {
         attendance: {
           everyone: 'not_invited',
-          // The tier as its roles today, until events keep tiers; the
-          // card still names the tier.
-          roles: { [PRESIDENT]: 'required', [TREASURER]: 'required' },
+          // The tier as its key, so the event follows it as roles join
+          // or leave it (#5870).
+          roles: { [`tier:${EXEC}`]: 'required' },
         },
         attendance_line: 'Cabinet required, nobody else invited',
         attendance_from: null,
@@ -1042,6 +1042,13 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
         event_type_id: FSL.id,
         point_value: 5,
       },
+    });
+    // Only the tier: no role of it is spelled out beside it.
+    const stored = draft as unknown as {
+      payload: { attendance: { roles: unknown } };
+    };
+    expect(stored.payload.attendance.roles).toEqual({
+      [`tier:${EXEC}`]: 'required',
     });
   });
 
@@ -1232,8 +1239,7 @@ describe('CreateEventActTool: who it invites (#5853)', () => {
         attendance: {
           everyone: 'not_invited',
           roles: {
-            [PRESIDENT]: 'optional',
-            [TREASURER]: 'optional',
+            [`tier:${EXEC}`]: 'optional',
             [SOCIAL]: 'optional',
           },
         },

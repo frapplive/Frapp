@@ -25474,6 +25474,37 @@
           }
         }
       },
+      "EventAttendancePicksDto": {
+        "type": "object",
+        "properties": {
+          "required": {
+            "description": "Role ids and `tier:<role tier id>` entries that must attend.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "optional": {
+            "description": "Role ids and tier entries invited, not required.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "not_invited": {
+            "description": "Role ids and tier entries not invited.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "required",
+          "optional",
+          "not_invited"
+        ]
+      },
       "EventAgendaTabledFromDto": {
         "type": "object",
         "properties": {
@@ -25653,6 +25684,16 @@
             "nullable": true,
             "description": "Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`)."
           },
+          "attendance_picks": {
+            "nullable": true,
+            "description": "What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventAttendancePicksDto"
+              }
+            ]
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -25722,6 +25763,7 @@
           "optional_role_ids",
           "excluded_role_ids",
           "others_invited",
+          "attendance_picks",
           "notes",
           "agenda",
           "attachments",
@@ -25804,6 +25846,16 @@
             "nullable": true,
             "description": "Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`)."
           },
+          "attendance_picks": {
+            "nullable": true,
+            "description": "What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventAttendancePicksDto"
+              }
+            ]
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -25877,6 +25929,7 @@
           "optional_role_ids",
           "excluded_role_ids",
           "others_invited",
+          "attendance_picks",
           "notes",
           "agenda",
           "attachments",
@@ -25927,7 +25980,7 @@
           },
           "required_role_ids": {
             "maxItems": 200,
-            "description": "Roles that must attend. See `others_invited` for members holding none of the listed roles.",
+            "description": "Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles.",
             "type": "array",
             "items": {
               "type": "string"
@@ -25935,7 +25988,7 @@
           },
           "optional_role_ids": {
             "maxItems": 200,
-            "description": "Roles invited but not required.",
+            "description": "Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.",
             "type": "array",
             "items": {
               "type": "string"
@@ -25943,7 +25996,7 @@
           },
           "excluded_role_ids": {
             "maxItems": 200,
-            "description": "Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
+            "description": "Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
             "type": "array",
             "items": {
               "type": "string"
@@ -26080,6 +26133,16 @@
             "nullable": true,
             "description": "Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`)."
           },
+          "attendance_picks": {
+            "nullable": true,
+            "description": "What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventAttendancePicksDto"
+              }
+            ]
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -26153,6 +26216,7 @@
           "optional_role_ids",
           "excluded_role_ids",
           "others_invited",
+          "attendance_picks",
           "notes",
           "agenda",
           "attachments",
@@ -26198,7 +26262,7 @@
           },
           "required_role_ids": {
             "maxItems": 200,
-            "description": "Roles that must attend. See `others_invited` for members holding none of the listed roles.",
+            "description": "Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles.",
             "type": "array",
             "items": {
               "type": "string"
@@ -26206,7 +26270,7 @@
           },
           "optional_role_ids": {
             "maxItems": 200,
-            "description": "Roles invited but not required.",
+            "description": "Roles invited but not required, each a role id or a tier as `tier:<role tier id>`.",
             "type": "array",
             "items": {
               "type": "string"
@@ -26214,7 +26278,7 @@
           },
           "excluded_role_ids": {
             "maxItems": 200,
-            "description": "Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
+            "description": "Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional.",
             "type": "array",
             "items": {
               "type": "string"

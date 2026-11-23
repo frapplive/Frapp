@@ -469,6 +469,8 @@ describe('EventService', () => {
       required_role_ids: null,
       optional_role_ids: null,
       excluded_role_ids: null,
+      // No tier picked: nothing to keep live.
+      attendance_picks: null,
       // Omitted, stored null: read with the older meaning on every read.
       others_invited: null,
       notes: null,

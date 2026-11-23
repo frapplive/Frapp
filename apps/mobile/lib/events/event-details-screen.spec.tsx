@@ -131,6 +131,7 @@ const invitees = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useRoleTiers: () => ({ data: [], isSuccess: true }),
   useActiveChapterId: () => chapterId,
   // Who's coming (Paul 2026-11-22): the invite list, read from the chapter's
   // members by the event's role rule.

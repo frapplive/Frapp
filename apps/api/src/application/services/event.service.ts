@@ -42,6 +42,8 @@ import {
   eventOthersInvited,
 } from '@repo/validation';
 import {
+  attendanceCreate,
+  attendanceUpdate,
   keepAgendaTabledFrom,
   normalizeAgenda,
   normalizeAttachments,
@@ -463,10 +465,13 @@ export class EventService {
       is_mandatory: input.is_mandatory ?? false,
       recurrence_rule: input.recurrence_rule ?? null,
       parent_event_id: null,
-      required_role_ids: input.required_role_ids ?? null,
-      optional_role_ids: input.optional_role_ids ?? null,
-      excluded_role_ids: input.excluded_role_ids ?? null,
-      others_invited,
+      // A tier in a list is kept in `attendance_picks`; the database fills the
+      // role lists from it, and `others_invited` is written out
+      // (`attendanceCreate`).
+      ...attendanceCreate({
+        ...input,
+        others_invited: others_invited ?? undefined,
+      }),
       notes: input.notes ?? null,
       // This first meeting's own; the series' other meetings start with
       // none (#4934).
@@ -602,10 +607,26 @@ export class EventService {
 
     await this.eventTypes.assertBelongs(input.event_type_id, chapterId);
 
+    // A list that names a tier keeps the picks beside the role lists; a
+    // series edit then carries both to every meeting it rewrites.
+    let attendance = {};
+    if (
+      input.required_role_ids !== undefined ||
+      input.optional_role_ids !== undefined ||
+      input.excluded_role_ids !== undefined
+    ) {
+      existing ??= await this.findById(id, chapterId);
+      attendance = attendanceUpdate(input, existing);
+    }
+
     // A meeting's agenda and attachments are its own (#4934), validated here
     // and kept apart from the rest of the patch so no series path ever
     // copies them.
-    const { agenda: rawAgenda, attachments: rawAttachments, ...rest } = input;
+    const {
+      agenda: rawAgenda,
+      attachments: rawAttachments,
+      ...rest
+    } = { ...input, ...attendance };
     const meetingOwn: Partial<Event> = {};
     const agenda = normalizeAgenda(rawAgenda);
     if (agenda !== undefined) {

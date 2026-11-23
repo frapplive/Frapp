@@ -7866,6 +7866,14 @@ export interface components {
             /** @description Read receipts on direct messages (#5519). Off is two-way: the member's reads are not reported to anyone, and they are told about no one's. Null or absent leaves it as it is. */
             read_receipts?: boolean;
         };
+        EventAttendancePicksDto: {
+            /** @description Role ids and `tier:<role tier id>` entries that must attend. */
+            required: string[];
+            /** @description Role ids and tier entries invited, not required. */
+            optional: string[];
+            /** @description Role ids and tier entries not invited. */
+            not_invited: string[];
+        };
         EventAgendaTabledFromDto: {
             /** @description The posted minutes that first tabled this matter. */
             meeting_id: string;
@@ -7924,6 +7932,8 @@ export interface components {
             excluded_role_ids: string[] | null;
             /** @description Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`). */
             others_invited: boolean | null;
+            /** @description What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this. */
+            attendance_picks: components["schemas"]["EventAttendancePicksDto"] | null;
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
@@ -7969,6 +7979,8 @@ export interface components {
             excluded_role_ids: string[] | null;
             /** @description Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`). */
             others_invited: boolean | null;
+            /** @description What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this. */
+            attendance_picks: components["schemas"]["EventAttendancePicksDto"] | null;
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
@@ -8012,11 +8024,11 @@ export interface components {
             is_mandatory: boolean;
             /** @description Repeat rule. Either a legacy token (WEEKLY, BIWEEKLY, MONTHLY: a fixed run of 12, 6 or 6 meetings after the first, still accepted from older phone builds) or an iCalendar RRULE subset such as `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TH;COUNT=20;TZID=America/New_York`: FREQ DAILY|WEEKLY|MONTHLY, INTERVAL 1-30, BYDAY (weekly: the days, required; monthly: the nth weekday such as 2TU or -1FR), BYMONTHDAY (monthly by date: 1-31, not with BYDAY), exactly one of COUNT (2-120 meetings, the first included) or UNTIL (YYYYMMDD, inclusive), and TZID (the zone whose wall clock the series keeps). */
             recurrence_rule?: string;
-            /** @description Roles that must attend. See `others_invited` for members holding none of the listed roles. */
+            /** @description Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles. */
             required_role_ids?: string[];
-            /** @description Roles invited but not required. */
+            /** @description Roles invited but not required, each a role id or a tier as `tier:<role tier id>`. */
             optional_role_ids?: string[];
-            /** @description Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
+            /** @description Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
             excluded_role_ids?: string[];
             /** @description Whether a member holding none of the listed roles is invited (then `is_mandatory` says whether they must attend). Omitted on create, it is stored as null, which reads as true unless `required_role_ids` is non-empty: the older "only these roles" meaning, for a caller that predates this field. Omitted on update, it is left as stored. */
             others_invited?: boolean;
@@ -8063,6 +8075,8 @@ export interface components {
             excluded_role_ids: string[] | null;
             /** @description Null on a row written without it: read it as true unless `required_role_ids` is non-empty (`eventOthersInvited` in `@repo/validation`). */
             others_invited: boolean | null;
+            /** @description What was picked when the event names a tier, else null. The three `*_role_ids` lists always hold the effective role ids (each tier read as the roles in it now), so only an editor reads this. */
+            attendance_picks: components["schemas"]["EventAttendancePicksDto"] | null;
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
@@ -8098,11 +8112,11 @@ export interface components {
             is_mandatory?: boolean;
             /** @description Repeat rule. Either a legacy token (WEEKLY, BIWEEKLY, MONTHLY: a fixed run of 12, 6 or 6 meetings after the first, still accepted from older phone builds) or an iCalendar RRULE subset such as `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TH;COUNT=20;TZID=America/New_York`: FREQ DAILY|WEEKLY|MONTHLY, INTERVAL 1-30, BYDAY (weekly: the days, required; monthly: the nth weekday such as 2TU or -1FR), BYMONTHDAY (monthly by date: 1-31, not with BYDAY), exactly one of COUNT (2-120 meetings, the first included) or UNTIL (YYYYMMDD, inclusive), and TZID (the zone whose wall clock the series keeps). */
             recurrence_rule?: string;
-            /** @description Roles that must attend. See `others_invited` for members holding none of the listed roles. */
+            /** @description Roles that must attend, each a role id or a tier as `tier:<role tier id>` (every role in the tier, kept current until the event ends). See `others_invited` for members holding none of the listed roles. */
             required_role_ids?: string[];
-            /** @description Roles invited but not required. */
+            /** @description Roles invited but not required, each a role id or a tier as `tier:<role tier id>`. */
             optional_role_ids?: string[];
-            /** @description Roles not invited: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
+            /** @description Roles not invited, each a role id or a tier as `tier:<role tier id>`: their holders do not see the event and cannot check in, unless another role of theirs is listed as required or optional. */
             excluded_role_ids?: string[];
             /** @description Whether a member holding none of the listed roles is invited (then `is_mandatory` says whether they must attend). Omitted, it is left as stored. A stored null reads as true unless `required_role_ids` is non-empty, the older "only these roles" meaning. */
             others_invited?: boolean;
