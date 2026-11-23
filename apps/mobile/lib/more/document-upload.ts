@@ -94,6 +94,8 @@ export interface SentUpload {
   folder: string | null;
   /** Who can see it (#5216): `null` follows its folder. */
   whoCanSee: string[] | null;
+  /** Its type's name (`chapter-docs.md` § Document types); `null` for none. */
+  documentType?: string | null;
 }
 
 export type DocumentUploadResult =
@@ -325,7 +327,13 @@ const DOCUMENT_GATE_COPY: GateCopy = {
  */
 export async function uploadDocumentPhoto(
   image: PickedImage,
-  draft: { title: string; folder: string | null; whoCanSee?: string[] | null },
+  draft: {
+    title: string;
+    folder: string | null;
+    whoCanSee?: string[] | null;
+    /** A type's name, or a new one the upload adds to the list; null for none. */
+    documentType?: string | null;
+  },
   mutations: DocumentUploadMutations,
   sent?: SentUpload,
 ): Promise<DocumentUploadResult> {
@@ -333,6 +341,9 @@ export async function uploadDocumentPhoto(
   const title = retry ? retry.title : documentTitle(draft.title, image);
   const folder = retry ? retry.folder : draft.folder;
   const whoCanSee = retry ? retry.whoCanSee : (draft.whoCanSee ?? null);
+  const documentType = retry
+    ? (retry.documentType ?? null)
+    : draft.documentType?.trim() || null;
   let stored = retry?.uploaded;
   if (!stored) {
     const put = await uploadPickedImageGated(
@@ -358,6 +369,8 @@ export async function uploadDocumentPhoto(
       // A list only when the uploader chose one (#5216); left out, the file
       // follows its folder.
       ...(whoCanSee !== null ? { who_can_see: whoCanSee } : {}),
+      // A name the chapter doesn't have yet joins its list, as on web.
+      ...(documentType !== null ? { document_type: documentType } : {}),
     });
     return { status: "uploaded", title };
   } catch (error) {
@@ -367,7 +380,7 @@ export async function uploadDocumentPhoto(
       reason:
         reason ?? definitiveRefusalMessage(error) ?? DOCUMENT_UPLOAD_FAILED,
       final: reason !== null,
-      sent: { image, uploaded: stored, title, folder, whoCanSee },
+      sent: { image, uploaded: stored, title, folder, whoCanSee, documentType },
     };
   }
 }

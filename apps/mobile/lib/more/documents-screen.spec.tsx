@@ -54,6 +54,11 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   usePermissionList: () => permissions,
   // Who can see (#5216): unread by default, so the upload sheet shows no row.
   useDocumentAccessOptions: () => accessQuery,
+  // The upload sheet's Type (Paul 2026-11-22).
+  useDocumentTypes: () => ({ data: [] }),
+  useCreateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDocuments: (...args: unknown[]) => {
     documentsArgs.push(args);
     return {

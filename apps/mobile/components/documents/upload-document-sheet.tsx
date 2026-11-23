@@ -9,6 +9,8 @@ import {
   documentAccessChoices,
   useConfirmDocumentUpload,
   useDocumentAccessOptions,
+  useDocumentTypes,
+  usePermissionList,
   useRequestDocumentUploadUrl,
 } from "@repo/hooks";
 import { FILE_ALWAYS_LINE } from "@repo/hooks/document-library";
@@ -18,7 +20,12 @@ import {
 } from "@repo/hooks/channel-access";
 import { formatBytes } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
-import { DOCUMENT_TITLE_MAX_LENGTH, MAX_UPLOAD_LABEL } from "@repo/validation";
+import {
+  can,
+  DOCUMENT_TITLE_MAX_LENGTH,
+  MAX_UPLOAD_LABEL,
+} from "@repo/validation";
+import { DocumentTypeSheet } from "@/components/documents/document-type-sheet";
 import { DocumentsGlyph } from "@/components/more/more-glyphs";
 import { ChannelAccessSheet } from "@/components/chat/channel-access-sheet";
 import { ForwardGlyph } from "@/components/control-glyphs";
@@ -70,7 +77,8 @@ export const FILES_ROW_META = `PDF, Word, Excel, PowerPoint or text, up to ${MAX
 
 /**
  * s21, the Upload document sheet (`canvas-screens.dc.html` s21, #3399): the
- * picked file's card with Change, a title, the folder chips, and Upload. The
+ * picked file's card with Change, a title, the Type row (the shared Type
+ * sheet, as web's Type menu), the folder chips, and Upload. The
  * wire steps and their refusals live in `lib/more/document-upload.ts`; this
  * file wires them to the board's controls.
  *
@@ -158,6 +166,8 @@ type KeptUpload = {
   chosenFolder: string | null | undefined;
   /** Who can see it: `null` follows its folder (#5216). */
   whoCanSee?: string[] | null;
+  /** The type's name; "" for none (`chapter-docs.md` § Document types). */
+  documentType?: string;
   stored: SentUpload | null;
 };
 
@@ -221,6 +231,15 @@ export const UploadDocumentSheet = forwardRef<
   );
   const access = documentAccessChoices(useDocumentAccessOptions());
   const accessSheetRef = useRef<BottomSheetModal>(null);
+  // Type, as web's upload panel has it (Paul 2026-11-22: one Type menu on
+  // both apps). A name typed that the list lacks is held; the upload adds it.
+  const [documentType, setDocumentType] = useState(
+    () => opening?.documentType ?? "",
+  );
+  const typesQuery = useDocumentTypes();
+  const documentTypes = typesQuery.data ?? [];
+  const canManageTypes = can("chapter_docs:manage", usePermissionList());
+  const typeSheetRef = useRef<BottomSheetModal>(null);
   const [titleFocused, setTitleFocused] = useState(false);
   const [uploading, setUploading] = useState(false);
   /** Why the pick was refused (type, size, photo access). */
@@ -243,13 +262,14 @@ export const UploadDocumentSheet = forwardRef<
   const draftHeld = uploading || stored !== null;
   const kept = useKeptSheetDraft<KeptUpload>(
     keptDraft ?? null,
-    { picked, source, title, chosenFolder, whoCanSee, stored },
+    { picked, source, title, chosenFolder, whoCanSee, documentType, stored },
     JSON.stringify([
       picked?.uri ?? null,
       source,
       title,
       chosenFolder ?? null,
       whoCanSee,
+      documentType,
       stored?.uploaded ?? null,
     ]),
     opening,
@@ -274,6 +294,8 @@ export const UploadDocumentSheet = forwardRef<
   const folder = stored ? heldFolder : draftFolder;
   // A held retry files with the list it was sent with, as with the folder.
   const accessList = stored ? (stored.whoCanSee ?? null) : whoCanSee;
+  // A held retry files with the type it was sent with, as with the folder.
+  const typeShown = stored ? (stored.documentType ?? "") : documentType;
   // The API refuses an empty Chosen list, so Upload waits for an entry.
   const accessEmpty = isEmptyChannelAccessChoice(accessList);
   const canUpload =
@@ -287,6 +309,7 @@ export const UploadDocumentSheet = forwardRef<
     setTitle("");
     setChosenFolder(undefined);
     setWhoCanSee(null);
+    setDocumentType("");
     setTitleFocused(false);
     setPickRefusal(null);
     setFailure(null);
@@ -392,7 +415,7 @@ export const UploadDocumentSheet = forwardRef<
     dismiss();
     const result = await uploadDocumentPhoto(
       picked,
-      { title, folder, whoCanSee },
+      { title, folder, whoCanSee, documentType },
       {
         requestUploadUrl: (body) => requestUploadUrl.mutateAsync(body),
         confirm: (body) => confirmUpload.mutateAsync(body),
@@ -584,6 +607,36 @@ export const UploadDocumentSheet = forwardRef<
             />
           </View>
 
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Type</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Type: ${typeShown || "none"}`}
+              accessibilityHint={stored ? RETRY_KEEPS_DRAFT : undefined}
+              accessibilityState={{ disabled: draftHeld }}
+              disabled={draftHeld}
+              onPress={() => {
+                Keyboard.dismiss();
+                typeSheetRef.current?.present?.();
+              }}
+              style={({ pressed }) => [
+                styles.accessRow,
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.accessValue,
+                  typeShown ? null : styles.valueEmpty,
+                ]}
+                numberOfLines={1}
+              >
+                {typeShown || "No type"}
+              </Text>
+              <ForwardGlyph color={tokens.color.text.mutedForeground} />
+            </Pressable>
+          </View>
+
           {folders.length > 0 ? (
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Folder</Text>
@@ -665,8 +718,15 @@ export const UploadDocumentSheet = forwardRef<
           />
         </BottomSheetView>
       </BottomSheetModal>
-      {/* A sibling, as on the channel form: it stacks over this sheet
+      {/* Siblings, as on the channel form: each stacks over this sheet
         (`SHEET_STACK_BEHAVIOR`), which stays presented under it. */}
+      <DocumentTypeSheet
+        ref={typeSheetRef}
+        types={documentTypes}
+        value={documentType}
+        onChange={setDocumentType}
+        canManage={canManageTypes}
+      />
       {showAccess ? (
         <ChannelAccessSheet
           ref={accessSheetRef}
@@ -820,6 +880,9 @@ function createStyles(tokens: SignetTokens, accent: string) {
       flex: 1,
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.foreground,
+    },
+    valueEmpty: {
+      color: tokens.color.text.muted,
     },
   });
 }

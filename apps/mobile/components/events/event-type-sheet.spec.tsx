@@ -12,11 +12,23 @@ import { screenText } from "@/test/screen-text";
  * "Find or add a type" search whose unmatched name offers "Create “…”".
  */
 
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
+const { mockCreate, mockUpdate, mockDelete, mockConfirm } = vi.hoisted(() => ({
+  mockCreate: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockDelete: vi.fn(),
+  mockConfirm: vi.fn(),
+}));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useCreateEventType: () => ({ mutateAsync: mockCreate, isPending: false }),
+  useUpdateEventType: () => ({ mutateAsync: mockUpdate, isPending: false }),
+  useDeleteEventType: () => ({ mutateAsync: mockDelete, isPending: false }),
+}));
+
+vi.mock("@/lib/minutes/meetings-on", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/minutes/meetings-on")>()),
+  confirmAlert: mockConfirm,
 }));
 
 vi.mock("@/lib/chapter-branding", () => ({
@@ -68,6 +80,7 @@ function render(
   onPick: (type: unknown, made?: boolean) => void,
   canAdd = true,
   types = TYPES,
+  value: string | null = null,
 ): ReactTestRenderer {
   let tree!: ReactTestRenderer;
   act(() => {
@@ -76,7 +89,7 @@ function render(
         <EventTypeSheet
           ref={React.createRef()}
           types={types}
-          value={null}
+          value={value}
           showSets
           onPick={onPick}
           typeFromForm={canAdd ? fromForm : undefined}
@@ -100,7 +113,26 @@ const search = (tree: ReactTestRenderer) =>
       typeof node.props.placeholder === "string",
   );
 
-beforeEach(() => mockCreate.mockReset());
+beforeEach(() => {
+  mockCreate.mockReset();
+  mockUpdate.mockReset().mockResolvedValue({});
+  mockDelete.mockReset().mockResolvedValue({});
+  mockConfirm.mockReset().mockResolvedValue(true);
+});
+
+const pressable = (tree: ReactTestRenderer, label: string) =>
+  tree.root.find(
+    (node) =>
+      node.props.accessibilityLabel === label &&
+      typeof node.props.onPress === "function",
+  );
+
+const nameField = (tree: ReactTestRenderer) =>
+  tree.root.find(
+    (node) =>
+      node.props.accessibilityLabel === "Name" &&
+      typeof node.props.onChangeText === "function",
+  );
 
 describe("EventTypeSheet", () => {
   it("sizes a short list to its rows instead of opening full height", () => {
@@ -199,6 +231,96 @@ describe("EventTypeSheet", () => {
         (node) =>
           typeof node.props.onChangeText === "function" &&
           typeof node.props.placeholder === "string",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("edits a type from its row's pencil and saves on back (Paul 2026-11-22)", async () => {
+    const onPick = vi.fn();
+    const tree = render(onPick);
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    expect(onPick).not.toHaveBeenCalled();
+    act(() => nameField(tree).props.onChangeText("Mixer"));
+    act(() =>
+      tree.root
+        .find(
+          (node) =>
+            node.props.accessibilityLabel === "Points" &&
+            typeof node.props.onChangeText === "function",
+        )
+        .props.onChangeText("3"),
+    );
+    act(() => pressable(tree, "Required").props.onPress());
+    await act(async () => pressable(tree, "Back to types").props.onPress());
+    expect(mockUpdate).toHaveBeenCalledWith({
+      id: "t-2",
+      body: { name: "Mixer", point_value: 3, is_mandatory: true },
+    });
+    // Back on the list.
+    expect(screenText(tree)).toContain("No type");
+  });
+
+  it("leaves an unchanged type without saving", async () => {
+    const tree = render(vi.fn());
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    await act(async () => pressable(tree, "Back to types").props.onPress());
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("says a refused save in place and stays in the edit view", async () => {
+    mockUpdate.mockRejectedValueOnce(
+      new MemberFacingError("That name is taken."),
+    );
+    const tree = render(vi.fn());
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    act(() => nameField(tree).props.onChangeText("Chapter meeting"));
+    await act(async () => nameField(tree).props.onSubmitEditing());
+    expect(screenText(tree)).toContain("That name is taken.");
+    expect(nameField(tree)).toBeDefined();
+  });
+
+  it("deletes a type once the platform alert confirms", async () => {
+    const tree = render(vi.fn());
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    await act(async () => pressable(tree, "Delete type").props.onPress());
+    expect(mockConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: "Its events keep their points and lose the type.",
+        destructive: true,
+      }),
+    );
+    expect(mockDelete).toHaveBeenCalledWith("t-2");
+  });
+
+  it("lets the form go of the type it holds when that type is deleted", async () => {
+    const onPick = vi.fn();
+    const tree = render(onPick, true, TYPES, "t-2");
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    await act(async () => pressable(tree, "Delete type").props.onPress());
+    expect(onPick).toHaveBeenCalledWith(null);
+  });
+
+  it("refuses points past a whole number in place", async () => {
+    const tree = render(vi.fn());
+    act(() => pressable(tree, "Edit Social").props.onPress());
+    const points = tree.root.find(
+      (node) =>
+        node.props.accessibilityLabel === "Points" &&
+        typeof node.props.onChangeText === "function",
+    );
+    act(() => points.props.onChangeText("99999999999999999999"));
+    await act(async () => pressable(tree, "Back to types").props.onPress());
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(screenText(tree)).toContain(
+      "Points must be a whole number of 0 or more.",
+    );
+  });
+
+  it("gives someone who can't make types no pencils", () => {
+    const tree = render(vi.fn(), false);
+    expect(
+      tree.root.findAll(
+        (node) => node.props.accessibilityLabel === "Edit Social",
       ),
     ).toHaveLength(0);
   });

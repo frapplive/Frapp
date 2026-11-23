@@ -1,50 +1,39 @@
-import { forwardRef, useMemo, useState, type ReactNode } from "react";
+import { forwardRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Path } from "react-native-svg";
-import {
-  BottomSheetModal,
-  BottomSheetTextInput,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   EVENT_FORM_GLYPHS,
   type EventFormGlyphName,
 } from "@repo/theme/event-form-glyphs";
-import { errorCopy, useCreateEventType, type EventType } from "@repo/hooks";
 import {
-  addEventTypeLabel,
+  useCreateEventType,
+  useDeleteEventType,
+  useTypeEditor,
+  useUpdateEventType,
+  type EventType,
+  type TypeEditorHandle,
+} from "@repo/hooks";
+import {
   describeEventTypeSets,
-  EVENT_TYPE_FIND_OR_ADD,
+  EVENT_TYPE_DELETE_CONSEQUENCE,
   EVENT_TYPE_NAME_MAX_LENGTH,
-  EVENT_TYPE_SEARCH_FROM,
-  eventTypeToAdd,
+  EVENT_TYPE_POINTS_INVALID,
+  EVENT_TYPES_MAX,
+  eventTypePoints,
+  tidyTypeName,
+  TYPE_NAME_REQUIRED,
+  typeToAdd,
   type EventTypeDraft,
 } from "@repo/validation";
 import { Frame, paint } from "@/components/glyph-recipe";
-import {
-  CheckGlyph,
-  ForwardGlyph,
-  PlusGlyph,
-} from "@/components/control-glyphs";
-import {
-  MAX_ROWS_SIZED_TO_CONTENT,
-  pickSheetSizing,
-} from "@/components/option-sheet";
-import {
-  SheetBackToClose,
-  SheetGrabber,
-  SheetHeader,
-  SheetScrim,
-  sheetFieldStyles,
-  useSheetBackgroundStyle,
-  useSheetClose,
-  SHEET_STACK_BEHAVIOR,
-} from "@/components/sheet-scaffold";
+import { ForwardGlyph } from "@/components/control-glyphs";
+import { Segmented } from "@/components/segmented";
+import { sheetFieldStyles } from "@/components/sheet-scaffold";
+import { TypeSheet, TypeSheetEditPane } from "@/components/type-sheet";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
 
 /**
  * The New event sheet's property rows (#5561,
@@ -149,20 +138,17 @@ export function RowDivider() {
 }
 
 /**
- * "Type": the chapter's event types in a sheet stacked over the New event
- * sheet, each saying what it sets (`describeEventTypeSets`, the words web's
- * Type menu shows), with "No type" first. Picking one closes it onto the form.
- *
- * Sized to its rows, as {@link OptionSheet} is, so the form stays in sight
- * above it (Paul 2026-11-20: a sheet "taking the whole screen" is an
- * anti-pattern, "you can't see what you're dealing with"); a list past
- * {@link MAX_ROWS_SIZED_TO_CONTENT} rows stops where every pick-one sheet
- * does ({@link pickSheetSizing}, 70%) and scrolls. It was a tall sheet at full height until then.
+ * "Type": the chapter's event types in the shared Type sheet
+ * (`components/type-sheet.tsx`), stacked over the New event sheet, each
+ * saying what it sets (`describeEventTypeSets`, the words web's Type menu
+ * shows), with "No type" first. Picking one closes it onto the form.
  *
  * `typeFromForm`, for someone who can make types (`events:update`), shows the
  * search as "Find or add a type" whatever the count, and a name no type has
  * yet offers "Create “Work party”", which makes the type from the form's
- * points and attendance and holds it, as web's Type menu does.
+ * points and attendance and holds it, as web's Type menu does. The same
+ * person edits a type from its row's pencil: name, points, attendance, and
+ * Delete type (Paul 2026-11-22, one Type menu on both apps).
  */
 export const EventTypeSheet = forwardRef<
   BottomSheetModal,
@@ -183,229 +169,140 @@ export const EventTypeSheet = forwardRef<
   { types, value, onPick, showSets, typeFromForm },
   ref,
 ) {
-  const backgroundStyle = useSheetBackgroundStyle();
-  const close = useSheetClose(ref);
-  const { tokens } = useFrappTheme();
-  const insets = useSafeAreaInsets();
-  // One row more than the types at most: No type while the search is empty,
-  // or Create while it offers, never both. Held for the sheet's life, so a
-  // type made here can't resize it as it closes.
-  const [fits] = useState(() => types.length + 1 <= MAX_ROWS_SIZED_TO_CONTENT);
+  const createType = useCreateEventType();
+  const canManage = typeFromForm !== undefined;
   return (
-    <BottomSheetModal
+    <TypeSheet
       ref={ref}
-      stackBehavior={SHEET_STACK_BEHAVIOR}
-      {...pickSheetSizing(fits)}
-      // The search raises it with the keyboard: never under the status bar.
-      topInset={insets.top + tokens.spacing.sm}
-      keyboardBehavior="interactive"
-      backgroundStyle={backgroundStyle}
-      handleComponent={SheetGrabber}
-      backdropComponent={SheetScrim}
-    >
-      <SheetBackToClose onClose={close} />
-      <TypeList
-        types={types}
-        value={value}
-        showSets={showSets}
-        fits={fits}
-        typeFromForm={typeFromForm}
-        onPick={(type, made) => {
-          onPick(type, made);
-          close();
-        }}
-        onDone={close}
-      />
-    </BottomSheetModal>
+      types={types}
+      isHeld={(type) => type.id === value}
+      onPick={(type) => onPick(type)}
+      toAdd={
+        canManage
+          ? (typed) =>
+              typeToAdd(typed, types, {
+                max: EVENT_TYPES_MAX,
+                maxLength: EVENT_TYPE_NAME_MAX_LENGTH,
+              })
+          : undefined
+      }
+      onCreate={
+        typeFromForm
+          ? async (name) => {
+              const created = await createType.mutateAsync(typeFromForm(name));
+              onPick(created, true);
+            }
+          : undefined
+      }
+      describe={showSets ? describeEventTypeSets : undefined}
+      renderEditor={
+        canManage
+          ? (type, handle) => (
+              <EventTypeEdit
+                key={type.id}
+                type={type}
+                handle={handle}
+                held={type.id === value}
+                onDeleted={() => onPick(null)}
+              />
+            )
+          : undefined
+      }
+    />
   );
 });
 
-type TypeOption =
-  | { kind: "none" }
-  | { kind: "type"; type: EventType }
-  | { kind: "create"; name: string };
+const ATTENDANCE_OPTIONS = [
+  { value: "optional", label: "Optional" },
+  { value: "required", label: "Required" },
+] as const;
 
-const optionKey = (row: TypeOption) =>
-  row.kind === "type" ? row.type.id : row.kind;
-
-function TypeList({
-  types,
-  value,
-  showSets,
-  fits,
-  typeFromForm,
-  onPick,
-  onDone,
+/**
+ * One event type's edit view in the Type sheet: its name, the points and
+ * attendance picking it fills in, and Delete type, as web's edit view.
+ */
+function EventTypeEdit({
+  type,
+  handle,
+  held,
+  onDeleted,
 }: {
-  types: readonly EventType[];
-  value: string | null;
-  showSets: boolean;
-  fits: boolean;
-  typeFromForm?: (name: string) => EventTypeDraft;
-  onPick: (type: EventType | null, made?: boolean) => void;
-  onDone: () => void;
+  type: EventType;
+  handle: TypeEditorHandle;
+  /** Whether the form holds this type. */
+  held: boolean;
+  onDeleted: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const brand = useChapterBranding();
-  const insets = useSafeAreaInsets();
   const styles = createStyles(tokens, brand.accent);
-  const createType = useCreateEventType();
-  const [search, setSearch] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
-  const canAdd = typeFromForm !== undefined;
-  const showSearch = canAdd || types.length > EVENT_TYPE_SEARCH_FROM;
-  const toAdd = canAdd ? eventTypeToAdd(search, types) : null;
-  const rows = useMemo<TypeOption[]>(() => {
-    const query = search.trim().replace(/\s+/g, " ").toLowerCase();
-    const matching = types.filter((type) =>
-      type.name.toLowerCase().includes(query),
-    );
-    return [
-      ...(query ? [] : [{ kind: "none" } as const]),
-      ...matching.map((type) => ({ kind: "type", type }) as const),
-      ...(toAdd ? [{ kind: "create", name: toAdd } as const] : []),
-    ];
-  }, [types, search, toAdd]);
-
-  async function addType(name: string) {
-    if (!typeFromForm || createType.isPending) return;
-    setAddError(null);
-    try {
-      const created = await createType.mutateAsync(typeFromForm(name));
-      setSearch("");
-      onPick(created, true);
-    } catch (error) {
-      setAddError(errorCopy(error, "Couldn't make the type. Try again."));
-    }
-  }
-
-  const header = (
-    <View style={styles.listHeader}>
-      <SheetHeader title="Type" />
-      {showSearch ? (
-        <BottomSheetTextInput
-          value={search}
-          onChangeText={(next) => {
-            setSearch(next);
-            setAddError(null);
-          }}
-          placeholder={canAdd ? EVENT_TYPE_FIND_OR_ADD : "Find a type"}
-          placeholderTextColor={tokens.color.text.muted}
-          accessibilityLabel={canAdd ? EVENT_TYPE_FIND_OR_ADD : "Find a type"}
-          autoCapitalize={canAdd ? "words" : "none"}
-          autoCorrect={false}
-          maxLength={EVENT_TYPE_NAME_MAX_LENGTH}
-          returnKeyType="done"
-          // Return holds the one type the search leaves, or makes the typed
-          // name when none is left, as Enter picks the top match on web; a
-          // half-typed search never becomes a type.
-          onSubmitEditing={() => {
-            const shown = rows.filter((row) => row.kind === "type");
-            if (shown.length === 1 && shown[0]!.kind === "type") {
-              onPick(shown[0]!.type);
-            } else if (shown.length === 0 && toAdd) {
-              void addType(toAdd);
-            }
-          }}
-          style={styles.search}
-        />
-      ) : null}
-      {addError ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {addError}
-        </Text>
-      ) : null}
-    </View>
-  );
-
-  const renderRow = (item: TypeOption) => {
-    if (item.kind === "create") {
-      return (
-        <Pressable
-          key="create"
-          accessibilityRole="button"
-          accessibilityLabel={addEventTypeLabel(item.name)}
-          accessibilityState={{ disabled: createType.isPending }}
-          disabled={createType.isPending}
-          onPress={() => void addType(item.name)}
-          style={({ pressed }) => [
-            styles.typeRow,
-            pressed || createType.isPending ? styles.pressed : null,
-          ]}
-        >
-          <View style={styles.check}>
-            <PlusGlyph color={tokens.color.text.mutedForeground} size={18} />
-          </View>
-          <Text style={styles.typeName} numberOfLines={1}>
-            {addEventTypeLabel(item.name)}
-          </Text>
-        </Pressable>
-      );
-    }
-    const type = item.kind === "type" ? item.type : null;
-    const held = (type?.id ?? null) === value;
-    return (
-      <Pressable
-        key={optionKey(item)}
-        accessibilityRole="radio"
-        accessibilityState={{ checked: held }}
-        accessibilityLabel={type?.name ?? "No type"}
-        onPress={() => onPick(type)}
-        style={({ pressed }) => [
-          styles.typeRow,
-          pressed ? styles.pressed : null,
-        ]}
-      >
-        <View style={styles.check}>
-          {held ? <CheckGlyph color={brand.accent} size={18} /> : null}
-        </View>
-        <Text
-          style={[styles.typeName, type ? null : styles.valueEmpty]}
-          numberOfLines={1}
-        >
-          {type?.name ?? "No type"}
-        </Text>
-        {type && showSets ? (
-          <Text style={styles.typeSets} numberOfLines={1}>
-            {describeEventTypeSets(type)}
-          </Text>
-        ) : null}
-      </Pressable>
-    );
-  };
-
-  const empty =
-    rows.length === 0 ? (
-      <Text style={styles.caption}>No type by that name.</Text>
-    ) : null;
-  const bottomPad = { paddingBottom: insets.bottom + tokens.spacing.md };
-
-  if (fits) {
-    return (
-      <BottomSheetView
-        accessibilityRole="radiogroup"
-        onAccessibilityEscape={onDone}
-        style={bottomPad}
-      >
-        {header}
-        {rows.map(renderRow)}
-        {empty}
-      </BottomSheetView>
-    );
-  }
+  const updateType = useUpdateEventType();
+  const deleteType = useDeleteEventType();
+  const [name, setName] = useState(type.name);
+  const [points, setPoints] = useState(String(type.point_value));
+  const [required, setRequired] = useState(type.is_mandatory);
+  const tidy = tidyTypeName(name);
+  const editor = useTypeEditor({
+    handle,
+    changed:
+      tidy !== type.name ||
+      points.trim() !== String(type.point_value) ||
+      required !== type.is_mandatory,
+    save: async () => {
+      if (!tidy) return TYPE_NAME_REQUIRED;
+      const pointValue = eventTypePoints(points);
+      if (pointValue === undefined) return EVENT_TYPE_POINTS_INVALID;
+      await updateType.mutateAsync({
+        id: type.id,
+        body: { name: tidy, point_value: pointValue, is_mandatory: required },
+      });
+      return null;
+    },
+    remove: async () => {
+      await deleteType.mutateAsync(type.id);
+      // The form holding it lets it go, so its save doesn't send a type
+      // that is gone.
+      if (held) onDeleted();
+    },
+  });
   return (
-    <BottomSheetFlatList
-      onAccessibilityEscape={onDone}
-      data={rows}
-      keyExtractor={optionKey}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      contentContainerStyle={[styles.listContent, bottomPad]}
-      ListHeaderComponent={header}
-      stickyHeaderIndices={[0]}
-      ListEmptyComponent={empty}
-      renderItem={({ item }: { item: TypeOption }) => renderRow(item)}
-    />
+    <TypeSheetEditPane
+      name={name}
+      nameMaxLength={EVENT_TYPE_NAME_MAX_LENGTH}
+      onNameChange={(next) => {
+        editor.clearError();
+        setName(next);
+      }}
+      error={editor.error}
+      saving={editor.saving}
+      onLeave={editor.leave}
+      deleteBody={EVENT_TYPE_DELETE_CONSEQUENCE}
+      deleting={editor.deleting}
+      onDelete={editor.onDelete}
+    >
+      <View style={styles.row}>
+        <Text style={styles.label}>Points</Text>
+        <BottomSheetTextInput
+          value={points}
+          onChangeText={(next) => {
+            if (!/^\d*$/.test(next)) return;
+            editor.clearError();
+            setPoints(next);
+          }}
+          accessibilityLabel="Points"
+          keyboardType="number-pad"
+          returnKeyType="done"
+          onSubmitEditing={editor.leave}
+          style={[styles.search, styles.pointsField]}
+        />
+      </View>
+      <Segmented
+        accessibilityLabel="Attendance for everyone"
+        options={ATTENDANCE_OPTIONS}
+        value={required ? "required" : "optional"}
+        onChange={(next) => setRequired(next === "required")}
+      />
+    </TypeSheetEditPane>
   );
 }
 
@@ -443,47 +340,11 @@ function createStyles(tokens: SignetTokens, accent?: string) {
       // Under the label, not the mark, as Settings insets its separators.
       marginLeft: 18 + tokens.spacing.sm,
     },
-    listContent: {
-      paddingBottom: tokens.spacing.xl,
-    },
-    listHeader: {
-      gap: tokens.spacing.sm,
-      paddingHorizontal: tokens.spacing.lg,
-      paddingBottom: tokens.spacing.sm,
-      backgroundColor: tokens.color.surface.popover,
-    },
     search: sheetFieldStyles(tokens, accent ?? tokens.color.text.foreground)
       .field,
-    error: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.semantic.destructive,
-    },
-    caption: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.muted,
-      paddingHorizontal: tokens.spacing.lg,
-      paddingTop: tokens.spacing.sm,
-    },
-    typeRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing.sm,
-      minHeight: tokens.touch.minimum + tokens.spacing.xs,
-      paddingHorizontal: tokens.spacing.lg,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: tokens.color.border.hairline,
-    },
-    check: {
-      width: 18,
-    },
-    typeName: {
-      ...body,
-      flex: 1,
-      color: tokens.color.text.foreground,
-    },
-    typeSets: {
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
+    pointsField: {
+      width: 88,
+      textAlign: "center",
     },
   });
 }

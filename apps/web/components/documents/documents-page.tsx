@@ -271,7 +271,7 @@ function ChapterDocumentsPage() {
   );
 
   /*
-    The upload panel's type chips: the chapter's own list of document types
+    The upload panel's Type menu: the chapter's own list of document types
     (#3642). Until that list has loaded, or when it can't be read, the common
     types plus every type the documents in hand already use, so the panel still
     offers the spellings the library has.
@@ -439,7 +439,7 @@ function ChapterDocumentsPage() {
           upload={upload}
           folders={folderNames}
           typeOptions={typeOptions}
-          typeRows={typesQuery.isSuccess && canManageTypes ? typeRows : null}
+          typeRows={typesQuery.isSuccess ? typeRows : null}
           importContext={importContext}
           documents={documents}
           folderRows={folders}
