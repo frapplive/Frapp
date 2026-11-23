@@ -271,3 +271,28 @@ export function sameDraft(a: ProfileDraft, b: ProfileDraft): boolean {
     (field) => a[field] === b[field],
   );
 }
+
+/** The draft fields s03's About you asks (#5284). */
+export const ABOUT_YOU_FIELDS = [
+  "phone",
+  "major",
+  "graduationYear",
+  "birthdayMonth",
+  "birthdayDay",
+  "birthdayYear",
+  "birthdayVisibility",
+] as const satisfies readonly ProfileDraftField[];
+
+/**
+ * `profilePatch` for s03's About you (#5284): the same rules and the same
+ * refusals as the Edit sheet, over the fields that step asks. The name isn't
+ * on the step (the screen before it saved it), so it is held equal on both
+ * sides and is never sent or refused here.
+ */
+export function aboutYouPatch(
+  original: ProfileDraft,
+  draft: ProfileDraft,
+): ProfilePatchResult {
+  const held = { displayName: "-", bio: "", city: "", company: "" };
+  return profilePatch({ ...original, ...held }, { ...draft, ...held });
+}

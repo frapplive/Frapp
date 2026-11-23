@@ -2,7 +2,10 @@ import type { components } from "@repo/api-sdk";
 import { normalizePhone } from "@repo/formatting";
 import {
   BIRTHDAY_VISIBILITY_DEFAULT,
+  type BirthdayDraftProblem,
+  birthdayDraftProblem,
   type BirthdayVisibility,
+  isPhoneNumber,
 } from "@repo/validation";
 
 /** The `PATCH /v1/users/me` body, the generated `UpdateUserDto`. */
@@ -87,4 +90,31 @@ export function profileSaveBody(
   }
 
   return body;
+}
+
+/** Why a Save can't be sent yet, on the field the member must fix. */
+export type ProfileSaveProblem =
+  { field: "phone" } | { field: "birthday"; problem: BirthdayDraftProblem };
+
+/**
+ * The checks a Save runs before it sends `body` (from `profileSaveBody`):
+ * a phone the API would refuse (`isPhoneNumber`), or half a birthday or a
+ * day its month lacks (#4959). Shared by `/profile` and `/welcome`'s About
+ * you, so the two refuse the same values in the same words.
+ */
+export function profileSaveProblem(
+  body: ProfileSaveBody,
+  draft: ProfileFields,
+): ProfileSaveProblem | null {
+  if (body.phone && !isPhoneNumber(body.phone)) return { field: "phone" };
+  // Month and day go together; the year rides with them.
+  if (body.birthday_visibility !== undefined) {
+    const problem = birthdayDraftProblem(
+      draft.birthday_month ?? null,
+      draft.birthday_day ?? null,
+      draft.birthday_year ?? null,
+    );
+    if (problem) return { field: "birthday", problem };
+  }
+  return null;
 }
