@@ -328,6 +328,20 @@ export interface Database {
         Returns: ChatChannel[];
       };
       /**
+       * `20261123185005` (#5905) — new members' copies of an existing group
+       * task, made from one of its copies with its checklist; a member who
+       * already has a copy is skipped. Returns the copies made.
+       */
+      add_task_group_copies: {
+        Args: {
+          p_chapter_id: string;
+          p_group_id: string;
+          p_template_id: string;
+          p_assignee_ids: string[];
+        };
+        Returns: Task[];
+      };
+      /**
        * `20261112165020` (#714) — a chapter's AI usage in `[p_from, p_to)`, one
        * row per task, provider and model. Bigint columns may arrive as strings.
        */
@@ -557,20 +571,6 @@ export interface Database {
         Returns:
           | { outcome: 'ok'; invites: Invite[] }
           | { outcome: 'over'; chapter: string[]; inviter: string[] };
-      };
-      /**
-       * `20261123185005` (#5905) — new members' copies of an existing group
-       * task, made from one of its copies with its checklist; a member who
-       * already has a copy is skipped. Returns the copies made.
-       */
-      add_task_group_copies: {
-        Args: {
-          p_chapter_id: string;
-          p_group_id: string;
-          p_template_id: string;
-          p_assignee_ids: string[];
-        };
-        Returns: Task[];
       };
       /**
        * `20261117172708` (#4295 step 3) — a task for everyone: its group, a
