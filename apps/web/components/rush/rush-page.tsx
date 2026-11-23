@@ -8,6 +8,7 @@ import {
   useRushPipeline,
   useViewerUserId,
   type RushPipelineCandidate,
+  rushOpenProspectCount,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { vocab } from "@repo/org-archetypes";
@@ -129,10 +130,7 @@ export function RushPage() {
   }
 
   const { stages, tags, candidates } = pipeline.data;
-  const closedKeys = new Set(
-    stages.filter((stage) => stage.category === "closed").map((s) => s.key),
-  );
-  const open = candidates.filter((c) => !closedKeys.has(c.stage)).length;
+  const open = rushOpenProspectCount(stages, candidates);
   const opened = candidates.find((c) => c.id === openId) ?? null;
   const writable = gate.allowed;
   const view = {

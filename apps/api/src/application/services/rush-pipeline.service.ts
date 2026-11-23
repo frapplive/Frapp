@@ -223,7 +223,7 @@ export class RushPipelineService {
     candidateId: string,
     chapterId: string,
     stageKey: string,
-    closedReason: string | undefined,
+    closedReason: string | null | undefined,
   ): Promise<RushCandidate> {
     const candidate = await this.requireCandidate(candidateId, chapterId);
     const stages = await this.listStages(chapterId);
@@ -240,7 +240,8 @@ export class RushPipelineService {
         );
       }
       reason = closedReason;
-    } else if (closedReason !== undefined) {
+    } else if (closedReason != null) {
+      // `null` is "no reason", as the response types it.
       throw new BadRequestException('Only a Closed stage takes a reason');
     }
     return this.pipelineRepo.setCandidateStage(

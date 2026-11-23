@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { isCardReadMiss } from "./card-read-miss";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { rushPipelineKeys } from "./use-rush-pipeline";
 
 export const rushKeys = {
   all: ["rush"] as const,
@@ -72,7 +73,7 @@ export function useVoteRushCandidate() {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
       // The pipeline shows the same vote (#5924).
       void queryClient.invalidateQueries({
-        queryKey: ["rush", chapterId, "pipeline"],
+        queryKey: rushPipelineKeys.pipeline(chapterId),
       });
     },
   });
@@ -100,6 +101,10 @@ export function useBidRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
+      // The pipeline shows the bid too (#5924).
+      void queryClient.invalidateQueries({
+        queryKey: rushPipelineKeys.pipeline(chapterId),
+      });
     },
   });
 }

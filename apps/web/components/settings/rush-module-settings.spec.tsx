@@ -156,6 +156,59 @@ describe("the recruitment stage editor", () => {
     });
   });
 
+  it("reorders a stage within its category from the keyboard", async () => {
+    const user = userEvent.setup();
+    const stages = [...STAGES, stage("coffee", "Coffee", "met", 1)];
+    render(<RushStageEditor stages={stages} canEdit />);
+    screen.getByRole("button", { name: "Reorder Coffee" }).focus();
+    await user.keyboard("{ArrowUp}");
+    const body = saveStages.mock.calls[0]![0] as Array<{
+      id?: string;
+      label: string;
+    }>;
+    expect(body.map((row) => row.label)).toEqual([
+      "New",
+      "Contacted",
+      "Coffee",
+      "Met",
+      "Engaged",
+      "Bid ready",
+      "Closed",
+    ]);
+    expect(body.every((row) => row.id)).toBe(true);
+  });
+
+  it("holds a change made while a save is out, then sends it with the new stage's id", async () => {
+    const user = userEvent.setup();
+    render(<RushStageEditor stages={STAGES} canEdit />);
+    const met = screen.getByRole("region", { name: "Met" });
+    await user.click(within(met).getByRole("button", { name: "Add a stage" }));
+    await user.type(
+      within(met).getByRole("textbox", { name: "New met stage" }),
+      "Coffee{Enter}",
+    );
+    expect(saveStages).toHaveBeenCalledTimes(1);
+    // A second change before the first save returns waits for it.
+    await user.click(
+      screen.getByRole("switch", { name: "Show Engaged on the board" }),
+    );
+    expect(saveStages).toHaveBeenCalledTimes(1);
+    const [, options] = saveStages.mock.calls[0]! as [
+      unknown,
+      { onSuccess: (saved: unknown) => void },
+    ];
+    options.onSuccess([...STAGES, stage("s_new", "Coffee", "met", 1)]);
+    await screen.findByRole("switch", { name: "Show Engaged on the board" });
+    expect(saveStages).toHaveBeenCalledTimes(2);
+    const second = saveStages.mock.calls[1]![0] as Array<{
+      id?: string;
+      label: string;
+      hidden: boolean;
+    }>;
+    expect(second.find((row) => row.label === "Coffee")?.id).toBe("s-s_new");
+    expect(second.find((row) => row.label === "Engaged")?.hidden).toBe(true);
+  });
+
   it("is read-only without rush:manage", () => {
     render(<RushStageEditor stages={STAGES} canEdit={false} />);
     expect(screen.queryByRole("textbox")).toBeNull();
@@ -216,13 +269,51 @@ describe("turning recruitment notes on", () => {
     ).toBeInTheDocument();
   });
 
-  it("goes away once a tier holds it", () => {
-    tiers.current = [
-      { ...TIERS[0]!, permissions: ["rush:read_notes"] },
-      ...TIERS.slice(1),
-    ];
-    render(<RushNotesAccess canEditRoles />);
-    expect(screen.queryByText(/Nobody can read/)).toBeNull();
+  it("goes away once both top tiers hold it", () => {
+    tiers.current = TIERS.map((tier, index) => ({
+      ...tier,
+      permissions: index < 2 ? ["rush:read_notes"] : [],
+    }));
+    const { container } = render(<RushNotesAccess canEditRoles />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("goes away once a tier below the top two holds it", () => {
+    tiers.current = TIERS.map((tier, index) => ({
+      ...tier,
+      permissions: index === 2 ? ["rush:read_notes"] : [],
+    }));
+    const { container } = render(<RushNotesAccess canEditRoles />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("stays after a grant that only half landed, and finishes it", async () => {
+    // The first tier's write fails: the overlay toasts and doesn't throw.
+    updateTier.mockRejectedValueOnce(new Error("offline"));
+    const user = userEvent.setup();
+    const view = render(<RushNotesAccess canEditRoles />);
+    await user.click(
+      screen.getByRole("button", { name: "Let the top two tiers read them" }),
+    );
+    tiers.current = TIERS.map((tier, index) => ({
+      ...tier,
+      permissions: index === 1 ? ["rush:read_notes"] : [],
+    }));
+    view.rerender(<RushNotesAccess canEditRoles />);
+    expect(
+      screen.getByText(
+        "Only Officers and chairs can read recruitment notes so far.",
+      ),
+    ).toBeInTheDocument();
+    updateTier.mockClear();
+    await user.click(
+      screen.getByRole("button", { name: "Let Exec board read them too" }),
+    );
+    expect(updateTier).toHaveBeenCalledTimes(1);
+    expect(updateTier).toHaveBeenCalledWith({
+      id: "t-exec",
+      body: { permissions: ["rush:read_notes"] },
+    });
   });
 
   it("goes away once a role outside the tiers holds it", () => {

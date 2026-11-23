@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { RushPipelineCandidate, RushStage } from "@repo/hooks";
 import {
-  openProspectCount,
-  rowTags,
-  rushStageTabs,
-  rushTagLabels,
-} from "./rush-entry";
+  rushAppliedTags,
+  rushOpenProspectCount,
+  rushTagOverflow,
+  type RushPipelineCandidate,
+  type RushStage,
+} from "@repo/hooks";
+import { rushStageTabs } from "./rush-entry";
 
 /**
  * The recruitment list's chips (#5924): the board's columns, one stage at a
@@ -90,10 +91,10 @@ describe("rushStageTabs", () => {
   });
 });
 
-describe("openProspectCount", () => {
+describe("rushOpenProspectCount", () => {
   it("counts everyone not in a Closed stage", () => {
     expect(
-      openProspectCount(STAGES, [
+      rushOpenProspectCount(STAGES, [
         candidate("a", "passed", 1),
         candidate("b", "new", 1),
         candidate("c", "old-met", 1),
@@ -111,15 +112,14 @@ describe("a row's tags", () => {
   }));
 
   it("names them in the chapter's order and skips an unknown id", () => {
-    expect(rushTagLabels(["t3", "gone", "t1"], tags)).toEqual([
-      "Tag 1",
-      "Tag 3",
-    ]);
+    expect(
+      rushAppliedTags(["t3", "gone", "t1"], tags).map((t) => t.label),
+    ).toEqual(["Tag 1", "Tag 3"]);
   });
 
   it("shows two, then a count of the rest", () => {
-    expect(rowTags(["a", "b"])).toEqual({ shown: ["a", "b"], more: 0 });
-    expect(rowTags(["a", "b", "c", "d"])).toEqual({
+    expect(rushTagOverflow(["a", "b"])).toEqual({ shown: ["a", "b"], more: 0 });
+    expect(rushTagOverflow(["a", "b", "c", "d"])).toEqual({
       shown: ["a", "b"],
       more: 2,
     });

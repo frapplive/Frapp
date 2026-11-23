@@ -564,6 +564,16 @@ describe('RushPipelineService', () => {
         null,
       );
     });
+
+    it('takes an explicit null reason on a working stage as none', async () => {
+      await service.moveStage('cand-1', CHAPTER, 'contacted', null);
+      expect(pipelineRepo.setCandidateStage).toHaveBeenCalledWith(
+        'cand-1',
+        CHAPTER,
+        'contacted',
+        null,
+      );
+    });
   });
 
   describe('tags', () => {

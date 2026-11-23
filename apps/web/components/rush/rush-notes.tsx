@@ -24,25 +24,6 @@ import { toastFailure } from "@/lib/failure-toast";
 import { OWNS_ESCAPE } from "@/components/shared/panel";
 
 /**
- * Whether the viewer sees a prospect's Notes section at all. Nobody reads
- * notes about themselves (`spec/behavior/ifc-recruitment.md` § Notes), so a
- * prospect linked to the viewer's own account shows none, whatever keys they
- * hold; until the viewer's id is known, a linked prospect shows none either.
- * Otherwise it shows to a role that reads notes (`rush:read_notes`) or
- * writes them (`rush:notes`).
- */
-export function rushNotesVisible(
-  candidate: Pick<RushPipelineCandidate, "user_id">,
-  access: Pick<RushPipelineAccess, "readNotes" | "writeNotes">,
-  viewerId: string | null,
-): boolean {
-  if (candidate.user_id && (!viewerId || candidate.user_id === viewerId)) {
-    return false;
-  }
-  return access.readNotes || access.writeNotes;
-}
-
-/**
  * A prospect's notes, private to the chapter: never on the chat card or in
  * a push. A role with `rush:notes` writes them; one with `rush:read_notes`
  * reads them, newest first, with who wrote each and when. An author edits or

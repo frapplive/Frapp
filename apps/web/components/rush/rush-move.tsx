@@ -41,7 +41,7 @@ type Asking = {
  * ask the same question.
  *
  * A Closed stage needs one of the four reasons a member picks by hand
- * (`spec/behavior/ifc-recruitment.md` § Stages), so a move there asks first,
+ * (`spec/behavior/rush.md` § Stages), so a move there asks first,
  * the way Pipedrive and HubSpot ask why a deal was lost before it leaves the
  * board. Cancelling leaves the prospect where they were: nothing is sent
  * until a reason is picked. When the move could land in more than one Closed

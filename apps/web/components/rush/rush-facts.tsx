@@ -1,4 +1,9 @@
-import type { RushPipelineCandidate, RushTag } from "@repo/hooks";
+import {
+  rushAppliedTags,
+  rushTagOverflow,
+  type RushPipelineCandidate,
+  type RushTag,
+} from "@repo/hooks";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -19,10 +24,9 @@ export function RushTagChips({
   max?: number;
   className?: string;
 }) {
-  const applied = tags.filter((tag) => tagIds.includes(tag.id));
+  const applied = rushAppliedTags(tagIds, tags);
   if (applied.length === 0) return null;
-  const shown = max === undefined ? applied : applied.slice(0, max);
-  const more = applied.length - shown.length;
+  const { shown, more } = rushTagOverflow(applied, max ?? applied.length);
   return (
     <span className={cn("flex min-w-0 flex-wrap gap-1", className)}>
       {shown.map((tag) => (

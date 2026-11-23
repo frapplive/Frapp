@@ -11,6 +11,7 @@ import {
   type RushPipelineCandidate,
   type RushStage,
   type RushTag,
+  rushNotesMode,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { RUSH_CLOSED_REASON_LABELS, sortRushStages } from "@repo/validation";
@@ -35,7 +36,7 @@ import { FieldRow, StaticValue } from "@/components/tasks/task-panel";
 import { toastFailure } from "@/lib/failure-toast";
 import { cn } from "@/lib/utils";
 import { RushRatingControl } from "./rush-rating";
-import { RushNotes, rushNotesVisible } from "./rush-notes";
+import { RushNotes } from "./rush-notes";
 
 export interface RushProspectPanelProps {
   candidate: RushPipelineCandidate | null;
@@ -110,9 +111,9 @@ function ProspectBody({
   const addable = tags.filter((tag) => !candidate.tag_ids.includes(tag.id));
   const canTag = access.writeNotes && writable;
 
-  function saveTags(tagIds: string[]) {
-    setTags.mutate(
-      { candidateId: candidate.id, tagIds },
+  function saveTags(change: { add?: string; remove?: string }) {
+    setTags.change(
+      { candidateId: candidate.id, ...change },
       {
         onError: (error) =>
           toastFailure({
@@ -260,9 +261,7 @@ function ProspectBody({
                   <button
                     type="button"
                     aria-label={`Remove ${tag.label}`}
-                    onClick={() =>
-                      saveTags(candidate.tag_ids.filter((id) => id !== tag.id))
-                    }
+                    onClick={() => saveTags({ remove: tag.id })}
                     className={cn(
                       "grid h-5 w-5 place-items-center rounded-full text-muted-foreground hover:bg-card-hover hover:text-foreground",
                       FOCUS_RING,
@@ -300,7 +299,7 @@ function ProspectBody({
                     {tag.label}
                   </span>
                 )}
-                onPick={(tag) => saveTags([...candidate.tag_ids, tag.id])}
+                onPick={(tag) => saveTags({ add: tag.id })}
               />
             ) : null}
             {canTag && tags.length === 0 ? (
@@ -311,7 +310,7 @@ function ProspectBody({
           </div>
         </FieldRow>
       </dl>
-      {rushNotesVisible(candidate, access, viewerId) ? (
+      {rushNotesMode(access, candidate.user_id, viewerId) ? (
         <div className="border-t border-border pt-4">
           <RushNotes
             key={candidate.id}

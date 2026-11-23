@@ -8,7 +8,6 @@ import {
   type RushPipelineAccess,
   type RushPipelineCandidate,
   type RushStage,
-  type RushTag,
 } from "@repo/hooks";
 import { memberViewVocabulary, vocab } from "@repo/org-archetypes";
 import { isModuleEnabled, sortRushStages } from "@repo/validation";
@@ -89,41 +88,4 @@ export function rushStageTabs(
     receivesAdds: column.category === "new",
     candidates: byColumn.get(column.id) ?? [],
   }));
-}
-
-/** The prospects still in play: everyone not in a Closed stage. */
-export function openProspectCount(
-  stages: readonly RushStage[],
-  candidates: readonly RushPipelineCandidate[],
-): number {
-  const closed = new Set(
-    stages.filter((stage) => stage.category === "closed").map((s) => s.key),
-  );
-  return candidates.filter((candidate) => !closed.has(candidate.stage)).length;
-}
-
-/** A prospect's tags by name, in the chapter's list order. */
-export function rushTagLabels(
-  tagIds: readonly string[],
-  tags: readonly RushTag[],
-): string[] {
-  const on = new Set(tagIds);
-  return tags.filter((tag) => on.has(tag.id)).map((tag) => tag.label);
-}
-
-/**
- * The tags a row has room for: two, then "+N" for the rest (P5.3: a chip set
- * has a cap). The prospect's screen shows them all.
- */
-export const ROW_TAG_LIMIT = 2;
-
-export function rowTags(labels: readonly string[]): {
-  shown: string[];
-  more: number;
-} {
-  if (labels.length <= ROW_TAG_LIMIT) return { shown: [...labels], more: 0 };
-  return {
-    shown: labels.slice(0, ROW_TAG_LIMIT),
-    more: labels.length - ROW_TAG_LIMIT,
-  };
 }

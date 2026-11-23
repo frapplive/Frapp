@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { rushPipelineAccess } from "@repo/hooks";
+import { rushPipelineAccess, rushNotesMode } from "@repo/hooks";
 
 const { notesEnabled, notes } = vi.hoisted(() => ({
   notesEnabled: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useRateRushCandidate: () => ({ mutate: vi.fn() }),
   useVoteRushCandidate: () => ({ mutate: vi.fn(), isPending: false }),
-  useSetRushCandidateTags: () => ({ mutate: vi.fn() }),
+  useSetRushCandidateTags: () => ({ change: vi.fn(), isPending: false }),
   useRushNotes: (_id: string, options?: { enabled?: boolean }) => {
     notesEnabled(options?.enabled);
     return { data: notes.current, isPending: false, isError: false };
@@ -24,7 +24,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 }));
 
 const { RushProspectPanel } = await import("./rush-prospect-panel");
-const { rushNotesVisible } = await import("./rush-notes");
 
 const STAGES = [
   {
@@ -215,11 +214,11 @@ describe("a prospect's panel", () => {
   });
 });
 
-describe("rushNotesVisible", () => {
+describe("rushNotesMode", () => {
   const all = rushPipelineAccess(EVERY);
   it("hides a linked prospect's notes until the viewer is known", () => {
-    expect(rushNotesVisible({ user_id: "x" }, all, null)).toBe(false);
-    expect(rushNotesVisible({ user_id: "x" }, all, "me")).toBe(true);
-    expect(rushNotesVisible({ user_id: null }, all, null)).toBe(true);
+    expect(rushNotesMode(all, "x", null)).toBeNull();
+    expect(rushNotesMode(all, "x", "me")).not.toBeNull();
+    expect(rushNotesMode(all, null, null)).not.toBeNull();
   });
 });

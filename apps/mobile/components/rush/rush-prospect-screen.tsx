@@ -14,6 +14,8 @@ import {
   useVoteRushCandidate,
   type RushManualClosedReason,
   type RushPipelineCandidate,
+  rushAppliedTags,
+  rushNotesMode,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { formatDayHeading } from "@repo/formatting";
@@ -38,11 +40,11 @@ import { InlineNote } from "@/components/inline-note";
 import { OptionSheet } from "@/components/option-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { useRefetchAll } from "@/components/pull-to-refresh";
-import { RushNotes, rushNotesMode } from "@/components/rush/rush-notes";
+import { RushNotes } from "@/components/rush/rush-notes";
 import { RushStars } from "@/components/rush/rush-stars";
 import { alertFailure } from "@/lib/failure-alert";
 import { firstParam } from "@/lib/route-params";
-import { rushTagLabels, useRushEntry } from "@/lib/rush/rush-entry";
+import { useRushEntry } from "@/lib/rush/rush-entry";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /** The reason sheet's title, asked before a prospect moves into a Closed stage. */
@@ -165,19 +167,15 @@ export function RushProspectScreen() {
   const rating = rushRatingSummary(candidate);
   const voted = candidate.viewer_has_voted || vote.isSuccess;
   const voteCount = candidate.vote_count;
-  const tagLabels = rushTagLabels(candidate.tag_ids, data.tags);
+  const tagLabels = rushAppliedTags(candidate.tag_ids, data.tags).map(
+    (tag) => tag.label,
+  );
   const canTag = access.writeNotes && data.tags.length > 0;
   const notesMode = rushNotesMode(access, candidate.user_id, viewerId);
 
   const toggleTag = (tagId: string) => {
-    const on = candidate.tag_ids.includes(tagId);
-    setTags.mutate(
-      {
-        candidateId: candidate.id,
-        tagIds: on
-          ? candidate.tag_ids.filter((id) => id !== tagId)
-          : [...candidate.tag_ids, tagId],
-      },
+    setTags.change(
+      { candidateId: candidate.id, toggle: tagId },
       { onError: fail("Couldn't change the tags") },
     );
   };

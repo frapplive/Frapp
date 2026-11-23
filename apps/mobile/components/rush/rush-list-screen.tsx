@@ -7,6 +7,9 @@ import {
   useRushPipeline,
   type RushPipelineCandidate,
   type RushTag,
+  rushAppliedTags,
+  rushOpenProspectCount,
+  rushTagOverflow,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { SignetTokens } from "@repo/theme/signet";
@@ -24,10 +27,7 @@ import { InlineNote } from "@/components/inline-note";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import {
-  openProspectCount,
-  rowTags,
   rushStageTabs,
-  rushTagLabels,
   useRushEntry,
   type RushStageTab,
 } from "@/lib/rush/rush-entry";
@@ -77,7 +77,7 @@ export function RushListScreen() {
   // the picked one leaves (an officer hid it while it was open).
   const tab = tabs.find((t) => t.id === picked) ?? tabs[0] ?? null;
   const openCount = data
-    ? openProspectCount(data.stages, data.candidates)
+    ? rushOpenProspectCount(data.stages, data.candidates)
     : null;
 
   if (entry.settled && !entry.show) return <Redirect href="/you" />;
@@ -240,8 +240,8 @@ export function ProspectRow({
   const meta = [`Added by ${candidate.created_by_name}`, rating]
     .filter(Boolean)
     .join(" · ");
-  const labels = rushTagLabels(candidate.tag_ids, tags);
-  const cut = rowTags(labels);
+  const labels = rushAppliedTags(candidate.tag_ids, tags).map((t) => t.label);
+  const cut = rushTagOverflow(labels);
   return (
     <PressableRow
       onCard

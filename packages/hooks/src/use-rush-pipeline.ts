@@ -25,7 +25,6 @@ export type RushManualClosedReason = NonNullable<
 export const rushPipelineKeys = {
   pipeline: (chapterId: string | null) =>
     ["rush", chapterId, "pipeline"] as const,
-  stages: (chapterId: string | null) => ["rush", chapterId, "stages"] as const,
   notes: (chapterId: string | null, candidateId: string) =>
     ["rush", chapterId, "notes", candidateId] as const,
 };
@@ -47,33 +46,13 @@ export function useRushPipeline(options?: { enabled?: boolean }) {
   });
 }
 
-/** The chapter's stages alone, for the settings page's stage editor. */
-export function useRushStages(options?: { enabled?: boolean }) {
-  const client = useFrappClient();
-  const chapterId = useActiveChapterId();
-  return useQuery({
-    queryKey: rushPipelineKeys.stages(chapterId),
-    queryFn: async ({ signal }) => {
-      const { data, error } = await client.GET("/v1/rush/stages", { signal });
-      if (error) throw error;
-      return data;
-    },
-    enabled: (options?.enabled ?? true) && !!chapterId,
-  });
-}
-
 function useRushInvalidate() {
   const queryClient = useQueryClient();
   const chapterId = useActiveChapterId();
   return () =>
-    Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: rushPipelineKeys.pipeline(chapterId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: rushPipelineKeys.stages(chapterId),
-      }),
-    ]);
+    queryClient.invalidateQueries({
+      queryKey: rushPipelineKeys.pipeline(chapterId),
+    });
 }
 
 /**
@@ -183,13 +162,24 @@ export function useMoveRushStage() {
   });
 }
 
-/** Replace a prospect's tags (`rush:notes`). */
+/**
+ * Tag or untag a prospect (`rush:notes`). Each change is worked out from the
+ * cached list at the moment it's asked for, and the cache takes it at once,
+ * so a second tap made before the first one's write returns builds on it
+ * rather than on what was last drawn. The writes run one at a time (one
+ * mutation scope), and the pipeline is read again only once the last of
+ * them settles, so an earlier write's read can't put back a list a later
+ * tap already changed. The route replaces the whole list, so running the
+ * writes in order also keeps one from undoing another on the server.
+ */
 export function useSetRushCandidateTags() {
   const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
   const invalidate = useRushInvalidate();
-  const optimistic = useOptimisticCandidate();
-  return useMutation({
+  const mutation = useMutation({
     mutationKey: ["rush", "set-tags"],
+    scope: { id: "rush-set-tags" },
     mutationFn: async (input: { candidateId: string; tagIds: string[] }) => {
       const { data, error } = await client.PUT(
         "/v1/rush/candidates/{id}/tags",
@@ -201,14 +191,53 @@ export function useSetRushCandidateTags() {
       if (error) throw error;
       return data;
     },
-    onMutate: (input) =>
-      optimistic(input.candidateId, (candidate) => ({
-        ...candidate,
-        tag_ids: input.tagIds,
-      })),
-    onError: (_error, _input, rollback) => rollback?.(),
-    onSettled: invalidate,
+    onSettled: () => {
+      // This mutation still counts as running here.
+      if (queryClient.isMutating({ mutationKey: ["rush", "set-tags"] }) <= 1) {
+        void invalidate();
+      }
+    },
   });
+  const change = (
+    input: {
+      candidateId: string;
+      add?: string;
+      remove?: string;
+      /** Adds the tag if the cached list lacks it, else removes it. */
+      toggle?: string;
+    },
+    options?: { onError?: (error: unknown) => void },
+  ) => {
+    const key = rushPipelineKeys.pipeline(chapterId);
+    const pipeline = queryClient.getQueryData<RushPipeline>(key);
+    const current = pipeline?.candidates.find(
+      (candidate) => candidate.id === input.candidateId,
+    );
+    if (!pipeline || !current) return;
+    if (input.toggle) {
+      input = current.tag_ids.includes(input.toggle)
+        ? { ...input, remove: input.toggle }
+        : { ...input, add: input.toggle };
+    }
+    let tagIds = current.tag_ids.filter((id) => id !== input.remove);
+    if (input.add && !tagIds.includes(input.add)) {
+      tagIds = [...tagIds, input.add];
+    }
+    void queryClient.cancelQueries({ queryKey: key });
+    queryClient.setQueryData<RushPipeline>(key, {
+      ...pipeline,
+      candidates: pipeline.candidates.map((candidate) =>
+        candidate.id === input.candidateId
+          ? { ...candidate, tag_ids: tagIds }
+          : candidate,
+      ),
+    });
+    mutation.mutate(
+      { candidateId: input.candidateId, tagIds },
+      { onError: options?.onError },
+    );
+  };
+  return { change, isPending: mutation.isPending };
 }
 
 /** Set the viewer's own 1-to-5 rating (`rush:vote`). */

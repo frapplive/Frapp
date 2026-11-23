@@ -319,7 +319,7 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "rush:manage",
     "rush",
     "Manage recruitment",
-    "Edit the chapter's stages and tags, delete any note, delete prospects and export the list.",
+    "Edit the chapter's stages and tags, and delete anyone's note on a prospect.",
   ),
 
   chapterPermission(

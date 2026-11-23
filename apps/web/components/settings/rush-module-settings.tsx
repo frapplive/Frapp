@@ -67,7 +67,7 @@ export function RushModuleSettings({
  * no role holds `rush:read_notes` (the President's `*` doesn't count: it
  * isn't a grant anyone chose). New chapters start with it on for their top
  * two tiers; an existing chapter turns it on here, in one press, for the
- * same two (`spec/behavior/ifc-recruitment.md` § Notes). Once anyone holds
+ * same two (`spec/behavior/rush.md` § Notes). Once anyone holds
  * it the line goes, and the Who can block below says who.
  *
  * The write is a tier's permission list (`useTierPermissionToggle`), so it
@@ -81,17 +81,22 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   if (rolesQuery.isPending || tiersQuery.isPending) return null;
   if (rolesQuery.isError || tiersQuery.isError) return null;
 
-  const held =
-    tiers.some((tier) =>
-      toggle.permissionsOf(tier).includes(RUSH_READ_NOTES),
-    ) ||
+  const top = [...tiers].sort((a, b) => a.position - b.position).slice(0, 2);
+  const holds = (tier: (typeof tiers)[number]) =>
+    toggle.permissionsOf(tier).includes(RUSH_READ_NOTES);
+  // Anyone holding it beyond the top two means the chapter chose who reads
+  // notes: the line goes. Only part of the top two holding it (a grant that
+  // half failed) keeps the line, so the press can finish the job.
+  const heldElsewhere =
+    tiers.some((tier) => !top.includes(tier) && holds(tier)) ||
     roles.some(
       (role) =>
         !isWildcardRole(role) && role.permissions.includes(RUSH_READ_NOTES),
     );
-  if (held) return null;
+  const missing = top.filter((tier) => !holds(tier));
+  if (heldElsewhere || (top.length > 0 && missing.length === 0)) return null;
+  const partly = missing.length < top.length;
 
-  const top = [...tiers].sort((a, b) => a.position - b.position).slice(0, 2);
   const why =
     top.length === 0
       ? `Your chapter has no ${words.plural} yet.`
@@ -105,7 +110,9 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
   async function grant() {
     setGranting(true);
     try {
-      for (const tier of top) {
+      // The overlay reports a failed write as a toast and doesn't throw;
+      // a tier it failed on stays missing, so the line stays to retry.
+      for (const tier of missing) {
         await toggle.toggle(tier, RUSH_READ_NOTES, false);
       }
     } finally {
@@ -117,7 +124,12 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
     <ProfileSection id="settings-module-rush-notes" title="Notes">
       <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-foreground">
-          Nobody can read recruitment notes yet.
+          {partly
+            ? `Only ${top
+                .filter(holds)
+                .map((tier) => tier.name)
+                .join(" and ")} can read recruitment notes so far.`
+            : "Nobody can read recruitment notes yet."}
         </p>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <Button
@@ -128,7 +140,9 @@ export function RushNotesAccess({ canEditRoles }: { canEditRoles: boolean }) {
             title={why ?? undefined}
             onClick={() => void grant()}
           >
-            Let the top two {words.plural} read them
+            {partly
+              ? `Let ${missing.map((tier) => tier.name).join(" and ")} read them too`
+              : `Let the top two ${words.plural} read them`}
           </Button>
           {why ? (
             <span className="text-caption text-muted-foreground">{why}</span>

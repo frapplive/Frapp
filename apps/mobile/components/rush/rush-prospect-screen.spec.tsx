@@ -54,7 +54,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isPending: false,
     isSuccess: false,
   }),
-  useSetRushCandidateTags: () => ({ mutate: setTags, isPending: false }),
+  useSetRushCandidateTags: () => ({ change: setTags, isPending: false }),
   useRushNotes: (_id: string, options?: { enabled?: boolean }) => {
     state.notesOptions.push(options);
     return {
@@ -79,11 +79,8 @@ import {
   CLOSED_REASON_TITLE,
   RushProspectScreen,
 } from "./rush-prospect-screen";
-import {
-  RUSH_NOTES_HEADING,
-  RUSH_NOTES_WRITE_ONLY,
-  rushNotesMode,
-} from "./rush-notes";
+import { rushNotesMode } from "@repo/hooks";
+import { RUSH_NOTES_HEADING, RUSH_NOTES_WRITE_ONLY } from "./rush-notes";
 import { RushStars } from "./rush-stars";
 import { OptionSheet } from "@/components/option-sheet";
 
@@ -343,12 +340,12 @@ describe("a prospect's screen (#5924)", () => {
       expect(button(tree, "Edit tags")).toHaveLength(1);
       act(() => sheet(tree, "Tags")!.props.onSelect("t2"));
       expect(setTags).toHaveBeenCalledWith(
-        { candidateId: "cand-1", tagIds: ["t1", "t2"] },
+        { candidateId: "cand-1", toggle: "t2" },
         expect.anything(),
       );
       act(() => sheet(tree, "Tags")!.props.onSelect("t1"));
       expect(setTags).toHaveBeenLastCalledWith(
-        { candidateId: "cand-1", tagIds: [] },
+        { candidateId: "cand-1", toggle: "t1" },
         expect.anything(),
       );
     });

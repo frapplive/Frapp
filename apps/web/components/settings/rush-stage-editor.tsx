@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
 import {
   useSaveRushStages,
@@ -60,11 +60,37 @@ export function stagesBody(drafts: readonly StageDraft[]): RushStageInput[] {
   );
 }
 
+/**
+ * A waiting edit, with the ids the server just gave the stages it added. A
+ * stage added before that save went out has no id in the edit; it is found
+ * by its row in the list that was sent (its name then may since have
+ * changed) and that name among the saved stages of its category.
+ */
+export function withSavedIds(
+  waiting: readonly StageDraft[],
+  sent: readonly StageDraft[],
+  saved: readonly RushStage[],
+): StageDraft[] {
+  const known = new Set(sent.flatMap((draft) => (draft.id ? [draft.id] : [])));
+  const fresh = saved.filter((stage) => !known.has(stage.id));
+  return waiting.map((draft) => {
+    if (draft.id) return draft;
+    const asSent = sent.find((row) => row.rowKey === draft.rowKey);
+    if (!asSent) return draft;
+    const match = fresh.find(
+      (stage) =>
+        stage.category === asSent.category &&
+        stage.label === asSent.label.trim(),
+    );
+    return match ? { ...draft, id: match.id } : draft;
+  });
+}
+
 let newRow = 0;
 
 /**
  * The chapter's recruitment stages, on the Recruitment module page
- * (`spec/behavior/ifc-recruitment.md` § Stages, § Where the chapter's settings
+ * (`spec/behavior/rush.md` § Stages; `ifc-recruitment.md` § Where the chapter's settings
  * live): grouped by the six fixed categories, each stage renamed in place,
  * shown or hidden on the board, and dragged into order within its category
  * (the grip; its arrow keys move it too). A stage never leaves its category,
@@ -86,21 +112,39 @@ export function RushStageEditor({
   const save = useSaveRushStages();
   const problemId = useId();
   // The edit in hand and the server list it was made against: once the
-  // server's list moves on (the save landed and refreshed), it is the truth.
+  // server's list moves on (the save landed and refreshed) and nothing is
+  // still being saved, the server's list is the truth.
   const [edit, setEdit] = useState<{
     basis: readonly RushStage[];
     drafts: StageDraft[];
   } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const drafts = edit && edit.basis === stages ? edit.drafts : draftsOf(stages);
+  // One save at a time. A change made while one is out waits here, newest
+  // wins, and goes once that save returns, with the ids it gave any stage
+  // just added: sent again without its id, a new stage would be added twice,
+  // or the API would refuse the list for missing it.
+  const [saving, setSaving] = useState(false);
+  const queued = useRef<StageDraft[] | null>(null);
+  const drafts =
+    edit && (edit.basis === stages || saving) ? edit.drafts : draftsOf(stages);
 
-  function change(next: StageDraft[]) {
-    setEdit({ basis: stages, drafts: next });
-    const refused = rushStagesProblem(next);
-    setProblem(refused);
-    if (refused) return;
+  function send(next: StageDraft[]) {
+    setSaving(true);
     save.mutate(stagesBody(next), {
+      onSuccess: (saved) => {
+        const waiting = queued.current;
+        queued.current = null;
+        if (!waiting) {
+          setSaving(false);
+          return;
+        }
+        const withIds = withSavedIds(waiting, next, saved);
+        setEdit({ basis: stages, drafts: withIds });
+        send(withIds);
+      },
       onError: (error) => {
+        queued.current = null;
+        setSaving(false);
         setEdit(null);
         toastFailure({
           title: "Couldn't save the stages",
@@ -109,6 +153,18 @@ export function RushStageEditor({
         });
       },
     });
+  }
+
+  function change(next: StageDraft[]) {
+    setEdit({ basis: stages, drafts: next });
+    const refused = rushStagesProblem(next);
+    setProblem(refused);
+    if (refused) return;
+    if (saving) {
+      queued.current = next;
+      return;
+    }
+    send(next);
   }
 
   return (

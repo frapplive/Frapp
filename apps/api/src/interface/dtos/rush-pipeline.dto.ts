@@ -221,7 +221,7 @@ export class MoveRushCandidateStageDto {
   })
   @IsOptional()
   @IsIn(RUSH_MANUAL_CLOSED_REASONS)
-  closed_reason?: RushManualClosedReason;
+  closed_reason?: RushManualClosedReason | null;
 }
 
 export class RushCandidateStageDto {

@@ -6,7 +6,6 @@ import {
   useEditRushNote,
   useRushNotes,
   type RushNote,
-  type RushPipelineAccess,
 } from "@repo/hooks";
 import { formatRelativeDayTime } from "@repo/formatting";
 import {
@@ -44,25 +43,6 @@ export const RUSH_NOTES_HEADING = "Notes · chapter only";
 /** Said to a writer who can't read, in place of the notes they can't see. */
 export const RUSH_NOTES_WRITE_ONLY =
   "Only roles that can read recruitment notes see them.";
-
-/** Who may see the section at all, and what it offers. */
-export function rushNotesMode(
-  access: Pick<RushPipelineAccess, "readNotes" | "writeNotes">,
-  candidateUserId: string | null,
-  viewerId: string | null,
-): { read: boolean; write: boolean } | null {
-  // Nobody reads, or writes, notes about themselves, whatever they hold. A
-  // viewer whose id hasn't loaded yet can't be told apart from the prospect,
-  // so the section waits for it.
-  if (
-    candidateUserId !== null &&
-    (viewerId === null || candidateUserId === viewerId)
-  ) {
-    return null;
-  }
-  if (!access.readNotes && !access.writeNotes) return null;
-  return { read: access.readNotes, write: access.writeNotes };
-}
 
 /**
  * A prospect's notes (#5924, `rush.md` § Notes): the box to write one, then

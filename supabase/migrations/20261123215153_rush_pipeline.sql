@@ -1,7 +1,7 @@
 -- The chapter recruitment pipeline, slice 1 of 3 (#5924, epic #5833):
 -- stage categories with default stages, notes, tags and ratings.
 -- Behavior: spec/behavior/rush.md § Pipeline; table shapes:
--- spec/architecture/school-layer.md § 3 (`rush_stages`).
+-- spec/architecture/school-layer.md § 2.5 (`rush_stages`).
 --
 -- Every table is chapter-private. RLS is on with no policies, the convention
 -- for the other rush tables (20260910020000_rush_candidates.sql): the API

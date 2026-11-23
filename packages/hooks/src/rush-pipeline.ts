@@ -181,3 +181,67 @@ export function rushRatingSummary(candidate: {
 export function rushProspectCount(count: number): string {
   return `${count} ${count === 1 ? "prospect" : "prospects"}`;
 }
+
+/** Stages a prospect can be counted against: `category` and `key`. */
+interface RushStageKeyLike {
+  key: string;
+  category: RushStageCategory;
+}
+
+/**
+ * The prospects still in play: everyone not in a Closed stage. The header's
+ * count on web and on the phone.
+ */
+export function rushOpenProspectCount(
+  stages: readonly RushStageKeyLike[],
+  candidates: readonly Pick<RushCandidateLike, "stage">[],
+): number {
+  const closed = new Set(
+    stages.filter((stage) => stage.category === "closed").map((s) => s.key),
+  );
+  return candidates.filter((candidate) => !closed.has(candidate.stage)).length;
+}
+
+/**
+ * Who may see a prospect's Notes section, and what it offers; `null` hides
+ * it. Nobody reads or writes notes about themselves (`rush.md` § Notes), so
+ * a prospect linked to the viewer's own account shows none, whatever keys
+ * they hold; while the viewer's id is unknown, a linked prospect shows none
+ * either. Otherwise it shows to a role that reads (`rush:read_notes`) or
+ * writes (`rush:notes`) notes.
+ */
+export function rushNotesMode(
+  access: Pick<RushPipelineAccess, "readNotes" | "writeNotes">,
+  candidateUserId: string | null,
+  viewerId: string | null,
+): { read: boolean; write: boolean } | null {
+  if (
+    candidateUserId !== null &&
+    (viewerId === null || candidateUserId === viewerId)
+  ) {
+    return null;
+  }
+  if (!access.readNotes && !access.writeNotes) return null;
+  return { read: access.readNotes, write: access.writeNotes };
+}
+
+/** A prospect's tags, in the chapter's list order; unknown ids drop out. */
+export function rushAppliedTags<T extends { id: string }>(
+  tagIds: readonly string[],
+  tags: readonly T[],
+): T[] {
+  const on = new Set(tagIds);
+  return tags.filter((tag) => on.has(tag.id));
+}
+
+/** How many tags a card or row has room for before "+N". */
+export const RUSH_ROW_TAG_LIMIT = 2;
+
+/** The tags a card or row shows, and how many more there are. */
+export function rushTagOverflow<T>(
+  items: readonly T[],
+  limit: number = RUSH_ROW_TAG_LIMIT,
+): { shown: T[]; more: number } {
+  if (items.length <= limit) return { shown: [...items], more: 0 };
+  return { shown: items.slice(0, limit), more: items.length - limit };
+}
