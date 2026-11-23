@@ -4143,18 +4143,15 @@ describe('TaskService', () => {
         'https://test',
         'http://localhost:3000/x',
         'https://192.168.1.20/photo.jpg',
-      ])(
-        'refuses an invalid link (%s)',
-        async (link) => {
-          mockTaskRepo.findById.mockResolvedValue(
-            inProgress({ proof_kind: 'link' }),
-          );
-          await expect(markDone({ proof_link: link })).rejects.toThrow(
-            'proof_link must be a full web link',
-          );
-          expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
-        },
-      );
+      ])('refuses an invalid link (%s)', async (link) => {
+        mockTaskRepo.findById.mockResolvedValue(
+          inProgress({ proof_kind: 'link' }),
+        );
+        await expect(markDone({ proof_link: link })).rejects.toThrow(
+          'proof_link must be a full web link',
+        );
+        expect(mockTaskRepo.updateIfMatches).not.toHaveBeenCalled();
+      });
 
       it('stores a Link task’s trimmed link with the completion', async () => {
         mockTaskRepo.findById.mockResolvedValue(

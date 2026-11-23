@@ -79,10 +79,14 @@ describe("TaskProof (#4635)", () => {
   });
 
   it("shows a stored link to a name that resolves nowhere as text, not a link (#5882)", () => {
-    render(<TaskProof task={{ id: "t-1", proof_link: "https://test" }} showProof />);
+    render(
+      <TaskProof task={{ id: "t-1", proof_link: "https://test" }} showProof />,
+    );
     expect(screen.queryByRole("link")).toBeNull();
     expect(
-      screen.getByLabelText("Proof link, not a working web address: https://test"),
+      screen.getByLabelText(
+        "Proof link, not a working web address: https://test",
+      ),
     ).toHaveTextContent("https://test");
   });
 

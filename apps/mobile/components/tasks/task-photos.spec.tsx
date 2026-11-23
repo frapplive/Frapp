@@ -125,9 +125,7 @@ describe("TaskProof (#4635)", () => {
     expect(chips.every((node) => node.props.onPress === undefined)).toBe(true);
     expect(screenText(tree)).toContain("https://test");
     expect(
-      tree.root.findAll(
-        (node) => node.props.accessibilityRole === "link",
-      ),
+      tree.root.findAll((node) => node.props.accessibilityRole === "link"),
     ).toHaveLength(0);
     expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   });
