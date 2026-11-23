@@ -6,7 +6,9 @@ const SUPABASE_ENV_KEYS = [
 ] as const;
 
 describe("apps/web/proxy.ts", () => {
-  const originalEnv: Partial<Record<(typeof SUPABASE_ENV_KEYS)[number], string | undefined>> = {};
+  const originalEnv: Partial<
+    Record<(typeof SUPABASE_ENV_KEYS)[number], string | undefined>
+  > = {};
 
   beforeEach(() => {
     for (const key of SUPABASE_ENV_KEYS) {
@@ -41,30 +43,36 @@ describe("apps/web/proxy.ts", () => {
   test("matcher gates every protected and auth route, skipping only dashboard prefetches", async () => {
     // Compiled by Next's own build-time matcher code, so this checks what a
     // deployment actually runs, not a hand-copied regex.
-    const { config, PROTECTED_ROUTE_PREFIXES, AUTH_ROUTES } = await import(
-      "../proxy"
-    );
+    const { config, PROTECTED_ROUTE_PREFIXES, AUTH_ROUTES } =
+      await import("../proxy");
     // Internal Next module: it exports this at runtime, but its type
     // declarations leave it out.
-    const { getMiddlewareMatchers } = (await import(
-      "next/dist/build/analysis/get-page-static-info.js"
-    )) as unknown as {
-      getMiddlewareMatchers: (
-        matcher: unknown,
-        nextConfig: { basePath: string; i18n: undefined },
-      ) => { regexp: string; missing?: unknown[] }[];
-    };
+    const { getMiddlewareMatchers } =
+      (await import("next/dist/build/analysis/get-page-static-info.js")) as unknown as {
+        getMiddlewareMatchers: (
+          matcher: unknown,
+          nextConfig: { basePath: string; i18n: undefined },
+        ) => { regexp: string; missing?: unknown[] }[];
+      };
     const compiled = getMiddlewareMatchers(config.matcher, {
       basePath: "",
       i18n: undefined,
     }).map((m) => ({ re: new RegExp(m.regexp), skipsPrefetch: !!m.missing }));
-    const onNavigation = (path: string) => compiled.some((m) => m.re.test(path));
+    const onNavigation = (path: string) =>
+      compiled.some((m) => m.re.test(path));
     const onPrefetch = (path: string) =>
       compiled.some((m) => !m.skipsPrefetch && m.re.test(path));
 
     // Static routes: Next reuses their prefetch as the navigation, so the
     // proxy must run on the prefetch too.
-    const staticRoutes = ["/", ...AUTH_ROUTES, "/join", "/no-access", "/welcome", "/dashboard"];
+    const staticRoutes = [
+      "/",
+      ...AUTH_ROUTES,
+      "/join",
+      "/no-access",
+      "/welcome",
+      "/dashboard",
+    ];
     for (const path of staticRoutes) {
       expect(onNavigation(path), path).toBe(true);
       expect(onPrefetch(path), path).toBe(true);
@@ -98,8 +106,33 @@ describe("apps/web/proxy.ts", () => {
       [...dynamicPrefixes].sort(),
     );
 
-    for (const path of ["/robots.txt", "/auth/callback", "/_next/static/a.js"]) {
+    for (const path of [
+      "/robots.txt",
+      "/auth/callback",
+      "/_next/static/a.js",
+    ]) {
       expect(onNavigation(path), path).toBe(false);
+    }
+  });
+
+  test("gates every dashboard page: a route under app/(dashboard) is a protected prefix", async () => {
+    // `/ask` (2026-11-22), `/meetings` and `/whats-new` were left out of
+    // both lists, so a signed-out visit rendered an empty shell instead of
+    // going to sign-in, and the check above, which only holds the two lists
+    // to each other, stayed green.
+    const { readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { PROTECTED_ROUTE_PREFIXES } = await import("../proxy");
+    const dashboard = join(__dirname, "../app/(dashboard)");
+    const routes = readdirSync(dashboard).filter(
+      (name) =>
+        statSync(join(dashboard, name)).isDirectory() &&
+        !name.startsWith("(") &&
+        !name.startsWith("_"),
+    );
+    expect(routes.length).toBeGreaterThan(10);
+    for (const route of routes) {
+      expect(PROTECTED_ROUTE_PREFIXES, `/${route}`).toContain(`/${route}`);
     }
   });
 
