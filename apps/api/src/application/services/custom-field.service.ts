@@ -15,7 +15,13 @@ import {
   CustomFieldKeyConflictError,
   type ICustomFieldRepository,
 } from '#domain/repositories/custom-field.repository.interface';
-import type { CreateCustomField, UpdateCustomField } from '@repo/validation';
+import {
+  checkCustomFieldValue,
+  PROFILE_OWNED_CUSTOM_FIELD_KEYS,
+  type CreateCustomField,
+  type UpdateCustomField,
+} from '@repo/validation';
+import { normalizePhone } from '@repo/formatting';
 import {
   ChapterAuditLogService,
   type AuditDiff,
@@ -47,6 +53,33 @@ export type UpdateCustomFieldInput = UpdateCustomField;
  * entity.
  */
 const AUDIT_TARGET_TYPE = 'chapter_custom_field';
+
+/**
+ * One of the chapter's fields as its own member sees it on their profile
+ * (#581): the definition they need to draw the right control, and their value.
+ * Carries every tier, `exec` and `president` included, because a member always
+ * reads and writes their own values; who *else* sees each one is the
+ * `visibility` the form shows beside it.
+ */
+export type OwnCustomField = {
+  field_id: string;
+  key: string;
+  label: string;
+  type: ChapterCustomField['type'];
+  visibility: CustomFieldVisibility;
+  required: boolean;
+  /** A `select` field's choices; null for every other type. */
+  choices: string[] | null;
+  /** A `text` field's own length cap, when it sets one. */
+  max_length: number | null;
+  value: string | null;
+};
+
+/** One value a member sends for one of their fields; null or "" clears it. */
+export type OwnCustomFieldValueInput = {
+  field_id: string;
+  value: string | null;
+};
 
 /**
  * CRUD over `chapter_custom_fields`, scoped to the active chapter (Settings →
@@ -140,6 +173,109 @@ export class CustomFieldService {
     fieldIds: string[],
   ): Promise<{ member_id: string; field_id: string; value: string | null }[]> {
     return this.fields.findValuesByFieldIds(fieldIds);
+  }
+
+  /**
+   * Every field the chapter keeps on a member, with that member's own value
+   * (#581), for the member themselves to read and edit. Leaves out the seeded
+   * fields the profile already owns (`PROFILE_OWNED_CUSTOM_FIELD_KEYS`).
+   *
+   * Callers pass the caller's own membership id only: this reads every tier,
+   * so it is never a path to another member's values.
+   */
+  async findOwnFields(
+    chapterId: string,
+    memberId: string,
+  ): Promise<OwnCustomField[]> {
+    const defs = await this.ownEditableFields(chapterId);
+    if (defs.length === 0) return [];
+    const values = await this.fields.findValuesForMember(
+      memberId,
+      defs.map((def) => def.id),
+    );
+    const valueByFieldId = new Map(
+      values.map((row) => [row.field_id, row.value]),
+    );
+    return defs.map((def) => toOwnField(def, valueByFieldId.get(def.id)));
+  }
+
+  /**
+   * Set or clear the caller's own values (#581). Each value is checked against
+   * its field's type and `required` (`checkCustomFieldValue`, the rule both
+   * forms check too); one refused value refuses the whole save, so a save
+   * never lands half-done. A required field can't be cleared once it has a
+   * value, and clearing one that has none is a no-op.
+   *
+   * Own values only, by construction: `memberId` is the caller's membership
+   * from `ChapterGuard`, never a request parameter. Not audit-logged, like
+   * `PATCH /v1/users/me`: a member editing their own profile is not a chapter
+   * settings change, and the audit log is mirrored into `#chapter-audit`,
+   * where a sensitive value would reach readers its tier excludes.
+   */
+  async updateOwnValues(
+    chapterId: string,
+    memberId: string,
+    entries: OwnCustomFieldValueInput[],
+  ): Promise<OwnCustomField[]> {
+    const defs = await this.ownEditableFields(chapterId);
+    const defById = new Map(defs.map((def) => [def.id, def]));
+
+    const seen = new Set<string>();
+    const pairs: { def: ChapterCustomField; value: string | null }[] = [];
+    for (const entry of entries) {
+      if (seen.has(entry.field_id)) {
+        throw new BadRequestException('Each field may appear once per save');
+      }
+      seen.add(entry.field_id);
+      const def = defById.get(entry.field_id);
+      if (!def) {
+        throw new BadRequestException(
+          "That field isn't one of your chapter's profile fields",
+        );
+      }
+      pairs.push({ def, value: entry.value });
+    }
+
+    const stored = entries.length
+      ? await this.fields.findValuesForMember(
+          memberId,
+          entries.map((entry) => entry.field_id),
+        )
+      : [];
+    const hasStoredValue = new Set(
+      stored.filter((row) => row.value !== null).map((row) => row.field_id),
+    );
+
+    const upserts: {
+      chapter_id: string;
+      member_id: string;
+      field_id: string;
+      value: string;
+    }[] = [];
+    const clears: string[] = [];
+    for (const { def, value } of pairs) {
+      const blank = (value ?? '').trim() === '';
+      if (blank && def.required && !hasStoredValue.has(def.id)) continue;
+      const checked = checkCustomFieldValue(def, value);
+      if (!checked.ok) throw new BadRequestException(checked.message);
+      if (checked.value === null) {
+        clears.push(def.id);
+        continue;
+      }
+      upserts.push({
+        chapter_id: chapterId,
+        member_id: memberId,
+        field_id: def.id,
+        // Stored E.164 when it is a whole number, as the profile's own Phone
+        // is (#5798), so every screen formats it alike.
+        value:
+          def.type === 'phone' ? normalizePhone(checked.value) : checked.value,
+      });
+    }
+
+    await this.fields.upsertValues(upserts);
+    await this.fields.deleteValues(chapterId, memberId, clears);
+    return this.findOwnFields(chapterId, memberId);
   }
 
   async create(
@@ -284,6 +420,16 @@ export class CustomFieldService {
     return max === null ? 0 : max + 1;
   }
 
+  /** The chapter's fields a member fills in themselves, in display order. */
+  private async ownEditableFields(
+    chapterId: string,
+  ): Promise<ChapterCustomField[]> {
+    const defs = await this.fields.findByChapter(chapterId);
+    return defs.filter(
+      (def) => !PROFILE_OWNED_CUSTOM_FIELD_KEYS.includes(def.key),
+    );
+  }
+
   private async findOne(
     id: string,
     chapterId: string,
@@ -292,4 +438,21 @@ export class CustomFieldService {
     if (!field) throw new NotFoundException('Custom field not found');
     return field;
   }
+}
+
+function toOwnField(
+  def: ChapterCustomField,
+  value: string | null | undefined,
+): OwnCustomField {
+  return {
+    field_id: def.id,
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    visibility: def.visibility,
+    required: def.required,
+    choices: def.type === 'select' ? (def.options?.choices ?? []) : null,
+    max_length: def.type === 'text' ? (def.options?.max_length ?? null) : null,
+    value: value ?? null,
+  };
 }

@@ -20,6 +20,7 @@ import {
 import { MemberService } from '../../application/services/member.service';
 import { InviteService } from '../../application/services/invite.service';
 import { MemberPhoneReachService } from '../../application/services/member-phone-reach.service';
+import { CustomFieldService } from '../../application/services/custom-field.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
@@ -42,6 +43,10 @@ import {
   MemberProfileDto,
   MemberRosterEntryDto,
 } from '../dtos/member-profile.dto';
+import {
+  OwnCustomFieldDto,
+  UpdateOwnCustomFieldsDto,
+} from '../dtos/custom-field.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
   FeatureEvent,
@@ -59,6 +64,7 @@ export class MemberController {
     private readonly memberService: MemberService,
     private readonly phoneReachService: MemberPhoneReachService,
     private readonly inviteService: InviteService,
+    private readonly customFieldService: CustomFieldService,
   ) {}
 
   @Get()
@@ -127,6 +133,48 @@ export class MemberController {
     @CurrentUser('id') viewerUserId: string,
   ) {
     return this.phoneReachService.findForViewer(chapterId, viewerUserId);
+  }
+
+  /**
+   * Your own custom-field values (#581): every field the chapter keeps on a
+   * member, whatever its tier, with your value. Own only: the membership is
+   * `ChapterGuard`'s, never a parameter, so no one reads another member's
+   * values here. MUST stay above `@Get(':id')`, like `search` (#990).
+   */
+  @Get('me/custom-fields')
+  @ApiOperation({ summary: 'Your own custom-field values' })
+  @ApiOkResponse({ type: OwnCustomFieldDto, isArray: true })
+  async getOwnCustomFields(
+    @CurrentChapterId() chapterId: string,
+    @CurrentMember() member: { id: string },
+  ) {
+    return this.customFieldService.findOwnFields(chapterId, member.id);
+  }
+
+  /**
+   * Set or clear your own custom-field values (#581). Like `me/onboarding`,
+   * a write that rides the class-level `members:view`: it writes only the
+   * caller's own membership, resolved by `ChapterGuard`, so there is no id to
+   * authorize. Officers can't set another member's values; nothing does
+   * (`spec/behavior/members.md` § Custom Fields).
+   */
+  @Patch('me/custom-fields')
+  @ApiOperation({
+    summary: 'Set your own custom-field values',
+    description:
+      "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Answers with all your fields, as GET does.",
+  })
+  @ApiOkResponse({ type: OwnCustomFieldDto, isArray: true })
+  async updateOwnCustomFields(
+    @CurrentChapterId() chapterId: string,
+    @CurrentMember() member: { id: string },
+    @Body() dto: UpdateOwnCustomFieldsDto,
+  ) {
+    return this.customFieldService.updateOwnValues(
+      chapterId,
+      member.id,
+      dto.values,
+    );
   }
 
   // Two segments, so `:id` never swallows it. Chat knows a person by their

@@ -234,6 +234,49 @@ describe('SupabaseCustomFieldRepository — tenant scope', () => {
     ]);
   });
 
+  it('upsertValues overwrites the member row for a field instead of adding a twin (#581)', async () => {
+    await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.upsertValues([
+        {
+          chapter_id: CHAPTER_B,
+          member_id: MEMBER_B,
+          field_id: FIELD_B,
+          value: 'Chemistry',
+        },
+      ]),
+    );
+
+    const rows = harness
+      .rows('member_custom_field_values')
+      .filter((r) => r.field_id === FIELD_B);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      chapter_id: CHAPTER_B,
+      value: 'Chemistry',
+    });
+    expect(
+      harness
+        .rows('member_custom_field_values')
+        .find((r) => r.field_id === FIELD_A)?.value,
+    ).toBe('Physics');
+  });
+
+  it('deleteValues removes only the caller chapter member values (#581)', async () => {
+    await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.deleteValues(CHAPTER_B, MEMBER_B, [FIELD_B]),
+    );
+
+    expect(
+      harness.rows('member_custom_field_values').map((r) => r.field_id),
+    ).toEqual([FIELD_A]);
+  });
+
+  it('value writes do not query for an empty list', async () => {
+    await repo.upsertValues([]);
+    await repo.deleteValues(CHAPTER_B, MEMBER_B, []);
+    expect(harness.ops).toHaveLength(0);
+  });
+
   it('findValuesByFieldIds does not query for an empty id list', async () => {
     await expect(repo.findValuesByFieldIds([])).resolves.toEqual([]);
     expect(harness.ops).toHaveLength(0);

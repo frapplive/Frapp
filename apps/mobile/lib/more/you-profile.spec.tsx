@@ -45,6 +45,11 @@ const usePledgeClasses = vi.fn((options?: { enabled?: boolean }) =>
     ? { data: undefined, isPending: true, isSuccess: false }
     : { data: pledgeClasses, isPending: false, isSuccess: true },
 );
+// More details is its own spec's business (#581, `lib/more/own-custom-fields.spec.ts`).
+vi.mock("@/components/you/own-custom-fields", () => ({
+  OwnCustomFieldsSection: () => null,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   // The hub's own reads, answered empty: `you-screen.spec.tsx` owns them.

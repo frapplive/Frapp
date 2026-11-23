@@ -169,4 +169,29 @@ export class SupabaseCustomFieldRepository implements ICustomFieldRepository {
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
   }
+
+  async upsertValues(
+    rows: TablesInsert<'member_custom_field_values'>[],
+  ): Promise<void> {
+    if (!rows.length) return;
+    const { error } = await this.supabase
+      .from('member_custom_field_values')
+      .upsert(rows, { onConflict: 'member_id,field_id' });
+    if (error) throw new SupabaseQueryError(error);
+  }
+
+  async deleteValues(
+    chapterId: string,
+    memberId: string,
+    fieldIds: string[],
+  ): Promise<void> {
+    if (!fieldIds.length) return;
+    const { error } = await this.supabase
+      .from('member_custom_field_values')
+      .delete()
+      .eq('chapter_id', chapterId)
+      .eq('member_id', memberId)
+      .in('field_id', fieldIds);
+    if (error) throw new SupabaseQueryError(error);
+  }
 }

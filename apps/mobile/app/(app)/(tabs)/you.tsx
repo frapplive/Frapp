@@ -50,6 +50,7 @@ import {
   ProfileHead,
   ProfileSkeleton,
 } from "@/components/you/profile-sections";
+import { OwnCustomFieldsSection } from "@/components/you/own-custom-fields";
 import { useOwnStatus } from "@/lib/account/own-status";
 import {
   destinationHue,
@@ -505,7 +506,11 @@ export default function YouScreen() {
       ) : null}
 
       {profileLoaded ? (
-        <ProfileDetails profile={profile} onEdit={openEditor} />
+        <>
+          <ProfileDetails profile={profile} onEdit={openEditor} />
+          {/* The chapter's own fields, every tier, with who sees each (#581). */}
+          <OwnCustomFieldsSection />
+        </>
       ) : null}
 
       {profileLoaded ? (

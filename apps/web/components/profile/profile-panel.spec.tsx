@@ -85,6 +85,12 @@ vi.mock("@/components/activity/standing-cards", () => ({
   StandingCards: () => <div data-testid="standing-cards" />,
 }));
 
+// More details is its own spec's business (#581); the panel's job is the gate.
+vi.mock("@/components/profile/own-custom-fields-section", () => ({
+  OwnCustomFieldsSection: ({ enabled }: { enabled: boolean }) =>
+    enabled ? <div data-testid="own-custom-fields" /> : null,
+}));
+
 // The picker is its own spec's business (#4958).
 vi.mock("@/components/roles/pick-roles-section", () => ({
   PickRolesSection: () => null,

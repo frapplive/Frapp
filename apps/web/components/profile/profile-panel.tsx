@@ -46,6 +46,7 @@ import { SuggestField } from "@/components/ui/suggest-field";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ProfileSection } from "@/components/profile/profile-section";
+import { OwnCustomFieldsSection } from "@/components/profile/own-custom-fields-section";
 import { profileSaveBody } from "@/components/profile/profile-save-body";
 import { PickRolesSection } from "@/components/roles/pick-roles-section";
 import { ProfilePhotoControl } from "@/components/profile/profile-photo-control";
@@ -663,6 +664,12 @@ export function ProfilePanel() {
             </div>
           </form>
         </ProfileSection>
+
+        {/*
+          Your chapter's own fields, every tier, with who sees each (#581).
+          Behind the Directory's gate, like your pledge class above.
+        */}
+        <OwnCustomFieldsSection enabled={canViewMembers} />
       </div>
     </div>
   );

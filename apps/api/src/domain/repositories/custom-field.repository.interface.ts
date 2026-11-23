@@ -85,4 +85,27 @@ export interface ICustomFieldRepository {
   findValuesByFieldIds(
     fieldIds: string[],
   ): Promise<{ member_id: string; field_id: string; value: string | null }[]>;
+  /**
+   * Write one member's values (#581), one row per `(member_id, field_id)`:
+   * a row that exists is overwritten, so a second save never adds a twin.
+   * Every row names its chapter, and the composite foreign keys refuse a
+   * member or field from another chapter. An empty list writes nothing.
+   */
+  upsertValues(
+    rows: {
+      chapter_id: string;
+      member_id: string;
+      field_id: string;
+      value: string;
+    }[],
+  ): Promise<void>;
+  /**
+   * Remove one member's values for `fieldIds` in the chapter (a value the
+   * member cleared). An empty list removes nothing.
+   */
+  deleteValues(
+    chapterId: string,
+    memberId: string,
+    fieldIds: string[],
+  ): Promise<void>;
 }

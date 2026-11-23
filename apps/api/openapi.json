@@ -2192,6 +2192,95 @@
         ]
       }
     },
+    "/v1/members/me/custom-fields": {
+      "get": {
+        "operationId": "MemberController_getOwnCustomFields_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      },
+      "patch": {
+        "description": "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Answers with all your fields, as GET does.",
+        "operationId": "MemberController_updateOwnCustomFields_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnCustomFieldsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      }
+    },
     "/v1/members/by-user/{userId}": {
       "get": {
         "operationId": "MemberController_getByUser_v1",
@@ -24676,6 +24765,105 @@
         "required": [
           "scope",
           "members"
+        ]
+      },
+      "OwnCustomFieldDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "decimal",
+              "phone",
+              "select",
+              "boolean"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "self",
+              "chapter",
+              "exec",
+              "president"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "choices": {
+            "nullable": true,
+            "description": "A select field's choices; null for every other type",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_length": {
+            "type": "number",
+            "nullable": true,
+            "description": "A text field's own length cap, when it sets one"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "field_id",
+          "key",
+          "label",
+          "type",
+          "visibility",
+          "required",
+          "choices",
+          "max_length",
+          "value"
+        ]
+      },
+      "OwnCustomFieldValueDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or \"true\"/\"false\". null or an empty string clears it; a required field with a value cannot be cleared."
+          }
+        },
+        "required": [
+          "field_id",
+          "value"
+        ]
+      },
+      "UpdateOwnCustomFieldsDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnCustomFieldValueDto"
+            }
+          }
+        },
+        "required": [
+          "values"
         ]
       },
       "UpdateMemberRolesDto": {
