@@ -130,9 +130,11 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Who's coming on an event can now be set for a whole tier, such as Cabinet, and roles added to that tier later are included.",
       "An officer can now give or take away roles ranked below them on a fellow officer of the same tier, such as making a fellow cabinet member a committee chair, without the president.",
       "A task's proof link has to be a full web address now, and an older one that goes nowhere shows as text instead of opening a \"server can't be found\" page.",
+      "An officer can now set the pledge class and order number of a fellow officer of the same tier, and fix their name and graduation year, without the president.",
     ],
     web: [
       "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
     ],
   },
   {
