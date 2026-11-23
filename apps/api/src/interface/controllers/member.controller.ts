@@ -184,14 +184,15 @@ export class MemberController {
    * An officer fixes another member's name or graduation year (#4367). The
    * guard is `roles:manage`, the officers who already set a member's roles
    * and pledge class; `MemberService.correctProfile` narrows it to members
-   * ranked below the caller, never the caller, and only a member of this
-   * chapter alone, since both fields live on the shared `users` row.
+   * ranked below the caller or at their own rank (#5900), never the caller,
+   * and only a member of this chapter alone, since both fields live on the
+   * shared `users` row.
    */
   @Patch(':id/profile')
   @ApiOperation({
     summary: "Fix a member's name or graduation year (officers)",
     description:
-      "Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked at or above you, and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.",
+      "Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked above you (a member at your own rank is in reach, #5900), and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.",
   })
   @ApiOkResponse({ type: MemberProfileDto })
   @RequirePermissions(SystemPermissions.ROLES_MANAGE)

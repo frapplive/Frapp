@@ -443,7 +443,8 @@ export function useUpdateMemberRoles() {
  * An officer fixes another member's name or graduation year (#4367,
  * `PATCH /v1/members/{id}/profile`). Offer it only where the profile read says
  * `viewer_can_edit_profile`: the API also refuses your own profile, anyone
- * ranked at or above you, and a member who is in another chapter too.
+ * ranked above you (a peer at your rank is in reach since #5900), and a
+ * member who is in another chapter too.
  *
  * The name shows wherever the member does (the directory, chat's author
  * labels through the roster, the alumni list, the activity feed), so this

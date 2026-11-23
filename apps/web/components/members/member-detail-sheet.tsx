@@ -205,7 +205,8 @@ type MemberDetailSheetProps = {
  *
  * **Edit name and graduation year** (#4367) is in the same `⋯`, for an officer
  * the API says may fix them (`viewer_can_edit_profile`: `roles:manage`, the
- * member ranks below them, and is in no other chapter). It opens
+ * member ranks below them or at their own rank (#5900), and is in no other
+ * chapter). It opens
  * `MemberCorrectionDialog`. Nothing else on someone's profile is an officer's
  * to change.
  */

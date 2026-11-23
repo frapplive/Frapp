@@ -77,7 +77,7 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "roles:manage",
     "chapter",
     "Manage roles",
-    "Create, edit and delete roles, give roles to members, edit pledge classes, and fix the names and graduation years of members ranked below them.",
+    "Create, edit and delete roles, give roles to members, edit pledge classes, and fix the names and graduation years of members ranked below them or at their own rank.",
   ),
   // Paul, 2026-11-20 (#5725): a switch a chapter turns on for its top tier,
   // so one cabinet officer can make another Stewardship Chair. Without it,

@@ -791,7 +791,7 @@ export interface paths {
         head?: never;
         /**
          * Fix a member's name or graduation year (officers)
-         * @description Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked at or above you, and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.
+         * @description Needs roles:manage. Refused (403) for your own profile (use PATCH /v1/users/me), for a member ranked above you (a member at your own rank is in reach, #5900), and for a member who is also in another chapter. Changes are recorded in the chapter audit log as member_profile_corrected. Answers with the member's profile.
          */
         patch: operations["MemberController_correctProfile_v1"];
         trace?: never;
@@ -7504,7 +7504,7 @@ export interface components {
             custom_fields?: components["schemas"]["MemberCustomFieldValueDto"][];
             /** @description Whether the requesting viewer may remove this member from the chapter (DELETE /v1/members/{id}): they hold members:remove, it is not their own profile, and the member ranks below them. Present only on single-member reads. */
             viewer_can_remove?: boolean;
-            /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them, and the member is in no other chapter. Present only on single-member reads. */
+            /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads. */
             viewer_can_edit_profile?: boolean;
         };
         MemberRosterEntryDto: {

@@ -118,6 +118,11 @@ export function canAssignAt(actor: ActorReach, targetRank: number): boolean {
  * {@link canAssignAt}'s, so a peer's role at the caller's own rank stays out
  * of reach without `roles:assign_own_level`. Nobody reaches a member ranked
  * above them, and a caller outside the tiers reaches no other member.
+ *
+ * The same rule decides whose pledge class and order number the actor may
+ * set (`PledgeClassService`) and whose name and graduation year they may fix
+ * (`MemberService.correctProfile`), since #5900. A change here changes all
+ * three; removing a member keeps {@link canReach}.
  */
 export function canAssignToMemberAt(
   actor: ActorReach,
