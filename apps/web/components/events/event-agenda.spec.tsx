@@ -459,7 +459,7 @@ describe("EventAttachmentsSection", () => {
       screen.getByRole("note", {
         name: "Old notes, not a working web address: https://test",
       }),
-    ).toHaveTextContent("https://test · not a working link");
+    ).toHaveTextContent("https://test· not a working link");
   });
 
   it("attaches a file it doesn't hold yet, with its name cut to the limit", async () => {

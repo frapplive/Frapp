@@ -19,11 +19,12 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
-  ATTACHMENT_LINK_DEAD_CAPTION,
   attachmentLinkOpens,
   attachmentLinkProblem,
   attachmentLinkTitle,
   attachmentTitle,
+  LINK_NOT_WORKING_CAPTION,
+  LINK_NOT_WORKING_LABEL,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
   EVENT_ATTACHMENT_TITLE_MAX,
@@ -681,12 +682,16 @@ export function EventAttachmentsSection({
                 <span
                   role="note"
                   className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
-                  aria-label={`${attachment.title}, not a working web address: ${attachment.url}`}
+                  aria-label={`${attachment.title}, ${LINK_NOT_WORKING_LABEL}: ${attachment.url}`}
                 >
                   <Link2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="truncate">{attachment.title}</span>
                   <span className="min-w-0 truncate text-caption">
-                    {attachment.url} · {ATTACHMENT_LINK_DEAD_CAPTION}
+                    {attachment.url}
+                  </span>
+                  {/* Its own span, so a long address never cuts it off. */}
+                  <span className="shrink-0 text-caption">
+                    · {LINK_NOT_WORKING_CAPTION}
                   </span>
                 </span>
               ) : attachment.kind === "link" ? (

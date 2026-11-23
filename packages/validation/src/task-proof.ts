@@ -158,6 +158,15 @@ export function proofLinkOpens(link: string): boolean {
   }
 }
 
+/**
+ * What a stored link that fails `proofLinkOpens` says beside its address,
+ * on a task's proof chip and an event's attachment row (#5882, #5883).
+ */
+export const LINK_NOT_WORKING_CAPTION = "not a working link";
+
+/** The same, as a screen reader hears it ahead of the address. */
+export const LINK_NOT_WORKING_LABEL = "not a working web address";
+
 /** The domain a proof link chip shows ("docs.google.com"). */
 export function proofLinkDomain(link: string): string {
   try {

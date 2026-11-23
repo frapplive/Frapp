@@ -25579,7 +25579,7 @@
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "A `link` attachment's address: http or https only."
+            "description": "A `link` attachment's address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the meeting already holds that address)."
           },
           "document_id": {
             "type": "string",
@@ -25706,7 +25706,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -25868,7 +25868,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26018,7 +26018,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26155,7 +26155,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26300,7 +26300,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"

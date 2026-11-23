@@ -153,7 +153,8 @@ export class EventAttachmentDto {
 
   @ApiPropertyOptional({
     maxLength: TASK_PROOF_LINK_MAX,
-    description: "A `link` attachment's address: http or https only.",
+    description:
+      "A `link` attachment's address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the meeting already holds that address).",
   })
   @ValidateIf((o: EventAttachmentDto) => o.kind === 'link')
   @IsString()
@@ -180,7 +181,7 @@ export class EventAttachmentDto {
 }
 
 const AGENDA_DESCRIPTION = `This meeting's agenda, in order: at most ${EVENT_AGENDA_MAX} short items. Sent whole; it replaces the stored list, and \`[]\` clears it (null is refused). Belongs to this one meeting: with \`scope: 'series'\` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none.`;
-const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${EVENT_ATTACHMENTS_MAX} titled links or Chapter Files documents. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.`;
+const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${EVENT_ATTACHMENTS_MAX} titled links or Chapter Files documents. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes \`url\`'s rule.`;
 
 export class CreateEventDto {
   @ApiProperty({ maxLength: EVENT_NAME_MAX_LENGTH })

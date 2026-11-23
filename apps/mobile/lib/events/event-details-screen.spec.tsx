@@ -1685,7 +1685,8 @@ describe("Event details agenda and attachments (#4934)", () => {
     );
     expect(row.props.disabled).toBe(true);
     expect(row.props.accessibilityRole).toBe("text");
-    expect(screenText(tree)).toContain("https://test · not a working link");
+    // The caption is its own Text, so a long address can't cut it off.
+    expect(screenText(tree)).toMatch(/https:\/\/test\s*· not a working link/);
     await act(async () => row.props.onPress());
     expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   });

@@ -46,11 +46,12 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
-  ATTACHMENT_LINK_DEAD_CAPTION,
   attachmentLinkOpens,
   attachmentLinkProblem,
   attachmentLinkTitle,
   attachmentTitle,
+  LINK_NOT_WORKING_CAPTION,
+  LINK_NOT_WORKING_LABEL,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
   EVENT_ATTACHMENT_TITLE_MAX,
@@ -956,7 +957,7 @@ function EventAttachmentsSection({
           const disabled =
             dead || (!isLink && (documentsOn === false || !!openingId));
           const source = dead
-            ? `${attachment.url} · ${ATTACHMENT_LINK_DEAD_CAPTION}`
+            ? attachment.url
             : isLink
               ? proofLinkDomain(attachment.url)
               : documentsOn === false
@@ -968,7 +969,7 @@ function EventAttachmentsSection({
                 accessibilityRole={dead ? "text" : isLink ? "link" : "button"}
                 accessibilityLabel={
                   dead
-                    ? `${attachment.title}, not a working web address: ${attachment.url}`
+                    ? `${attachment.title}, ${LINK_NOT_WORKING_LABEL}: ${attachment.url}`
                     : `${attachment.title}, ${source}`
                 }
                 accessibilityState={{ disabled }}
@@ -1001,6 +1002,12 @@ function EventAttachmentsSection({
                 <Text style={styles.caption} numberOfLines={1}>
                   {source}
                 </Text>
+                {dead ? (
+                  // Its own Text, so a long address never cuts it off.
+                  <Text style={styles.captionFixed}>
+                    · {LINK_NOT_WORKING_CAPTION}
+                  </Text>
+                ) : null}
               </Pressable>
               {canEdit ? (
                 <View style={styles.controls}>
@@ -1378,6 +1385,10 @@ function createStyles(tokens: SignetTokens, accent?: string) {
     },
     caption: {
       flexShrink: 1,
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+    },
+    captionFixed: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.mutedForeground,
     },

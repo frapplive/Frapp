@@ -103,9 +103,6 @@ export function attachmentLinkOpens(url: string): boolean {
 export const ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE =
   "That address won't open on members' phones. Use a public web link, like https://docs.google.com/…";
 
-/** What a stored link that fails `attachmentLinkOpens` says beside it. */
-export const ATTACHMENT_LINK_DEAD_CAPTION = "not a working link";
-
 /** An agenda item's text as stored: trimmed, inner whitespace collapsed. */
 export function normalizeAgendaText(value: string): string {
   return value.replace(/\s+/g, " ").trim();

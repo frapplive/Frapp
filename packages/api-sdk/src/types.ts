@@ -7896,7 +7896,7 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "link" | "document";
-            /** @description A `link` attachment's address: http or https only. */
+            /** @description A `link` attachment's address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the meeting already holds that address). */
             url?: string;
             /**
              * Format: uuid
@@ -7937,7 +7937,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -7984,7 +7984,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8035,7 +8035,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
@@ -8080,7 +8080,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8123,7 +8123,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. A link the meeting already holds stays likewise, even one that no longer passes `url`'s rule. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. Send an empty array to clear an existing zone. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
