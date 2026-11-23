@@ -10371,6 +10371,17 @@ export interface components {
             kind: "type" | "event";
             name: string;
         };
+        NewEventAttendanceDto: {
+            /**
+             * @description What the event asks of a member set apart by no entry.
+             * @enum {string}
+             */
+            everyone: "required" | "optional" | "not_invited";
+            /** @description Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles. */
+            roles: {
+                [key: string]: "required" | "optional" | "not_invited";
+            };
+        };
         NewEventSuggestionDto: {
             name: string;
             description: string | null;
@@ -10388,7 +10399,14 @@ export interface components {
              * @description The chapter event type the event is one of, when one matched.
              */
             event_type_id: string | null;
+            /** @description Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must. */
             is_mandatory: boolean;
+            /** @description Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says. */
+            attendance: components["schemas"]["NewEventAttendanceDto"] | null;
+            /** @description One line for who is invited, in the chapter's names when the card was made ("Cabinet required, nobody else invited"). */
+            attendance_line: string | null;
+            /** @description The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one. */
+            attendance_from: components["schemas"]["NewEventPointsFromDto"] | null;
             /** @description The repeat the series is made with (the `recurrence_rule` format of `POST /v1/events`), or null for one event. */
             recurrence_rule: string | null;
         };

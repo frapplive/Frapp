@@ -48,6 +48,9 @@ const proposal = (extra: Record<string, unknown> = {}) => ({
   points_from: null,
   event_type_id: null,
   is_mandatory: false,
+  attendance: null,
+  attendance_line: null,
+  attendance_from: null,
   recurrence_rule: null,
   ...extra,
 });
@@ -142,6 +145,83 @@ describe('NewEventSuggestionKind', () => {
       start_time: '2026-11-18T00:00:00.000Z',
       end_time: '2026-11-18T01:00:00.000Z',
       is_mandatory: true,
+    });
+  });
+
+  describe('who it invites (#5853)', () => {
+    const EXEC_TIER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const SOCIAL = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const PRESIDENT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+    it('keeps a well-formed invite list and drops what is not one', () => {
+      const { kind } = build();
+      expect(
+        kind.normalizeProposal(
+          proposal({
+            attendance: {
+              everyone: 'not_invited',
+              roles: {
+                [PRESIDENT]: 'required',
+                [SOCIAL]: 'optional',
+                'not-an-id': 'required',
+                // Events take role ids only, so a tier key is not kept.
+                [`tier:${EXEC_TIER}`]: 'required',
+                [`tier:${SOCIAL}`]: 'maybe',
+                // The same as everyone: not set apart.
+                'cccccccc-cccc-4ccc-8ccc-cccccccccccc': 'not_invited',
+              },
+            },
+            attendance_line: 'Exec board required, nobody else invited',
+          }),
+        ),
+      ).toMatchObject({
+        attendance: {
+          everyone: 'not_invited',
+          roles: { [PRESIDENT]: 'required', [SOCIAL]: 'optional' },
+        },
+        attendance_line: 'Exec board required, nobody else invited',
+      });
+      expect(
+        kind.normalizeProposal(proposal({ attendance: { everyone: 'all' } })),
+      ).toMatchObject({ attendance: null });
+    });
+
+    it('creates the event with the list, as the event form sends it', async () => {
+      const { kind, events } = build();
+      await kind.commit({
+        chapterId: CHAPTER,
+        userId: OFFICER,
+        payload: proposal({
+          attendance: {
+            everyone: 'not_invited',
+            roles: { [PRESIDENT]: 'required', [SOCIAL]: 'optional' },
+          },
+        }),
+      });
+      expect(events.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          is_mandatory: false,
+          others_invited: false,
+          required_role_ids: [PRESIDENT],
+          optional_role_ids: [SOCIAL],
+          excluded_role_ids: [],
+        }),
+      );
+    });
+
+    it('invites everyone as is_mandatory says on a card from before invite lists', async () => {
+      const { kind, events } = build();
+      await kind.commit({
+        chapterId: CHAPTER,
+        userId: OFFICER,
+        payload: proposal({ is_mandatory: true, attendance: undefined }),
+      });
+      const sent = (events.create.mock.calls[0] as unknown[])[0] as Record<
+        string,
+        unknown
+      >;
+      expect(sent.is_mandatory).toBe(true);
+      expect(sent).not.toHaveProperty('required_role_ids');
     });
   });
 

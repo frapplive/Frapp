@@ -573,6 +573,38 @@ describe("AskProposal", () => {
     expect(screen.queryByText(ACT_COPY.points_missing)).toBeNull();
   });
 
+  it("says who the event invites, and where that list came from (#5853)", async () => {
+    show({
+      ...base,
+      action: "create_event",
+      suggestion: suggestion("new_event", {
+        name: "FSL Leaders Reception",
+        description: null,
+        location: "Union Theater",
+        start_time: "2027-01-19T17:00:00",
+        end_time: "2027-01-19T18:00:00",
+        point_value: 5,
+        points_from: null,
+        event_type_id: null,
+        is_mandatory: false,
+        attendance: {
+          everyone: "not_invited",
+          roles: { "tier:t-1": "required" },
+        },
+        attendance_line: "Cabinet required, nobody else invited",
+        attendance_from: { kind: "event", name: "FSL Leaders Reception" },
+        recurrence_rule: null,
+      }),
+    });
+    expect(
+      await screen.findByText("Cabinet required, nobody else invited"),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Same as your last FSL Leaders Reception"),
+    ).toBeDefined();
+    expect(screen.queryByText(ACT_COPY.everyone_optional)).toBeNull();
+  });
+
   it("asks which event, and sends the pick with the amount it was given", async () => {
     state.audience.mockResolvedValue(pointsCard([JORDAN]));
     show({

@@ -50,6 +50,32 @@ export const EXEC_ROLES: ReadonlySet<SyntheticRole> = new Set([
   'Risk Manager',
 ]);
 
+/**
+ * The chapter's tiers of roles, highest first (#5853): what an event or a
+ * task can be for besides one role. Every role is in one.
+ */
+export const SYNTHETIC_TIERS: readonly {
+  name: string;
+  roles: readonly SyntheticRole[];
+}[] = [
+  {
+    name: 'Exec board',
+    roles: [
+      'President',
+      'Vice President',
+      'Treasurer',
+      'Secretary',
+      'Risk Manager',
+    ],
+  },
+  {
+    name: 'Chairs',
+    roles: ['Social Chair', 'House Manager', 'Philanthropy Chair'],
+  },
+  { name: 'Brothers', roles: ['Member'] },
+  { name: 'Alumni', roles: ['Alumni'] },
+];
+
 const m = (
   id: string,
   name: string,

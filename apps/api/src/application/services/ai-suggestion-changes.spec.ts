@@ -89,6 +89,42 @@ describe('compareSuggestion (Paul, 2026-11-22)', () => {
     ).toEqual({ a: { verdict: 'kept' } });
   });
 
+  it('reads a card that proposed an invite list (#5853) as kept when saved as proposed', () => {
+    const proposed = newEventChangeView({
+      name: 'FSL Leaders Reception',
+      start_time: '2026-12-02T00:00:00.000Z',
+      end_time: '2026-12-02T01:00:00.000Z',
+      is_mandatory: false,
+      attendance: { everyone: 'not_invited', roles: { [EXEC]: 'required' } },
+    });
+    const saved = savedEventChangeView({
+      name: 'FSL Leaders Reception',
+      description: null,
+      location: null,
+      start_time: '2026-12-02T00:00:00.000Z',
+      end_time: '2026-12-02T01:00:00.000Z',
+      point_value: null,
+      is_mandatory: false,
+      recurrence_rule: null,
+      event_type_id: null,
+      required_role_ids: [EXEC],
+      optional_role_ids: null,
+      excluded_role_ids: null,
+      others_invited: false,
+    } as unknown as Event);
+    const { changed } = compareSuggestion(
+      {
+        required_role_ids: 'ids',
+        optional_role_ids: 'ids',
+        excluded_role_ids: 'ids',
+        others_invited: 'boolean',
+      },
+      proposed,
+      saved,
+    );
+    expect(changed).toEqual([]);
+  });
+
   it('logs the FSL case: an event Ask opened to everyone, saved for two roles in the form', () => {
     const proposed = newEventChangeView({
       name: 'FSL Leaders Reception',

@@ -11,6 +11,7 @@ import { ChapterConfigModule } from '../chapter-config/chapter-config.module';
   imports: [ChapterModule, ChapterConfigModule],
   controllers: [RbacController, RoleTierController],
   providers: [RbacService, RoleTierService],
-  exports: [RbacService],
+  // RoleTierService: Ask reads a chapter's tiers to invite by them (#5853).
+  exports: [RbacService, RoleTierService],
 })
 export class RbacModule {}

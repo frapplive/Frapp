@@ -27,6 +27,8 @@ import {
   NEXT_AGENDA_OUTCOMES,
   type NextAgendaOutcomeKind,
   type TaskSuggestionAudience,
+  EVENT_ATTENDANCE_STATUSES,
+  type EventAttendanceStatus,
 } from '@repo/validation';
 import {
   AI_SUGGESTION_KINDS,
@@ -472,6 +474,26 @@ export class NewEventPointsFromDto {
   name: string;
 }
 
+/** Who a proposed event invites (#5853): the event form's draft. */
+export class NewEventAttendanceDto {
+  @ApiProperty({
+    enum: EVENT_ATTENDANCE_STATUSES,
+    description: 'What the event asks of a member set apart by no entry.',
+  })
+  everyone: EventAttendanceStatus;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'string',
+      enum: [...EVENT_ATTENDANCE_STATUSES],
+    },
+    description:
+      'Each role (by id) set apart from `everyone`, with its status. A tier is listed as its roles.',
+  })
+  roles: Record<string, EventAttendanceStatus>;
+}
+
 /** An event the acting agent proposes to create (#718). */
 export class NewEventSuggestionDto {
   @ApiProperty()
@@ -514,8 +536,35 @@ export class NewEventSuggestionDto {
   })
   event_type_id: string | null;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Whether everyone not set apart by `attendance` must attend. On a card with no `attendance`, whether everyone must.',
+  })
   is_mandatory: boolean;
+
+  @ApiProperty({
+    type: NewEventAttendanceDto,
+    nullable: true,
+    description:
+      "Who it invites, as the event form's draft. Null on a card made before invite lists, which invites everyone as `is_mandatory` says.",
+  })
+  attendance: NewEventAttendanceDto | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'One line for who is invited, in the chapter\'s names when the card was made ("Cabinet required, nobody else invited").',
+  })
+  attendance_line: string | null;
+
+  @ApiProperty({
+    type: NewEventPointsFromDto,
+    nullable: true,
+    description:
+      'The earlier event the invite list was copied from (`kind` is `event`), when nobody chose one.',
+  })
+  attendance_from: NewEventPointsFromDto | null;
 
   @ApiProperty({
     type: String,
