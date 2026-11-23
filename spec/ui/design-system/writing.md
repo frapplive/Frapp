@@ -360,13 +360,13 @@ A row under one says only its time (`6:48 PM`), and a repeating series, shown on
 *(Changed 2026-11-19, Paul's "did a better job of showing details": a row says its start to end, `6:48 – 8:00 PM` (`formatTimeRange`), and a series says how it repeats after its name, muted, `Chapter · Every Sunday`, on web as the phone's row already did; while check-in is open the row says `Check-in is open` (`CHECK_IN_OPEN_LABEL`) on both apps.)*
 *(Changed in #5560 by pdcarlson, 2026-11-19: Upcoming held today through the next 14 days, later events waiting behind a `Later` disclosure with their count (#3707, #3822). The agenda reaches four weeks and then offers **Show more**.)*
 Each day heading ends with a quiet `Hours ›` (named `Hours for Today` to a screen reader), which opens the hour grid on that day; its back button reads `Events`.
-A required event says `Required` after its title, in the events hue; the grey `Mandatory` pill is gone (#5560). The Attendance filter still says `Mandatory`.
+A required event says `Required` after its title, in the events hue; the grey `Mandatory` pill is gone (#5560). The Attendance filter says `Required` too since 2026-11-22, and so do the chat event card, the phone's rows and the hour grid's spoken label.
 A task row says where it stands (`To do`, `Overdue`, `Waiting on an officer`), and one handed to many says `Assigned by you` with its progress at the right (`0 of 3 done`); a birthday row says `Birthday` under the name.
 The colour key under the navigator reads `Events`, `Tasks` and `Birthdays`, each with its count (`Events, 4` to a screen reader). The navigator's header says `Today` once it has moved off today. On a narrow pane Search, Filter and Subscribe are glyphs named `Search events`, `Filter events` and `Subscribe to chapter events in your calendar`. In the hour grid a column heading is named `Open Wednesday, November 11`.
 These lines, and the Directory's empty, error and search-miss lines, are one string on both apps: `EVENTS_COPY`, `eventsCount`, `DIRECTORY_COPY` and `directoryNoSearchMatches` in `@repo/validation` (`screen-copy.ts`, #4135, 2026-11-13).
 A point count read as text, as in a row's meta line, is written out on both apps (`7:00 – 9:00 PM · Great Room · 10 points`, `formatPoints`; an event row has said its start to end with `formatTimeRange` since 2026-11-19); a chip or badge says `+10 pts` (`formatPointsChip`), the phone's event rows and Event detail included (#4135; the phone's meta line said `10 pts` until then).
 The toolbar's filter button is `Filter`, named `Filter events`, or `Filter events, 2 on` while filters are off their defaults, which it also shows as a count;
-its popover's groups are `Time` (`Upcoming`, `Past`, `All`), `Attendance` (`All`, `Mandatory`, `Optional`) and `Cadence` (`All`, `Repeating`, `One-time`), then `Clear`.
+its popover's groups are `Time` (`Upcoming`, `Past`, `All`), `Attendance` (`All`, `Required`, `Optional`) and `Cadence` (`All`, `Repeating`, `One-time`), then `Clear`.
 Bulk selection is `Select`, then `Mark attendance complete` and `Done`, with the count reading `2 selected` (2026-11-09).
 
 The page opened on whichever view, List or Calendar, this person last used on this browser (2026-11-09, #3822), and a chapter with no events opened on the Calendar with a dashed `+` on today's square.
@@ -471,14 +471,15 @@ It clears on the officer's next edit, since a stale verdict describing a colour 
 | Loading | — | `Loading chapter tasks...` |
 | Nothing assigned (member) | — | `Nothing on your plate.` then, when an event is ahead and Events is on, `Next up: {event}, {when}.` (one line, in place of the board) |
 | Add row (officer) | — | `Add a task`, at the top of To do |
-| Add row, required field left out | — | `Pick an assignee.` / `Pick a due date.` (under the field, on submit only) |
-| Add row or chat Task form, due date typed but not readable | — | `Try a date like November 14 or Friday, with a time if it has one, like Friday 5pm.` (under the field; it takes the place of `Pick a due date.` once a submit has left the date out and what is typed is still not a date, and goes when it is; #3928) |
+| Add row, required field left out | — | `Pick who it's for.` (under the row, on submit only); the chat Task form says `Pick an assignee.`. A due date is optional (#5761); a task up for grabs, which needs one, says `A task up for grabs needs a due date, like Friday or Friday 5pm.` |
+| Any task form, no due date | — | Due's empty value and its clear choice read `No due date`, as do My tasks' group and the Due filter (`TASK_NO_DUE_DATE_LABEL`); Repeat without a date reads `Add a due date to repeat it` (`TASK_REPEAT_NEEDS_DUE_DATE`) (#5761) |
+| Add row or chat Task form, due date typed but not readable | — | `Try a date like November 14 or Friday, with a time if it has one, like Friday 5pm.` (under the field, once a submit has left what is typed still not a date, and goes when it is; #3928). A due date may be left empty (#5761), except on a copy of a repeating task, where an empty one reads `Pick a due date.` |
 | Any web task form, a new due time already gone by | — | `That time has already passed. Pick a later time or another day.` (under the due field on submit; goes when the date or time changes; #4512) |
 | Error | `Couldn't load tasks` | the load-failure line (§ copy rules) |
 | Offline | `Tasks unavailable offline` | `Reconnect to load the chapter board and move tasks through it.` |
 
 The board keeps its four columns at zero for a `tasks:manage` holder, and the add row at the top of To do is its one way to create a task: it replaced the New task button and dialog (2026-11-06).
-Pressing it opens the row in place; Enter in the title creates the task once it has an assignee and a due date, which `POST /v1/tasks` requires, and the row stays open for the next one.
+Pressing it opens the row in place; Enter in the title creates the task once it has an assignee (an empty Due makes a task with no due date, #5761), and the row stays open for the next one.
 A member without `tasks:manage` reads their own tasks (and, since #5473, those a tier, role or group they're in follows, which their My tasks leaves out), so with none of their own the four empty columns give way to the one line above; `{when}` is `formatRelativeDayTime`'s shape (`Tomorrow · 7:00 PM`).
 
 Mobile's task board (s08, a tab until #4610, now pushed from Activity) is a personal board for everyone, so with nothing assigned it writes the same line under the points line, from the same `nextUpLine` (`@repo/formatting`), and a holder of `tasks:manage` and `members:view` (New task's grants) reads ` Tap + to assign a task.` after it, since New task lives in the + (the tab bar's, 2026-11-07, and the board's own since #4610).
@@ -1126,12 +1127,13 @@ Who gets it, and what it changes, is owned by [`../mobile/screens.md`](../mobile
 | State | Title | Description | Home |
 |---|---|---|---|
 | The sheet | `<name>'s roles and groups` | Section headings as web's list (each tier's name, `Other roles`, `Groups`); search field `Search roles and groups`; under it one fixed-height status line, blank until `Saving…` and `Saved` (it said `Tap a role to add or remove it.` until 2026-11-07) | mobile `components/directory/member-roles-sheet.tsx` |
-| A row the viewer can't tick | — | Under the name, why: `Changes with Transfer presidency` (President), `Ranks at or above yours`, `Checking what your role can give`, `Your role can't give roles`, `Your role can't change groups`; the row can't be tapped | `@repo/hooks` `member-assignments.ts` (`ASSIGN_CAPTIONS`), shared with web |
+| A row the viewer can't tick | — | Under the name, why: `Changes with Transfer presidency` (President), `Ranks at or above yours`, `They rank at or above you`, `Gives “<permission>”, which your role doesn't have` (or `Gives <n> permissions your role doesn't have`; #5730), `Checking what your role can give`, `Your role can't give roles`, `Your role can't change groups`; the row can't be tapped | `@repo/hooks` `member-assignments.ts` (`ASSIGN_CAPTIONS`), shared with web |
 | Empty | — | `This chapter has no roles or groups yet.`, or `Nothing matches that search.` while searching | mobile `components/directory/member-roles-sheet.tsx` |
 | Removing the last role carrying `members:view` | `Take away <name>'s access?` | `Without this role, <name> can't open chat, the member list or events.` Buttons `Cancel` and `Remove <role>` | `@repo/hooks` (`ASSIGN_COPY`), shared with web |
 | Group save failed | `Couldn't add to that group` or `Couldn't take out of that group` | The API's reason (a channel names the group, the group is full, the member has left) | same |
 | Save failed: a role was deleted (400) | `Couldn't save roles` | `One of those roles was just deleted. The change was put back and the list refreshed.` | mobile `lib/directory/role-editor.ts` (`rolesSaveFailedBody`) |
 | Save failed: not allowed (403) | `Couldn't save roles` | `The change isn't allowed any more, so it was put back.` | same |
+| Save failed: refused by a rank rule (403 with `role.assign_out_of_reach` or `role.assign_permission_not_held`; #5730) | `Couldn't save roles` | `The change was put back.` then the refusal's own words: `That role, or this member, ranks too high for your role to change.` or `This role has a permission your role doesn't, so you can't give it. Your president can give it, or give your role that permission.` | same, with `serverCopyOf` (`@repo/hooks`) |
 | Save failed: anything else | `Couldn't save roles` | `The change didn't reach the server, so it was put back. Try again.` | same |
 
 When the officer has already opened someone else, a failed save still alerts, and `The change` reads `Your change to <name>'s roles`, so no change is lost without a word.

@@ -1138,6 +1138,54 @@ describe("Actives on a chapter with alumni", () => {
     expect(screen.queryByRole("menuitem", { name: "Old Admin" })).toBeNull();
   });
 
+  it("offers no role to assign that carries a permission the viewer lacks (#5730)", async () => {
+    const user = userEvent.setup();
+    Object.assign(membersRead, read(CHAPTER));
+    permissionsRead.data = { permissions: ["roles:manage", "members:view"] };
+    Object.assign(
+      rolesRead,
+      read([
+        { id: "r-1", name: "Treasurer", is_system: false, permissions: [] },
+        {
+          id: "r-new",
+          name: "New Member",
+          system_key: "NEW_MEMBER",
+          is_system: true,
+          permissions: ["members:view", "ai:use"],
+        },
+        // Everyone's permissions are exempt: every member has them.
+        {
+          id: "r-everyone",
+          name: "Everyone",
+          system_key: "EVERYONE",
+          is_system: true,
+          permissions: ["members:view", "rush:view"],
+        },
+        {
+          id: "r-rush",
+          name: "Rush helper",
+          is_system: false,
+          permissions: ["rush:view"],
+        },
+      ]),
+    );
+    render(<MembersDirectory />);
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /select all members on this page/i,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Assign role" }));
+    expect(
+      await screen.findByRole("menuitem", { name: "Treasurer" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Rush helper" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "New Member" })).toBeNull();
+  });
+
   it("reads a bulk role as unpicked once that role is deleted, and can un-pick one", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<MembersDirectory />);

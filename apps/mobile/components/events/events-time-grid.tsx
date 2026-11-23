@@ -129,7 +129,7 @@ export function EventsTimeGrid({
   // The accent edge is what marks a required event to the eye; a screen
   // reader hears it, as web's grid says it.
   const required = (event: EventRow) =>
-    requiredOf(event.attendance) ? ", mandatory" : "";
+    requiredOf(event.attendance) ? ", required" : "";
 
   return (
     <View style={styles.root}>

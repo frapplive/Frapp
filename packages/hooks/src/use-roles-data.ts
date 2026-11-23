@@ -74,9 +74,12 @@ export function useRolesDataFrom({
     () => permissionsQuery.data?.permissions ?? [],
     [permissionsQuery.data],
   );
+  // `null` until the permissions read lands (a failed refetch keeps the
+  // cached ones), so the reach stays unknown rather than a guess (#5730).
+  const readPermissions = permissionsQuery.data?.permissions ?? null;
   const reach = useMemo(
-    () => callerReach(myRoleIds, myPermissions, roles, tiers, viewerUserId),
-    [myRoleIds, myPermissions, roles, tiers, viewerUserId],
+    () => callerReach(myRoleIds, readPermissions, roles, tiers, viewerUserId),
+    [myRoleIds, readPermissions, roles, tiers, viewerUserId],
   );
 
   return {

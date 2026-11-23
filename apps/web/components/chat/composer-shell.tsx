@@ -255,7 +255,7 @@ export function ComposerShell({
           // upgrade, inside a box whose size does not.
           className={cn(
             COMPOSER_INPUT_CLASS,
-            "block w-full resize-none border-0 bg-transparent p-0 placeholder:text-muted-foreground",
+            "block w-full resize-none border-0 bg-transparent p-0 placeholder:text-muted",
           )}
           aria-describedby={hintId}
           onChange={(event) => {

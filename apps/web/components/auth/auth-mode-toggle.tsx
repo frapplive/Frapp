@@ -52,7 +52,7 @@ export function AuthModeToggle({
           "-mb-px inline-flex min-h-11 items-center rounded-t-xs border-b-2 px-1 py-3 text-sm transition-colors",
           active
             ? "border-primary font-semibold text-foreground"
-            : "border-transparent font-normal text-muted-foreground",
+            : "border-transparent font-normal text-muted",
         );
         if (redirectTo === null) {
           return (
@@ -69,7 +69,7 @@ export function AuthModeToggle({
             className={cn(
               className,
               FOCUS_RING_OFFSET,
-              !active && "hover:text-foreground",
+              !active && "hover:text-muted-foreground",
             )}
           >
             {label}

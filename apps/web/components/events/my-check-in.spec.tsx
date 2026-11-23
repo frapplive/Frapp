@@ -343,9 +343,7 @@ describe("<MyCheckIn />", () => {
     clock.now = new Date(2026, 10, 8, 12, 0).getTime();
     renderBlock();
 
-    expect(
-      screen.getByText(/^Opens tomorrow · 6:50\sPM$/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/^Opens tomorrow · 6:50\sPM$/)).toBeInTheDocument();
   });
 
   it("says when check-in opens before the window", () => {

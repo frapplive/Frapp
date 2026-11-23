@@ -112,6 +112,9 @@ These cause most of the iterations, so they come first.
   thing; see § 9.*
 - **Record pages read top-down in the order people use them.** An event is details, then agenda, then
   attendance; a series is one Repeat row and a "Next Friday" link, never a list. (11-19)
+  *Changed 11-22 by Paul: a record page also follows its clock. An event shows who's coming before
+  check-in opens, leads with check-in and the roster while it's open, and opens on who came after; a
+  section nobody can act on yet (a roster a month out) stays off the page.*
 - **Long content is scannable:** one meta line, a short summary (3 bullets or fewer), collapsible topic
   rows, a pinned jump bar, sticky title and primary action. "Nothing stands out" is the failure.
   (11-16 to 11-19, minutes)

@@ -27,6 +27,7 @@ import { CHAT_FORM_RESPONSE_REPOSITORY } from '#domain/repositories/chat-form-re
 import type { IChatFormResponseRepository } from '#domain/repositories/chat-form-response.repository.interface';
 import { isCardClosed } from '#domain/utils/card-closing';
 import { formQuestions } from '#domain/utils/form-card-rules';
+import { ascendingNullsLast } from '#domain/utils/nulls-last';
 import {
   SIGNUP_ACTION_TYPE,
   isHeadcountCard,
@@ -121,7 +122,8 @@ export type ActivitySection = (typeof ACTIVITY_SECTIONS)[number];
 export interface ActivityTask {
   id: string;
   title: string;
-  due_date: string;
+  /** Null for a task with no due date (#5761). */
+  due_date: string | null;
   /** The moment it is due, when it has a time of day (#4003). */
   due_at: string | null;
   /** Display status: `OVERDUE` for an open task past its due date. */
@@ -179,7 +181,7 @@ export interface ActivityTaskGroup extends TaskGroupSummary {
   /** What the copies share, read from one not yet confirmed. */
   title: string;
   description: string | null;
-  due_date: string;
+  due_date: string | null;
   due_at: string | null;
   point_reward: number | null;
   proof_kind: TaskProofKind;
@@ -605,6 +607,8 @@ function dueBefore(
   task: Pick<ActivityTask, 'due_date' | 'due_at'>,
   weekEnd: number,
 ): boolean {
+  // A task with no due date isn't due this week or any other (#5761).
+  if (task.due_date === null) return false;
   const at = Date.parse(task.due_at ?? `${task.due_date}T12:00:00Z`);
   // An unreadable date is still the member's to do.
   return Number.isNaN(at) || at < weekEnd;
@@ -2011,8 +2015,13 @@ export class ActivityService {
           task.stored_status !== TaskStatus.COMPLETED,
       )
       // By day, and within a day by time, a task with no time last: it is
-      // due by the end of the day.
-      .sort(byAscending((task) => `${task.due_date} ${task.due_at ?? '~'}`));
+      // due by the end of the day. One with no due date goes after every
+      // dated one (#5761).
+      .sort(
+        (a, b) =>
+          ascendingNullsLast(a.due_date, b.due_date) ||
+          ascendingNullsLast(a.due_at, b.due_at),
+      );
 
     // The groups of every row drawn, in one read, then each list as it was.
     const grouped = await this.taskService.withGroupSummaries(chapterId, [

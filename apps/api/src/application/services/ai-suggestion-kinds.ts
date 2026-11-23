@@ -1,4 +1,8 @@
 import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type {
   AiSuggestionKind,
   AiSuggestionPayload,
   AiSuggestionSourceType,
@@ -27,7 +31,35 @@ export interface AiSuggestionCommitResult {
   outcome?: Readonly<Record<string, number>>;
 }
 
+/**
+ * How a kind's change log compares what was proposed with what was saved
+ * (`ai_suggestion_changes`, Paul 2026-11-22). Absent, a decision is logged
+ * with no fields.
+ */
+export interface AiSuggestionChangeLog {
+  /** The fields compared, and how (`compareSuggestion`). */
+  readonly fields: ChangeFieldSpec;
+  /** A payload as those fields. */
+  view(payload: AiSuggestionPayload): ChangeView;
+  /**
+   * Whether the accept only names what the member made in the full form the
+   * card's Edit opened (`via: form`).
+   */
+  madeInForm?(payload: AiSuggestionPayload): boolean;
+  /**
+   * What was actually saved, read back, when the accept's payload only names
+   * it (an event made in its form). Null: compare the accepted payload.
+   */
+  readSaved?(input: {
+    chapterId: string;
+    payload: AiSuggestionPayload;
+    resultId: string;
+  }): Promise<ChangeView | null>;
+}
+
 export interface AiSuggestionKindHandler {
+  /** How what people change is logged; see {@link AiSuggestionChangeLog}. */
+  readonly changeLog?: AiSuggestionChangeLog;
   readonly kind: AiSuggestionKind;
   /** What the accepter must hold at the moment they accept. */
   readonly requiredPermission: string;

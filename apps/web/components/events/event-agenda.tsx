@@ -365,7 +365,7 @@ export function EventAgendaSection({
             maxLength={EVENT_AGENDA_ITEM_MAX}
             enterKeyHint="done"
             className={cn(
-              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted-foreground hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
+              "flex min-h-9 w-full min-w-0 rounded-md bg-transparent px-2 text-sm caret-primary placeholder:text-muted hover:bg-card-hover focus:bg-surface-1 pointer-coarse:min-h-11",
               FOCUS_RING,
             )}
           />
@@ -634,9 +634,37 @@ export function EventAttachmentsSection({
     setAdding(null);
   };
 
+  const addLinks = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      <button
+        type="button"
+        className={QUIET_LINK}
+        onClick={() => setAdding("link")}
+      >
+        Add a link
+      </button>
+      {documentsOn === true ? (
+        <button
+          type="button"
+          className={QUIET_LINK}
+          onClick={() => setAdding("document")}
+        >
+          Attach from Chapter Files
+        </button>
+      ) : null}
+    </div>
+  );
+
   return (
     <section aria-label="Attachments" className={SECTION}>
-      <h3 className={HEADING}>Attachments</h3>
+      {/* Empty, the add links ride the heading's row: one quiet line, not a
+          section of its own (Paul 2026-11-22). */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className={HEADING}>Attachments</h3>
+        {attachments.length === 0 && canEdit && !full && adding === null
+          ? addLinks
+          : null}
+      </div>
       {attachments.length > 0 ? (
         <ul className="grid gap-1">
           {attachments.map((attachment) => (
@@ -737,26 +765,9 @@ export function EventAttachmentsSection({
           }
         />
       ) : null}
-      {canEdit && !full && adding === null ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <button
-            type="button"
-            className={QUIET_LINK}
-            onClick={() => setAdding("link")}
-          >
-            Add a link
-          </button>
-          {documentsOn === true ? (
-            <button
-              type="button"
-              className={QUIET_LINK}
-              onClick={() => setAdding("document")}
-            >
-              Attach from Chapter Files
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {attachments.length > 0 && canEdit && !full && adding === null
+        ? addLinks
+        : null}
     </section>
   );
 }

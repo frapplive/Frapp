@@ -10,6 +10,7 @@ import {
   MAX_REPEAT_RULE_LENGTH,
   EVENT_ATTENDANCE_STATUSES,
   POINTS_ADJUSTMENT_MAX,
+  eventOthersInvited,
   attendanceToWire,
   isRepeatRule,
   type EventAttendanceDraft,
@@ -18,6 +19,12 @@ import {
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { AiSuggestionPayload } from '#domain/entities/ai-suggestion.entity';
 import type {
+  ChangeFieldSpec,
+  ChangeView,
+} from '#domain/utils/ai-suggestion-changes';
+import type { Event } from '#domain/entities/event.entity';
+import type {
+  AiSuggestionChangeLog,
   AiSuggestionCommitResult,
   AiSuggestionKindHandler,
 } from './ai-suggestion-kinds';
@@ -193,6 +200,95 @@ export function readNewEventPayload(
   };
 }
 
+/** What the change log compares for a proposed event (Paul, 2026-11-22). */
+const NEW_EVENT_CHANGE_FIELDS: ChangeFieldSpec = {
+  name: 'text',
+  description: 'text',
+  location: 'text',
+  start_time: 'instant',
+  end_time: 'instant',
+  length_minutes: 'number',
+  point_value: 'number',
+  event_type_id: 'id',
+  is_mandatory: 'boolean',
+  recurrence_rule: 'text',
+  // Who is invited: null on every side is the whole chapter. A proposal
+  // carries none today (set in the form); a proposal that does is compared.
+  required_role_ids: 'ids',
+  optional_role_ids: 'ids',
+  excluded_role_ids: 'ids',
+  // Whether a member holding none of those roles is invited: "only these
+  // roles" and "everyone, these roles required" list the same ids.
+  others_invited: 'boolean',
+};
+
+function lengthMinutes(start: string, end: string): number | null {
+  const from = Date.parse(start);
+  const to = Date.parse(end);
+  return Number.isNaN(from) || Number.isNaN(to)
+    ? null
+    : Math.round((to - from) / 60_000);
+}
+
+/** A stored proposal as the change log's fields. */
+export function newEventChangeView(payload: AiSuggestionPayload): ChangeView {
+  const event = readNewEventPayload(payload);
+  // A card since #5853 proposes its list as `attendance`, sent as these
+  // fields on commit; read them the same way so kept reads as kept.
+  if (event.attendance) {
+    const wire = attendanceToWire(event.attendance);
+    return {
+      ...event,
+      length_minutes: lengthMinutes(event.start_time, event.end_time),
+      is_mandatory: wire.is_mandatory,
+      required_role_ids: wire.required_role_ids,
+      optional_role_ids: wire.optional_role_ids,
+      excluded_role_ids: wire.excluded_role_ids,
+      others_invited: wire.others_invited,
+    };
+  }
+  return {
+    ...event,
+    length_minutes: lengthMinutes(event.start_time, event.end_time),
+    required_role_ids: payload.required_role_ids ?? null,
+    optional_role_ids: payload.optional_role_ids ?? null,
+    excluded_role_ids: payload.excluded_role_ids ?? null,
+    others_invited: eventOthersInvited({
+      required_role_ids: idsOrNull(payload.required_role_ids),
+      others_invited:
+        typeof payload.others_invited === 'boolean'
+          ? payload.others_invited
+          : null,
+    }),
+  };
+}
+
+function idsOrNull(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : null;
+}
+
+/** An event as saved, as the change log's fields. */
+export function savedEventChangeView(event: Event): ChangeView {
+  return {
+    name: event.name,
+    description: event.description,
+    location: event.location,
+    start_time: event.start_time,
+    end_time: event.end_time,
+    length_minutes: lengthMinutes(event.start_time, event.end_time),
+    point_value: event.point_value,
+    event_type_id: event.event_type_id,
+    is_mandatory: event.is_mandatory,
+    recurrence_rule: event.recurrence_rule,
+    required_role_ids: event.required_role_ids,
+    optional_role_ids: event.optional_role_ids,
+    excluded_role_ids: event.excluded_role_ids,
+    others_invited: eventOthersInvited(event),
+  };
+}
+
 function incomplete(message: string): BadRequestException {
   return new BadRequestException({ code: 'ai.suggestion.incomplete', message });
 }
@@ -213,6 +309,19 @@ export class NewEventSuggestionKind implements AiSuggestionKindHandler {
   readonly module = 'events';
   readonly expiresAfterDays = NEW_EVENT_SUGGESTION_EXPIRY_DAYS;
   readonly pushCategory = 'events';
+
+  /**
+   * Every accept is compared with the event as it was saved, read back, so
+   * one confirmed as shown and one made in the form are logged alike (what
+   * the form set, such as who is invited, is in the event).
+   */
+  readonly changeLog: AiSuggestionChangeLog = {
+    fields: NEW_EVENT_CHANGE_FIELDS,
+    view: newEventChangeView,
+    madeInForm: (payload) => madeEventIdOf(payload) !== null,
+    readSaved: async ({ chapterId, resultId }) =>
+      savedEventChangeView(await this.events.findById(resultId, chapterId)),
+  };
 
   constructor(
     private readonly events: EventService,

@@ -122,6 +122,12 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // Joining or leaving a role an officer unmarked or changed since the
   // picker loaded it.
   "role.not_self_assignable",
+  // Giving or taking a role the rank rules refuse (#5730): the role or the
+  // member ranks at or above the officer, or the role carries a permission
+  // the officer lacks. The "+ Add" list disables those it can see; a list
+  // loaded before a role or tier change can still offer one.
+  "role.assign_out_of_reach",
+  "role.assign_permission_not_held",
   "chat.since_not_found",
   // An AI route while `AI_ENABLED` is off on the server (#4310, and
   // `AiEnabledGuard`, ADR-28). A state the deployment is in, and how a
