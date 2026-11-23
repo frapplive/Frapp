@@ -1256,16 +1256,101 @@ describe('MemberService', () => {
       });
     });
 
+    // #5843 (Paul's go, relayed by Shawn, 2026-11-23): a peer at the
+    // caller's own rank is reachable for roles ranked below them, so a
+    // cabinet officer can give a fellow cabinet officer a committee role.
+    // Roles at the caller's own rank stay out of reach, so nobody strips a
+    // peer's position or hands themselves one.
+    describe('on a fellow member of the same tier (#5843)', () => {
+      it('lets a chair give a fellow chair a role below the chairs', async () => {
+        await save(
+          SOCIAL_CHAIR_MEMBER,
+          [ROLE.socialChair, ROLE.brother, ROLE.pledge],
+          USER.riskChair,
+        );
+        expect(mockRepo.setRoleIds).toHaveBeenCalledWith(
+          expect.any(String),
+          SOCIAL_CHAIR_MEMBER,
+          expect.any(Array),
+          [ROLE.socialChair, ROLE.brother, ROLE.pledge],
+        );
+      });
+
+      it('lets a chair take a role below the chairs away from a fellow chair', async () => {
+        await save(SOCIAL_CHAIR_MEMBER, [ROLE.socialChair], USER.riskChair);
+        expect(mockRepo.setRoleIds).toHaveBeenCalledTimes(1);
+      });
+
+      it("refuses giving a fellow chair a role at the chairs' own rank", async () => {
+        const refusal = await save(
+          SOCIAL_CHAIR_MEMBER,
+          [ROLE.socialChair, ROLE.brother, ROLE.riskChair],
+          USER.riskChair,
+        ).catch((error: unknown) => error);
+        expect((refusal as ForbiddenException).getResponse()).toMatchObject({
+          code: 'role.assign_out_of_reach',
+        });
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("refuses taking a fellow chair's own chair role away", async () => {
+        await expect(
+          save(SOCIAL_CHAIR_MEMBER, [ROLE.brother], USER.riskChair),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it('still refuses even a lower role on a member ranked above the caller', async () => {
+        await expect(
+          save(
+            TIERED_MEMBER.vicePresident,
+            [ROLE.vicePresident, ROLE.brother, ROLE.pledge],
+            USER.riskChair,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(
+          save(
+            TIERED_MEMBER.vicePresident,
+            [ROLE.vicePresident],
+            USER.riskChair,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("never reaches the President, though `*` sits in the cabinet's own tier", async () => {
+        // The President's role is in the Cabinet tier with the Vice
+        // President's, but `*` ranks above every tier.
+        await expect(
+          save(
+            TIERED_MEMBER.president,
+            [ROLE.president, ROLE.pledge],
+            USER.vicePresident,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("leaves the President unaffected: `*` still gives and takes any role, a cabinet officer's included", async () => {
+        await save(
+          TIERED_MEMBER.vicePresident,
+          [ROLE.brother, ROLE.treasurer],
+          USER.president,
+        );
+        expect(mockRepo.setRoleIds).toHaveBeenCalledTimes(1);
+      });
+    });
+
     // #5725 (Paul, 2026-11-20): `roles:assign_own_level` reaches the
     // caller's own rank too, for the roles and for the member.
     describe('with roles:assign_own_level', () => {
       const OWN = ['roles:assign_own_level'];
 
-      it('is off by default: a chair cannot give a fellow chair even a lower role', async () => {
+      it('is off by default: a chair cannot give a fellow chair a chair-level role', async () => {
         await expect(
           save(
             SOCIAL_CHAIR_MEMBER,
-            [ROLE.socialChair, ROLE.brother, ROLE.pledge],
+            [ROLE.socialChair, ROLE.brother, ROLE.riskChair],
             USER.riskChair,
           ),
         ).rejects.toBeInstanceOf(ForbiddenException);

@@ -32,6 +32,7 @@ import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
   canAssignAt,
+  canAssignToMemberAt,
   canReach,
   holderRank,
   roleRank,
@@ -392,10 +393,12 @@ export class MemberService {
    * unless they hold `*`:
    *
    * - every role added or taken away must rank below the caller's own;
-   * - the member must rank below the caller too, unless it is the caller
-   *   themselves, so a chair cannot strip an officer's roles;
+   * - the member must rank below the caller or at the caller's own rank
+   *   (`canAssignToMemberAt`, #5843), so a cabinet officer can give a fellow
+   *   cabinet officer a committee role but a chair cannot strip an
+   *   officer's roles;
    * - a caller holding `roles:assign_own_level` also reaches their own rank
-   *   on both counts (`canAssignAt`, #5725), so a cabinet officer can make
+   *   for the roles (`canAssignAt`, #5725), so a cabinet officer can make
    *   another cabinet officer Stewardship Chair;
    * - on their own row, the caller may not end up holding a permission they
    *   did not already hold, so nobody hands themselves a lower role that
@@ -537,7 +540,7 @@ export class MemberService {
     const isSelf = reach.memberId === member.id;
     if (
       changed.some((role) => !canAssignAt(reach, roleRank(role, positions))) ||
-      (!isSelf && !canAssignAt(reach, holderRank(before, positions)))
+      (!isSelf && !canAssignToMemberAt(reach, holderRank(before, positions)))
     ) {
       throw new ForbiddenException({
         code: ROLE_ASSIGN_OUT_OF_REACH_CODE,

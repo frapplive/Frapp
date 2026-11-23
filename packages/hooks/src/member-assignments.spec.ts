@@ -149,19 +149,27 @@ describe("base roles (2026-11-21)", () => {
 
   it("disables a base role whose pick would take away one ranked at or above the viewer (#5730)", () => {
     // Picking a base role takes the member's other one away, which the API
-    // rank-checks too. A member holding one at or above the viewer ranks
-    // there themselves, so the member rule already disables every row.
-    // Grads sits in the top tier here, so the VP can't take it away.
+    // rank-checks too. Grads sits in the top tier here, so the member is the
+    // VP's peer, reachable since #5843, but the VP can't take Grads away.
     const highGrads = withBase.map((r) =>
       r.id === "r-alumni" ? { ...r, tier_id: "t-exec" } : r,
     );
     const rows = sections({ roles: highGrads, heldRoleIds: ["r-alumni"] })[0]!
       .rows;
     expect(rows.find((r) => r.name === "New Member")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
+      ASSIGN_CAPTIONS.takesAwayAbove,
     );
     // The member's own base role stays as it is.
     expect(rows.find((r) => r.name === "Grads")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.ranksAbove,
+    );
+    // A member ranked above the viewer: the member rule disables every row.
+    const above = sections({
+      roles: highGrads,
+      heldRoleIds: ["r-alumni"],
+      reach: { ...VP_REACH, rank: 2 },
+    })[0]!.rows;
+    expect(above.find((r) => r.name === "New Member")?.disabledReason).toBe(
       ASSIGN_CAPTIONS.memberAbove,
     );
     // A member holding a reachable base role: the pick is open.
@@ -310,9 +318,10 @@ describe("memberAssignmentSections", () => {
     );
   });
 
-  // #5725: the member's rank counts too, and roles:assign_own_level lets a
-  // viewer reach their own level as well as below it.
-  it("disables every role on a member ranked at the viewer's level, unless they can assign at their own level", () => {
+  // #5725: roles:assign_own_level lets a viewer reach their own level as
+  // well as below it. #5843: a member at the viewer's own level is
+  // reachable without it, for roles below the viewer.
+  it("lets the viewer give a peer roles below them, and their own level's only with roles:assign_own_level", () => {
     const peer = (reach: Reach) =>
       sections({ reach, heldRoleIds: ["r-vp"], userId: "u-peer" }).flatMap(
         (s) => s.rows,
@@ -321,7 +330,10 @@ describe("memberAssignmentSections", () => {
       rows.find((r) => r.name === name)?.disabledReason;
 
     const plain = peer(VP_REACH);
-    expect(reason(plain, "Rush Chair")).toBe(ASSIGN_CAPTIONS.memberAbove);
+    expect(reason(plain, "Rush Chair")).toBeNull();
+    // Their position at the viewer's own rank stays out of reach.
+    expect(reason(plain, "Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+    expect(reason(plain, "President")).toBe(ASSIGN_CAPTIONS.presidency);
 
     const ownLevel = peer({
       ...VP_REACH,

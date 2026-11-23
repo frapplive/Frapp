@@ -44,7 +44,8 @@ export const ASSIGN_CAPTIONS = {
   presidency: "Changes with Transfer presidency",
   checking: "Checking what your role can give",
   ranksAbove: "Ranks at or above yours",
-  memberAbove: "They rank at or above you",
+  memberAbove: "They rank above you",
+  takesAwayAbove: "Would take away a base role ranked at or above yours",
   noRoles: "Your role can't give roles",
   noGroups: "Your role can't change groups",
 } as const;
@@ -190,9 +191,30 @@ export function memberAssignmentSections(
   });
 
   const sections: AssignmentSection[] = [];
-  const baseRows = baseRolesInOrder(inputs.roles)
+  // Picking a base role takes the member's other one away, which the API
+  // rank-checks too. Once a peer is reachable (#5843), their base role can
+  // sit at the viewer's own rank, so the row says so rather than the member.
+  const baseRoles = baseRolesInOrder(inputs.roles);
+  const swapReason = (role: TieredRole): string | null =>
+    !held.has(role.id) &&
+    baseRoles.some(
+      (other) =>
+        other.id !== role.id &&
+        held.has(other.id) &&
+        !assignsRole(inputs.reach, other, inputs.tiers),
+    )
+      ? ASSIGN_CAPTIONS.takesAwayAbove
+      : null;
+  const baseRows = baseRoles
     .filter((role) => matches(role.name))
-    .map((role) => ({ ...roleRow(role), exclusive: true }));
+    .map((role) => {
+      const row = roleRow(role);
+      return {
+        ...row,
+        disabledReason: row.disabledReason ?? swapReason(role),
+        exclusive: true,
+      };
+    });
   if (baseRows.length > 0) {
     sections.push({ key: "base", title: BASE_ROLE_HEADING, rows: baseRows });
   }
