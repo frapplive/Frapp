@@ -1,6 +1,7 @@
 import {
   addedPermissions,
   canAssignAt,
+  canAssignToMemberAt,
   canReach,
   effectivePermissions,
   holderRank,
@@ -101,6 +102,25 @@ describe('canAssignAt', () => {
   it('still reaches nothing from outside the tiers', () => {
     const outside = actor(OUTSIDE_TIERS_RANK, ['roles:assign_own_level']);
     expect(canAssignAt(outside, OUTSIDE_TIERS_RANK)).toBe(false);
+  });
+});
+
+describe('canAssignToMemberAt (#5843)', () => {
+  it('reaches a member below or level with the actor, never above', () => {
+    expect(canAssignToMemberAt(actor(2), 3)).toBe(true);
+    expect(canAssignToMemberAt(actor(2), 2)).toBe(true);
+    expect(canAssignToMemberAt(actor(2), 1)).toBe(false);
+  });
+
+  it('never reaches a `*` holder, even from the top tier', () => {
+    expect(canAssignToMemberAt(actor(1), WILDCARD_RANK)).toBe(false);
+  });
+
+  it('reaches a member outside the tiers, but not from outside them', () => {
+    expect(canAssignToMemberAt(actor(3), OUTSIDE_TIERS_RANK)).toBe(true);
+    expect(
+      canAssignToMemberAt(actor(OUTSIDE_TIERS_RANK), OUTSIDE_TIERS_RANK),
+    ).toBe(false);
   });
 });
 

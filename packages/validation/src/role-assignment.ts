@@ -5,7 +5,10 @@
  */
 import { isEveryoneRole, type EveryoneSaveRole } from "./everyone-role";
 
-/** A role or member ranked at or above the caller (`canAssignAt`). */
+/**
+ * A role ranked at or above the caller (`canAssignAt`), or a member ranked
+ * above them (`canAssignToMemberAt`; a peer is reachable since #5843).
+ */
 export const ROLE_ASSIGN_OUT_OF_REACH_CODE = "role.assign_out_of_reach";
 
 /** A role carrying a permission the caller doesn't hold. */

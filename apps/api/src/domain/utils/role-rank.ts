@@ -93,8 +93,9 @@ export function canReach(actor: ActorReach, targetRank: number): boolean {
 }
 
 /**
- * Whether the actor may give or take away a role at `targetRank`, or change
- * the roles of a member at `targetRank`: what {@link canReach} allows, plus
+ * Whether the actor may give or take away a role at `targetRank` (which
+ * members they may do it to is {@link canAssignToMemberAt}'s): what
+ * {@link canReach} allows, plus
  * their own rank when they hold `roles:assign_own_level` (Paul, 2026-11-20,
  * #5725). A chapter turns that on for its cabinet so one officer can make
  * another Stewardship Chair; nobody reaches anyone ranked above them. A
@@ -107,6 +108,23 @@ export function canAssignAt(actor: ActorReach, targetRank: number): boolean {
     Number.isFinite(actor.rank) &&
     targetRank === actor.rank
   );
+}
+
+/**
+ * Whether the actor may change the roles of a member at `memberRank`: one
+ * ranked below them, or a peer at their own rank (Paul's go, relayed by Shawn,
+ * 2026-11-23, #5843), so a cabinet officer can give a fellow cabinet officer a
+ * committee role. Which roles they may give or take is still
+ * {@link canAssignAt}'s, so a peer's role at the caller's own rank stays out
+ * of reach without `roles:assign_own_level`. Nobody reaches a member ranked
+ * above them, and a caller outside the tiers reaches no other member.
+ */
+export function canAssignToMemberAt(
+  actor: ActorReach,
+  memberRank: number,
+): boolean {
+  if (actor.wildcard) return true;
+  return Number.isFinite(actor.rank) && ranksAtOrAbove(actor.rank, memberRank);
 }
 
 /**

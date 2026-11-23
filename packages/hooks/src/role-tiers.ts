@@ -236,7 +236,9 @@ export function assignsRole(
 
 /**
  * Whether the caller may change this member's roles at all: their own, or a
- * member ranked below them, or at their level with `roles:assign_own_level`.
+ * member ranked below them or at their own rank (#5843; the API's
+ * `canAssignToMemberAt`). Which roles they may give or take on a peer is
+ * still `assignsRole`'s, so a peer's own-rank role stays out of reach.
  */
 export function assignsToMember(
   reach: Reach,
@@ -253,7 +255,7 @@ export function assignsToMember(
       rank = Math.min(rank, roleRank(role, positions));
     }
   }
-  return assignsAt(reach, rank);
+  return Number.isFinite(reach.rank) && rank >= reach.rank;
 }
 
 /**
