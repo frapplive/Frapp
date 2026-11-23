@@ -128,6 +128,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Picking a type for an event or a document now happens in one menu you can search, where you can also make a new type and rename or delete one without leaving it.",
       "Ask Frapp can make a task for several people, a role, a tier or a group, and set its points, proof, steps and who it is from.",
       "Who's coming on an event can now be set for a whole tier, such as Cabinet, and roles added to that tier later are included.",
+      "An officer can now give or take away roles ranked below them on a fellow officer of the same tier, such as making a fellow cabinet member a committee chair, without the president.",
+      "A task's proof link has to be a full web address now, and an older one that goes nowhere shows as text instead of opening a \"server can't be found\" page.",
     ],
     web: [
       "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
