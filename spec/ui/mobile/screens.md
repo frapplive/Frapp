@@ -219,7 +219,7 @@ Copy: [`writing.md` § Already in a chapter](../design-system/writing.md#already
 
 Route: `(auth)/welcome.tsx`.
 
-Live — up to three screens on one route, then the chapter's default channel with the welcome card at its top ([`onboarding.md` § After joining](../../behavior/onboarding.md#after-joining)); the first-run tour over chat was removed in #5627. Paul's pick, 2026-11-19 (#5627): "Two: name, then notifications". Changed in #PRNUM by shawnatomklein-eng, 2026-11-23: About you between them (#5284).
+Live — up to three screens on one route, then the chapter's default channel with the welcome card at its top ([`onboarding.md` § After joining](../../behavior/onboarding.md#after-joining)); the first-run tour over chat was removed in #5627. Paul's pick, 2026-11-19 (#5627): "Two: name, then notifications". Changed in #5930 by shawnatomklein-eng, 2026-11-23: About you between them (#5284).
 Nothing is drawn while the profile and push reads come back (given up on after 4 seconds).
 The `You're in.` card that opened s03 (the chapter, its school and the auto-joined channels) was removed on 2026-11-07; the welcome card says it now, in the channel (#5627).
 First, for every member: `How the chapter sees you`, the profile photo control and a `Your name` field ([`writing.md` § Name and photo (after a join)](../design-system/writing.md#name-and-photo-after-a-join)). The name is pre-filled when sign-in carried a real one (Apple or Google); the API's `Member` stand-in and an email sign-up's stored name (the email before the `@`) start empty (`needsName` in `@repo/validation`). The photo is optional, a name is required, and a changed name is saved (`PATCH /v1/users/me`) before the screen moves on. Web shows the same screen after a join (`/welcome`).
