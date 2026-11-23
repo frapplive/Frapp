@@ -134,6 +134,13 @@ import type {
   UserAiConsent,
   UserSettings,
 } from '#domain/entities';
+import type {
+  RushCandidateNote,
+  RushCandidateRating,
+  RushCandidateTag,
+  RushStage,
+  RushTag,
+} from '#domain/entities/rush-pipeline.entity';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -289,8 +296,13 @@ export interface Database {
       push_tokens: TableDefinition<PushToken>;
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
+      rush_candidate_notes: TableDefinition<RushCandidateNote>;
+      rush_candidate_ratings: TableDefinition<RushCandidateRating>;
+      rush_candidate_tags: TableDefinition<RushCandidateTag>;
       rush_candidate_votes: TableDefinition<RushCandidateVote>;
       rush_candidates: TableDefinition<RushCandidate>;
+      rush_stages: TableDefinition<RushStage>;
+      rush_tags: TableDefinition<RushTag>;
       scheduled_notification_dispatches: TableDefinition<ScheduledNotificationDispatch>;
       semester_archives: TableDefinition<SemesterArchive>;
       service_entries: TableDefinition<ServiceEntry>;

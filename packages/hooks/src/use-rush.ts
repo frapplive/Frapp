@@ -70,6 +70,10 @@ export function useVoteRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
+      // The pipeline shows the same vote (#5924).
+      void queryClient.invalidateQueries({
+        queryKey: ["rush", chapterId, "pipeline"],
+      });
     },
   });
 }

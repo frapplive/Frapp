@@ -4290,6 +4290,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rush/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's stages, tags and candidates, for the pipeline */
+        get: operations["RushPipelineController_pipeline_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's stages, in board order (written on first read) */
+        get: operations["RushPipelineController_stages_v1"];
+        /** Save the stage list: rename, reorder, hide and add stages */
+        put: operations["RushPipelineController_saveStages_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Move a candidate to a stage (a Closed stage needs a reason) */
+        patch: operations["RushPipelineController_moveStage_v1"];
+        trace?: never;
+    };
+    "/v1/rush/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a tag to the chapter’s list */
+        post: operations["RushPipelineController_createTag_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a tag, taking it off every candidate */
+        delete: operations["RushPipelineController_deleteTag_v1"];
+        options?: never;
+        head?: never;
+        /** Rename a tag */
+        patch: operations["RushPipelineController_renameTag_v1"];
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a candidate's tags */
+        put: operations["RushPipelineController_setTags_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the caller's 1-to-5 rating of a candidate (replaces it) */
+        put: operations["RushPipelineController_rate_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's notes, newest first (empty for a candidate linked to the caller) */
+        get: operations["RushPipelineController_notes_v1"];
+        put?: never;
+        /** Write a note on a candidate */
+        post: operations["RushPipelineController_addNote_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/notes/{noteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a note: your own, or any with `rush:manage` */
+        delete: operations["RushPipelineController_deleteNote_v1"];
+        options?: never;
+        head?: never;
+        /** Edit your own note */
+        patch: operations["RushPipelineController_editNote_v1"];
+        trace?: never;
+    };
     "/v1/geofences": {
         parameters: {
             query?: never;
@@ -10893,6 +11050,11 @@ export interface components {
             /** Format: uuid */
             user_id: string | null;
             stage: string;
+            /**
+             * @description Why the candidate is in a Closed stage; null in any other.
+             * @enum {string|null}
+             */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
             /** Format: uuid */
@@ -10923,6 +11085,11 @@ export interface components {
             /** Format: uuid */
             user_id: string | null;
             stage: string;
+            /**
+             * @description Why the candidate is in a Closed stage; null in any other.
+             * @enum {string|null}
+             */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
             /** Format: uuid */
@@ -10931,6 +11098,133 @@ export interface components {
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the candidate row committed and the card did not. Absent means no card was attempted. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
             card_posted?: boolean;
+        };
+        RushStageDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            /** @description What a candidate's `stage` holds. Fixed once made; a rename changes `label` only. */
+            key: string;
+            label: string;
+            /** @enum {string} */
+            category: "new" | "contacted" | "met" | "engaged" | "bid_ready" | "closed";
+            /** @description Order within its category. */
+            position: number;
+            hidden: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RushTagDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            label: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        RushPipelineCandidateDto: {
+            /** Format: uuid */
+            id: string;
+            display_name: string;
+            /** Format: uuid */
+            user_id: string | null;
+            /** @description The key of one of the chapter's stages. */
+            stage: string;
+            /** @enum {string|null} */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
+            /** @enum {string} */
+            bid_status: "none" | "extended";
+            /** Format: uuid */
+            created_by: string;
+            /** @description Who added the candidate, by current name. */
+            created_by_name: string;
+            /** Format: date-time */
+            created_at: string;
+            tag_ids: string[];
+            /** @description Average 1-to-5 rating; null when nobody has rated. Absent without `rush:view_results`. */
+            rating_average?: number | null;
+            /** @description How many members rated. Absent without `rush:view_results`. */
+            rating_count?: number;
+            /** @description The caller's own rating, or null. */
+            viewer_rating: number | null;
+            /** @description Ballot count. Absent without `rush:view_results`. */
+            vote_count?: number;
+            viewer_has_voted: boolean;
+        };
+        RushPipelineDto: {
+            /** @description In board order: by category, then position. */
+            stages: components["schemas"]["RushStageDto"][];
+            tags: components["schemas"]["RushTagDto"][];
+            /** @description Newest first. */
+            candidates: components["schemas"]["RushPipelineCandidateDto"][];
+        };
+        RushStageInputDto: {
+            /**
+             * Format: uuid
+             * @description An existing stage. Omit to add a new one.
+             */
+            id?: string;
+            label: string;
+            /**
+             * @description An existing stage's category can't change.
+             * @enum {string}
+             */
+            category: "new" | "contacted" | "met" | "engaged" | "bid_ready" | "closed";
+            hidden: boolean;
+        };
+        SaveRushStagesDto: {
+            /** @description Every stage, in order. Each existing stage must be included: stages are hidden, never removed. New and Closed each keep a visible stage. */
+            stages: components["schemas"]["RushStageInputDto"][];
+        };
+        MoveRushCandidateStageDto: {
+            /** @description The key of one of the chapter's visible stages. */
+            stage: string;
+            /**
+             * @description Required for a Closed stage, refused for any other.
+             * @enum {string}
+             */
+            closed_reason?: "not_interested" | "not_eligible" | "chapter_passed" | "no_response";
+        };
+        RushCandidateStageDto: {
+            /** Format: uuid */
+            id: string;
+            stage: string;
+            /** @enum {string|null} */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
+        };
+        RushTagInputDto: {
+            label: string;
+        };
+        SetRushCandidateTagsDto: {
+            /** @description The candidate's tags after the call, replacing what it had. */
+            tag_ids: string[];
+        };
+        RushCandidateTagsDto: {
+            tag_ids: string[];
+        };
+        RateRushCandidateDto: {
+            rating: number;
+        };
+        RushNoteDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            candidate_id: string;
+            /** Format: uuid */
+            author_id: string;
+            author_name: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RushNoteInputDto: {
+            body: string;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -23212,6 +23506,416 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RushCandidateViewDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_pipeline_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushPipelineDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_stages_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushStageDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_saveStages_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRushStagesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushStageDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_moveStage_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRushCandidateStageDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushCandidateStageDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_createTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushTagInputDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushTagDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_deleteTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_renameTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushTagInputDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushTagDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setTags_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushCandidateTagsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushCandidateTagsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_rate_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateRushCandidateDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_notes_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_addNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushNoteInputDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_deleteNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_editNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushNoteInputDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"];
                 };
             };
             /** @description Error */

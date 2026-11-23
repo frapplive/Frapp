@@ -51,6 +51,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
         display_name: data.display_name,
         user_id: data.user_id,
         stage: data.stage,
+        closed_reason: data.closed_reason,
         bid_status: data.bid_status,
         created_by: data.created_by,
         ...(data.id ? { id: data.id } : {}),
