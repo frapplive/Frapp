@@ -278,6 +278,8 @@ export * from "./task-proof";
 export * from "./task-row-facts";
 // Who a suggested task names, guessed from its own words (Paul, 2026-11-18).
 export * from "./task-suggestion-guess";
+// Tenant kinds and URL slugs (ADR-27 decision 5, #5918).
+export * from "./tenant-slug";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";

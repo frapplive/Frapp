@@ -72,9 +72,14 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
 
 export const MEMBER_CAUSED_ERROR_CODES = [
   "chapter.context.invalid",
-  // Header and JWT name different chapters: a chapter switched in another
-  // tab while this one still sent the old header.
+  // A chapter-config URL (`/chapters/:id/config`) naming another chapter than
+  // the request's: a settings page left open across a chapter switch. The
+  // chapter guard no longer throws it for a header that differs from the
+  // token's claim (ADR-27, #5918).
   "chapter.context.mismatch",
+  // A tenant slug the caller can't open (ADR-27, #5918): unknown, or another
+  // tenant's, as an old link to a chapter they left would be.
+  "tenant.not_found",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",

@@ -130,6 +130,7 @@ import type {
   TaskPhoto,
   TaskSeries,
   TaskSubtask,
+  TenantSlug,
   User,
   UserAiConsent,
   UserSettings,
@@ -302,6 +303,7 @@ export interface Database {
       task_series: TableDefinition<TaskSeries>;
       task_subtasks: TableDefinition<TaskSubtask>;
       tasks: TableDefinition<Task>;
+      tenant_slugs: TableDefinition<TenantSlug>;
       user_ai_consents: TableDefinition<UserAiConsent>;
       user_settings: TableDefinition<UserSettings>;
       users: TableDefinition<User>;

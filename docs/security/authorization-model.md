@@ -65,8 +65,11 @@ keeps it only through its guards: `RequestReadsInterceptor` seals it before the 
 that writes a membership or a role and reads it back reads the database. The store is created per request and never outlives it; only the in-flight reads in the table above cross between requests.
 
 **The header is never trusted on its own.** `ChapterGuard` re-reads the membership row for whatever
-chapter was requested (`findMembership` in `chapter.guard.ts`), and a JWT/header disagreement is a hard
-`403 chapter.context.mismatch` (`readRequestedChapter`) — the header cannot override the claim. A user with no
+chapter was requested (`findMembership` in `chapter.guard.ts`). Since ADR-27 (#5918, 2026-11-23) the header
+is authoritative and the JWT claim is the default without one (`readRequestedChapter`); a header that differs
+from the claim is served, because the membership check, not the claim, is the tenant boundary. Each route
+also serves only the tenant kinds it declares (`@TenantKinds`, `chapter` by default), refusing another kind
+as `403 chapter.context.invalid`. A user with no
 chapter context is auto-resolved only when they hold exactly one membership (`resolveSoleChapter`).
 
 Below the guards, the API talks to Postgres with the **service-role key, which bypasses RLS**. So for
@@ -494,7 +497,7 @@ unused param through "to fix the lint warning").
 Fixed by keeping the `:id` URL shape (the route rename to `chapters/current/config` was the
 alternative, but that's a breaking public-API change outside this fix's scope) and adding
 `assertMatchesActiveChapter(id, chapterId)` to all three handlers: a disagreement now throws
-`403 chapter.context.mismatch` — the same code `ChapterGuard` uses for a JWT/header disagreement —
+`403 chapter.context.mismatch` — the same code `ChapterGuard` used for a JWT/header disagreement until ADR-27 (#5918) —
 before the service is ever called (`chapter-config.controller.ts`). Regression coverage in
 `apps/api/test/cross-tenant-isolation.e2e-spec.ts` (`chapter config: URL id vs active chapter`).
 
@@ -560,7 +563,7 @@ service-layer checks against a table-aware in-memory Supabase fake seeded with t
 asserts that a member of chapter B is rejected when they:
 
 - send chapter A's `x-chapter-id` (no membership) → `403 chapter.context.invalid`
-- send an `x-chapter-id` that disagrees with their JWT claim → `403 chapter.context.mismatch`
+- send a council's `x-chapter-id` to a chapter route, or a chapter's to a council route → `403 chapter.context.invalid` (ADR-27)
 - request chapter A's member, task, event, or invoice by raw id → `403` / `404`
 - edit chapter A's role, or revoke chapter A's invite → `403` / `404`
 - read or write notification preferences for chapter A → `403`

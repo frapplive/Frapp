@@ -12924,6 +12924,56 @@
         ]
       }
     },
+    "/v1/tenants/resolve": {
+      "get": {
+        "description": "Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.",
+        "operationId": "TenantController_resolve_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "query",
+            "description": "The slug from the page's URL (`/c/<slug>/…`). Matched in lower case; anything that is not a slug the caller's own tenant holds or held answers 404.",
+            "schema": {
+              "maxLength": 64,
+              "example": "fiji-rpi",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedTenantDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Find one of your tenants by its URL slug",
+        "tags": [
+          "Tenants"
+        ]
+      }
+    },
     "/v1/ai/suggestions": {
       "get": {
         "operationId": "AiSuggestionController_list_v1",
@@ -32541,6 +32591,41 @@
         },
         "required": [
           "assignee_id"
+        ]
+      },
+      "ResolvedTenantDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "The tenant's current slug. Differs from the one asked for when that slug was retired, in which case the client replaces its URL with this one.",
+            "example": "fiji-rpi"
+          },
+          "redirected": {
+            "type": "boolean",
+            "description": "True when the slug asked for is one this tenant has retired, so the URL should move to `slug`."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "slug",
+          "redirected"
         ]
       },
       "AiSuggestionSourceDto": {

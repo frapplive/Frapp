@@ -92,6 +92,8 @@ const USER_ROUTES: Record<string, string> = {
   'ChapterController.listForCurrentUser': "The caller's own chapters.",
   'ChapterController.activate':
     'Activates a chapter the caller is creating; the service checks ownership.',
+  'TenantController.resolve':
+    "One of the caller's own tenants by its slug; the service answers 404 for anyone else's (ADR-27, #5918).",
   'InviteController.preview':
     'Reads an invite by its token before the caller has joined.',
   'InviteController.redeem':

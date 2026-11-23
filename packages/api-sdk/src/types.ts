@@ -3856,6 +3856,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find one of your tenants by its URL slug
+         * @description Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.
+         */
+        get: operations["TenantController_resolve_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/suggestions": {
         parameters: {
             query?: never;
@@ -10311,6 +10331,20 @@ export interface components {
              * @description Who gets it: any active member of the chapter, eligible to claim it or not.
              */
             assignee_id: string;
+        };
+        ResolvedTenantDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /**
+             * @description The tenant's current slug. Differs from the one asked for when that slug was retired, in which case the client replaces its URL with this one.
+             * @example fiji-rpi
+             */
+            slug: string;
+            /** @description True when the slug asked for is one this tenant has retired, so the URL should move to `slug`. */
+            redirected: boolean;
         };
         AiSuggestionSourceDto: {
             /** @enum {string} */
@@ -22167,6 +22201,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TenantController_resolve_v1: {
+        parameters: {
+            query: {
+                /** @description The slug from the page's URL (`/c/<slug>/…`). Matched in lower case; anything that is not a slug the caller's own tenant holds or held answers 404. */
+                slug: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedTenantDto"];
+                };
             };
             /** @description Error */
             default: {
