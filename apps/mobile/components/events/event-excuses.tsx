@@ -15,7 +15,11 @@ import {
   useWithdrawEventExcuse,
   type EventExcuseWithMember,
 } from "@repo/hooks";
-import { EVENT_EXCUSE_REASON_MAX, statusLabel } from "@repo/validation";
+import {
+  EVENT_EXCUSE_REASON_MAX,
+  EVENT_PAGE_COPY,
+  statusLabel,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
 import { StatusChip } from "@/components/status-chip";
@@ -114,14 +118,21 @@ export function MyExcuse({
     // Closed, the offer is one quiet underlined line: declining reads quieter
     // than going (#4933, the way Google Calendar's and Luma's RSVP rows keep
     // No secondary). Writing opens one field in its place, not a card.
+    // "You're required" says why it's offered, as web's Who's coming row
+    // does (Paul 2026-11-22: it floated on its own before).
     if (!writing) {
       return (
-        <TextAction
-          label="Can't make it?"
-          hint="Send an excuse for this event."
-          underline
-          onPress={() => setWriting(true)}
-        />
+        <View style={styles.offerRow}>
+          <Text style={styles.offerText}>
+            {EVENT_PAGE_COPY.youreRequired} ·
+          </Text>
+          <TextAction
+            label={EVENT_PAGE_COPY.cantMakeIt}
+            hint="Send an excuse for this event."
+            underline
+            onPress={() => setWriting(true)}
+          />
+        </View>
       );
     }
     return (
@@ -563,7 +574,7 @@ export function TextAction({
   color?: string;
   disabled?: boolean;
   hint?: string;
-  /** The standalone quiet link: underlined, centered, padded to 44×44. */
+  /** The quiet link: underlined, 44pt tall, inline in its line. */
   underline?: boolean;
   /** At a row's end: hugs its label, and reaches 44pt through its slop. */
   compact?: boolean;
@@ -610,6 +621,16 @@ function createStyles(tokens: SignetTokens) {
     grow: {
       flex: 1,
       minWidth: 0,
+    },
+    offerRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: tokens.spacing.xs,
+    },
+    offerText: {
+      ...typeRole(tokens.typography.role.body),
+      color: tokens.color.text.muted,
     },
     // An opened row reads from its top, so a long reason doesn't center
     // the buttons against three lines.
@@ -693,10 +714,10 @@ function createStyles(tokens: SignetTokens) {
     textActionLabel: {
       ...typeRole(tokens.typography.role.label),
     },
+    // Inline after "You're required ·", left-aligned with the page's text;
+    // the 44pt height keeps it a finger's target.
     textLink: {
-      alignSelf: "center",
       minWidth: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
     },
     textLinkLabel: {
       textDecorationLine: "underline",

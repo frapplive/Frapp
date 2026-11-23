@@ -126,24 +126,24 @@ describe("EventCard", () => {
     expect(screen.getByText(/\+15 pts/)).toBeInTheDocument();
   });
 
-  it("draws Mandatory as the hairline badge, as the Events list does (#4132)", () => {
+  it("draws Required as the hairline badge, as the Events list does (#4132)", () => {
     render(
       <EventCard message={makeMessage({ is_mandatory: true })} isConfirmed />,
     );
-    const badge = screen.getByText("Mandatory");
+    const badge = screen.getByText("Required");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("text-destructive-text");
     expect(badge.className).not.toContain("text-accent-text");
   });
 
-  it("shows Mandatory only when the event requires this viewer (#4132)", () => {
+  it("shows Required only when the event requires this viewer (#4132)", () => {
     render(
       <EventCard
         message={makeMessage({ is_mandatory: true, viewer_required: false })}
         isConfirmed
       />,
     );
-    expect(screen.queryByText("Mandatory")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required")).not.toBeInTheDocument();
   });
 
   // #4660: the rule is `useEventCardExcuse`'s (its own spec in @repo/hooks);

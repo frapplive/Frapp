@@ -8,6 +8,7 @@ import type {
   AiReport,
   AiRun,
   AiSuggestion,
+  AiSuggestionChange,
   AskDiagnosticsExchange,
   AskDiagnosticsWindow,
   AskFeedbackRow,
@@ -190,6 +191,7 @@ export interface Database {
       ai_diagnostics_windows: TableDefinition<AskDiagnosticsWindow>;
       ai_reports: TableDefinition<AiReport>;
       ai_runs: TableDefinition<AiRun>;
+      ai_suggestion_changes: TableDefinition<AiSuggestionChange>;
       ai_suggestions: TableDefinition<AiSuggestion>;
       backwork_courses: TableDefinition<BackworkCourse>;
       backwork_departments: TableDefinition<BackworkDepartment>;

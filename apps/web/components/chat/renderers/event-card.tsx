@@ -25,6 +25,7 @@ import { readEventPayload } from "@repo/chat-core/cards";
 import {
   can,
   CHECK_IN_MODULE_OFF_LINE,
+  EVENT_PAGE_COPY,
   checkInOpenAt,
   isModuleEnabled,
 } from "@repo/validation";
@@ -188,7 +189,7 @@ export function EventCard({ message, isConfirmed }: EventCardProps) {
         {eventCardRequiresViewer(payload, requiredOf) ? (
           // Required of this viewer, in the hairline kind, as the Events list
           // and the phone draw it (#3822, #4132).
-          <Badge variant="outline">Mandatory</Badge>
+          <Badge variant="outline">{EVENT_PAGE_COPY.required}</Badge>
         ) : null}
       </div>
       <p className="mt-2 text-base font-bold">{payload.name}</p>

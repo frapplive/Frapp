@@ -40,6 +40,7 @@
     "ai:bake-off": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_COMPILER_OPTIONS='{\"rootDir\":\".\"}' node --conditions=source -r ts-node/register test/ai-evals/bake-off/cli.ts",
     "ai:open-diagnostics": "node --conditions=source -r ts-node/register src/open-ask-diagnostics.ts",
     "ai:open-reports": "node --conditions=source -r ts-node/register src/open-ai-reports.ts",
+    "ai:open-suggestion-changes": "node --conditions=source -r ts-node/register src/open-ai-suggestion-changes.ts",
     "openapi:export": "node --conditions=source -r ts-node/register src/export-openapi.ts"
   },
   "dependencies": {
