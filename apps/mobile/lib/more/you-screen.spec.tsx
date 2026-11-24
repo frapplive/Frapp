@@ -41,9 +41,6 @@ const LOADED_USER = {
 };
 let currentUser: Record<string, unknown> = LOADED_USER;
 let hiddenFeatures = new Set<string>();
-/** The member's weekly study goal in minutes (#1062), from `useMyGoals`. */
-let studyGoal: number | null = null;
-const goalReadOptions: ({ enabled?: boolean } | undefined)[] = [];
 /** True while `/v1/users/me/permissions` hasn't answered. */
 let permissionsLoading = false;
 const hiddenFeatureCalls: unknown[][] = [];
@@ -123,10 +120,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The Edit sheet's Major suggestions (#5778) are its own spec's business.
   useChapterMajors: () => [],
   useOwnAvatarTint: () => null,
-  useMyGoals: (options?: { enabled?: boolean }) => {
-    goalReadOptions.push(options);
-    return { data: { points: null, service: null, study: studyGoal } };
-  },
   useListChapters: () => ({ isSuccess: true, data: chapterList.value }),
   usePermissionList: () => permissions,
   useMyPermissions: () => ({
