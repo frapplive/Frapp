@@ -426,7 +426,7 @@ Chat keeps working, and the card links to the candidate's page.
 
 ### Voting
 
-- **The existing vote stays.** It's anonymous, one per member and one click: support ([`rush.md` § Voting and Bids](rush.md#voting-and-bids)). Seeing the count needs `rush:view_results` once #4084 wires it.
+- **The existing vote stays.** It's anonymous, one per member and one click: support ([`rush.md` § Voting and Bids](rush.md#voting-and-bids)). Seeing the count needs `rush:view_results` (wired by #4084, [`rush.md` § Permissions](rush.md#permissions)).
 - **Voting closes when the season closes.** At deletion ([§ Retention](#retention-and-deletion)), the count is first copied onto the candidate, in a column the data-model design adds. The ballots are then deleted, so the count survives, and the closed season can't be voted on again.
 - **Soon after: a formal bid vote.**
   - **Who opens it:** a holder of `rush:manage`, as a timed ballot on candidates in `bid_ready`.

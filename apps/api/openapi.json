@@ -12608,6 +12608,62 @@
         ]
       }
     },
+    "/v1/tasks/{id}/group/add": {
+      "post": {
+        "operationId": "TaskController_addToGroup_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddToTaskGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddToTaskGroupResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add members to a group task: each gets a To do copy of it (#5905)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
     "/v1/tasks/{id}/group/remove": {
       "post": {
         "operationId": "TaskController_removeFromGroup_v1",
@@ -32751,6 +32807,44 @@
           "done"
         ]
       },
+      "AddToTaskGroupDto": {
+        "type": "object",
+        "properties": {
+          "assignee_ids": {
+            "description": "The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.",
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "assignee_ids"
+        ]
+      },
+      "AddToTaskGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "description": "The members who got a copy; anyone who already had one is left out.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "group": {
+            "$ref": "#/components/schemas/TaskGroupSummaryDto"
+          }
+        },
+        "required": [
+          "added",
+          "group"
+        ]
+      },
       "RemoveFromTaskGroupDto": {
         "type": "object",
         "properties": {
@@ -34568,7 +34662,7 @@
           },
           "vote_count": {
             "type": "number",
-            "description": "Ballot count. Voter names are never returned."
+            "description": "Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0."
           },
           "viewer_has_voted": {
             "type": "boolean",
@@ -34585,7 +34679,6 @@
           "bid_status",
           "created_by",
           "created_at",
-          "vote_count",
           "viewer_has_voted"
         ]
       },

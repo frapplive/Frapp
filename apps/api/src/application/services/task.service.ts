@@ -1212,13 +1212,10 @@ export class TaskService {
     }
     // A list of one is that person's task, held to the list's rule: active
     // members only, as two or more are (`TaskAudienceReader.resolve`).
-    if (
-      input.assignee_ids != null &&
-      !(await this.audiences.reader(input.chapter_id)).activeIds.has(assigneeId)
-    ) {
-      throw new BadRequestException(
-        'Everyone you pick must be an active member of the chapter',
-      );
+    if (input.assignee_ids != null) {
+      (await this.audiences.reader(input.chapter_id)).assertActive([
+        assigneeId,
+      ]);
     }
     const dueDate = checkedDueDate(input.due_date ?? null);
     const dueAt = checkedDueAt(dueDate, input.due_at);
@@ -1400,15 +1397,7 @@ export class TaskService {
       attachments,
     });
 
-    // `notifyAssigned` reports its own failures, so one member's push can't
-    // stop the rest.
-    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
-      await Promise.all(
-        copies
-          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
-          .map((copy) => this.notifyAssigned(copy, input.created_by)),
-      );
-    }
+    await this.notifyEachAssigned(copies, input.created_by);
 
     const own =
       copies.find((copy) => copy.assignee_id === input.created_by) ?? copies[0];
@@ -1604,6 +1593,50 @@ export class TaskService {
   }
 
   /**
+   * Add members to a group task after it's made (#5905), the mirror of
+   * {@link removeFromGroup}: each gets a copy at To do, made from the
+   * group's current title, notes, due, points, proof, checklist,
+   * attachments and follower. A cabinet member who sent a task to four brothers hands it
+   * to a fifth (Winston, 2026-11-23).
+   *
+   * The copy it's made from is {@link groupTemplate}'s: the one asked on
+   * unless it is confirmed, since a confirmed copy kept what it was paid on
+   * while later edits to everyone's copy passed it by ({@link updateGroup}). Everyone listed must be an active
+   * member, as when the task was made. A member who already has a copy is
+   * skipped, so a retry finishes the job; the repository holds the group
+   * locked while it writes, so two adds can't give one member two copies.
+   * Each member added gets the usual assignment push. Returns them and the
+   * group as it now stands.
+   */
+  async addToGroup(
+    id: string,
+    chapterId: string,
+    actorId: string,
+    assigneeIds: string[],
+  ): Promise<{ added: string[]; group: TaskGroupSummary }> {
+    const { task, groupId } = await this.groupCopyOrThrow(id, chapterId);
+    const asked = [...new Set(assigneeIds)];
+    (await this.audiences.reader(chapterId)).assertActive(asked);
+    const copies = await this.taskRepo.findGroupCopies(chapterId, [groupId]);
+    const has = new Set(copies.map((copy) => copy.assignee_id));
+    const fresh = asked.filter((userId) => !has.has(userId));
+    let made: Task[] = [];
+    if (fresh.length > 0) {
+      const template = groupTemplate(task, copies);
+      made = await this.taskRepo.addGroupCopies(
+        chapterId,
+        groupId,
+        template.id,
+        fresh,
+      );
+      await this.notifyEachAssigned(made, actorId);
+    }
+    const summary = (await this.groupSummaries(chapterId, [task])).get(groupId);
+    if (!summary) throw new NotFoundException('Task not found');
+    return { added: made.map((copy) => copy.assignee_id), group: summary };
+  }
+
+  /**
    * A new task's repeat (#5119): its rule, checked, and the schedule its
    * series starts with. Null for a task that doesn't repeat.
    */
@@ -1632,6 +1665,24 @@ export class TaskService {
       first_due_date: firstDueDate,
       ...start,
     };
+  }
+
+  /**
+   * {@link notifyAssigned} for each of a group's new copies, a few at a time.
+   * `notifyAssigned` reports its own failures, so one member's push can't
+   * stop the rest.
+   */
+  private async notifyEachAssigned(
+    copies: Task[],
+    assignerId: string,
+  ): Promise<void> {
+    for (let i = 0; i < copies.length; i += GROUP_NOTIFY_CONCURRENCY) {
+      await Promise.all(
+        copies
+          .slice(i, i + GROUP_NOTIFY_CONCURRENCY)
+          .map((copy) => this.notifyAssigned(copy, assignerId)),
+      );
+    }
   }
 
   /**
@@ -2588,7 +2639,7 @@ export class TaskService {
     id: string,
     chapterId: string,
     comment: string | null | undefined,
-    options: { requirePhoto?: boolean; actorUserId?: string } = {},
+    options: { requirePhoto?: boolean; actorUserId: string },
   ): Promise<TaskView> {
     // A send-back says why (#4635): the reason stays on the task for the
     // assignee, and the push carries it.
@@ -2604,6 +2655,15 @@ export class TaskService {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    // No one sends back their own task (#5917), as no one confirms it
+    // ({@link confirmCompletion}): an officer's own completion is undone with
+    // Mark not done. Before the status guard, as there.
+    if (task.assignee_id === options.actorUserId) {
+      throw new ForbiddenException(
+        'Admins cannot send back their own task completions',
+      );
     }
 
     if (task.status !== TaskStatus.COMPLETED) {
@@ -2639,9 +2699,7 @@ export class TaskService {
     await this.notificationService.retractTaskCompletion(chapterId, id);
 
     const sender =
-      (options.actorUserId &&
-        (await this.displayNameOf(options.actorUserId))) ||
-      'An officer';
+      (await this.displayNameOf(options.actorUserId)) || 'An officer';
     await this.safeNotifyUser(
       task.assignee_id,
       chapterId,
@@ -2688,4 +2746,21 @@ export class TaskService {
       photos.map((photo) => photo.storage_path),
     );
   }
+}
+
+/**
+ * The copy a group's new copies are made from (#5905): the group as it
+ * stands. The copy asked on while it is open; else any open copy, since
+ * {@link TaskService.updateGroup} edits every one of those; else, with
+ * every copy confirmed, the one confirmed last, which saw the most edits.
+ */
+export function groupTemplate(asked: Task, copies: readonly Task[]): Task {
+  if (!asked.points_awarded) return asked;
+  const open = copies.find((copy) => !copy.points_awarded);
+  if (open) return open;
+  return copies.reduce(
+    (latest, copy) =>
+      (copy.confirmed_at ?? '') > (latest.confirmed_at ?? '') ? copy : latest,
+    asked,
+  );
 }

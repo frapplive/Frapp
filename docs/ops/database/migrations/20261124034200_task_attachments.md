@@ -1,4 +1,4 @@
-# 20261123183858_task_attachments.sql
+# 20261124034200_task_attachments.sql
 
 Adds `attachments` (a list of Frapp links) to tasks and repeating-task templates, and carries it through `create_task_group`, `create_task_series` and `insert_task_series_copy` (Paul 2026-11-22, `spec/behavior/frapp-links.md`).
 

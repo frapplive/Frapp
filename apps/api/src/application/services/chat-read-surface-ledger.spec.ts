@@ -787,7 +787,10 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     // +1 for a task for everyone (#4295 step 3): each copy's assignment push.
     // +3 for a following group (#5473): "finished" to its members, the
     // review push to one who can confirm, as the creator's names the task.
-    calls: 12,
+    // +2 for Add people (#5905): a group's assignment pushes go through
+    // `notifyEachAssigned`, called once from a new group and once for
+    // members added later; the same push each copy always got.
+    calls: 14,
     entries: [MEMBER_TEXT],
   },
   'application/workers/scheduled-jobs.service.ts': {
