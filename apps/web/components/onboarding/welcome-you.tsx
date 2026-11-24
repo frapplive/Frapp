@@ -6,10 +6,13 @@ import { Loader2 } from "lucide-react";
 import {
   useActiveChapterId,
   useCurrentUser,
+  useOwnCustomFields,
+  usePermissionList,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
 import {
+  can,
   DISPLAY_NAME_MAX_LENGTH,
   NAME_LOCK_COPY,
   ONBOARDING_YOU_COPY,
@@ -56,8 +59,9 @@ type Me = ProfileFields & {
  * own, as it does on Profile.
  *
  * Then **About you** (#5284), when phone, major, graduation year or birthday
- * is empty (`needsAboutYou`): optional, with Skip for now
- * (`welcome-about.tsx`). The name's button says Continue when it follows.
+ * is empty, or one of the chapter's required fields is (#5926,
+ * `needsAboutYou`): optional, with Skip for now (`welcome-about.tsx`). The
+ * name's button says Continue when it follows.
  *
  * Leaving marks onboarding done (`has_completed_onboarding`), as the phone's
  * s03 does, so the Directory stops listing the member as pending. The phone
@@ -77,6 +81,10 @@ export function WelcomeYou() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [step, setStep] = useState<"you" | "about">("you");
+  // The chapter's own fields (#5926), read as `/profile` reads them: the
+  // route needs `members:view`.
+  const canViewMembers = can("members:view", usePermissionList());
+  const customFields = useOwnCustomFields({ enabled: canViewMembers });
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -119,14 +127,17 @@ export function WelcomeYou() {
     ? storedName
     : (nameDraft ?? initialNameField(me.display_name, me.email ?? null));
 
-  // Decided from the profile as loaded; once on About you it stays there.
-  const askAbout = needsAboutYou({
+  // Decided from the profile and the chapter's fields as loaded; once on
+  // About you it stays there. A failed fields read asks from the profile
+  // alone, and the step then shows none of them.
+  const aboutProfile = {
     phone: me.phone,
     major: me.major,
     graduationYear: me.graduation_year,
     birthdayMonth: me.birthday_month,
     birthdayDay: me.birthday_day,
-  });
+  };
+  const askAbout = needsAboutYou(aboutProfile, customFields.data ?? []);
 
   // Validated on Continue or Go to chat, not per keystroke. A name that didn't change
   // isn't sent again; one that did is saved first, so a failure keeps the
@@ -149,7 +160,16 @@ export function WelcomeYou() {
         return;
       }
     }
-    if (askAbout) {
+    // Fields still on their way are waited for, so a required one isn't
+    // missed for a slow read.
+    const fields =
+      canViewMembers && customFields.isPending
+        ? await customFields
+            .refetch()
+            .then((result) => result.data ?? [])
+            .catch(() => [])
+        : (customFields.data ?? []);
+    if (needsAboutYou(aboutProfile, fields)) {
       setLeaving(false);
       setStep("about");
       return;
@@ -172,7 +192,12 @@ export function WelcomeYou() {
 
   if (step === "about") {
     return (
-      <WelcomeAbout saved={me} leaving={leaving} onDone={() => void finish()} />
+      <WelcomeAbout
+        saved={me}
+        fields={customFields.data ?? []}
+        leaving={leaving}
+        onDone={() => void finish()}
+      />
     );
   }
 

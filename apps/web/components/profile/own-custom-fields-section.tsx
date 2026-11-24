@@ -161,7 +161,12 @@ export function OwnCustomFieldsSection({ enabled }: { enabled: boolean }) {
   );
 }
 
-function OwnCustomFieldControl({
+/**
+ * One of your fields as its control, with who else sees it (or the refusal)
+ * under it. Controlled: the host holds the draft and saves it. `/profile`'s
+ * More details and About you after a join (#5926) both draw these.
+ */
+export function OwnCustomFieldControl({
   field,
   value,
   problem,

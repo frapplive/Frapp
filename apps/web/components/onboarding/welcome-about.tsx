@@ -1,19 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
+  type OwnCustomField,
+  ownCustomFieldFormChanges,
+  ownCustomFieldShownValue,
   useChapterMajors,
   usePermissionList,
+  useUpdateOwnCustomFields,
   useUpdateUser,
 } from "@repo/hooks";
 import { formatPhone } from "@repo/formatting";
 import {
+  aboutYouCustomFields,
   type BirthdayDraftProblem,
   can,
   ONBOARDING_ABOUT_COPY,
 } from "@repo/validation";
 import { AuthScreen } from "@/components/auth/auth-screen";
+import { OwnCustomFieldControl } from "@/components/profile/own-custom-fields-section";
 import { ProfileAboutFields } from "@/components/profile/profile-about-fields";
 import {
   type ProfileFields,
@@ -22,6 +28,7 @@ import {
 } from "@/components/profile/profile-save-body";
 import { Button } from "@/components/ui/button";
 import { QUIET_LINK } from "@/components/ui/quiet-link";
+import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
 /** The fields this step asks, as stored, the phone shown formatted (#5798). */
@@ -47,25 +54,50 @@ export function aboutYouFields(saved: ProfileFields): ProfileFields {
  * Go to chat sends only what changed (`profileSaveBody`) after the same
  * checks (`profileSaveProblem`), and a failed save keeps the member here
  * with the reason. Skip for now saves nothing.
+ *
+ * Under them, the chapter's own fields (#5926), drawn by `/profile`'s More
+ * details control (`OwnCustomFieldControl`), each saying who else sees it:
+ * the `required` ones in place, the rest behind one More details row that
+ * opens them where they stand (`aboutYouCustomFields`), so a chapter that
+ * asks for two things shows two. They are checked and sent the way More
+ * details sends them (`ownCustomFieldFormChanges`): only what changed, and
+ * a required field left empty waits for later rather than holding the
+ * member here.
  */
 export function WelcomeAbout({
   saved,
+  fields,
   leaving,
   onDone,
 }: {
   saved: ProfileFields;
+  /** The chapter's fields with the member's values, as loaded. */
+  fields: readonly OwnCustomField[];
   /** The host is on its way to chat. */
   leaving: boolean;
   onDone: () => void;
 }) {
   const updateUser = useUpdateUser();
+  const updateCustom = useUpdateOwnCustomFields();
   // The chapter's majors under Major (#5778), as on `/profile`: the read
   // needs `members:view`.
   const canViewMembers = can("members:view", usePermissionList());
   const majors = useChapterMajors({ enabled: canViewMembers });
   // What the step opened on, so a refetch underneath doesn't move it.
-  const [original] = useState(() => aboutYouFields(saved));
+  const [original, setOriginal] = useState(() => aboutYouFields(saved));
   const [draft, setDraft] = useState<ProfileFields>(original);
+  // The chapter's fields as the step opened on them, and what was typed.
+  const [customOriginal, setCustomOriginal] = useState(() => [...fields]);
+  const [customDraft, setCustomDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      fields.map((field) => [field.field_id, ownCustomFieldShownValue(field)]),
+    ),
+  );
+  const [customProblems, setCustomProblems] = useState<Record<string, string>>(
+    {},
+  );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { asked, more } = aboutYouCustomFields(customOriginal);
   const [phoneInvalid, setPhoneInvalid] = useState(false);
   const [yearInvalid, setYearInvalid] = useState(false);
   const [birthdayProblem, setBirthdayProblem] =
@@ -91,11 +123,35 @@ export function WelcomeAbout({
       setBirthdayProblem(problem.problem);
       return;
     }
-    if (Object.keys(body).length > 0) {
+    const custom = ownCustomFieldFormChanges(customOriginal, customDraft);
+    const refused = Object.keys(custom.problems);
+    if (refused.length > 0) {
+      setCustomProblems(custom.problems);
+      // A refusal behind More details opens it, so the reason shows.
+      if (more.some((field) => refused.includes(field.field_id))) {
+        setMoreOpen(true);
+      }
+      return;
+    }
+    if (Object.keys(body).length > 0 || custom.values.length > 0) {
       setSaving(true);
       setSaveFailed(false);
       try {
-        await updateUser.mutateAsync(body);
+        if (Object.keys(body).length > 0) {
+          await updateUser.mutateAsync(body);
+          // Saved: a retry after the next write fails doesn't send it again.
+          setOriginal(draft);
+        }
+        if (custom.values.length > 0) {
+          const savedFields = await updateCustom.mutateAsync(custom.values);
+          setCustomOriginal(
+            customOriginal.map(
+              (field) =>
+                savedFields.find((next) => next.field_id === field.field_id) ??
+                field,
+            ),
+          );
+        }
       } catch {
         setSaveFailed(true);
         setSaving(false);
@@ -105,6 +161,26 @@ export function WelcomeAbout({
     }
     onDone();
   }
+
+  const customControl = (field: OwnCustomField) => (
+    <OwnCustomFieldControl
+      key={field.field_id}
+      field={field}
+      value={customDraft[field.field_id] ?? ""}
+      problem={customProblems[field.field_id] ?? null}
+      disabled={busy}
+      onChange={(value) => {
+        setCustomProblems((prev) => {
+          if (!(field.field_id in prev)) return prev;
+          const rest = { ...prev };
+          delete rest[field.field_id];
+          return rest;
+        });
+        setSaveFailed(false);
+        setCustomDraft((prev) => ({ ...prev, [field.field_id]: value }));
+      }}
+    />
+  );
 
   return (
     <AuthScreen
@@ -131,6 +207,27 @@ export function WelcomeAbout({
             setDraft((prev) => ({ ...prev, ...patch }));
           }}
         />
+        {asked.map(customControl)}
+        {more.length > 0 && !moreOpen ? (
+          // Opens the rest in place, once: nothing here closes it again.
+          <button
+            type="button"
+            className={cn(
+              "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
+              FOCUS_RING,
+            )}
+            disabled={busy}
+            aria-expanded={false}
+            onClick={() => setMoreOpen(true)}
+          >
+            <span>{ONBOARDING_ABOUT_COPY.moreDetails}</span>
+            <span className="flex items-center gap-2 text-caption text-muted-foreground">
+              {ONBOARDING_ABOUT_COPY.moreDetailsCount(more.length)}
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </button>
+        ) : null}
+        {moreOpen ? more.map(customControl) : null}
         {saveFailed ? (
           <p role="alert" className="text-sm text-destructive">
             {ONBOARDING_ABOUT_COPY.saveFailed}

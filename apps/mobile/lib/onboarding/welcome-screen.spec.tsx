@@ -74,6 +74,9 @@ const COMPLETE_USER = {
   birthday_day: 10,
 };
 let currentUser: Record<string, unknown> | undefined = COMPLETE_USER;
+/** The chapter's own fields with the member's values (#5926); none by default. */
+let customFields: Record<string, unknown>[] = [];
+const updateCustom = vi.fn();
 
 const track = vi.fn();
 vi.mock("@/lib/use-latest-track", () => ({ useLatestTrack: () => track }));
@@ -106,7 +109,13 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: () => Promise.resolve({ data: currentUser }),
   }),
   useUpdateUser: () => ({ mutateAsync: updateUser }),
-  usePermissionList: () => [],
+  useOwnCustomFields: () => ({
+    data: customFields,
+    isFetched: true,
+    isError: false,
+  }),
+  useUpdateOwnCustomFields: () => ({ mutateAsync: updateCustom }),
+  usePermissionList: () => ["members:view"],
   useChapterMajors: () => [],
 }));
 
@@ -759,5 +768,168 @@ describe("s03 welcome, About you", () => {
     await press(button(root, "Continue"));
 
     expect(updateUser).toHaveBeenLastCalledWith({ major: "" });
+  });
+});
+
+/**
+ * About you with the chapter's own fields (#5926): the required ones in
+ * place, the rest behind More details; sent with Continue, never on a pick.
+ */
+describe("s03 welcome, About you with the chapter's fields", () => {
+  const CONTACT = {
+    field_id: "cf-contact",
+    label: "Emergency contact (name)",
+    type: "text",
+    required: true,
+    visibility: "exec",
+    choices: null,
+    max_length: null,
+    value: null,
+  };
+  const SHIRT = {
+    field_id: "cf-shirt",
+    label: "T-shirt size",
+    type: "select",
+    required: false,
+    visibility: "chapter",
+    choices: ["S", "M", "L"],
+    max_length: null,
+    value: null,
+  };
+  const CONTACT_PHONE = {
+    field_id: "cf-contact-phone",
+    label: "Emergency contact (phone)",
+    type: "phone",
+    required: true,
+    visibility: "exec",
+    choices: null,
+    max_length: null,
+    value: null,
+  };
+  const input = (root: Node, label: string) =>
+    root
+      .findAllByType("TextInput" as never, { deep: true })
+      .find((node) => node.props.accessibilityLabel === label);
+  const onAbout = (root: Node) =>
+    root
+      .findAllByType("Text" as never, { deep: true })
+      .some((text) => text.props.children === "About you");
+  const moreRow = (root: Node) =>
+    pressables(root).find(
+      (pressable) => pressable.props.accessibilityLabel === "More details",
+    );
+
+  beforeEach(() => {
+    pushAvailable = false;
+    permission = null;
+    currentUser = COMPLETE_USER;
+    customFields = [CONTACT, CONTACT_PHONE, SHIRT];
+    completeOnboarding.mockClear();
+    updateUser.mockClear().mockResolvedValue({});
+    updateCustom.mockReset().mockImplementation(async () => customFields);
+    vi.mocked(vi.mocked(useRouter)().replace).mockClear();
+  });
+
+  it("asks when a required field is empty, even with the profile full", async () => {
+    const { root } = await render();
+
+    expect(onAbout(root)).toBe(true);
+    expect(input(root, "Emergency contact (name)")).toBeDefined();
+    expect(texts(root).some((t) => t.includes("Officers see this"))).toBe(true);
+  });
+
+  it("is skipped when only optional fields are empty", async () => {
+    customFields = [{ ...CONTACT, value: "Grace Hopper" }, SHIRT];
+    const { root } = await render();
+
+    expect(onAbout(root)).toBe(false);
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("keeps the optional ones behind More details until it is opened", async () => {
+    const { root } = await render();
+
+    expect(
+      pressables(root).some(
+        (p) => p.props.accessibilityLabel === "T-shirt size",
+      ),
+    ).toBe(false);
+    expect(texts(root).some((t) => t.includes("1 optional"))).toBe(true);
+
+    await press(moreRow(root));
+
+    expect(
+      pressables(root).some(
+        (p) => p.props.accessibilityLabel === "T-shirt size",
+      ),
+    ).toBe(true);
+    expect(moreRow(root)).toBeUndefined();
+  });
+
+  it("sends only what changed on Continue, and nothing on Skip for now", async () => {
+    const { root } = await render();
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText(" Grace "),
+    );
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(updateCustom).toHaveBeenCalledWith([
+      { field_id: "cf-contact", value: "Grace" },
+    ]);
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("lets a required field wait: Go to chat with it empty sends nothing", async () => {
+    const { root } = await render();
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateCustom).not.toHaveBeenCalled();
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("Skip for now saves none of them", async () => {
+    const { root } = await render();
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
+    );
+
+    await press(button(root, "Skip for now"));
+
+    expect(updateCustom).not.toHaveBeenCalled();
+    expect(completeOnboarding).toHaveBeenCalled();
+  });
+
+  it("refuses a phone the API would, and sends nothing", async () => {
+    const { root } = await render();
+    act(() =>
+      input(root, "Emergency contact (phone)")?.props.onChangeText("12"),
+    );
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateCustom).not.toHaveBeenCalled();
+    expect(onAbout(root)).toBe(true);
+    expect(texts(root).some((t) => t.includes("Enter a phone number"))).toBe(
+      true,
+    );
+  });
+
+  it("stays with the reason when the fields can't be saved", async () => {
+    updateCustom.mockRejectedValueOnce(new Error("offline"));
+    const { root } = await render();
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
+    );
+
+    await press(button(root, "Go to chat"));
+
+    expect(texts(root).some((t) => t.includes("Couldn't save that"))).toBe(
+      true,
+    );
+    expect(completeOnboarding).not.toHaveBeenCalled();
+    expect(input(root, "Emergency contact (name)")?.props.value).toBe("Grace");
   });
 });

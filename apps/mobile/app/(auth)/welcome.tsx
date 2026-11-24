@@ -4,15 +4,22 @@ import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  type OwnCustomField,
+  ownCustomFieldFormChanges,
+  ownCustomFieldShownValue,
   useChapterMajors,
   useCurrentUser,
   useFieldReveal,
+  useOwnCustomFields,
   usePermissionList,
   useUpdateOnboarding,
+  useUpdateOwnCustomFields,
   useUpdateUser,
 } from "@repo/hooks";
+import { formatPhone } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
+  aboutYouCustomFields,
   can,
   DISPLAY_NAME_MAX_LENGTH,
   ONBOARDING_ABOUT_COPY,
@@ -36,6 +43,7 @@ import {
   OnboardingTextInput,
 } from "@/components/onboarding/onboarding-field";
 import { ProfilePhoto } from "@/components/profile/profile-photo";
+import { AboutYouCustomFields } from "@/components/onboarding/about-you-custom-fields";
 import { AboutYouFields } from "@/components/onboarding/about-you-fields";
 import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import {
@@ -72,9 +80,12 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *    (`typedNameMissing`). Web shows the same
  *    screen after a join (`apps/web/app/(auth)/welcome`).
  * 2. **About you** (#5284), when phone, major, graduation year or birthday is
- *    empty (`needsAboutYou`): optional, the Edit sheet's fields and rules
- *    (`aboutYouPatch`). Continue saves only what changed; Skip for now saves
- *    nothing. Web asks the same after its name screen.
+ *    empty, or one of the chapter's required fields is (#5926,
+ *    `needsAboutYou`): optional, the Edit sheet's fields and rules
+ *    (`aboutYouPatch`), then the chapter's own fields, the required ones in
+ *    place and the rest behind More details (`AboutYouCustomFields`).
+ *    Continue saves only what changed; Skip for now saves nothing. Web asks
+ *    the same after its name screen.
  * 3. **Turn on notifications**, when this build can push and push isn't on
  *    yet (`shouldOfferPrimer`, #2299). Either answer goes to chat; a "Not
  *    now" comes back once, days later, on the chat home (`usePushReminder`).
@@ -127,17 +138,26 @@ export default function Welcome() {
   // A member already settled in a chapter that locks names (#5801) keeps the
   // name they have: it shows read-only, and isn't sent.
   const nameLocked = profile?.nameLocked === true;
-  // About you (#5284): shown when one of its fields is empty, decided from
-  // the profile as it stands when the member leaves the name.
+  const canViewMembers = can("members:view", usePermissionList());
+  // The chapter's own fields (#5926), read as the You tab reads them: the
+  // route needs `members:view`.
+  const customFields = useOwnCustomFields({ enabled: canViewMembers });
+  // About you (#5284): shown when one of its fields, or a required field of
+  // the chapter's, is empty, decided from the profile and fields as they
+  // stand when the member leaves the name. A failed fields read asks from
+  // the profile alone.
   const askAbout =
     profile !== null &&
-    needsAboutYou({
-      phone: profile.phone,
-      major: profile.major,
-      graduationYear: profile.graduationYear,
-      birthdayMonth: profile.birthdayMonth,
-      birthdayDay: profile.birthdayDay,
-    });
+    needsAboutYou(
+      {
+        phone: profile.phone,
+        major: profile.major,
+        graduationYear: profile.graduationYear,
+        birthdayMonth: profile.birthdayMonth,
+        birthdayDay: profile.birthdayDay,
+      },
+      customFields.data ?? [],
+    );
   // What About you opened on (so a refetch underneath doesn't move it), what
   // was typed over it, and whether it was shown, for Android's back.
   const [aboutOriginal, setAboutOriginal] = useState<ProfileDraft | null>(null);
@@ -145,7 +165,18 @@ export default function Welcome() {
   const [aboutFailed, setAboutFailed] = useState(false);
   const [savingAbout, setSavingAbout] = useState(false);
   const reveal = useFieldReveal<ProfileDraftField>();
-  const canViewMembers = can("members:view", usePermissionList());
+  // The chapter's fields as About you opened on them, what was typed, and
+  // each refusal, shown once Continue is pressed.
+  const updateCustom = useUpdateOwnCustomFields();
+  const [customOriginal, setCustomOriginal] = useState<OwnCustomField[] | null>(
+    null,
+  );
+  const [customDraft, setCustomDraft] = useState<Record<string, string>>({});
+  const [customProblems, setCustomProblems] = useState<Record<string, string>>(
+    {},
+  );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const customSplit = aboutYouCustomFields(customOriginal);
   const chapterMajors = useChapterMajors({
     enabled: canViewMembers && step === "about",
   });
@@ -204,7 +235,14 @@ export default function Welcome() {
   const profileKnown =
     userQuery.data !== undefined || userQuery.isError || waitedOut;
   const primerKnown = primer.ready || waitedOut;
-  if (step === "deciding" && profileKnown && primerKnown) {
+  // Whether About you comes next waits on the chapter's fields too, so a
+  // read still loading isn't read as "nothing required" (#5926).
+  const customKnown =
+    !canViewMembers ||
+    customFields.isFetched ||
+    customFields.isError ||
+    waitedOut;
+  if (step === "deciding" && profileKnown && primerKnown && customKnown) {
     setHadPhoto(!!profile?.photoUrl);
     setStep("you");
   }
@@ -242,6 +280,17 @@ export default function Welcome() {
       }),
     );
     if (askAbout && profile) {
+      // The chapter's fields are seeded once: a return here from the name
+      // keeps what was typed in them.
+      if (!customOriginal) {
+        const fields = customFields.data ?? [];
+        setCustomOriginal(fields);
+        setCustomDraft(
+          Object.fromEntries(
+            fields.map((f) => [f.field_id, ownCustomFieldShownValue(f)]),
+          ),
+        );
+      }
       setAboutOriginal(draftFromProfile(profile));
       setStep("about");
     } else afterAbout();
@@ -274,30 +323,72 @@ export default function Welcome() {
     }
   }
 
-  // Continue: only what changed, after the Edit sheet's checks; a refusal or
-  // a failed save keeps the member here with the reason and what they typed.
+  function editCustom(field: OwnCustomField, value: string) {
+    setAboutFailed(false);
+    setCustomProblems((prev) => {
+      if (!(field.field_id in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[field.field_id];
+      return rest;
+    });
+    setCustomDraft((prev) => ({ ...prev, [field.field_id]: value }));
+  }
+
+  // A number reads (518) 555-0142 once the member leaves it, as on the You
+  // tab's More details.
+  function leaveCustom(field: OwnCustomField) {
+    if (field.type !== "phone") return;
+    setCustomDraft((prev) => {
+      const typed = prev[field.field_id];
+      return typed ? { ...prev, [field.field_id]: formatPhone(typed) } : prev;
+    });
+  }
+
+  // Continue: only what changed, after the Edit sheet's checks and the
+  // chapter's field rules (`ownCustomFieldFormChanges`); a refusal or a
+  // failed save keeps the member here with the reason and what they typed.
+  // A required field left empty waits for later, as on the You tab.
   async function leaveAbout() {
     if (savingAbout || leaving || !aboutResult) return;
-    if (!aboutResult.ok) {
-      reveal.submit();
+    const custom = ownCustomFieldFormChanges(customOriginal ?? [], customDraft);
+    const refused = Object.keys(custom.problems);
+    if (!aboutResult.ok || refused.length > 0) {
+      if (!aboutResult.ok) reveal.submit();
+      setCustomProblems(custom.problems);
+      // A refusal behind More details opens it, so the reason shows.
+      if (customSplit.more.some((f) => refused.includes(f.field_id))) {
+        setMoreOpen(true);
+      }
       return;
     }
-    if (hasChanges(aboutResult.patch)) {
+    const profileChanged = hasChanges(aboutResult.patch);
+    if (profileChanged || custom.values.length > 0) {
       setSavingAbout(true);
       setAboutFailed(false);
       try {
-        await updateUser.mutateAsync(aboutResult.patch);
+        if (profileChanged) {
+          await updateUser.mutateAsync(aboutResult.patch);
+          // What was saved is the new baseline, so a return here from
+          // notifications, or a retry after the fields fail, compares
+          // against it: clearing a saved field then sends the clear rather
+          // than reading as no change.
+          if (aboutShown) setAboutOriginal(aboutShown);
+          setAboutEdits(null);
+        }
+        if (custom.values.length > 0) {
+          const saved = await updateCustom.mutateAsync(custom.values);
+          setCustomOriginal((prev) =>
+            (prev ?? []).map(
+              (f) => saved.find((next) => next.field_id === f.field_id) ?? f,
+            ),
+          );
+        }
       } catch {
         setAboutFailed(true);
         return;
       } finally {
         setSavingAbout(false);
       }
-      // What was saved is the new baseline, so a return here from
-      // notifications compares against it: clearing a saved field then
-      // sends the clear rather than reading as no change.
-      if (aboutShown) setAboutOriginal(aboutShown);
-      setAboutEdits(null);
     }
     afterAbout();
   }
@@ -365,6 +456,17 @@ export default function Welcome() {
                 onLeave={leaveAboutField}
                 refusal={aboutRefusal}
                 majors={chapterMajors}
+                editable={!answering}
+              />
+              <AboutYouCustomFields
+                asked={customSplit.asked}
+                more={customSplit.more}
+                moreOpen={moreOpen}
+                onOpenMore={() => setMoreOpen(true)}
+                draft={customDraft}
+                problems={customProblems}
+                onEdit={editCustom}
+                onLeave={leaveCustom}
                 editable={!answering}
               />
               {aboutFailed ? (
