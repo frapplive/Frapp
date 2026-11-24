@@ -12,7 +12,7 @@ import {
   ownCustomFieldRule,
   PHONE_MAX_LENGTH,
 } from "@repo/validation";
-import { ForwardGlyph } from "@/components/control-glyphs";
+import { DisclosureGlyph, ForwardGlyph } from "@/components/control-glyphs";
 import { ListRow, ListSection } from "@/components/list-section";
 import {
   OnboardingFieldLabel,
@@ -29,10 +29,10 @@ import {
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * s03's About you, the chapter's own fields (#5926): under the profile
- * fields, the `required` ones in place and the rest behind one More details
- * row that opens them where they stand (`aboutYouCustomFields`). Web's About
- * you draws the same fields in the same order and words.
+ * s03's About you, the chapter's own fields (#5926): under the basics, every
+ * one behind a collapsed See more (Shawn's pick, 2026-11-24) that opens and
+ * closes in place. Web's About you draws the same fields in the same order
+ * and words.
  *
  * Each field takes the You tab's More details controls for its type (#581,
  * `lib/more/own-custom-fields.ts`): a pick opens the option sheet with its
@@ -43,20 +43,19 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * for now saves nothing.
  */
 export function AboutYouCustomFields({
-  asked,
-  more,
-  moreOpen,
-  onOpenMore,
+  fields,
+  open,
+  onToggle,
   draft,
   problems,
   onEdit,
   onLeave,
   editable,
 }: {
-  asked: readonly OwnCustomField[];
-  more: readonly OwnCustomField[];
-  moreOpen: boolean;
-  onOpenMore: () => void;
+  fields: readonly OwnCustomField[];
+  /** Whether See more is open. */
+  open: boolean;
+  onToggle: () => void;
   /** What each field shows, by field id. */
   draft: Readonly<Record<string, string>>;
   /** A refused field's reason, by field id. */
@@ -161,24 +160,27 @@ export function AboutYouCustomFields({
     );
   };
 
-  if (asked.length === 0 && more.length === 0) return null;
+  if (fields.length === 0) return null;
 
   return (
     <View style={styles.fields}>
-      {asked.map(control)}
-      {more.length > 0 && !moreOpen ? (
-        // Opens the rest in place, once: nothing here closes it again.
-        <ListSection>
-          <ListRow
-            label={ONBOARDING_ABOUT_COPY.moreDetails}
-            value={ONBOARDING_ABOUT_COPY.moreDetailsCount(more.length)}
-            accessibilityHint="Shows more fields"
-            disabled={!editable}
-            onPress={onOpenMore}
-          />
-        </ListSection>
-      ) : null}
-      {moreOpen ? more.map(control) : null}
+      {/* Opens and closes in place; what was typed stays either way. */}
+      <ListSection>
+        <ListRow
+          label={ONBOARDING_ABOUT_COPY.seeMore}
+          action
+          trailing={
+            <DisclosureGlyph
+              color={tokens.color.text.mutedForeground}
+              direction={open ? "down" : "right"}
+            />
+          }
+          accessibilityHint={open ? "Hides the fields" : "Shows more fields"}
+          disabled={!editable}
+          onPress={onToggle}
+        />
+      </ListSection>
+      {open ? fields.map(control) : null}
       <OptionSheet
         ref={pickRef}
         title={picking?.label ?? OWN_CUSTOM_FIELDS_COPY.title}

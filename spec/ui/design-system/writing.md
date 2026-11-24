@@ -917,7 +917,7 @@ The optional screen after the name on web (`/welcome`) and the phone (s03), show
 
 | State | Title | Copy |
 |---|---|---|
-| Screen | `About you` | `Officers use this to reach you, and it fills in your profile in the directory.` Then Phone (hint `Members of your chapter see it on your profile.`), Major and Grad year, Birthday, then the chapter's required fields by their own labels, each with its line of who else sees it (`CUSTOM_FIELD_AUDIENCE_LINE`, as More details), then the row `More details` with `2 optional` (`moreDetails`, `moreDetailsCount`) when the chapter keeps optional ones. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`; under it the quiet `Skip for now`. |
+| Screen | `About you` | `Officers use this to reach you, and it fills in your profile in the directory.` Then Phone (hint `Members of your chapter see it on your profile.`), Major and Grad year, Birthday, then the row `See more` (`seeMore`) when the chapter keeps fields of its own, which opens them by their own labels, each with its line of who else sees it (`CUSTOM_FIELD_AUDIENCE_LINE`, as More details). One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`; under it the quiet `Skip for now`. |
 | Refused value | as above | The profile form's refusal on the field (a phone, a year, half a birthday): on the phone once the member leaves the field or presses the button, on web when they press it (as `/profile`). Nothing is sent. |
 | Save failed | as above | `Couldn't save that. Check your connection and try again.` The member stays with what they typed. |
 

@@ -772,8 +772,8 @@ describe("s03 welcome, About you", () => {
 });
 
 /**
- * About you with the chapter's own fields (#5926): the required ones in
- * place, the rest behind More details; sent with Continue, never on a pick.
+ * About you with the chapter's own fields (#5926): every one behind a
+ * collapsed See more (Shawn, 2026-11-24); sent with Continue, never on a pick.
  */
 describe("s03 welcome, About you with the chapter's fields", () => {
   const CONTACT = {
@@ -814,10 +814,16 @@ describe("s03 welcome, About you with the chapter's fields", () => {
     root
       .findAllByType("Text" as never, { deep: true })
       .some((text) => text.props.children === "About you");
-  const moreRow = (root: Node) =>
+  const seeMore = (root: Node) =>
     pressables(root).find(
-      (pressable) => pressable.props.accessibilityLabel === "More details",
+      (pressable) => pressable.props.accessibilityLabel === "See more",
     );
+  /** Renders s03 to About you and opens See more. */
+  const renderOpen = async () => {
+    const tree = await render();
+    await press(seeMore(tree.root));
+    return tree;
+  };
 
   beforeEach(() => {
     pushAvailable = false;
@@ -834,8 +840,7 @@ describe("s03 welcome, About you with the chapter's fields", () => {
     const { root } = await render();
 
     expect(onAbout(root)).toBe(true);
-    expect(input(root, "Emergency contact (name)")).toBeDefined();
-    expect(texts(root).some((t) => t.includes("Officers see this"))).toBe(true);
+    expect(input(root, "Phone")).toBeDefined();
   });
 
   it("is skipped when only optional fields are empty", async () => {
@@ -846,28 +851,50 @@ describe("s03 welcome, About you with the chapter's fields", () => {
     expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
   });
 
-  it("keeps the optional ones behind More details until it is opened", async () => {
+  it("keeps every one behind a collapsed See more that opens and closes", async () => {
     const { root } = await render();
 
-    expect(
-      pressables(root).some(
-        (p) => p.props.accessibilityLabel === "T-shirt size",
-      ),
-    ).toBe(false);
-    expect(texts(root).some((t) => t.includes("1 optional"))).toBe(true);
+    expect(input(root, "Emergency contact (name)")).toBeUndefined();
+    expect(seeMore(root)).toBeDefined();
 
-    await press(moreRow(root));
+    await press(seeMore(root));
 
+    expect(input(root, "Emergency contact (name)")).toBeDefined();
     expect(
       pressables(root).some(
         (p) => p.props.accessibilityLabel === "T-shirt size",
       ),
     ).toBe(true);
-    expect(moreRow(root)).toBeUndefined();
+    expect(texts(root).some((t) => t.includes("Officers see this"))).toBe(true);
+
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
+    );
+    await press(seeMore(root));
+    expect(input(root, "Emergency contact (name)")).toBeUndefined();
+    await press(seeMore(root));
+    // What was typed stays while it is closed.
+    expect(input(root, "Emergency contact (name)")?.props.value).toBe("Grace");
+  });
+
+  it("opens See more on a refusal inside it, and sends nothing", async () => {
+    const { root } = await renderOpen();
+    act(() =>
+      input(root, "Emergency contact (phone)")?.props.onChangeText("12"),
+    );
+    await press(seeMore(root));
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateCustom).not.toHaveBeenCalled();
+    expect(input(root, "Emergency contact (phone)")).toBeDefined();
+    expect(texts(root).some((t) => t.includes("Enter a phone number"))).toBe(
+      true,
+    );
   });
 
   it("sends only what changed on Continue, and nothing on Skip for now", async () => {
-    const { root } = await render();
+    const { root } = await renderOpen();
     act(() =>
       input(root, "Emergency contact (name)")?.props.onChangeText(" Grace "),
     );
@@ -891,7 +918,7 @@ describe("s03 welcome, About you with the chapter's fields", () => {
   });
 
   it("Skip for now saves none of them", async () => {
-    const { root } = await render();
+    const { root } = await renderOpen();
     act(() =>
       input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
     );
@@ -903,7 +930,7 @@ describe("s03 welcome, About you with the chapter's fields", () => {
   });
 
   it("refuses a phone the API would, and sends nothing", async () => {
-    const { root } = await render();
+    const { root } = await renderOpen();
     act(() =>
       input(root, "Emergency contact (phone)")?.props.onChangeText("12"),
     );
@@ -919,7 +946,7 @@ describe("s03 welcome, About you with the chapter's fields", () => {
 
   it("stays with the reason when the fields can't be saved", async () => {
     updateCustom.mockRejectedValueOnce(new Error("offline"));
-    const { root } = await render();
+    const { root } = await renderOpen();
     act(() =>
       input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
     );

@@ -393,32 +393,64 @@ describe("About you with the chapter's fields (#5926)", () => {
     window.localStorage.clear();
   });
 
-  const toAbout = async () => {
+  const seeMore = () => screen.getByRole("button", { name: "See more" });
+  const toAbout = async ({ open = true } = {}) => {
     render(<WelcomeYou />);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "About you" });
+    if (open) fireEvent.click(seeMore());
   };
 
   it("shows the step for an empty required field, even with the profile full", async () => {
-    await toAbout();
+    await toAbout({ open: false });
 
-    expect(screen.getByLabelText("Emergency contact (name)")).toBeTruthy();
-    // Who else sees it, under the field.
-    expect(screen.getByText("Officers see this")).toBeTruthy();
+    expect(screen.getByLabelText("Phone")).toBeTruthy();
   });
 
-  it("keeps the optional fields behind More details until it is opened", async () => {
-    await toAbout();
+  it("keeps every one of them behind a collapsed See more (Shawn, 2026-11-24)", async () => {
+    await toAbout({ open: false });
 
-    expect(screen.queryByLabelText("Allergies")).toBeNull();
-    const more = screen.getByRole("button", { name: /More details/ });
-    expect(more.textContent).toContain("2 optional");
+    expect(screen.queryByLabelText("Emergency contact (name)")).toBeNull();
+    expect(seeMore().getAttribute("aria-expanded")).toBe("false");
 
-    fireEvent.click(more);
+    fireEvent.click(seeMore());
 
+    expect(seeMore().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Emergency contact (name)")).toBeTruthy();
     expect(screen.getByLabelText("Allergies")).toBeTruthy();
     expect(screen.getByLabelText("T-shirt size")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /More details/ })).toBeNull();
+    // Who else sees each, under it.
+    expect(screen.getAllByText("Officers see this")).toHaveLength(2);
+
+    fireEvent.change(screen.getByLabelText("Allergies"), {
+      target: { value: "Peanuts" },
+    });
+    fireEvent.click(seeMore());
+    expect(screen.queryByLabelText("Allergies")).toBeNull();
+    fireEvent.click(seeMore());
+    // What was typed stays while it is closed.
+    expect((screen.getByLabelText("Allergies") as HTMLInputElement).value).toBe(
+      "Peanuts",
+    );
+  });
+
+  it("opens See more on a refusal inside it, and sends nothing", async () => {
+    mocks.user = { ...ADA, major: null };
+    mocks.customFields = [{ ...CONTACT, value: "Grace Hopper" }, SHIRT];
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "" },
+    });
+    fireEvent.click(seeMore());
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText("Emergency contact (name) is required."),
+    ).toBeTruthy();
+    expect(seeMore().getAttribute("aria-expanded")).toBe("true");
+    expect(mocks.updateCustom).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 
   it("skips the step when the required fields are filled and only optional ones are empty", () => {
@@ -433,7 +465,6 @@ describe("About you with the chapter's fields (#5926)", () => {
     fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
       target: { value: " Grace Hopper " },
     });
-    fireEvent.click(screen.getByRole("button", { name: /More details/ }));
     fireEvent.change(screen.getByLabelText("Allergies"), {
       target: { value: "Peanuts" },
     });
@@ -450,7 +481,7 @@ describe("About you with the chapter's fields (#5926)", () => {
   });
 
   it("lets a required field wait: Go to chat with it empty saves nothing", async () => {
-    await toAbout();
+    await toAbout({ open: false });
 
     fireEvent.click(goToChat());
 

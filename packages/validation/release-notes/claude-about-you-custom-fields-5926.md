@@ -1,1 +1,1 @@
-After you join, About you also asks for the details your chapter requires, like an emergency contact, with the rest a tap away under More details.
+After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.

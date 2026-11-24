@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aboutYouCustomFields, needsAboutYou } from "./onboarding-about";
+import { needsAboutYou } from "./onboarding-about";
 
 const full = {
   phone: "+15185550142",
@@ -39,26 +39,5 @@ describe("needsAboutYou with the chapter's fields (#5926)", () => {
 
   it("never asks for an empty optional field alone", () => {
     expect(needsAboutYou(full, [{ required: false, value: null }])).toBe(false);
-  });
-});
-
-describe("aboutYouCustomFields", () => {
-  it("asks the required fields and keeps the rest behind More details, in order", () => {
-    const fields = [
-      { id: "allergies", required: false, value: null },
-      { id: "contact", required: true, value: null },
-      { id: "shirt", required: false, value: "M" },
-      { id: "contact-phone", required: true, value: "+15185550142" },
-    ];
-    const { asked, more } = aboutYouCustomFields(fields);
-    expect(asked.map((field) => field.id)).toEqual([
-      "contact",
-      "contact-phone",
-    ]);
-    expect(more.map((field) => field.id)).toEqual(["allergies", "shirt"]);
-  });
-
-  it("is empty before the fields load", () => {
-    expect(aboutYouCustomFields(undefined)).toEqual({ asked: [], more: [] });
   });
 });

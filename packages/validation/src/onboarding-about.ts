@@ -12,9 +12,8 @@
  * today is legal copy for Paul first.
  *
  * Under the profile fields, the chapter's own fields (#5926, asked by Shawn
- * 2026-11-23): the `required` ones in place, the rest behind one More
- * details row, so the step stays as short as the chapter asks
- * (`aboutYouCustomFields`).
+ * 2026-11-23), every one behind a collapsed See more (Shawn's pick,
+ * 2026-11-24), so the step opens on the four basics.
  */
 export const ONBOARDING_ABOUT_COPY = {
   title: "About you",
@@ -26,10 +25,8 @@ export const ONBOARDING_ABOUT_COPY = {
   /** Moves on and saves nothing. */
   skip: "Skip for now",
   saveFailed: "Couldn't save that. Check your connection and try again.",
-  /** The row that opens the chapter's optional fields (#5926). */
-  moreDetails: "More details",
-  /** Beside More details: how many fields it opens. */
-  moreDetailsCount: (count: number) => `${count} optional`,
+  /** The row under the basics that opens the chapter's own fields (#5926). */
+  seeMore: "See more",
 } as const;
 
 /** The four profile fields the step asks for, as either app reads them. */
@@ -46,22 +43,6 @@ export type AboutYouCustomField = {
   required: boolean;
   value: string | null;
 };
-
-/**
- * Which of the chapter's own fields the step asks (#5926): the `required`
- * ones in place (`asked`), and the rest (`more`) behind the More details
- * row, each in the chapter's order. A member always fills in their own
- * values, whoever else sees them (`spec/behavior/members.md` § Custom
- * Fields), so every tier is here.
- */
-export function aboutYouCustomFields<T extends AboutYouCustomField>(
-  fields: readonly T[] | null | undefined,
-): { asked: T[]; more: T[] } {
-  const asked: T[] = [];
-  const more: T[] = [];
-  for (const field of fields ?? []) (field.required ? asked : more).push(field);
-  return { asked, more };
-}
 
 /**
  * Whether the step shows: when any of phone, major, graduation year or

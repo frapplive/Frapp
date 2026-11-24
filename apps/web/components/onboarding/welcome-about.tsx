@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import {
   type OwnCustomField,
   ownCustomFieldFormChanges,
@@ -13,7 +13,6 @@ import {
 } from "@repo/hooks";
 import { formatPhone } from "@repo/formatting";
 import {
-  aboutYouCustomFields,
   type BirthdayDraftProblem,
   can,
   ONBOARDING_ABOUT_COPY,
@@ -55,14 +54,13 @@ export function aboutYouFields(saved: ProfileFields): ProfileFields {
  * checks (`profileSaveProblem`), and a failed save keeps the member here
  * with the reason. Skip for now saves nothing.
  *
- * Under them, the chapter's own fields (#5926), drawn by `/profile`'s More
- * details control (`OwnCustomFieldControl`), each saying who else sees it:
- * the `required` ones in place, the rest behind one More details row that
- * opens them where they stand (`aboutYouCustomFields`), so a chapter that
- * asks for two things shows two. They are checked and sent the way More
- * details sends them (`ownCustomFieldFormChanges`): only what changed, and
- * a required field left empty waits for later rather than holding the
- * member here.
+ * Under them, the chapter's own fields (#5926), every one behind a
+ * collapsed See more (Shawn's pick, 2026-11-24), so the step opens on the
+ * basics. Each is drawn by `/profile`'s More details control
+ * (`OwnCustomFieldControl`) and says who else sees it. They are checked and
+ * sent the way More details sends them (`ownCustomFieldFormChanges`): only
+ * what changed, and a required field left empty waits for later rather than
+ * holding the member here. A refusal opens See more, so the reason shows.
  */
 export function WelcomeAbout({
   saved,
@@ -97,7 +95,6 @@ export function WelcomeAbout({
     {},
   );
   const [moreOpen, setMoreOpen] = useState(false);
-  const { asked, more } = aboutYouCustomFields(customOriginal);
   const [phoneInvalid, setPhoneInvalid] = useState(false);
   const [yearInvalid, setYearInvalid] = useState(false);
   const [birthdayProblem, setBirthdayProblem] =
@@ -127,10 +124,8 @@ export function WelcomeAbout({
     const refused = Object.keys(custom.problems);
     if (refused.length > 0) {
       setCustomProblems(custom.problems);
-      // A refusal behind More details opens it, so the reason shows.
-      if (more.some((field) => refused.includes(field.field_id))) {
-        setMoreOpen(true);
-      }
+      // A refusal behind See more opens it, so the reason shows.
+      setMoreOpen(true);
       return;
     }
     if (Object.keys(body).length > 0 || custom.values.length > 0) {
@@ -207,27 +202,40 @@ export function WelcomeAbout({
             setDraft((prev) => ({ ...prev, ...patch }));
           }}
         />
-        {asked.map(customControl)}
-        {more.length > 0 && !moreOpen ? (
-          // Opens the rest in place, once: nothing here closes it again.
-          <button
-            type="button"
-            className={cn(
-              "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
-              FOCUS_RING,
-            )}
-            disabled={busy}
-            aria-expanded={false}
-            onClick={() => setMoreOpen(true)}
-          >
-            <span>{ONBOARDING_ABOUT_COPY.moreDetails}</span>
-            <span className="flex items-center gap-2 text-caption text-muted-foreground">
-              {ONBOARDING_ABOUT_COPY.moreDetailsCount(more.length)}
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </span>
-          </button>
+        {customOriginal.length > 0 ? (
+          <div className="grid gap-5">
+            {/* Opens and closes in place; what was typed stays either way. */}
+            <button
+              type="button"
+              className={cn(
+                "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
+                FOCUS_RING,
+              )}
+              disabled={busy}
+              aria-expanded={moreOpen}
+              aria-controls="about-you-see-more"
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <span>{ONBOARDING_ABOUT_COPY.seeMore}</span>
+              {moreOpen ? (
+                <ChevronDown
+                  className="h-4 w-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              ) : (
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+            {moreOpen ? (
+              <div id="about-you-see-more" className="grid gap-5">
+                {customOriginal.map(customControl)}
+              </div>
+            ) : null}
+          </div>
         ) : null}
-        {moreOpen ? more.map(customControl) : null}
         {saveFailed ? (
           <p role="alert" className="text-sm text-destructive">
             {ONBOARDING_ABOUT_COPY.saveFailed}

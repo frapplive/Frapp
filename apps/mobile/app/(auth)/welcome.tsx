@@ -19,7 +19,6 @@ import {
 import { formatPhone } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
-  aboutYouCustomFields,
   can,
   DISPLAY_NAME_MAX_LENGTH,
   ONBOARDING_ABOUT_COPY,
@@ -82,8 +81,8 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * 2. **About you** (#5284), when phone, major, graduation year or birthday is
  *    empty, or one of the chapter's required fields is (#5926,
  *    `needsAboutYou`): optional, the Edit sheet's fields and rules
- *    (`aboutYouPatch`), then the chapter's own fields, the required ones in
- *    place and the rest behind More details (`AboutYouCustomFields`).
+ *    (`aboutYouPatch`), then the chapter's own fields behind a collapsed See
+ *    more (`AboutYouCustomFields`).
  *    Continue saves only what changed; Skip for now saves nothing. Web asks
  *    the same after its name screen.
  * 3. **Turn on notifications**, when this build can push and push isn't on
@@ -176,7 +175,6 @@ export default function Welcome() {
     {},
   );
   const [moreOpen, setMoreOpen] = useState(false);
-  const customSplit = aboutYouCustomFields(customOriginal);
   const chapterMajors = useChapterMajors({
     enabled: canViewMembers && step === "about",
   });
@@ -355,10 +353,8 @@ export default function Welcome() {
     if (!aboutResult.ok || refused.length > 0) {
       if (!aboutResult.ok) reveal.submit();
       setCustomProblems(custom.problems);
-      // A refusal behind More details opens it, so the reason shows.
-      if (customSplit.more.some((f) => refused.includes(f.field_id))) {
-        setMoreOpen(true);
-      }
+      // A refusal behind See more opens it, so the reason shows.
+      if (refused.length > 0) setMoreOpen(true);
       return;
     }
     const profileChanged = hasChanges(aboutResult.patch);
@@ -459,10 +455,9 @@ export default function Welcome() {
                 editable={!answering}
               />
               <AboutYouCustomFields
-                asked={customSplit.asked}
-                more={customSplit.more}
-                moreOpen={moreOpen}
-                onOpenMore={() => setMoreOpen(true)}
+                fields={customOriginal ?? []}
+                open={moreOpen}
+                onToggle={() => setMoreOpen((open) => !open)}
                 draft={customDraft}
                 problems={customProblems}
                 onEdit={editCustom}
