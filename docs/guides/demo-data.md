@@ -302,9 +302,8 @@ EXPO_PUBLIC_API_URL=http://localhost:3001
 EXPO_PUBLIC_WEB_SECURE_STORE=1
 ```
 
-In a sandbox the capture script also needs the sandbox's browser:
-`CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/demo/capture-mobile.mjs`.
-Expo inlines `EXPO_PUBLIC_*` when it bundles, so start it after the file exists
+In a sandbox the capture script also needs the sandbox's browser
+([§ Sandbox Chromium](#sandbox-chromium) has the path). Expo inlines `EXPO_PUBLIC_*` when it bundles, so start it after the file exists
 (`npx expo start --web --port 3002 --clear` from `apps/mobile`), and give the
 first bundle a minute before the script signs in.
 
