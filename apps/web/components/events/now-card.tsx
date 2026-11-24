@@ -6,6 +6,7 @@ import { formatClockShort } from "@repo/formatting";
 import { eventNowPill, eventNowState, useEventsOnNow } from "@repo/hooks";
 import { EVENT_NOW_COPY } from "@repo/validation";
 import { cn } from "@/lib/utils";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 
 /**
  * The Now card (`spec/behavior/activity.md` § Now, #5777): the event on right
@@ -19,7 +20,12 @@ import { cn } from "@/lib/utils";
  * sidebar and Teams' bar over a meeting's chat.
  */
 export function NowCard({ className }: { className?: string }) {
-  const { events } = useEventsOnNow();
+  // Only with Events on, known to be: an events read in a chapter that turned
+  // Events off, or in a council, whose routes refuse it (#5933), can only fail.
+  const isModuleEnabled = useChapterModuleGate();
+  const { events } = useEventsOnNow({
+    enabled: isModuleEnabled?.("events") === true,
+  });
   const lead = events[0];
   if (!lead) return null;
   const more = events.length - 1;

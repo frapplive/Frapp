@@ -167,6 +167,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 import { InlineNote } from "@/components/inline-note";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
 import { usePrefetchUnreadChannels } from "@/lib/chat/prefetch-channel";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * s04 — Chat home. Chat is home, so this is the tab bar's `index` route.
@@ -221,8 +222,10 @@ export default function ChatHomeScreen() {
   // they answer (`lib/chat/unread-first-paint.ts`, #4006).
   const unread = useShownUnreadCounts();
   const unreadQuery = unread.query;
-  const eventsQuery = useEvents();
-  const tasksQuery = useTasks();
+  // A council has no events or tasks, and their routes refuse it (#5933).
+  const chapterFeatures = useServesChapterFeatures();
+  const eventsQuery = useEvents({ enabled: chapterFeatures });
+  const tasksQuery = useTasks({ enabled: chapterFeatures });
   // A DM row's title is the *other* participant, so the list needs the viewer's
   // `users.id` to subtract. Deliberately not `useChatRuntime()`, which would
   // boot the outbox flush from this screen. The badges stay live without it:
@@ -282,22 +285,6 @@ export default function ChatHomeScreen() {
     useSetSidebarSectionCollapsed(sidebarWriteOptions);
   const { mutate: setSidebarFilter } = useSetSidebarFilter(sidebarWriteOptions);
   const notificationPrefsQuery = useChannelNotificationPreferences();
-  // The Recent sort (#2877) reads each channel's latest message time, the
-  // read the Messages screen orders by. Only while the member sorts by it.
-  const recentSort = preferences.sort === "recent";
-  const latestQuery = useChannelLatestMessages({ enabled: recentSort });
-  // Unknown until the read answers, and kept through a failed refetch, as
-  // TanStack keeps `data`: the shared arrangement holds the chapter's order
-  // until then rather than sorting on nothing.
-  const latestAtByChannelId = useMemo(
-    () =>
-      recentSort && latestQuery.data
-        ? new Map(
-            latestQuery.data.map((row) => [row.channel_id, row.created_at]),
-          )
-        : undefined,
-    [recentSort, latestQuery.data],
-  );
 
   // A row's long-press menu (owner, 2026-11-06): web's right-click actions in
   // our own glass menu. Which rows show is `channelRowActions`, scoped to the
@@ -515,8 +502,6 @@ export default function ChatHomeScreen() {
       filters: unread.provisional
         ? { ...preferences.filters, unreadOnly: false }
         : preferences.filters,
-      sort: preferences.sort,
-      latestAtByChannelId,
       activeChannelId: null,
       titleOf,
       unreadByChannelId: arrangementUnread,
@@ -530,7 +515,6 @@ export default function ChatHomeScreen() {
     arrangementUnread,
     mutedChannelIds,
     titleOf,
-    latestAtByChannelId,
   ]);
   const filtersOn =
     preferences.filters.unreadOnly || preferences.filters.hideMuted;
@@ -863,7 +847,6 @@ export default function ChatHomeScreen() {
             menu={filterMenu}
             unreadOnly={preferences.filters.unreadOnly}
             hideMuted={preferences.filters.hideMuted}
-            sort={preferences.sort}
             onChange={setSidebarFilter}
           />
         ),
@@ -873,8 +856,9 @@ export default function ChatHomeScreen() {
           {/* Search (#5139), then the inbox's bell (#3362). The member's
               avatar is the You tab since #3839, threads sit under their
               channels since #5277, and the Messages door became the
-              Messages tab in #5310. */}
-          <SearchButton />
+              Messages tab in #5310. Not in a council: `GET /v1/search`
+              is a chapter route and refuses it (#5933). */}
+          {chapterFeatures ? <SearchButton /> : null}
           <NotificationsButton />
         </View>
       }
@@ -893,9 +877,11 @@ export default function ChatHomeScreen() {
         The officer setup checklist (spec/product/modules.md § Setup
         checklist), under UP NEXT and above the channels, as the web rail
         draws it above its channel list. Only once channels have loaded, so it
-        never sits on top of the skeleton or the error.
+        never sits on top of the skeleton or the error. Not in a council,
+        whose home on the Activity tab holds its first steps (#5933).
       */}
       {setup.checklist &&
+      chapterFeatures &&
       !channelsQuery.isPending &&
       !holdingForLaunch &&
       !(channelsQuery.isError && channelsQuery.data === undefined) ? (

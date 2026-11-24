@@ -71,6 +71,7 @@ describe("apps/web/proxy.ts", () => {
       "/join",
       "/no-access",
       "/welcome",
+      "/start-council",
       "/dashboard",
     ];
     for (const path of staticRoutes) {
@@ -109,6 +110,9 @@ describe("apps/web/proxy.ts", () => {
     for (const path of [
       "/robots.txt",
       "/auth/callback",
+      // The desktop app's sign-in returns here signed out (#4841).
+      "/auth/desktop",
+      "/desktop-sign-in",
       "/_next/static/a.js",
     ]) {
       expect(onNavigation(path), path).toBe(false);

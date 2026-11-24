@@ -5,6 +5,7 @@ import { MemberController } from './member.controller';
 import { MemberService } from '../../application/services/member.service';
 import { MemberPhoneReachService } from '../../application/services/member-phone-reach.service';
 import { InviteService } from '../../application/services/invite.service';
+import { CustomFieldService } from '../../application/services/custom-field.service';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
@@ -17,6 +18,10 @@ describe('MemberController', () => {
   let controller: MemberController;
   let memberService: jest.Mocked<MemberService>;
   let inviteService: { announceJoin: jest.Mock };
+  let customFieldService: {
+    findOwnFields: jest.Mock;
+    updateOwnValues: jest.Mock;
+  };
 
   beforeEach(async () => {
     memberService = {
@@ -35,6 +40,10 @@ describe('MemberController', () => {
     } as any;
 
     inviteService = { announceJoin: jest.fn().mockResolvedValue(undefined) };
+    customFieldService = {
+      findOwnFields: jest.fn().mockResolvedValue([]),
+      updateOwnValues: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await createUnguardedTestingModule({
       controllers: [MemberController],
@@ -45,6 +54,7 @@ describe('MemberController', () => {
           useValue: { findForViewer: jest.fn() },
         },
         { provide: InviteService, useValue: inviteService },
+        { provide: CustomFieldService, useValue: customFieldService },
       ],
     }).compile();
 
@@ -290,6 +300,40 @@ describe('MemberController', () => {
       );
 
       expect(inviteService.announceJoin).toHaveBeenCalledWith(updatedMember);
+    });
+  });
+
+  describe('own custom fields (#581)', () => {
+    it('reads the caller own membership, never a parameter', async () => {
+      await controller.getOwnCustomFields('chapter-1', { id: 'member-1' });
+      expect(customFieldService.findOwnFields).toHaveBeenCalledWith(
+        'chapter-1',
+        'member-1',
+      );
+    });
+
+    it('writes to the caller own membership, with no officer gate beyond members:view', async () => {
+      const values = [{ field_id: 'f-1', value: 'M' }];
+      await controller.updateOwnCustomFields(
+        'chapter-1',
+        'user-1',
+        { id: 'member-1' },
+        { values },
+      );
+      expect(customFieldService.updateOwnValues).toHaveBeenCalledWith(
+        'chapter-1',
+        'member-1',
+        'user-1',
+        values,
+      );
+      // Own only: the route takes no member id, so no permission beyond the
+      // class baseline could widen whose values it writes.
+      expect(
+        Reflect.getMetadata(
+          PERMISSIONS_KEY,
+          MemberController.prototype.updateOwnCustomFields,
+        ),
+      ).toBeUndefined();
     });
   });
 

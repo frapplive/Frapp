@@ -25,6 +25,10 @@ import { cn } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { Skeleton } from "@/components/shared/async-states";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
+import { SETTINGS_TITLE } from "@/components/layout/page-title";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
+import { START_COUNCIL_PATH } from "@/lib/auth/join-visit";
+import { councilTypeLabel, useTenantKind } from "@/lib/hooks/use-tenant-kind";
 
 /**
  * The 40px chapter row at the top of the left nav.
@@ -57,6 +61,20 @@ import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confir
  * only here (`1i`: "Identity and chapter stay separate menus").
  */
 
+/**
+ * The line under a tenant in the switcher: a chapter's school, a council's
+ * type ("Interfraternity Council"), so a council reads as one beside the
+ * chapters (#5933).
+ */
+export function membershipSubtitle(
+  membership: ChapterMembershipSummary,
+): string | null {
+  if (membership.kind === "council") {
+    return councilTypeLabel(membership.chapter?.council_type);
+  }
+  return membership.chapter?.university || null;
+}
+
 type ChapterNavHeaderProps = {
   collapsed: boolean;
   className?: string;
@@ -83,6 +101,8 @@ export function ChapterNavHeader({
   const permissions = useNavPermissions();
   const isModuleEnabled = useChapterModuleGate();
   const showSettingsLink = hasSettingsDestination(permissions, isModuleEnabled);
+  // A council's settings are its own (#5933): the menu names them so.
+  const tenantKind = useTenantKind();
   const selectChapter = useSelectChapter();
   const { toast } = useToast();
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
@@ -286,7 +306,11 @@ export function ChapterNavHeader({
         {otherChapters.length > 0 ? (
           <>
             <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              Your chapters
+              {memberships.some(
+                (m) => (m as { kind?: unknown }).kind === "council",
+              )
+                ? "Your chapters and councils"
+                : "Your chapters"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {memberships.map((membership) => {
@@ -308,9 +332,9 @@ export function ChapterNavHeader({
                     <span className="block truncate text-label font-normal">
                       {membership.chapter?.name ?? "Untitled chapter"}
                     </span>
-                    {membership.chapter?.university ? (
+                    {membershipSubtitle(membership) ? (
                       <span className="block truncate text-caption text-muted-foreground">
-                        {membership.chapter.university}
+                        {membershipSubtitle(membership)}
                       </span>
                     ) : null}
                   </span>
@@ -324,13 +348,24 @@ export function ChapterNavHeader({
         {showSettingsLink ? (
           <DropdownMenuItem asChild>
             <Link href="/settings" onClick={onNavigate}>
-              Chapter settings
+              {SETTINGS_TITLE[tenantKind ?? "chapter"]}
             </Link>
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem asChild>
           <Link href="/join" onClick={onNavigate}>
             Join another chapter
+          </Link>
+        </DropdownMenuItem>
+        {/*
+          Start a council (#5933): the founder is nearly always already in
+          their own chapter (an IFC's delegates are its chapters' members), so
+          the way in sits beside joining another, as Discord's server list
+          ends in Add a server.
+        */}
+        <DropdownMenuItem asChild>
+          <Link href={START_COUNCIL_PATH} onClick={onNavigate}>
+            {START_COUNCIL_ENTRY.action}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

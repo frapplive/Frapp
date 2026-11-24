@@ -325,10 +325,9 @@ describe("AppNav", () => {
       keepDraft: vi.fn(),
     };
     const { unmount: unmountOpen } = renderNav({ collapsed: true });
-    expect(screen.getByRole("button", { name: "Frapp Intelligence" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(
+      screen.getByRole("button", { name: "Frapp Intelligence" }),
+    ).toHaveAttribute("aria-current", "page");
     unmountOpen();
 
     // The drawer has none; below `lg` the page floats its own.

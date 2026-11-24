@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Controller,
   Get,
@@ -48,6 +49,8 @@ import { BootstrapDto, BootstrapQueryDto } from '../dtos/bootstrap.dto';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @UseInterceptors(AuthSyncInterceptor)
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('bootstrap')
 export class BootstrapController {
   constructor(private readonly bootstrap: BootstrapService) {}

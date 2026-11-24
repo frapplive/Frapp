@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTaskPhotoUrl, type LiveTaskPhoto } from "@repo/hooks";
 import {
+  LINK_NOT_WORKING_CAPTION,
+  LINK_NOT_WORKING_LABEL,
   TASK_PHOTOS_MAX,
   proofLinkDomain,
   proofLinkOpens,
@@ -220,13 +222,13 @@ function ProofLinkChip({ link }: { link: string }) {
       <View
         style={styles.chip}
         accessible
-        accessibilityLabel={`Proof link, not a working web address: ${link}`}
+        accessibilityLabel={`Proof link, ${LINK_NOT_WORKING_LABEL}: ${link}`}
       >
         <LinkGlyph color={tokens.color.text.mutedForeground} size={14} />
         <Text style={styles.chipTextMuted} numberOfLines={1} selectable>
           {link}
         </Text>
-        <Text style={styles.chipTextMuted}>· not a working link</Text>
+        <Text style={styles.chipTextMuted}>· {LINK_NOT_WORKING_CAPTION}</Text>
       </View>
     );
   }

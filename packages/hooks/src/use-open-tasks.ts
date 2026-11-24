@@ -68,7 +68,13 @@ export function useUpdateOpenTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ["open-tasks", "update"],
-    mutationFn: async ({ id, body }: { id: string; body: UpdateOpenTaskBody }) => {
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: UpdateOpenTaskBody;
+    }) => {
       const { data, error } = await client.PATCH("/v1/open-tasks/{id}", {
         params: { path: { id } },
         body,

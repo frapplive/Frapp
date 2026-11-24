@@ -68,11 +68,15 @@ const NOTIF_B = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2';
 const CHAPTER_C = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 const COUNCIL = 'c4c4c4c4-c4c4-44c4-84c4-c4c4c4c4c4c4';
 const MEMBER_B_IN_COUNCIL = 'c5c5c5c5-c5c5-45c5-85c5-c5c5c5c5c5c5';
+// School layer (#5929): Bob is verified at school A only; Alice at B.
+const SCHOOL_A = 'd1d1d1d1-d1d1-41d1-81d1-d1d1d1d1d1d1';
+const SCHOOL_B = 'd2d2d2d2-d2d2-42d2-82d2-d2d2d2d2d2d2';
+const SCHOOL_SUSPENDED = 'd3d3d3d3-d3d3-43d3-83d3-d3d3d3d3d3d3';
 
 /**
- * A route that serves councils alone, for ADR-27 test 5. No council route
- * exists yet, so this stands in for the first one: the real guards, the
- * declaration a council route will carry, and the chapter it resolved.
+ * A route that serves councils alone, for ADR-27 test 5: the real guards and
+ * the declaration, with nothing but the chapter it resolved. Test 5d runs the
+ * real council route, `GET /v1/council` (#5933).
  */
 @Controller('council-probe')
 @UseGuards(SupabaseAuthGuard, ChapterGuard)
@@ -137,6 +141,12 @@ function seed(): SeededTables {
         subscription_status: 'active',
         past_due_since: null,
         enabled_modules: null,
+        // A council's own fields (#5933).
+        council_type: 'ifc',
+        recruitment_model: 'open_bidding',
+        council_school_id: SCHOOL_A,
+        council_verified_at: null,
+        org_archetype: 'council',
       },
     ],
     // Every tenant's current slug, and one retired slug each for A and B.
@@ -195,6 +205,70 @@ function seed(): SeededTables {
       },
     ],
   };
+}
+
+/**
+ * The school layer's rows (#5929, school-layer.md § 4.3): Bob is a live
+ * member of school A and of a suspended school, and left school B, where
+ * Alice is a member. Each membership collides on everything but who and
+ * where, so only `SchoolGuard`'s school and user filters tell them apart.
+ */
+function seedSchools(): SeededTables {
+  const tables = seed();
+  const school = (id: string, name: string, status: string) => ({
+    id,
+    name,
+    short_name: name,
+    aliases: [],
+    status,
+    directory_university: name,
+    created_by: null,
+    created_at: '2026-11-23T00:00:00.000Z',
+    updated_at: '2026-11-23T00:00:00.000Z',
+  });
+  const membership = (
+    id: string,
+    schoolId: string,
+    userId: string,
+    leftAt: string | null = null,
+  ) => ({
+    id,
+    school_id: schoolId,
+    user_id: userId,
+    status: 'member',
+    verified_via: 'email_code',
+    verified_email: `${userId.slice(0, 4)}@example.edu`,
+    verified_at: '2026-11-23T00:00:00.000Z',
+    directory_visibility: 'hidden',
+    left_at: leftAt,
+    created_at: '2026-11-23T00:00:00.000Z',
+  });
+  tables.schools = [
+    school(SCHOOL_A, 'School A', 'verified'),
+    school(SCHOOL_B, 'School B', 'verified'),
+    school(SCHOOL_SUSPENDED, 'School C', 'suspended'),
+  ];
+  tables.school_members = [
+    membership('e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1', SCHOOL_A, USER_B),
+    membership('e2e2e2e2-e2e2-42e2-82e2-e2e2e2e2e2e2', SCHOOL_B, USER_A),
+    membership(
+      'e3e3e3e3-e3e3-43e3-83e3-e3e3e3e3e3e3',
+      SCHOOL_B,
+      USER_B,
+      '2026-11-20T00:00:00.000Z',
+    ),
+    membership(
+      'e4e4e4e4-e4e4-44e4-84e4-e4e4e4e4e4e4',
+      SCHOOL_SUSPENDED,
+      USER_B,
+    ),
+  ];
+  tables.school_slugs = [
+    { slug: 'school-a', school_id: SCHOOL_A, retired_at: null },
+    { slug: 'school-b', school_id: SCHOOL_B, retired_at: null },
+  ];
+  tables.school_email_domains = [];
+  return tables;
 }
 
 /**
@@ -640,6 +714,98 @@ describe('Cross-tenant isolation (e2e)', () => {
       expect(res.body).toEqual({ chapter_id: COUNCIL });
     });
 
+    // #5933: the first real council route, beside the probe above. A
+    // chapter, even the caller's own, is refused as a non-member; the
+    // caller's council is served. `school-layer.md` § 4.3 test 2.
+    it('5d. refuses the caller’s own chapter on GET /v1/council, and serves their council', async () => {
+      const tables = seedTenants();
+      tables.schools = [
+        {
+          id: SCHOOL_A,
+          name: 'Rensselaer',
+          short_name: 'RPI',
+          status: 'verified',
+        },
+      ];
+      app = await boot({ active_chapter_id: CHAPTER_B }, tables);
+      const server = app.getHttpServer();
+
+      const asChapter = await asBob(
+        request(server).get(`${V1}/council`),
+        CHAPTER_B,
+      );
+      expect(asChapter.status).toBe(403);
+      expectDeniedBody(asChapter.body, 'chapter.context.invalid');
+
+      const asCouncil = await asBob(
+        request(server).get(`${V1}/council`),
+        COUNCIL,
+      );
+      expect(asCouncil.status).toBe(200);
+      expect(asCouncil.body).toMatchObject({
+        id: COUNCIL,
+        council_type: 'ifc',
+        recruitment_model: 'open_bidding',
+        verified: false,
+        school: { id: SCHOOL_A, short_name: 'RPI' },
+      });
+    });
+
+    it('5e. serves the council on a route both kinds share, and still refuses it on chapter-only ones', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+      const server = app.getHttpServer();
+
+      // Chat's notification levels serve councils too (#5933).
+      const shared = await asBob(
+        request(server).get(`${V1}/channels/notification-preferences/chapter`),
+        COUNCIL,
+      );
+      expect(shared.status).toBe(200);
+
+      for (const path of [
+        '/points/me',
+        '/events',
+        '/tasks',
+        `/chapters/${COUNCIL}/config`,
+      ]) {
+        const res = await asBob(request(server).get(`${V1}${path}`), COUNCIL);
+        expect([path, res.status]).toEqual([path, 403]);
+        expectDeniedBody(res.body, 'chapter.context.invalid');
+      }
+    });
+
+    it('4c. auto-resolves the one chapter of a member who also holds a council (#5925 review)', async () => {
+      const tables = seedTenants();
+      // Bob in chapter B and the council only.
+      tables.members = tables.members.filter(
+        (m) => m.user_id !== USER_B || m.chapter_id !== CHAPTER_A,
+      );
+      app = await boot(null, tables);
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/tasks`)
+        .set('authorization', 'Bearer token-bob');
+
+      // `/tasks` serves chapters only; the council beside B isn't counted.
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).toContain(TASK_B);
+    });
+
+    it('4d. never auto-resolves a council alone onto a chapter route', async () => {
+      const tables = seedTenants();
+      tables.members = tables.members.filter(
+        (m) => m.user_id !== USER_B || m.chapter_id === COUNCIL,
+      );
+      app = await boot(null, tables);
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/tasks`)
+        .set('authorization', 'Bearer token-bob');
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('chapter.context.required');
+    });
+
     describe('6. GET /v1/tenants/resolve', () => {
       const resolve = (slug: string) =>
         request(app.getHttpServer())
@@ -754,6 +920,66 @@ describe('Cross-tenant isolation (e2e)', () => {
   });
 
   describe('client-supplied chapter id outside ChapterGuard', () => {
+    // #5933, settling #5925's review: these take a tenant id of any kind
+    // the caller belongs to, and refuse every other id alike.
+    it('activates a council the caller belongs to, and refuses one they don’t', async () => {
+      const tables = seed();
+      tables.members = [
+        ...tables.members,
+        {
+          id: MEMBER_B_IN_COUNCIL,
+          user_id: USER_B,
+          chapter_id: COUNCIL,
+          role_ids: [],
+          custom_role_ids: [],
+        },
+      ];
+      app = await boot({ active_chapter_id: CHAPTER_B }, tables);
+      const server = app.getHttpServer();
+
+      const own = await request(server)
+        .post(`${V1}/chapters/${COUNCIL}/activate`)
+        .set('authorization', 'Bearer token-bob');
+      expect(own.status).toBe(201);
+      expect(tables.users.find((u) => u.id === USER_B)?.active_chapter_id).toBe(
+        COUNCIL,
+      );
+
+      const other = await request(server)
+        .post(`${V1}/chapters/${CHAPTER_A}/activate`)
+        .set('authorization', 'Bearer token-bob');
+      expect(other.status).toBe(403);
+    });
+
+    it('keeps notification preferences for a council the caller belongs to, never one they don’t', async () => {
+      const mine = seed();
+      mine.members = [
+        ...mine.members,
+        {
+          id: MEMBER_B_IN_COUNCIL,
+          user_id: USER_B,
+          chapter_id: COUNCIL,
+          role_ids: [],
+          custom_role_ids: [],
+        },
+      ];
+      app = await boot({ active_chapter_id: CHAPTER_B }, mine);
+      const asMember = await request(app.getHttpServer())
+        .patch(`${V1}/notifications/preferences`)
+        .set('authorization', 'Bearer token-bob')
+        .send({ chapter_id: COUNCIL, category: 'chat', is_enabled: false });
+      expect(asMember.status).toBe(200);
+      await app.close();
+
+      // The same council, Bob no longer in it.
+      app = await boot({ active_chapter_id: CHAPTER_B }, seed());
+      const asStranger = await request(app.getHttpServer())
+        .patch(`${V1}/notifications/preferences`)
+        .set('authorization', 'Bearer token-bob')
+        .send({ chapter_id: COUNCIL, category: 'chat', is_enabled: false });
+      expect(asStranger.status).toBe(403);
+    });
+
     // `/notifications/preferences` carries no ChapterGuard — it takes the chapter
     // straight off the query string, so `assertChapterMembership` in
     // NotificationService is the only thing standing between Bob and chapter A.
@@ -836,6 +1062,97 @@ describe('Cross-tenant isolation (e2e)', () => {
       expect(own.status).toBe(200);
       expect(own.body.id).toBe(NOTIF_B);
       expect(own.body.read_at).toEqual(expect.any(String));
+    });
+  });
+
+  describe('school context (SchoolGuard, #5929)', () => {
+    const asBobAt = (req: request.Test, schoolId?: string) => {
+      const authed = req.set('authorization', 'Bearer token-bob');
+      return schoolId ? authed.set('x-school-id', schoolId) : authed;
+    };
+
+    function expectSchoolDenied(body: Record<string, unknown>): void {
+      expect(body.code).toBe('school.context.invalid');
+      expect(body.statusCode).toBe(403);
+    }
+
+    it('serves a school Bob is verified at, with his own membership', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_A,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.school).toMatchObject({ id: SCHOOL_A, slug: 'school-a' });
+      expect(res.body.verified_email).toBe(`${USER_B.slice(0, 4)}@example.edu`);
+    });
+
+    it("refuses another person's school, and one he left, with the same 403", async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      // Alice is a live member of B and Bob's row there has left_at set:
+      // neither lets Bob in, and nothing of Alice's comes back.
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_B,
+      );
+
+      expect(res.status).toBe(403);
+      expectSchoolDenied(res.body);
+      expect(JSON.stringify(res.body)).not.toContain(USER_A.slice(0, 4));
+    });
+
+    it('answers an unknown school, a chapter id and a malformed id exactly as a foreign school', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      for (const id of [
+        'f9f9f9f9-f9f9-49f9-89f9-f9f9f9f9f9f9',
+        CHAPTER_B,
+        'not-a-uuid',
+      ]) {
+        const res = await asBobAt(
+          request(app.getHttpServer()).get(`${V1}/school`),
+          id,
+        );
+        expect(res.status).toBe(403);
+        expectSchoolDenied(res.body);
+      }
+    });
+
+    it('refuses a suspended school even for a live member', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_SUSPENDED,
+      );
+
+      expect(res.status).toBe(403);
+      expectSchoolDenied(res.body);
+    });
+
+    it('needs the header: neither the chapter header nor the claim stands in for a school', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBob(request(app.getHttpServer()).get(`${V1}/school`));
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('school.context.required');
+    });
+
+    it("lists only Bob's own live schools, a suspended one left out", async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/schools/mine`),
+      );
+
+      expect(res.status).toBe(200);
+      const ids = res.body.map((m: { school: { id: string } }) => m.school.id);
+      expect(ids).toEqual([SCHOOL_A]);
+      expect(ids).not.toContain(SCHOOL_B);
     });
   });
 });

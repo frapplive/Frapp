@@ -85,9 +85,11 @@ import { ProChip } from "@/components/billing/pro-chip";
  *   standing on is locked behind the purchase they are making from it. The
  *   nav derivation already excludes it; the test pins that it stays excluded.
  *
- * `rush` and `onboarding` fall out for the honest reason: the API gates `rush`
- * but `apps/web` ships no route for it, so on this surface the subscription
- * unlocks nothing a member can see.
+ * `onboarding` falls out for the honest reason: the API gates it but
+ * `apps/web` ships no route for it, so on this surface the subscription
+ * unlocks nothing a member can see. `rush` fell out the same way until its
+ * recruitment page shipped (#5924); its nav row now lists it, with no change
+ * to its tier in the catalog.
  */
 const SHIPPED_PAID_KEYS = new Set<string>([
   ...DASHBOARD_NAV_ITEMS.flatMap((item) => [

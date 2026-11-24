@@ -200,7 +200,10 @@ describe('InviteService', () => {
       })),
     };
 
-    mockEmailProvider = { sendInviteEmail: jest.fn().mockResolvedValue(true) };
+    mockEmailProvider = {
+      sendInviteEmail: jest.fn().mockResolvedValue(true),
+      sendSchoolCodeEmail: jest.fn().mockResolvedValue(true),
+    };
     mockConfig = { get: jest.fn().mockReturnValue(undefined) };
 
     mockUserRepo = {
@@ -231,6 +234,8 @@ describe('InviteService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),

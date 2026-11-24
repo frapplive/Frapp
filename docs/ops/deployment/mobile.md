@@ -219,12 +219,13 @@ pipeline renders 1206 × 2622 itself ([#2454](https://github.com/pdcarlson/Frapp
 **Procedure**, on a machine or cloud sandbox with the local stack running (API on `:3001`, local
 Supabase):
 
-1. Write `apps/mobile/.env.local` per
-   [`docs/guides/demo-data.md` § Mobile setup](../../guides/demo-data.md#mobile-setup), and leave
+1. Have `apps/mobile/.env.local` per
+   [`docs/guides/demo-data.md` § Mobile setup](../../guides/demo-data.md#mobile-setup) (a cloud
+   sandbox's bring-up writes it; on a machine, write it), and leave
    the API's `AI_ENABLED` off (the default). With AI on, the Tasks shot can carry a suggested-tasks row, and the run stops
    rather than write a set containing it. (Since #4702 the Frapp Intelligence bar is also on every tab for a member with Ask, and the stop matches it by its name, so with AI on the run stops at the first tab shot.) The same section's `EVENT_CHECK_IN_TOKEN_SECRET` must be
-   in `apps/api/.env.local` before the API starts (the cloud sandbox's bring-up does not write
-   it): without it the Host check-in screen shows "Code unavailable" instead of a QR, and that
+   in `apps/api/.env.local` before the API starts (the cloud sandbox's bring-up writes a local
+   one since 2026-11-24; on a machine, add it): without it the Host check-in screen shows "Code unavailable" instead of a QR, and that
    shot times out.
 2. After 13:00 UTC, re-seed, so every unread badge and the demo data are fresh (opening a channel
    marks it read): `bash scripts/demo/setup-demo.sh`, then shoot the same UTC day. Chat and study
@@ -235,7 +236,7 @@ Supabase):
    cache so no earlier flag value is inlined: `npx expo start --web --port 3002 --clear`. Wait for
    `http://localhost:3002` to answer 200.
 4. From the repo root: `node scripts/demo/capture-mobile.mjs --store`
-   (sandbox Chromium: prefix `CHROMIUM_PATH=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`).
+   (sandbox Chromium: prefix `CHROMIUM_PATH=/opt/pw-browsers/chromium`).
    It signs in as the demo president — Host check-in needs an officer — captures the seven screens
    to `screenshots/store-raw/`, and frames them into `screenshots/app-store/` and
    `screenshots/google-play/`, `01-chat-home.png` … `07-directory.png` in each.

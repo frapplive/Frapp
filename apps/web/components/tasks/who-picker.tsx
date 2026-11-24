@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { propertyChipClass } from "./property-chip";
@@ -44,6 +45,7 @@ import {
   pickerMode,
   setTick,
   tickChecked,
+  peopleToAdd,
   tickedIds,
   tierKey,
   toggleChapter,
@@ -97,9 +99,11 @@ export function useWhoDirectory(options: { enabled?: boolean } = {}) {
  * What the picker may hand back: `any` is every kind (the board's add line
  * and New task); `person` is one member (Assign on Up for grabs, a chat
  * card's task, which posts a card for one person); `personOrEveryone` is one
- * member or a copy each for the chapter (the task form's Everyone, #4295).
+ * member or a copy each for the chapter (the task form's Everyone, #4295);
+ * `people` is several members picked one by one, no roles, groups or
+ * Everyone (a group task's Add people, #5905).
  */
-export type WhoPickerAllow = "any" | "person" | "personOrEveryone";
+export type WhoPickerAllow = "any" | "person" | "personOrEveryone" | "people";
 
 export interface WhoPickerProps {
   value: TaskWho | null;
@@ -124,6 +128,16 @@ export interface WhoPickerProps {
   chip?: boolean;
   guessed?: boolean;
   "aria-describedby"?: string;
+  /**
+   * With `people`: members already on it (a group task's copies, #5905),
+   * drawn ticked and fixed with `markedNote` beside them, so the picker
+   * reads as who has it plus who is being added.
+   */
+  marked?: ReadonlySet<string>;
+  markedNote?: string;
+  /** With `people`: the footer's button, which closes and calls `onDone`. */
+  doneLabel?: (count: number) => string;
+  onDone?: () => void;
 }
 
 /**
@@ -154,6 +168,10 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
       chip = false,
       guessed = false,
       "aria-describedby": describedBy,
+      marked,
+      markedNote,
+      doneLabel,
+      onDone,
     },
     ref,
   ) {
@@ -163,7 +181,15 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
     });
     const picked = whoLabel(value, directory);
     return (
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // Add people: closed without Add drops the picks, so they are
+          // never sent by a later Add (#5905).
+          if (!next && allow === "people") onChange(null);
+        }}
+      >
         <PopoverTrigger asChild>
           {trigger ??
             (chip ? (
@@ -232,14 +258,22 @@ export const WhoPicker = forwardRef<HTMLButtonElement, WhoPickerProps>(
             value={value}
             onChange={(next) => {
               onChange(next);
-              if (allow !== "any") setOpen(false);
+              if (allow === "person" || allow === "personOrEveryone") {
+                setOpen(false);
+              }
             }}
             allow={allow}
             directory={directory}
             loading={loading}
             failed={failed}
             onRetry={retry}
-            onDone={() => setOpen(false)}
+            onDone={() => {
+              setOpen(false);
+              onDone?.();
+            }}
+            marked={marked}
+            markedNote={markedNote}
+            doneLabel={doneLabel}
           />
         </PopoverContent>
       </Popover>
@@ -277,6 +311,9 @@ export function WhoPickerBody({
   failed,
   onRetry,
   onDone,
+  marked,
+  markedNote,
+  doneLabel,
 }: {
   value: TaskWho | null;
   onChange: (next: TaskWho | null) => void;
@@ -286,6 +323,9 @@ export function WhoPickerBody({
   failed: boolean;
   onRetry: () => void;
   onDone: () => void;
+  marked?: ReadonlySet<string>;
+  markedNote?: string;
+  doneLabel?: (count: number) => string;
 }) {
   const ids = useId();
   const { avatarTintFor } = useMemberDisplayNames();
@@ -312,7 +352,9 @@ export function WhoPickerBody({
   const mode = pickerMode(value, heldMode);
   // The role or group a pick was narrowed from, for "5 of Recruitment".
   const [narrowedFrom, setNarrowedFrom] = useState<WhoSet | null>(null);
-  const many = allow === "any";
+  // Several picked at once: any kind, or people only (Add people).
+  const many = allow === "any" || allow === "people";
+  const peopleOnly = allow === "people";
   const included = useMemo(
     () => new Set(tickedIds(value, directory)),
     [value, directory],
@@ -357,38 +399,49 @@ export function WhoPickerBody({
     ...allRoles(directory),
     ...directory.groups,
   ];
-  const sets = many ? allSets.filter((set) => whoMatches(set.name, query)) : [];
+  const sets =
+    allow === "any" ? allSets.filter((set) => whoMatches(set.name, query)) : [];
 
-  const personRow = (person: WhoPerson, from: WhoSet | null = null) => (
-    <PickRow
-      key={`${from?.id ?? "p"}:${person.userId}`}
-      indent={from !== null}
-      tick={
-        many
-          ? included.has(person.userId)
-          : value?.kind === "person" && value.userId === person.userId
-      }
-      kind={many ? "checkbox" : "radio"}
-      onClick={() =>
-        pick(
-          many
-            ? togglePerson(value, person.userId, mode, directory)
-            : { kind: "person", userId: person.userId },
-          // A member unticked inside a role or group: "5 of Recruitment".
-          many ? from : null,
-        )
-      }
-      leading={
-        <PersonFace person={person} tint={avatarTintFor(person.userId)} />
-      }
-      name={person.name}
-      trailing={
-        person.isViewer ? (
-          <span className="text-caption text-muted-foreground">you</span>
-        ) : null
-      }
-    />
-  );
+  const personRow = (person: WhoPerson, from: WhoSet | null = null) => {
+    // Already on it (Add people): ticked and fixed, its note beside it.
+    const fixed = !!marked?.has(person.userId);
+    return (
+      <PickRow
+        key={`${from?.id ?? "p"}:${person.userId}`}
+        indent={from !== null}
+        tick={
+          fixed ||
+          (many
+            ? included.has(person.userId)
+            : value?.kind === "person" && value.userId === person.userId)
+        }
+        kind={many ? "checkbox" : "radio"}
+        disabled={fixed}
+        onClick={() =>
+          pick(
+            many
+              ? togglePerson(value, person.userId, mode, directory)
+              : { kind: "person", userId: person.userId },
+            // A member unticked inside a role or group: "5 of Recruitment".
+            many ? from : null,
+          )
+        }
+        leading={
+          <PersonFace person={person} tint={avatarTintFor(person.userId)} />
+        }
+        name={person.name}
+        trailing={
+          fixed && markedNote ? (
+            <span className="text-caption text-muted-foreground">
+              {markedNote}
+            </span>
+          ) : person.isViewer ? (
+            <span className="text-caption text-muted-foreground">you</span>
+          ) : null
+        }
+      />
+    );
+  };
 
   const setRow = (set: WhoSet) => {
     const empty = set.memberIds.length === 0;
@@ -443,7 +496,7 @@ export function WhoPickerBody({
   };
 
   const chapterRow =
-    allow === "person" ? null : (
+    allow === "person" || peopleOnly ? null : (
       <PickRow
         tick={chapterPicked}
         kind={many ? "checkbox" : "radio"}
@@ -471,7 +524,10 @@ export function WhoPickerBody({
       />
     );
 
-  const count = included.size;
+  // Add people counts only who gets a copy, not who already has one.
+  const count = peopleOnly
+    ? peopleToAdd(value, directory, marked ?? new Set()).length
+    : included.size;
   const summary = whoSummary(value, directory, narrowedFrom);
   const hint = whoHint(value, directory);
 
@@ -511,7 +567,7 @@ export function WhoPickerBody({
           {sets.map(setRow)}
         </ul>
       );
-  } else if (tab === "people" || !many) {
+  } else if (tab === "people" || allow !== "any") {
     list = (
       <ul aria-label="People">
         {chapterRow ? <li>{chapterRow}</li> : null}
@@ -602,28 +658,42 @@ export function WhoPickerBody({
             }
           }}
           aria-label={
-            many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople
+            allow === "any"
+              ? WHO_PICKER_COPY.search
+              : WHO_PICKER_COPY.searchPeople
           }
           placeholder={
-            many ? WHO_PICKER_COPY.search : WHO_PICKER_COPY.searchPeople
+            allow === "any"
+              ? WHO_PICKER_COPY.search
+              : WHO_PICKER_COPY.searchPeople
           }
           className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
         />
       </div>
-      {many && !searching ? (
+      {allow === "any" && !searching ? (
         <div className="px-3 pt-3">
-          <SegmentedChoice
+          <ViewLabels
+            flush
             label="Show"
             options={TAB_OPTIONS}
             value={tab}
             onChange={setTab}
-            fill
-            dense
           />
         </div>
       ) : null}
       <div className="max-h-[min(22rem,50vh)] overflow-y-auto py-1">{list}</div>
-      {many && count > 1 ? (
+      {peopleOnly ? (
+        <div className="flex items-center justify-end border-t border-border px-3 py-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={count === 0}
+            onClick={onDone}
+          >
+            {doneLabel ? doneLabel(count) : "Done"}
+          </Button>
+        </div>
+      ) : many && count > 1 ? (
         <div className="grid gap-2 border-t border-border px-3 py-3">
           <p className="truncate text-sm font-semibold text-foreground">
             {summary}

@@ -251,7 +251,7 @@ The Chip step ([foundations.md](foundations.md) §9): height 24px on every point
 
 Underline style only — no segmented pill controls for tabs. Choosing one answer from a short set inside a form is a different control: § Segmented control.
 
-_Changed 2026-11-24 (Paul, [#5947](https://github.com/frapplive/Frapp/issues/5947)): a page's or a list's views are [§ View labels](#view-labels-change-a-pages-or-a-lists-view), the same words without the rule or the accent underline. This primitive's three view uses (the Directory's Actives / Alumni, a form's responses, chat reports) move to it in #5947's sweep; what stays here is navigation between pages of one surface (the Settings rail, sign in / sign up)._
+_Changed 2026-11-24 (Paul, [#5947](https://github.com/frapplive/Frapp/issues/5947)): a page's or a list's views are [§ View labels](#view-labels-change-a-pages-or-a-lists-view), the same words without the rule or the accent underline. A form's responses and chat reports moved to it in #5947's sweep, and the Directory's Actives / Alumni moves with the Directory's own step (#5950); what stays here is navigation between pages of one surface (the Settings rail, sign in / sign up)._
 
 - Row: 1px bottom hairline `--border` (`rgba(255,255,255,.12)`); items gap 22px. An item is the Small step: 36px to a fine pointer, 44 on touch, set by a min-height so a caller's padding cannot push it past its row.
 - Active: 15px / 600 `--foreground` (web: 14), 2px bottom underline `accent-9`.
@@ -782,6 +782,7 @@ _Added 2026-11-22 (Paul, at web's old "Edit types" popover: "yo what is this?").
 | Row   | `SettingsRow`                               | `ListRow` with a trailing `Toggle`, value or chevron |
 
 - A row is a label, at most one short muted line, and one trailing thing: a switch, a current value that opens the picker, or a chevron to a page.
+- **Grouping, Discord's channel settings and iOS Settings** *(Paul, 2026-11-20; built 2026-11-24 on Chapter settings' Chapter tab)*: a page leads with the few fields a member types into (a name), then a few groups of rows. A section too long to sit open, such as a form of its own, becomes one row with its current value that opens a page of its own, with a way back to the page it came from (web `SettingsSubpage`, `?page=`; the phone pushes a screen). A group takes a heading when the page has more than one (`heading` on web, `SectionHeader` on the phone) and at most one muted footnote under it, saying what its rows share (`footnote` on both; its words live in `@repo/validation`'s `chapter-settings-copy.ts`). A row that opens a page or sheet leads with a glyph (web `icon`, a Lucide icon; the phone `leading`, drawn from the same Lucide icon in `components/settings-glyphs.tsx`, the same one where a row is on both); a switch row, or one that opens nothing, goes without.
 - Switches only in rows (Apple, toggles); on or off is never colour alone.
 - **Saving:** a switch or a pick saves the moment it changes (NN/g toggle guidelines; GitHub Primer: switches are instant-save). Typed text saves on Enter or on leaving the field, then shows a quiet "Saved"; Escape restores the old text. No Save button on a settings page (Paul, 2026-11-20).
 

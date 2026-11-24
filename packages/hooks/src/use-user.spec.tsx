@@ -114,7 +114,6 @@ describe("profile mutations (#732, #3387)", () => {
     { queryKey: ["user", "me"], exact: true },
     { queryKey: ["members"] },
     { queryKey: ["alumni"] },
-    { queryKey: ["activity-feed"] },
   ];
 
   function photoMutationHarness() {

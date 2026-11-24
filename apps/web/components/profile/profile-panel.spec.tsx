@@ -57,6 +57,14 @@ vi.mock("@/components/profile/profile-photo-control", () => ({
     mocks.photoControl(props),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {
@@ -83,6 +91,12 @@ vi.mock("@/components/members/member-pledge-class-section", () => ({
 // job is whether it draws them.
 vi.mock("@/components/activity/standing-cards", () => ({
   StandingCards: () => <div data-testid="standing-cards" />,
+}));
+
+// More details is its own spec's business (#581); the panel's job is the gate.
+vi.mock("@/components/profile/own-custom-fields-section", () => ({
+  OwnCustomFieldsSection: ({ enabled }: { enabled: boolean }) =>
+    enabled ? <div data-testid="own-custom-fields" /> : null,
 }));
 
 // The picker is its own spec's business (#4958).
@@ -741,5 +755,15 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     mocks.permissions = [];
     render(<ProfilePanel />);
     expect(mocks.memberByUserId).not.toHaveBeenCalledWith("u-1");
+  });
+
+  it("draws More details behind the Directory's permission (#581)", () => {
+    const { unmount } = render(<ProfilePanel />);
+    expect(screen.getByTestId("own-custom-fields")).toBeInTheDocument();
+    unmount();
+
+    mocks.permissions = [];
+    render(<ProfilePanel />);
+    expect(screen.queryByTestId("own-custom-fields")).toBeNull();
   });
 });

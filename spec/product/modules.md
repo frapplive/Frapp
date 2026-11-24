@@ -129,11 +129,6 @@
 - Members edit their own profile. Admins can view all profiles.
 - Tap a member to view profile or start a DM.
 
-## Activity Feed
-
-- Unified feed showing recent chapter activity — the item set is owned by [`../behavior/activity-feed.md`](../behavior/activity-feed.md) and not restated here. **Specified, not built on any surface today** — the web home screen was removed in the chat-first redesign, and mobile's `(app)/(tabs)/index.tsx` is no longer a Home tab at all: the Signet rebuild ([#937](https://github.com/pdcarlson/Frapp/issues/937)) made it `ChatHomeScreen`, chat's own home route. Web's chat catch-up surfaces a separate, action-oriented pulse card instead ([`spec/behavior/chat/catch-up.md`](../behavior/chat/catch-up.md)).
-- Read-only aggregation from existing data sources.
-
 ## Global Search
 
 - Single search bar accessible from the top of mobile and web.
@@ -236,9 +231,8 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
-| Geofences | `geofences` | Geo-fenced check-in zones |
+| Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
 | Meetings | `meetings` | Minutes written by hand, or drafted from notes or a recording, with suggested tasks and one template per chapter ([`spec/behavior/meetings.md`](../behavior/meetings.md)) |
-| Vault | `vault` | Encrypted private storage for risk / standards content ([`spec/behavior/vault.md`](../behavior/vault.md)) |
 | AI Q&A | `ai` | Ask-anything over meeting minutes, documents, structured data, announcements, and channel messages from members who agreed ([`spec/behavior/ai.md`](../behavior/ai.md)) |
 
 ## Archetype-specific extras (prototype extras carried forward)
@@ -300,7 +294,7 @@ A module in `BETA_OFF_MODULES` (`@repo/validation`) is off for **every** chapter
 
 Nothing is deleted. Removing the key turns the module back on with each chapter's own setting, configuration and invoices as they were. Reminders are skipped, not queued: once dues returns, the sweep reminds only about invoices still inside its windows ([`billing.md`](../behavior/billing.md)), so one that came due during the beta gets none.
 
-> The toggle UI lists the modules present in `MODULE_CATALOG` today. `vault` and `ai` are catalogued above for roadmap/scoping but are not yet in the toggle set; they join Settings → Modules when those features ship. `meetings` is in the catalog (2026-11-12, #4312) and has its Settings page since it left the beta-off list (2026-11-12).
+> The toggle UI lists the modules present in `MODULE_CATALOG` today. `ai` is catalogued above for roadmap/scoping but is not yet in the toggle set; it joins Settings → Modules when it ships. Vault is not a module: it is a parked design with no code ([`spec/behavior/vault.md`](../behavior/vault.md)), and its row left the table above on 2026-11-24 (#5951). `meetings` is in the catalog (2026-11-12, #4312) and has its Settings page since it left the beta-off list (2026-11-12).
 
 ## AI feature pricing
 

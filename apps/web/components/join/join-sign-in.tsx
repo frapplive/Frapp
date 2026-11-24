@@ -8,6 +8,7 @@ import { AppleMark, GoogleMark } from "@/components/auth/oauth-brand-icons";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
+  DESKTOP_HANDOFF_COPY,
   describeOAuthKickoffError,
   startWebOAuth,
   type OAuthProvider,
@@ -58,14 +59,19 @@ export function JoinSignIn({
     onStart();
     record?.({ step: "sign-in-started", method: provider });
     try {
-      const { error } = await startWebOAuth(
+      const { error, handedOff } = await startWebOAuth(
         createSupabaseBrowserClient(),
         provider,
         window.location.origin,
         returnTo,
       );
       if (error) throw error;
-      // The browser is on its way to the provider; the spinner stays.
+      // The browser is on its way to the provider; the spinner stays. In the
+      // desktop app this window stays put, so the buttons come back.
+      if (handedOff) {
+        toast({ title: DESKTOP_HANDOFF_COPY });
+        setPending(null);
+      }
     } catch (error) {
       reportAuthFailure({ flow: "oauth_start", screen: "/join", error });
       toast({

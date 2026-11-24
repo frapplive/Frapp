@@ -285,6 +285,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useClaimOpenTask: () => ({ mutateAsync: claimMutate, isPending: false }),
   useAssignOpenTask: () => ({ mutateAsync: assignMutate, isPending: false }),
   useReleaseTask: () => ({ mutateAsync: releaseMutate, isPending: false }),
+  useAddToTaskGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -425,26 +426,28 @@ function liveStatus(): HTMLElement | null {
 const filterButton = () =>
   screen.getByRole("button", { name: /^Filter tasks/ });
 
-/** The header's My tasks / Everyone's switch, or null without one. */
-const viewSwitch = () =>
-  screen.queryByRole("radiogroup", { name: "Whose tasks" });
+/**
+ * The header's My tasks / Everyone's views, plain words beside the title
+ * (`ViewLabels`, #5947), or null without them.
+ */
+const viewSwitch = () => screen.queryByRole("tablist", { name: "Whose tasks" });
 
-/** Which view the header's switch is on. */
+/** Which view the header is on. */
 const viewOn = (name: "My tasks" | "Everyone's") =>
   within(viewSwitch()!)
-    .getByRole("radio", { name })
-    .getAttribute("aria-checked") === "true";
+    .getByRole("tab", { name })
+    .getAttribute("aria-selected") === "true";
 
 /**
  * An officer opens on My tasks (#5578); the chapter's board is Everyone's,
- * picked in the header's switch. Does nothing where the page has none.
+ * picked in the header's views. Does nothing where the page has none.
  */
 async function showEveryones() {
-  const radio = viewSwitch()
-    ? within(viewSwitch()!).getByRole("radio", { name: "Everyone's" })
+  const tab = viewSwitch()
+    ? within(viewSwitch()!).getByRole("tab", { name: "Everyone's" })
     : null;
-  if (!radio || radio.getAttribute("aria-checked") === "true") return;
-  await userEvent.click(radio);
+  if (!tab || tab.getAttribute("aria-selected") === "true") return;
+  await userEvent.click(tab);
 }
 
 /** The Filter menu row a Group or Layout pick sits under. */
@@ -588,10 +591,10 @@ describe("TasksBoard subscription gating", () => {
     expect(liveStatus()).not.toBeInTheDocument();
   });
 
-  it("hides Confirm on your own completed task but keeps Send back (#1056)", () => {
-    // The API refuses a self-confirmation, so offering the control would be a
-    // guaranteed 403 plus an optimistic flip-and-revert. Send back is untouched:
-    // it withholds points rather than awarding them.
+  it("hides Confirm and Send back on your own completed task, keeping Mark not done (#1056, #5917)", () => {
+    // The API refuses a self-confirmation and a self-send-back, so offering
+    // either would be a guaranteed 403. Mark not done takes your own "done"
+    // back.
     chapter.active();
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
     render(<TasksBoard />);
@@ -599,7 +602,12 @@ describe("TasksBoard subscription gating", () => {
     expect(
       screen.queryByRole("button", { name: /^confirm$/i }),
     ).not.toBeInTheDocument();
-    expect(sendBackButton()).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /^send back$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^mark not done$/i }),
+    ).toBeEnabled();
     // The missing control is explained on the tile it is missing from.
     expect(
       screen.getByText("You can't confirm your own task."),
@@ -1361,7 +1369,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
       within(addForm()).getByRole("button", { name: /^who/i }),
     );
     await userEvent.click(
-      await screen.findByRole("radio", { name: "Roles and groups" }),
+      await screen.findByRole("tab", { name: "Roles and groups" }),
     );
     // A chapter with a dozen roles or fewer opens every tier.
     await userEvent.click(
@@ -2522,8 +2530,12 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     await user.click(
       within(row).getByRole("button", { name: "Fill out the tabling form" }),
     );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    // The group's Who offers Add people to an officer (#5905).
     expect(
-      await screen.findByRole("dialog", { name: "Fill out the tabling form" }),
+      within(panel).getByRole("button", { name: "Add people" }),
     ).toBeInTheDocument();
   });
 
@@ -2592,6 +2604,44 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     expect(
       within(panel).getByText("Everyone · 14 of 20 done"),
     ).toBeInTheDocument();
+    // An officer can add people from a copy's For (#5905), and the picker
+    // marks the group's other members, not only this copy's, as having it.
+    await user.click(within(panel).getByRole("button", { name: "Add people" }));
+    expect(
+      await screen.findByRole("checkbox", { name: /Cole Martin\s*has it/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: /Paul Carlson\s*has it/ }),
+    ).toBeDisabled();
+  });
+
+  it("offers no Add people on a copy without tasks:manage (#5905)", async () => {
+    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
+    resetListLayoutForTests();
+    permissionsRef.current = [];
+    const user = userEvent.setup();
+    tasksRef.current = GROUP.map((task) => ({
+      ...task,
+      group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
+    }));
+    render(<TasksBoard />);
+    const everyone = screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.includes("Fill out the tabling form"))!;
+    await user.click(
+      within(everyone).getByRole("button", {
+        name: "Fill out the tabling form",
+      }),
+    );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    expect(
+      within(panel).getByText("Everyone · 14 of 20 done"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Add people" }),
+    ).toBeNull();
   });
 
   it("says who a copy went to on a My tasks Grid card too (#5699)", () => {
@@ -2830,7 +2880,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
     );
     // A person only: no roles tab, no mode switch.
     expect(
-      screen.queryByRole("radio", { name: "Roles and groups" }),
+      screen.queryByRole("tab", { name: "Roles and groups" }),
     ).toBeNull();
     await userEvent.click(
       await screen.findByRole("radio", { name: /Cole Martin/ }),

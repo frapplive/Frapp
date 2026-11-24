@@ -589,21 +589,6 @@ export class ActivityEventDto implements ActivityEvent {
   snoozed_until: string | null;
 }
 
-/** A file the caller uploaded. Never served since #4291; see `ActivityMadeByYouDto.files`. */
-export class ActivityFileDto {
-  @ApiProperty({ format: 'uuid' })
-  id: string;
-
-  @ApiProperty({ enum: ['document', 'backwork'] })
-  source: 'document' | 'backwork';
-
-  @ApiProperty()
-  title: string;
-
-  @ApiProperty({ format: 'date-time' })
-  created_at: string;
-}
-
 export class ActivityLinkDto implements ActivityLink {
   @ApiProperty({ format: 'uuid' })
   id: string;
@@ -1040,14 +1025,6 @@ export class ActivityMadeByYouDto {
       'What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`.',
   })
   task_items: ActivityTaskItem[];
-
-  @ApiProperty({
-    type: [ActivityFileDto],
-    deprecated: true,
-    description:
-      'Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.',
-  })
-  files: ActivityFileDto[];
 
   @ApiProperty({
     type: [ActivityEventDto],

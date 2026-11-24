@@ -887,6 +887,92 @@
         ]
       }
     },
+    "/v1/councils": {
+      "post": {
+        "description": "Creates a council of the chosen type at a school where the caller holds a verified school email, seeded with its type's role pack. The caller holds Council admin and the title they picked. 403 `council.school_unverified` without a verified school email there; 409 `council.type_taken` when the school already has a council of that type (`other` aside); 429 `chapter.start_daily_limit` past the daily ceiling chapters share.",
+        "operationId": "CouncilsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCouncilDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCouncilDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council": {
+      "get": {
+        "description": "Its type, recruitment model, whether staff verified it, and its school. Serves the council tenant kind only.",
+        "operationId": "CouncilController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilProfileDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The active council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
     "/v1/chapters/{id}/config": {
       "get": {
         "operationId": "ChapterConfigController_getConfig_v1",
@@ -1360,6 +1446,262 @@
         "summary": "List chapter audit log entries",
         "tags": [
           "Chapter Audit Log"
+        ]
+      }
+    },
+    "/v1/schools": {
+      "get": {
+        "description": "Schools by name, short name or another name, best match first, at most 20. Each says whether a student can verify there today.",
+        "operationId": "SchoolController_search_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Part of the school's name, short name or another name for it (\"rens\", \"RPI\"). Under 2 characters answers an empty list.",
+            "schema": {
+              "maxLength": 100,
+              "example": "rensselaer",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchoolSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/mine": {
+      "get": {
+        "description": "The schools where the caller proved a school address, newest first. Empty for someone who hasn't verified, or skipped.",
+        "operationId": "SchoolController_listMine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MySchoolDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification": {
+      "post": {
+        "description": "Emails a six-digit code to an address on one of the school's verified domains. 404 `school.not_found`; 409 `school.verification_unavailable` when the school can't verify students yet; 400 `school.email.invalid` for anything but a plain `local@domain` address, or `school.email.wrong_domain`; 429 `school.code.cooldown` within a minute of the last code, or `school.code.rate_limited` past the hourly ceilings per address, IP or account; 503 `school.code.send_failed`.",
+        "operationId": "SchoolController_startVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentSchoolCodeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a code to your school email",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification/confirm": {
+      "post": {
+        "description": "Checks the code and makes the caller a member of the school. 400 `school.code.missing`, `school.code.expired` or `school.code.wrong`; 429 `school.code.too_many_attempts`; 409 `school.email.taken` when another account verified that address, or `school.verification_unavailable`.",
+        "operationId": "SchoolController_confirmVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm your school email with its code",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/school": {
+      "get": {
+        "description": "The school in `x-school-id` and the caller's membership there. 403 `school.context.invalid` for a school the caller isn't verified at (or that doesn't exist); 400 `school.context.required` without the header.",
+        "operationId": "SchoolPageController_get_v1",
+        "parameters": [
+          {
+            "name": "x-school-id",
+            "in": "header",
+            "description": "The school a campus page (`/s/<slug>`) acts in.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The school a campus page names",
+        "tags": [
+          "Schools"
         ]
       }
     },
@@ -2197,6 +2539,95 @@
           }
         ],
         "summary": "Whether Frapp's notifications reach each member's phone",
+        "tags": [
+          "Members"
+        ]
+      }
+    },
+    "/v1/members/me/custom-fields": {
+      "get": {
+        "operationId": "MemberController_getOwnCustomFields_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      },
+      "patch": {
+        "description": "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.",
+        "operationId": "MemberController_updateOwnCustomFields_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnCustomFieldsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set your own custom-field values",
         "tags": [
           "Members"
         ]
@@ -12608,6 +13039,62 @@
         ]
       }
     },
+    "/v1/tasks/{id}/group/add": {
+      "post": {
+        "operationId": "TaskController_addToGroup_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddToTaskGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddToTaskGroupResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add members to a group task: each gets a To do copy of it (#5905)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
     "/v1/tasks/{id}/group/remove": {
       "post": {
         "operationId": "TaskController_removeFromGroup_v1",
@@ -14536,6 +15023,985 @@
           }
         ],
         "summary": "Extend a bid (idempotent; a repeat bid returns 201 again, not a conflict)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/pipeline": {
+      "get": {
+        "operationId": "RushPipelineController_pipeline_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushPipelineDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, tags and candidates, for the pipeline",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/stages": {
+      "get": {
+        "operationId": "RushPipelineController_stages_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, in board order (written on first read)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveStages_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRushStagesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the stage list: rename, reorder, hide and add stages",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/stage": {
+      "patch": {
+        "operationId": "RushPipelineController_moveStage_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRushCandidateStageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateStageDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a candidate to a stage (a Closed stage needs a reason)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags": {
+      "post": {
+        "operationId": "RushPipelineController_createTag_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a tag to the chapter’s list",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags/{tagId}": {
+      "patch": {
+        "operationId": "RushPipelineController_renameTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename a tag",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a tag, taking it off every candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/tags": {
+      "put": {
+        "operationId": "RushPipelineController_setTags_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushCandidateTagsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateTagsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set a candidate's tags",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/rating": {
+      "put": {
+        "operationId": "RushPipelineController_rate_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateRushCandidateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the caller's 1-to-5 rating of a candidate (replaces it)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes": {
+      "get": {
+        "operationId": "RushPipelineController_notes_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushNoteDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's notes, newest first (empty for a candidate linked to the caller)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_addNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Write a note on a candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes/{noteId}": {
+      "patch": {
+        "operationId": "RushPipelineController_editNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit your own note",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a note: your own, or any with `rush:manage`",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/settings": {
+      "get": {
+        "operationId": "RushPipelineController_settings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveSettings_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/contacts": {
+      "get": {
+        "operationId": "RushPipelineController_contacts_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushContactDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's logged contacts, newest first (notes only with `rush:read_notes`)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_logContact_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogRushContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushContactDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/owner": {
+      "put": {
+        "operationId": "RushPipelineController_setOwner_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushOwnerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushOwnerDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage`",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/follow-up": {
+      "put": {
+        "operationId": "RushPipelineController_setFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushFollowUpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_clearFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clear the candidate's follow-up",
         "tags": [
           "Rush"
         ]
@@ -17448,64 +18914,9 @@
         ]
       }
     },
-    "/v1/activity-feed": {
-      "get": {
-        "description": "Normalized, newest-first rows aggregated from events, the caller’s own point changes, backwork uploads (only when the caller can view Backwork), new members, and the announcements channel. Read-only aggregation — no separate feed table (`spec/behavior/activity-feed.md`).",
-        "operationId": "ActivityFeedController_getFeed_v1",
-        "parameters": [
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "Max feed rows to return across all domains combined. Clamped to 1–50 inclusive; omitted defaults to 20.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20,
-              "example": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ActivityFeedItemDto"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get the chapter activity feed",
-        "tags": [
-          "Activity Feed"
-        ]
-      }
-    },
     "/v1/activity": {
       "get": {
-        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat. Not `GET /v1/activity-feed`, which is a feed of what happened in the chapter.",
+        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat.",
         "operationId": "ActivityController_getActivity_v1",
         "parameters": [
           {
@@ -23486,6 +24897,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23635,6 +25076,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23772,6 +25243,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23864,6 +25365,152 @@
         },
         "required": [
           "storage_path"
+        ]
+      },
+      "CreateCouncilDto": {
+        "type": "object",
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The school the council is at. The caller must hold a verified school email there."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "example": "RPI IFC",
+            "maxLength": 80
+          },
+          "title_key": {
+            "type": "string",
+            "description": "The founder's title: a seeded title's key from the type's role pack (`pickableCouncilTitles` in `@repo/validation`), or `custom` with `custom_title`.",
+            "example": "vp_recruitment",
+            "maxLength": 40
+          },
+          "custom_title": {
+            "type": "string",
+            "description": "With `title_key: 'custom'`: the founder's own title, a new role in the Executive board.",
+            "example": "Recruitment Chair",
+            "maxLength": 40
+          },
+          "accept_terms_privacy": {
+            "type": "boolean",
+            "description": "The founder accepted the Terms of Service and Privacy Policy, for the council and for themselves. Must be true, as chapter onboarding requires (spec/behavior/legal.md)."
+          }
+        },
+        "required": [
+          "school_id",
+          "council_type",
+          "name",
+          "title_key",
+          "accept_terms_privacy"
+        ]
+      },
+      "CreatedCouncilDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "example": "council"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ]
+      },
+      "CouncilSchoolDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name"
+        ]
+      },
+      "CouncilProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ]
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether Frapp staff verified the council (`council_verified_at`). Every council starts unverified."
+          },
+          "school": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CouncilSchoolDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "council_type",
+          "recruitment_model",
+          "verified",
+          "school"
         ]
       },
       "BetaConfigDto": {
@@ -24339,6 +25986,134 @@
           "created_at"
         ]
       },
+      "SchoolSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school's current URL slug (`/s/<slug>`, ADR-27).",
+            "example": "rpi"
+          },
+          "verifiable": {
+            "type": "boolean",
+            "description": "Whether a student can verify at this school today: the school is verified and has at least one verified email domain."
+          },
+          "email_domains": {
+            "description": "The school's verified email domains, for the address field's placeholder. Empty when it can't verify students.",
+            "example": [
+              "rpi.edu"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name",
+          "slug",
+          "verifiable",
+          "email_domains"
+        ]
+      },
+      "MySchoolDto": {
+        "type": "object",
+        "properties": {
+          "school": {
+            "$ref": "#/components/schemas/SchoolSummaryDto"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pnm",
+              "member",
+              "alum"
+            ]
+          },
+          "verified_email": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school address the code went to."
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "school",
+          "status",
+          "verified_email",
+          "verified_at"
+        ]
+      },
+      "StartSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The caller's school address. Only an address on one of the school's verified domains is sent a code.",
+            "example": "student@rpi.edu",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "SentSchoolCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address the code went to, in lower case."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code stops working."
+          },
+          "resend_after_seconds": {
+            "type": "number",
+            "description": "Seconds before another code can be asked for.",
+            "example": 60
+          }
+        },
+        "required": [
+          "email",
+          "expires_at"
+        ]
+      },
+      "ConfirmSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The six-digit code from the email.",
+            "example": "123456",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
       "PermissionCatalogEntryDto": {
         "type": "object",
         "properties": {
@@ -24368,7 +26143,9 @@
               "documents",
               "geofences",
               "reports",
-              "billing"
+              "billing",
+              "council",
+              "council-recruitment"
             ],
             "description": "The module the permission belongs to: a module catalog key, or `chapter` for a chapter-level permission."
           },
@@ -24954,6 +26731,105 @@
         "required": [
           "scope",
           "members"
+        ]
+      },
+      "OwnCustomFieldDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "decimal",
+              "phone",
+              "select",
+              "boolean"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "self",
+              "chapter",
+              "exec",
+              "president"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "choices": {
+            "nullable": true,
+            "description": "A select field's choices; null for every other type",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_length": {
+            "type": "number",
+            "nullable": true,
+            "description": "A text field's own length cap, when it sets one"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "field_id",
+          "key",
+          "label",
+          "type",
+          "visibility",
+          "required",
+          "choices",
+          "max_length",
+          "value"
+        ]
+      },
+      "OwnCustomFieldValueDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or \"true\"/\"false\". null or an empty string clears it; a required field with a value cannot be cleared."
+          }
+        },
+        "required": [
+          "field_id",
+          "value"
+        ]
+      },
+      "UpdateOwnCustomFieldsDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnCustomFieldValueDto"
+            }
+          }
+        },
+        "required": [
+          "values"
         ]
       },
       "UpdateMemberRolesDto": {
@@ -25860,7 +27736,7 @@
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "A `link`'s address: http or https only. Never fetched."
+            "description": "A `link`'s address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the list already holds that address). Never fetched."
           },
           "document_id": {
             "type": "string",
@@ -31994,7 +33870,7 @@
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "A `link`'s address: http or https only. Never fetched."
+            "description": "A `link`'s address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the list already holds that address). Never fetched."
           },
           "document_id": {
             "type": "string",
@@ -32761,6 +34637,44 @@
         },
         "required": [
           "done"
+        ]
+      },
+      "AddToTaskGroupDto": {
+        "type": "object",
+        "properties": {
+          "assignee_ids": {
+            "description": "The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.",
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "assignee_ids"
+        ]
+      },
+      "AddToTaskGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "description": "The members who got a copy; anyone who already had one is left out.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "group": {
+            "$ref": "#/components/schemas/TaskGroupSummaryDto"
+          }
+        },
+        "required": [
+          "added",
+          "group"
         ]
       },
       "RemoveFromTaskGroupDto": {
@@ -34563,6 +36477,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -34580,7 +36508,7 @@
           },
           "vote_count": {
             "type": "number",
-            "description": "Ballot count. Voter names are never returned."
+            "description": "Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0."
           },
           "viewer_has_voted": {
             "type": "boolean",
@@ -34594,10 +36522,10 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at",
-          "vote_count",
           "viewer_has_voted"
         ]
       },
@@ -34650,6 +36578,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -34677,9 +36619,681 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at"
+        ]
+      },
+      "RushStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "What a candidate's `stage` holds. Fixed once made; a rename changes `label` only."
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ]
+          },
+          "position": {
+            "type": "number",
+            "description": "Order within its category."
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "key",
+          "label",
+          "category",
+          "position",
+          "hidden",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushTagDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "label",
+          "created_at"
+        ]
+      },
+      "RushPipelineCandidateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          },
+          "bid_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended"
+            ]
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_by_name": {
+            "type": "string",
+            "description": "Who added the candidate, by current name."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "rating_average": {
+            "type": "number",
+            "nullable": true,
+            "description": "Average 1-to-5 rating; null when nobody has rated. Absent without `rush:view_results`."
+          },
+          "rating_count": {
+            "type": "number",
+            "description": "How many members rated. Absent without `rush:view_results`."
+          },
+          "viewer_rating": {
+            "type": "number",
+            "nullable": true,
+            "description": "The caller's own rating, or null."
+          },
+          "vote_count": {
+            "type": "number",
+            "description": "Ballot count. Absent without `rush:view_results`."
+          },
+          "viewer_has_voted": {
+            "type": "boolean"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The member who is the prospect's main point of contact."
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_contact_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day of the newest logged contact."
+          },
+          "last_contact_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "last_contact_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day the open follow-up comes due."
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who the follow-up is for; they get the push."
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "user_id",
+          "stage",
+          "closed_reason",
+          "bid_status",
+          "created_by",
+          "created_by_name",
+          "created_at",
+          "tag_ids",
+          "viewer_rating",
+          "viewer_has_voted",
+          "owner_id",
+          "owner_name",
+          "last_contact_on",
+          "last_contact_by",
+          "last_contact_by_name",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
+        ]
+      },
+      "RushPipelineDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "description": "In board order: by category, then position.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageDto"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushTagDto"
+            }
+          },
+          "candidates": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushPipelineCandidateDto"
+            }
+          },
+          "stale_days": {
+            "type": "number",
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
+          }
+        },
+        "required": [
+          "stages",
+          "tags",
+          "candidates",
+          "stale_days"
+        ]
+      },
+      "RushStageInputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "An existing stage. Omit to add a new one."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ],
+            "description": "An existing stage's category can't change."
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "category",
+          "hidden"
+        ]
+      },
+      "SaveRushStagesDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "maxItems": 30,
+            "description": "Every stage, in order. Each existing stage must be included: stages are hidden, never removed. New and Closed each keep a visible stage.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageInputDto"
+            }
+          }
+        },
+        "required": [
+          "stages"
+        ]
+      },
+      "MoveRushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's visible stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response"
+            ],
+            "description": "Required for a Closed stage, refused for any other."
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "RushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "closed_reason"
+        ]
+      },
+      "RushTagInputDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "SetRushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "description": "The candidate's tags after the call, replacing what it had.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RateRushCandidateDto": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "rating"
+        ]
+      },
+      "RushNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "author_id",
+          "author_name",
+          "body",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushNoteInputDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "RushSettingsDto": {
+        "type": "object",
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
+          }
+        },
+        "required": [
+          "stale_days"
+        ]
+      },
+      "RushContactDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by_name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "Absent without `rush:read_notes`, and on a prospect linked to the reader."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "logged_by",
+          "logged_by_name",
+          "kind",
+          "contacted_on",
+          "created_at"
+        ]
+      },
+      "LogRushContactDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date",
+            "description": "The day of the contact: today or earlier."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "Read only by roles that can read recruitment notes."
+          }
+        },
+        "required": [
+          "kind",
+          "contacted_on"
+        ]
+      },
+      "SetRushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`."
+          }
+        },
+        "required": [
+          "owner_id"
+        ]
+      },
+      "RushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "owner_name"
+        ]
+      },
+      "SetRushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "due_on": {
+            "type": "string",
+            "format": "date",
+            "description": "Today or later."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "for_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Who it is for. Defaults to the owner, else the caller."
+          }
+        },
+        "required": [
+          "due_on"
+        ]
+      },
+      "RushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
         ]
       },
       "GeofenceCircleDto": {
@@ -36208,82 +38822,6 @@
           }
         }
       },
-      "ActivityFeedActorDto": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "display_name": {
-            "type": "string",
-            "description": "Empty when the actor could not be resolved against the current roster (e.g. a member who has since left the chapter) — the server does not invent a placeholder name."
-          },
-          "avatar_url": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "user_id",
-          "display_name",
-          "avatar_url"
-        ]
-      },
-      "ActivityFeedItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable within one response; not a database primary key."
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "event_created",
-              "event_upcoming",
-              "points_change",
-              "backwork_upload",
-              "member_joined",
-              "announcement"
-            ]
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Feed ordering key — newest first."
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "nullable": true
-          },
-          "actor": {
-            "nullable": true,
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ActivityFeedActorDto"
-              }
-            ]
-          },
-          "target_id": {
-            "type": "string",
-            "description": "The underlying record id (event, point transaction, backwork resource, joining member’s user id, or announcement channel id) for client-side navigation."
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "timestamp",
-          "title",
-          "body",
-          "actor",
-          "target_id"
-        ]
-      },
       "ActivityTaskDto": {
         "type": "object",
         "properties": {
@@ -37320,35 +39858,6 @@
           "taking_notes"
         ]
       },
-      "ActivityFileDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "document",
-              "backwork"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "source",
-          "title",
-          "created_at"
-        ]
-      },
       "ActivityMadeByYouDto": {
         "type": "object",
         "properties": {
@@ -37387,14 +39896,6 @@
             },
             "description": "What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`."
           },
-          "files": {
-            "deprecated": true,
-            "description": "Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ActivityFileDto"
-            }
-          },
           "events": {
             "description": "Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here.",
             "type": "array",
@@ -37407,7 +39908,6 @@
           "polls",
           "tasks",
           "task_items",
-          "files",
           "events"
         ]
       },

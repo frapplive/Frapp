@@ -489,12 +489,6 @@ export interface ActivityView {
      */
     task_items: ActivityTaskItem[];
     /**
-     * Always empty. Uploads left Activity (#4291); the field stays only so a
-     * client built before that, an open web tab or a phone's over-the-air
-     * bundle, does not fail on its absence. Removal is tracked separately.
-     */
-    files: unknown[];
-    /**
      * Events the caller made that have not ended, soonest first. A recurring
      * series is one row, its next meeting. Events made before creators were
      * recorded are not here.
@@ -1262,7 +1256,6 @@ export class ActivityService {
         polls: pollLists.mine,
         tasks: taskLists.assigned.slice(0, LIST_LIMIT),
         task_items: taskLists.assignedItems,
-        files: [],
         events: myEvents.slice(0, LIST_LIMIT),
       },
       needs_you_count: needsYouCount,

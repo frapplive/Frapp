@@ -936,6 +936,52 @@ export function useRemoveFromTaskGroup() {
   });
 }
 
+/** What `POST /v1/tasks/{id}/group/add` answers (#5905). */
+export type AddToTaskGroupResult =
+  components["schemas"]["AddToTaskGroupResponseDto"];
+
+/**
+ * Add members to a group task after it's made (#5905), the mirror of
+ * {@link useRemoveFromTaskGroup}: each gets a To do copy of it. `id` is any
+ * copy of the group. **Not optimistic**: the new copies are rows the server
+ * makes, and an alum or a stranger is a 400 the caller says. A member who
+ * already has a copy is skipped, so a lost answer is safe to try again.
+ * Every task read and Activity are read again, since each copy carries the
+ * group's counts.
+ */
+export function useAddToTaskGroup() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  return useMutation({
+    mutationKey: ["tasks", "add-to-task-group"],
+    retry: false,
+    mutationFn: async ({
+      id,
+      assigneeIds,
+    }: {
+      id: string;
+      assigneeIds: string[];
+    }): Promise<AddToTaskGroupResult> => {
+      const { data, error } = await client.POST("/v1/tasks/{id}/group/add", {
+        params: { path: { id } },
+        body: { assignee_ids: assigneeIds },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: taskKeys.all }),
+        chapterId
+          ? queryClient.invalidateQueries({
+              queryKey: activityKeys.chapter(chapterId),
+            })
+          : undefined,
+      ]),
+  });
+}
+
 /**
  * Check off or uncheck one of a task's subtasks (#4003), optimistically: the
  * box flips on the tap, and a refusal puts it back. The assignee or an

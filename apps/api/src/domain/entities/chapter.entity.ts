@@ -1,4 +1,9 @@
-import type { SubscriptionStatus, TenantKind } from '@repo/validation';
+import type {
+  CouncilType,
+  RecruitmentModel,
+  SubscriptionStatus,
+  TenantKind,
+} from '@repo/validation';
 
 /** `@repo/validation`'s, the one declaration the clients read too. */
 export type { SubscriptionStatus };
@@ -14,6 +19,14 @@ export interface Chapter {
    * `org_archetype`.
    */
   kind?: TenantKind;
+  /**
+   * A council's own fields (#5933, `school-layer.md` § 2.3), all null on a
+   * chapter: `chapters_council_fields_kind` holds them to the kind.
+   */
+  council_type?: CouncilType | null;
+  council_school_id?: string | null;
+  council_verified_at?: string | null;
+  recruitment_model?: RecruitmentModel | null;
   stripe_customer_id: string | null;
   subscription_status: SubscriptionStatus;
   subscription_id: string | null;

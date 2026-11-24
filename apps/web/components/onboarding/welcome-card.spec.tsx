@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   events: [] as unknown[],
   roles: [] as unknown[],
   clear: vi.fn(),
+  eventsOn: true,
+  eventsEnabled: [] as unknown[],
 }));
 
 vi.mock("@repo/hooks", () => ({
@@ -14,12 +16,21 @@ vi.mock("@repo/hooks", () => ({
     data: { id: "u-1", display_name: "Jordan Avery", avatar_url: null },
   }),
   useCurrentChapter: () => ({ data: { name: "Beta Theta Omega" } }),
-  useEvents: () => ({ data: mocks.events, isPending: false }),
+  useEvents: (options: { enabled?: boolean }) => {
+    mocks.eventsEnabled.push(options.enabled);
+    return options.enabled === false
+      ? { data: undefined, isPending: true }
+      : { data: mocks.events, isPending: false };
+  },
   usePickableRoles: () => ({ roles: mocks.roles, isLoading: false }),
 }));
 vi.mock("@/lib/stores/chapter-store", () => ({
   useChapterStore: (pick: (s: { activeChapterId: string }) => unknown) =>
     pick({ activeChapterId: "ch-1" }),
+}));
+vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
+  useChapterModuleGate: () => (key: string) =>
+    key === "events" ? mocks.eventsOn : true,
 }));
 vi.mock("@/lib/onboarding/welcome-due", () => ({
   isWelcomeDue: () => mocks.due,
@@ -46,6 +57,17 @@ describe("WelcomeCard", () => {
     mocks.due = true;
     mocks.events = [];
     mocks.roles = [];
+    mocks.eventsOn = true;
+    mocks.eventsEnabled = [];
+  });
+
+  it("with Events off (a council, #5933) greets without reading events", () => {
+    mocks.eventsOn = false;
+    render(<WelcomeCard inDefaultChannel />);
+    expect(screen.getByRole("heading")).toBeInTheDocument();
+    expect(mocks.eventsEnabled.every((enabled) => enabled === false)).toBe(
+      true,
+    );
   });
 
   it("greets by first name and lists the next two events", () => {

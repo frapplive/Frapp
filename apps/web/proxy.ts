@@ -28,10 +28,12 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/settings",
   "/ask",
   "/meetings",
+  "/rush",
   "/whats-new",
   "/join",
   "/no-access",
   "/welcome",
+  "/start-council",
 ];
 
 function needsAuth(pathname: string) {
@@ -219,8 +221,8 @@ export async function proxy(request: NextRequest) {
  *
  * Everything else keeps the proxy on every request, prefetch or not:
  *
- * - `/`, the auth routes, `/join`, `/no-access`, `/welcome` and `/dashboard`
- *   are static.
+ * - `/`, the auth routes, `/join`, `/no-access`, `/welcome`, `/start-council`
+ *   and `/dashboard` are static.
  *   Next prefetches a static route whole and reuses that for the navigation
  *   with no second request, so a skipped prefetch would skip the redirect.
  * - `/` stays the plain string because Next only adds the root's transport
@@ -246,10 +248,11 @@ export const config = {
     "/join",
     "/no-access",
     "/welcome",
+    "/start-council",
     "/dashboard/:path*",
     {
       source:
-        "/((?:activity|members|alumni|roles|events|tasks|service|documents|backwork|discord-import|geofences|study|chat|chat-admin|points|billing|reports|profile|preferences|settings|ask|meetings|whats-new)(?:/.*)?)",
+        "/((?:activity|members|alumni|roles|events|tasks|service|documents|backwork|discord-import|geofences|study|chat|chat-admin|points|billing|reports|profile|preferences|settings|ask|meetings|rush|whats-new)(?:/.*)?)",
       missing: [{ type: "header", key: "next-router-prefetch" }],
     },
   ],

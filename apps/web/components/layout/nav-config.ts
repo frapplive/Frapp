@@ -6,13 +6,15 @@ import {
   DocumentsGlyph,
   EventsGlyph,
   PointsGlyph,
+  RecruitmentGlyph,
   ServiceGlyph,
   StudyGlyph,
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
-import { SECTION_NAMES } from "@repo/validation";
+import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
+import { SECTION_NAMES, type TenantKind } from "@repo/validation";
 
 /**
  * Permission-aware dashboard navigation.
@@ -56,7 +58,8 @@ import { SECTION_NAMES } from "@repo/validation";
  * Permission semantics:
  * - `requirePermission` — a single permission string; hide when absent.
  * - `requireAnyOf` — shown when the caller holds at least one listed.
- * - Omitting both renders the item unconditionally.
+ * - `requireAllOf` — shown only when the caller holds every one listed.
+ * - Omitting all three renders the item unconditionally.
  *
  * Every row links to a built route. There are no roadmap rows: a row drawn
  * disabled with nothing behind it is a dead-end control, and the "Coming soon"
@@ -81,15 +84,42 @@ import { SECTION_NAMES } from "@repo/validation";
  *   the Study zones tool, not on its page. Nothing hides while permissions,
  *   modules or the list are still loading, or after the list's read fails.
  *
+ * Tenant-kind gating (#5933):
+ * - `kinds` — the tenant kinds a row serves. Omitted, a row is a chapter's
+ *   only. A council (ADR-27) is a tenant served by chat, members, roles,
+ *   invites and the audit log, and every other chapter route answers it 403
+ *   (`chapter.context.invalid`), so a council's nav shows only the rows that
+ *   name `council` here: Chat, Direct messages and Directory. Activity, which
+ *   has no module to switch off, is the row this gate exists for. Opt-in, so
+ *   a new chapter row never reaches a council by default. While the kind is
+ *   unknown nothing hides, as with the module gate (`useTenantKind`).
+ *
  * Section gating is derived, never declared: a section renders only when at
  * least one of its items survives every gate (`isNavItemVisible` in
  * `protected-nav-item.tsx`), so a heading never announces an empty group.
  */
 
 type NavPermissionRule =
-  | { requirePermission?: undefined; requireAnyOf?: undefined }
-  | { requirePermission: string; requireAnyOf?: undefined }
-  | { requirePermission?: undefined; requireAnyOf: readonly string[] };
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission: string;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf: readonly string[];
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf: readonly string[];
+    };
 
 export type NavItem = {
   id: string;
@@ -117,7 +147,38 @@ export type NavItem = {
    * gating" above). Omit for a feature that works with nothing in it.
    */
   hiddenUntilSetUp?: UnsetFeatureKey;
+  /** The tenant kinds this row serves; omitted, chapters only (above). */
+  kinds?: readonly TenantKind[];
+  /**
+   * Named in the chapter's own word (`vocab()` in `@repo/org-archetypes`):
+   * the recruitment row reads Rush, Recruitment or Intake as the chapter
+   * calls it, never a hardcoded "Rush" (`spec/behavior/rush.md` §
+   * Vocabulary). `label` is then the IFC default, what shows before the
+   * chapter read answers. Resolve it with {@link navItemLabel}.
+   */
+  vocabLabel?: VocabKey;
 } & NavPermissionRule;
+
+/** A row a council's space shows as well as a chapter's. */
+const EVERY_TENANT: readonly TenantKind[] = ["chapter", "council"];
+
+/** A row's label in the chapter's words (see `vocabLabel`). */
+export function navItemLabel(
+  item: Pick<NavItem, "label" | "vocabLabel">,
+  vocabulary?: VocabConfig,
+): string {
+  return item.vocabLabel ? vocab(item.vocabLabel, vocabulary) : item.label;
+}
+
+/** The row with its label in the chapter's words. */
+export function withChapterWords(
+  item: NavItem,
+  vocabulary?: VocabConfig,
+): NavItem {
+  return item.vocabLabel
+    ? { ...item, label: navItemLabel(item, vocabulary) }
+    : item;
+}
 
 export type NavSection = {
   id: string;
@@ -158,6 +219,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         icon: ChatGlyph,
         href: "/chat",
         description: "The chapter's channels and announcements.",
+        kinds: EVERY_TENANT,
       },
       {
         id: "direct",
@@ -165,6 +227,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         icon: DirectMessagesGlyph,
         href: "/chat?view=direct",
         description: "Your one-to-one and group conversations.",
+        kinds: EVERY_TENANT,
       },
     ],
   },
@@ -224,6 +287,19 @@ export const DASHBOARD_NAV: NavSection[] = [
         href: "/service",
         description: "Log service hours and approve entries for points.",
         module: "hours",
+      },
+      {
+        // The recruitment pipeline (#5924): a board and a list of prospects.
+        // Its routes need `members:view` and `rush:view` with the module on
+        // (`rush-pipeline.controller.ts`), so the row asks for both.
+        id: "rush",
+        label: vocab("recruitment"),
+        vocabLabel: "recruitment",
+        icon: RecruitmentGlyph,
+        href: "/rush",
+        description: "Prospects by stage, with tags, ratings and notes.",
+        module: "rush",
+        requireAllOf: ["members:view", "rush:view"],
       },
     ],
   },
@@ -287,6 +363,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         description:
           "Actives and alumni, profile cards, invites, deactivation.",
         requirePermission: "members:view",
+        kinds: EVERY_TENANT,
       },
     ],
   },

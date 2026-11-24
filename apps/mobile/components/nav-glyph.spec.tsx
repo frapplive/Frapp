@@ -15,6 +15,7 @@ import {
   DocumentsGlyph,
   DuesGlyph,
   HostCheckInGlyph,
+  RecruitmentGlyph,
   ServiceGlyph,
   SettingsGlyph,
   StudyGlyph,
@@ -56,6 +57,7 @@ const HUB: ReadonlyArray<[string, typeof StudyGlyph, NavGlyphName]> = [
   ["Settings", SettingsGlyph, "settings"],
   ["Create a chapter", ChapterGlyph, "chapter"],
   ["Host check-in", HostCheckInGlyph, "hostCheckIn"],
+  ["Recruitment", RecruitmentGlyph, "recruitment"],
 ];
 
 describe("shared nav glyphs on mobile", () => {

@@ -2347,9 +2347,9 @@ export function ChatShell({
     Direct messages read like the phone's Messages screen (#3774): newest
     conversation first, each with its last line, worded by the rule both
     clients share (`channelPreviewLine`; spec/behavior/chat/README.md
-    § Channel list previews). The channels rail draws neither, so the read
-    runs there only while the member sorts by Recent (#2877), which orders
-    the rail by the same times and draws no line from them.
+    § Channel list previews). The channels rail draws neither and is always
+    in the chapter's order (#5947), so the read runs for Direct messages
+    alone.
 
     The list waits for the read's first answer behind its skeleton, as the
     phone's does, so the rows never re-sort under the pointer. After that the
@@ -2357,10 +2357,7 @@ export function ChatShell({
     and so the order and the lines. A hidden DM has no latest row (the server
     leaves it out), so it gets no line rather than a false "No messages yet".
   */
-  const recentSort = !directView && sidebarPreferences.sort === "recent";
-  const latestQuery = useChannelLatestMessages({
-    enabled: directView || recentSort,
-  });
+  const latestQuery = useChannelLatestMessages({ enabled: directView });
   const latestRows = latestQuery.data;
   // The rows' times read this clock, so "4:46 PM" becomes "Yesterday" on a
   // tab left open: identical refetches keep `latestRows` stable (#5519).
@@ -2406,13 +2403,6 @@ export function ChatShell({
     }
     return { at, previews, meta };
   }, [directView, latestRows, railChannels, userId, nameFor, now]);
-  // Recent on the channels rail (#2877): each channel's latest message time.
-  // Absent until the read answers or if it failed, when the shared
-  // arrangement keeps the chapter's order rather than sorting on nothing.
-  const channelLatestAt = useMemo(() => {
-    if (!recentSort || !latestRows) return undefined;
-    return new Map(latestRows.map((row) => [row.channel_id, row.created_at]));
-  }, [recentSort, latestRows]);
   // A failed fetch must not read as "everything is read". `ChannelList` maps
   // an absent row to zero, so handing it an empty map on error would render
   // every row calm and unbadged — telling a member they have no @-mentions at
@@ -3394,10 +3384,6 @@ export function ChatShell({
           ) : null}
           <ChannelFilters
             filters={sidebarPreferences.filters}
-            // Direct messages always run newest first, so their panel
-            // offers no sort.
-            sort={directView ? undefined : sidebarPreferences.sort}
-            reorderable={!directView && !!railReorder}
             onChange={sidebarControls.onSetFilters}
           />
           {/*
@@ -3459,14 +3445,12 @@ export function ChatShell({
           {channelsPaneState === "ready" && !directView ? (
             <SetupChecklistSection />
           ) : null}
-          {channelsPaneState === "ready" &&
-          (directView || recentSort) &&
-          !latestSettled ? (
+          {channelsPaneState === "ready" && directView && !latestSettled ? (
             <ChannelListSkeleton />
           ) : channelsPaneState === "ready" ? (
             <ChannelList
               kind={view}
-              latestAt={directView ? directLatest?.at : channelLatestAt}
+              latestAt={directLatest?.at}
               previews={directLatest?.previews}
               rowMeta={directLatest?.meta}
               viewerId={userId}
@@ -3482,9 +3466,8 @@ export function ChatShell({
               sidebar={sidebarControls}
               // The chapter's order is for channels: a DM is never placed in
               // it, and the empty categories an officer drags onto would sit
-              // in a list of conversations (#3774). Under Recent or A–Z the
-              // list keeps categories draggable and turns off channel-row
-              // drag itself (#2877).
+              // in a list of conversations (#3774). Channels are always in
+              // that order (#5947), so their rows always drag.
               reorder={directView ? undefined : railReorder}
               onCreateChannel={
                 canManageChannel && !directView
@@ -4517,6 +4500,7 @@ export function ChatShell({
             isModuleEnabled={isModuleEnabled}
             recruitmentVocab={recruitmentVocab}
             canAnnounce={canAnnounce}
+            permissions={permissionsPayload?.permissions}
             slashCommandsStatus={slashCommandsStatus}
             onRetrySlashCommands={onRetrySlashCommands}
             // Never `disabled` while offline: the send path enqueues to the

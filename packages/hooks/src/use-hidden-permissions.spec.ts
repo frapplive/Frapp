@@ -9,6 +9,7 @@ import {
 const h = vi.hoisted(() => ({
   heldOff: new Set<string>(),
   consent: { data: undefined as unknown },
+  current: { data: undefined as unknown },
 }));
 
 vi.mock("@repo/validation", async (importOriginal) => ({
@@ -21,9 +22,14 @@ vi.mock("./use-ai", async (importOriginal) => ({
   useAiConsent: () => h.consent,
 }));
 
+vi.mock("./use-chapters", () => ({
+  useCurrentChapter: () => h.current,
+}));
+
 beforeEach(() => {
   h.heldOff.clear();
   h.consent = { data: undefined };
+  h.current = { data: undefined };
 });
 
 describe("isPermissionHidden (#4504)", () => {
@@ -50,6 +56,33 @@ describe("isPermissionHidden (#4504)", () => {
     }
   });
 
+  // #5933: a chapter is offered no council key; a council its own keys and
+  // the chapter keys it shares, less recruitment under the `none` model.
+  it("filters by the tenant's kind", () => {
+    expect(isPermissionHidden("council:announce", true)).toBe(true);
+    expect(
+      isPermissionHidden("council:announce", true, { kind: "chapter" }),
+    ).toBe(true);
+    const ifc = {
+      kind: "council" as const,
+      recruitmentModel: "open_bidding" as const,
+    };
+    expect(isPermissionHidden("council:announce", true, ifc)).toBe(false);
+    expect(isPermissionHidden("council:recruitment_view", true, ifc)).toBe(
+      false,
+    );
+    expect(isPermissionHidden("roles:manage", true, ifc)).toBe(false);
+    expect(isPermissionHidden("points:adjust", true, ifc)).toBe(true);
+    const nphc = {
+      kind: "council" as const,
+      recruitmentModel: "none" as const,
+    };
+    expect(isPermissionHidden("council:recruitment_view", true, nphc)).toBe(
+      true,
+    );
+    expect(isPermissionHidden("council:announce", true, nphc)).toBe(false);
+  });
+
   it("leaves every other switch alone, whatever is held off", () => {
     h.heldOff.add("meetings");
     expect(isPermissionHidden("events:create", false)).toBe(false);
@@ -73,5 +106,14 @@ describe("useIsPermissionHidden (#4504)", () => {
     const { result } = renderHook(() => useIsPermissionHidden());
     expect(result.current("ai:use")).toBe(false);
     expect(result.current("events:create")).toBe(false);
+  });
+
+  it("reads the open tenant's kind (#5933)", () => {
+    h.consent = { data: { version: 1 } };
+    h.current = { data: { kind: "council", recruitment_model: "none" } };
+    const { result } = renderHook(() => useIsPermissionHidden());
+    expect(result.current("points:adjust")).toBe(true);
+    expect(result.current("council:announce")).toBe(false);
+    expect(result.current("council:recruitment_view")).toBe(true);
   });
 });

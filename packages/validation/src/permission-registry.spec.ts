@@ -49,7 +49,10 @@ describe("PERMISSION_REGISTRY", () => {
       expect(modules.has(entry.module)).toBe(true);
       expect(entry.label.trim()).not.toBe("");
       expect(entry.description.trim()).not.toBe("");
-      expect(entry.scope).toBe("chapter");
+      // Council keys are council-scoped (#5933); every other is a chapter's.
+      expect(entry.scope).toBe(
+        entry.permission.startsWith("council:") ? "council" : "chapter",
+      );
     }
   });
 

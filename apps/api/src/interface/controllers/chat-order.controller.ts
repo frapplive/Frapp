@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import { Body, Controller, Put, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -32,6 +33,8 @@ import {
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.CHANNELS_MANAGE)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('channels')
 export class ChatOrderController {
   constructor(private readonly order: ChatChannelOrderService) {}

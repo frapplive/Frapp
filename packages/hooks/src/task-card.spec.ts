@@ -316,13 +316,20 @@ describe("taskCardControls", () => {
     expect(taskCardControls({ live: completed, ...bystander })).toEqual([]);
   });
 
-  it("never offers Confirm on the admin's own task, which the server refuses (#1056)", () => {
+  it("never offers Confirm or Send back on the admin's own task, which the server refuses (#1056, #5917)", () => {
     expect(
       taskCardControls({
         live: live({ status: "COMPLETED", stored_status: "COMPLETED" }),
         ...assigneeAdmin,
       }),
-    ).toEqual(["reject"]);
+    ).toEqual([]);
+    // Someone else's completion is unchanged.
+    expect(
+      taskCardControls({
+        live: live({ status: "COMPLETED", stored_status: "COMPLETED" }),
+        ...admin,
+      }),
+    ).toEqual(["confirm", "reject"]);
   });
 
   it("leaves only the Confirmed indicator once points are awarded", () => {
@@ -656,7 +663,11 @@ describe("localTaskStatus (#5774)", () => {
     ).toBe("OVERDUE");
     expect(
       localTaskStatus(
-        { status: "COMPLETED", stored_status: "COMPLETED", due_date: "2026-11-18" },
+        {
+          status: "COMPLETED",
+          stored_status: "COMPLETED",
+          due_date: "2026-11-18",
+        },
         evening,
       ),
     ).toBe("COMPLETED");

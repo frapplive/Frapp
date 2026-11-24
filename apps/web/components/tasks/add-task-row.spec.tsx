@@ -292,7 +292,7 @@ describe("AddTaskRow for many people (#4295 step 3, 2026-11-18)", () => {
       target: { value: "Drive to the airport" },
     });
     await userEvent.click(within(form()).getByRole("button", { name: /^who/i }));
-    await userEvent.click(await screen.findByRole("radio", { name: "Roles and groups" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Roles and groups" }));
     await userEvent.click(await screen.findByRole("checkbox", { name: /Recruitment Chair/ }));
     await userEvent.click(screen.getByRole("radio", { name: "One claims it" }));
     await userEvent.keyboard("{Escape}");

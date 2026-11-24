@@ -278,6 +278,19 @@ const snoozeWrites = vi.hoisted(() => ({
   snooze: vi.fn(() => Promise.resolve()),
   unsnooze: vi.fn(() => Promise.resolve()),
 }));
+// The open tenant's kind (#5933): a chapter, so the screen draws; a case
+// sets it to hold or to a council.
+const tenant = vi.hoisted(() => ({
+  kind: "chapter" as "chapter" | "council" | null,
+}));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => tenant.kind,
+  useIsCouncil: () => tenant.kind === "council",
+  useServesChapterFeatures: () => tenant.kind === "chapter",
+}));
+vi.mock("@/components/council/council-home", () => ({
+  CouncilHome: "CouncilHome",
+}));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useActivityNudge: (options?: { enabled?: boolean }) => {
@@ -387,6 +400,7 @@ import {
   ActivityAsk,
   ActivityAskButton,
   ActivityListRow,
+  ActivityRowSkeleton,
 } from "@/components/activity/activity-row";
 import { SUBSCRIPTION_REFUSAL_COPY } from "@/lib/subscription-refusal";
 import { OFFLINE_COPY } from "@repo/validation";
@@ -528,6 +542,7 @@ describe("Activity screen (#3897)", () => {
     menuReads.deleteEvent.mockClear();
     chapter.data = undefined;
     chapter.isPending = false;
+    tenant.kind = "chapter";
     writes.confirm.mockReset().mockResolvedValue(undefined);
     writes.review.mockReset().mockResolvedValue(undefined);
     writes.checkIn.mockReset().mockResolvedValue(undefined);
@@ -562,6 +577,27 @@ describe("Activity screen (#3897)", () => {
         node.props.accessibilityLabel.startsWith("Back to "),
     );
     expect(rows).toHaveLength(0);
+  });
+
+  it("holds on its loading rows, reading nothing, until the tenant's kind is known (#5933)", () => {
+    tenant.kind = null;
+    const tree = render();
+    expect(tree.root.findAllByType(ActivityRowSkeleton).length).toBeGreaterThan(
+      0,
+    );
+    expect(tree.root.findAllByType(ActivityListRow)).toHaveLength(0);
+    expect(
+      tree.root.findAll((n) => (n.type as unknown) === "CouncilHome"),
+    ).toHaveLength(0);
+  });
+
+  it("draws a council's home in its place (#5933)", () => {
+    tenant.kind = "council";
+    const tree = render();
+    expect(
+      tree.root.findAll((n) => (n.type as unknown) === "CouncilHome"),
+    ).toHaveLength(1);
+    expect(tree.root.findAllByType(ActivityListRow)).toHaveLength(0);
   });
 
   it("opens the task board from its title row (#4610)", () => {

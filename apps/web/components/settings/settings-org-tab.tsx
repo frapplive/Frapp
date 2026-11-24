@@ -1,7 +1,14 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  Building2,
+  Image as ImageIcon,
+  Landmark,
+  Loader2,
+  Palette,
+  Type,
+} from "lucide-react";
 import {
   ARCHETYPES,
   DEFAULT_TIER_WORD,
@@ -11,6 +18,9 @@ import {
   type ArchetypeKey,
 } from "@repo/org-archetypes";
 import {
+  CHAPTER_ABOUT_FOOTNOTE,
+  CHAPTER_LOOK_FOOTNOTE,
+  resolveChapterMark,
   CHAPTER_NAME_MAX_LENGTH,
   CHAPTER_UNIVERSITY_MAX_LENGTH,
   type PatchChapterConfig,
@@ -37,6 +47,12 @@ import { cn } from "@/lib/utils";
 import { FOCUS_RING } from "@/components/ui/focus";
 import type { ChapterLogoUpload } from "@repo/hooks";
 import { SettingsChapterMarkCard } from "@/components/settings/settings-chapter-mark-card";
+import { SettingsSubpage } from "@/components/settings/settings-subpage";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import {
+  chapterSettingsHref,
+  type ChapterSettingsPage,
+} from "@/components/settings/settings-paths";
 
 type Branding = {
   greek_letters?: string;
@@ -83,12 +99,29 @@ type Props = {
   savingProfile?: boolean;
   savingConfig?: boolean;
   /**
-   * The chapter's accent, drawn under the chapter mark. Accent was its own
+   * The chapter's accent, opened from the Accent color row. Accent was its own
    * rail row until #3827 folded it into the chapter's profile, beside the
    * other thing that decides how the chapter looks.
    */
   accentSection?: ReactNode;
+  /**
+   * The page opened from one of the tab's rows (`?page=`), or `null` for the
+   * tab itself: the profile's fields on top, then a few groups of rows that
+   * each open one page, as Discord's channel settings and iOS Settings are
+   * laid out (Paul, 2026-11-20).
+   */
+  page?: ChapterSettingsPage | null;
+  /** The address of a page (or, for `null`, of the tab itself). */
+  pageHref?: (page: ChapterSettingsPage | null) => string;
 };
+
+const VOCABULARY_KEYS = [
+  "recruitment",
+  "pledge",
+  "class",
+  "order",
+  "tier",
+] as const;
 
 export function SettingsOrgTab({
   archetypeKey,
@@ -103,6 +136,8 @@ export function SettingsOrgTab({
   savingProfile,
   savingConfig,
   accentSection,
+  page = null,
+  pageHref = chapterSettingsHref,
 }: Props) {
   const current = getArchetype(archetypeKey);
 
@@ -272,205 +307,220 @@ export function SettingsOrgTab({
   const manageHint = canManage ? null : readOnlyHint;
   const profileHint = canEditProfile ? null : readOnlyHint;
 
-  return (
-    <div className="space-y-10">
-      {/* Chapter profile (core chapter record) */}
-      <ProfileSection id="settings-chapter-profile" title="Chapter profile">
-        <form onSubmit={saveProfile}>
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="grid gap-1">
-                <Label htmlFor="chapter-name">Chapter name</Label>
-                <Input
-                  id="chapter-name"
-                  maxLength={CHAPTER_NAME_MAX_LENGTH}
-                  value={profileDraft.name}
-                  onChange={(event) =>
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      name: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="chapter-university">University</Label>
-                <Input
-                  id="chapter-university"
-                  maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
-                  value={profileDraft.university}
-                  onChange={(event) =>
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      university: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="chapter-donation">Donation link (optional)</Label>
-              <Input
-                id="chapter-donation"
-                type="url"
-                value={profileDraft.donation_url}
-                onChange={(event) =>
-                  setProfileDraft((prev) => ({
-                    ...prev,
-                    donation_url: event.target.value,
-                  }))
-                }
-                placeholder="https://give.youruniversity.edu/..."
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-3">
-            {profileHint ?? <span />}
-            <Button type="submit" disabled={!canEditProfile || savingProfile}>
-              {savingProfile ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Save profile
-            </Button>
-          </div>
-        </form>
-      </ProfileSection>
+  const profileChanged =
+    profileDraft.name !== storedName ||
+    profileDraft.university !== storedUniversity ||
+    profileDraft.donation_url !== storedDonation;
+  const vocabularyDefaults: Record<string, string | undefined> = {
+    ...VOCABULARY_DEFAULTS[current.key],
+  };
+  const vocabularyCustom = VOCABULARY_KEYS.some(
+    (key) => !!vocabulary[key] && vocabulary[key] !== vocabularyDefaults[key],
+  );
+  // The first of the page's facts the chapter has filled in.
+  const identityValue =
+    branding.designation?.trim() ||
+    (branding.founded_at != null
+      ? `Founded ${branding.founded_at}`
+      : undefined) ||
+    branding.school_short?.trim() ||
+    (lettersHidden ? undefined : branding.greek_letters?.trim()) ||
+    "Not set";
+  // What the mark draws, read the way every surface reads it.
+  const shownMark = resolveChapterMark({
+    logoUrl: mark.logoUrl,
+    branding: {
+      ...branding,
+      show_greek_letters:
+        branding.show_greek_letters !== false && !lettersHidden,
+    },
+    name: storedName,
+  });
+  const markValue = shownMark.logoUrl
+    ? "Logo"
+    : shownMark.source === "initials"
+      ? "Initials"
+      : shownMark.text;
 
-      <SettingsChapterMarkCard
-        name={profile.name}
-        logoUrl={mark.logoUrl}
-        branding={branding}
-        canEditLogo={canEditProfile}
-        canManage={canManage}
-        onUploadLogo={mark.onUploadLogo}
-        onRemoveLogo={mark.onRemoveLogo}
-        logoPending={mark.logoPending}
-        onPatchConfig={onPatchConfig}
-        savingConfig={savingConfig}
-        manageHint={manageHint}
-        profileHint={profileHint}
-      />
+  const subpage = (title: string, children: ReactNode, shown = true) => (
+    <SettingsSubpage
+      shown={shown}
+      backHref={pageHref(null)}
+      backLabel="Chapter"
+      title={title}
+    >
+      {children}
+    </SettingsSubpage>
+  );
 
-      {accentSection}
+  // Back on the tab from one of its pages, focus returns to the row that
+  // opened it, as it would on a page that never went away.
+  const lastPage = useRef(page);
+  useEffect(() => {
+    const left = lastPage.current;
+    lastPage.current = page;
+    if (page || !left) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    document.getElementById(`chapter-row-${left}`)?.focus();
+  }, [page]);
 
-      {/* Identity & founding (branding config — audited) */}
-      <ProfileSection
-        id="settings-identity"
-        title="Identity & founding"
-        hint={
-          lettersHidden
-            ? "Saving writes an entry to the chapter audit log."
-            : "Whether the letters show is set under Chapter mark. Saving writes an entry to the chapter audit log."
-        }
-      >
-        <form onSubmit={saveIdentity}>
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              {/*
+  let content: ReactNode;
+  // The mark page stays mounted while hidden, so a short name typed there
+  // and left unsaved is still there on the way back, as the other pages' drafts
+  // are (they live in this component).
+  const markPage = (
+    <div hidden={page !== "mark"}>
+      {subpage(
+        "Chapter mark",
+        <SettingsChapterMarkCard
+          name={profile.name}
+          logoUrl={mark.logoUrl}
+          branding={branding}
+          canEditLogo={canEditProfile}
+          canManage={canManage}
+          onUploadLogo={mark.onUploadLogo}
+          onRemoveLogo={mark.onRemoveLogo}
+          logoPending={mark.logoPending}
+          onPatchConfig={onPatchConfig}
+          savingConfig={savingConfig}
+          manageHint={manageHint}
+          profileHint={profileHint}
+        />,
+        page === "mark",
+      )}
+    </div>
+  );
+
+  if (page === "mark") {
+    content = null;
+  } else if (page === "accent") {
+    content = subpage("Accent color", accentSection);
+  } else if (page === "identity") {
+    content = subpage(
+      "Identity & founding",
+      <>
+        <ProfileSection
+          id="settings-identity"
+          title="Identity & founding"
+          hint={
+            lettersHidden
+              ? "Saving writes an entry to the chapter audit log."
+              : "Whether the letters show is set under Chapter mark. Saving writes an entry to the chapter audit log."
+          }
+        >
+          <form onSubmit={saveIdentity}>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                {/*
                 FIJI never displays its letters, so Settings doesn't draw
                 them either. They stay stored: the hidden field's draft is
                 the stored value, so a save writes them back unchanged.
               */}
-              {lettersHidden ? null : (
+                {lettersHidden ? null : (
+                  <div className="grid gap-1">
+                    <Label htmlFor="greek-letters">Greek letters</Label>
+                    <Input
+                      id="greek-letters"
+                      value={greekLetters}
+                      onChange={(event) => setGreekLetters(event.target.value)}
+                      maxLength={8}
+                      placeholder="e.g. ΣΦΕ"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
                 <div className="grid gap-1">
-                  <Label htmlFor="greek-letters">Greek letters</Label>
+                  <Label htmlFor="designation">Chapter designation</Label>
                   <Input
-                    id="greek-letters"
-                    value={greekLetters}
-                    onChange={(event) => setGreekLetters(event.target.value)}
-                    maxLength={8}
-                    placeholder="e.g. ΣΦΕ"
-                    className="font-mono"
+                    id="designation"
+                    value={designation}
+                    onChange={(event) => setDesignation(event.target.value)}
+                    placeholder="e.g. California Eta"
                   />
                 </div>
-              )}
-              <div className="grid gap-1">
-                <Label htmlFor="designation">Chapter designation</Label>
-                <Input
-                  id="designation"
-                  value={designation}
-                  onChange={(event) => setDesignation(event.target.value)}
-                  placeholder="e.g. California Eta"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="school-short">School (short)</Label>
-                <Input
-                  id="school-short"
-                  value={schoolShort}
-                  onChange={(event) => setSchoolShort(event.target.value)}
-                  placeholder="e.g. UCLA"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="founded-year">Founded year</Label>
-                <Input
-                  id="founded-year"
-                  type="number"
-                  inputMode="numeric"
-                  value={foundedYear}
-                  onChange={(event) => setFoundedYear(event.target.value)}
-                  placeholder="e.g. 1901"
-                  onBlur={() => reveal.blur("founded")}
-                  aria-invalid={foundedError}
-                  aria-describedby={
-                    foundedError ? "founded-year-error" : undefined
-                  }
-                />
-                {foundedError ? (
-                  <p
-                    id="founded-year-error"
-                    className="text-xs text-destructive"
-                  >
-                    {foundedCleared
-                      ? "A founded year can't be removed once saved. "
-                      : null}
-                    Enter a year between {FOUNDED_YEAR_MIN} and{" "}
-                    {latestFoundedYear()}.
-                  </p>
-                ) : null}
+                <div className="grid gap-1">
+                  <Label htmlFor="school-short">School (short)</Label>
+                  <Input
+                    id="school-short"
+                    value={schoolShort}
+                    onChange={(event) => setSchoolShort(event.target.value)}
+                    placeholder="e.g. UCLA"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="founded-year">Founded year</Label>
+                  <Input
+                    id="founded-year"
+                    type="number"
+                    inputMode="numeric"
+                    value={foundedYear}
+                    onChange={(event) => setFoundedYear(event.target.value)}
+                    placeholder="e.g. 1901"
+                    onBlur={() => reveal.blur("founded")}
+                    aria-invalid={foundedError}
+                    aria-describedby={
+                      foundedError ? "founded-year-error" : undefined
+                    }
+                  />
+                  {foundedError ? (
+                    <p
+                      id="founded-year-error"
+                      className="text-xs text-destructive"
+                    >
+                      {foundedCleared
+                        ? "A founded year can't be removed once saved. "
+                        : null}
+                      Enter a year between {FOUNDED_YEAR_MIN} and{" "}
+                      {latestFoundedYear()}.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-3">
-            {manageHint ?? <span />}
-            <Button type="submit" disabled={!canManage || savingConfig}>
-              {savingConfig ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Save identity
-            </Button>
-          </div>
-        </form>
-      </ProfileSection>
-
-      {/* Archetype */}
-      <ProfileSection
-        id="settings-archetype"
-        title={
-          <>
-            Organization archetype
-            <span className="ml-2 rounded-xs border border-border px-1.5 py-0.5 text-caption font-medium uppercase tracking-wide text-muted-foreground">
-              {current.short}
-            </span>
-          </>
-        }
-        hint={
-          <>{current.description} Sets defaults for modules and vocabulary.</>
-        }
-      >
-        <div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.values(ARCHETYPES).map((option) => {
-              const isCurrent = option.key === current.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  disabled={!canManage || isCurrent}
-                  aria-pressed={isCurrent}
-                  onClick={() => setPendingArchetype(option.key)}
-                  /*
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {manageHint ?? <span />}
+              <Button type="submit" disabled={!canManage || savingConfig}>
+                {savingConfig ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Save identity
+              </Button>
+            </div>
+          </form>
+        </ProfileSection>
+      </>,
+    );
+  } else if (page === "type") {
+    content = subpage(
+      "Organization type",
+      <>
+        <ProfileSection
+          id="settings-archetype"
+          title={
+            <>
+              Organization archetype
+              <span className="ml-2 rounded-xs border border-border px-1.5 py-0.5 text-caption font-medium uppercase tracking-wide text-muted-foreground">
+                {current.short}
+              </span>
+            </>
+          }
+          hint={
+            <>{current.description} Sets defaults for modules and vocabulary.</>
+          }
+        >
+          <div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Object.values(ARCHETYPES).map((option) => {
+                const isCurrent = option.key === current.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    disabled={!canManage || isCurrent}
+                    aria-pressed={isCurrent}
+                    onClick={() => setPendingArchetype(option.key)}
+                    /*
                     The other direction of the accent sweep. This selection is
                     accent-worthy — §5 names active filters, and a chosen
                     archetype is the same shape as `/documents`' selected
@@ -483,111 +533,245 @@ export function SettingsOrgTab({
                     border swap is `FOCUS_RING`'s job, and using it for hover
                     too left focus and hover indistinguishable on a card.
                   */
-                  className={cn(
-                    "flex flex-col gap-1 rounded-md border p-3 text-left transition-colors",
-                    FOCUS_RING,
-                    isCurrent
-                      ? "border-accent-border bg-accent-subtle-hover text-accent-text"
-                      : "border-border hover:bg-card-hover",
-                    !canManage && !isCurrent && "cursor-not-allowed opacity-60",
-                  )}
-                >
-                  <span className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {option.short}
+                    className={cn(
+                      "flex flex-col gap-1 rounded-md border p-3 text-left transition-colors",
+                      FOCUS_RING,
+                      isCurrent
+                        ? "border-accent-border bg-accent-subtle-hover text-accent-text"
+                        : "border-border hover:bg-card-hover",
+                      !canManage &&
+                        !isCurrent &&
+                        "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <span className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {option.short}
+                      </span>
+                      {isCurrent ? (
+                        // `accent-11` rather than `--primary`: the fill under it
+                        // is `accent-4`, and §1's ladder puts the readable tone
+                        // at 11. It also inherits from the button above, so this
+                        // states the weight and lets the colour come from one
+                        // place.
+                        <span className="text-caption font-medium">
+                          Current
+                        </span>
+                      ) : null}
                     </span>
-                    {isCurrent ? (
-                      // `accent-11` rather than `--primary`: the fill under it
-                      // is `accent-4`, and §1's ladder puts the readable tone
-                      // at 11. It also inherits from the button above, so this
-                      // states the weight and lets the colour come from one
-                      // place.
-                      <span className="text-caption font-medium">Current</span>
-                    ) : null}
-                  </span>
-                  <span className="text-sm font-medium">{option.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {option.description}
-                  </span>
-                </button>
-              );
-            })}
+                    <span className="text-sm font-medium">{option.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {manageHint ? <div className="mt-3">{manageHint}</div> : null}
           </div>
-          {manageHint ? <div className="mt-3">{manageHint}</div> : null}
-        </div>
-      </ProfileSection>
-
-      {/* Vocabulary */}
-      <ProfileSection
-        id="settings-vocabulary"
-        title="Vocabulary"
-        hint={<>Defaults follow the {current.short} archetype.</>}
-      >
-        <form onSubmit={saveVocabulary}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="grid gap-1">
-              <Label htmlFor="vocab-recruitment">Recruitment process</Label>
-              <Input
-                id="vocab-recruitment"
-                value={recruitment}
-                onChange={(event) => setRecruitment(event.target.value)}
-                placeholder={current.recruitmentLanguage}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="vocab-pledge">New member term</Label>
-              <Input
-                id="vocab-pledge"
-                value={pledge}
-                onChange={(event) => setPledge(event.target.value)}
-                placeholder={current.pledgeLanguage}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="vocab-class">Cohort label</Label>
-              <Input
-                id="vocab-class"
-                value={cohort}
-                onChange={(event) => setCohort(event.target.value)}
-                placeholder={current.classLanguage}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="vocab-order">Member order number</Label>
-              <Input
-                id="vocab-order"
-                value={order}
-                onChange={(event) => setOrder(event.target.value)}
-                placeholder={current.orderLanguage}
-              />
-            </div>
-            <div className="grid gap-1">
-              {/*
+        </ProfileSection>
+      </>,
+    );
+  } else if (page === "vocabulary") {
+    content = subpage(
+      "Vocabulary",
+      <>
+        <ProfileSection
+          id="settings-vocabulary"
+          title="Vocabulary"
+          hint={<>Defaults follow the {current.short} archetype.</>}
+        >
+          <form onSubmit={saveVocabulary}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-1">
+                <Label htmlFor="vocab-recruitment">Recruitment process</Label>
+                <Input
+                  id="vocab-recruitment"
+                  value={recruitment}
+                  onChange={(event) => setRecruitment(event.target.value)}
+                  placeholder={current.recruitmentLanguage}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="vocab-pledge">New member term</Label>
+                <Input
+                  id="vocab-pledge"
+                  value={pledge}
+                  onChange={(event) => setPledge(event.target.value)}
+                  placeholder={current.pledgeLanguage}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="vocab-class">Cohort label</Label>
+                <Input
+                  id="vocab-class"
+                  value={cohort}
+                  onChange={(event) => setCohort(event.target.value)}
+                  placeholder={current.classLanguage}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="vocab-order">Member order number</Label>
+                <Input
+                  id="vocab-order"
+                  value={order}
+                  onChange={(event) => setOrder(event.target.value)}
+                  placeholder={current.orderLanguage}
+                />
+              </div>
+              <div className="grid gap-1">
+                {/*
                 What the chapter calls a tier of roles (#4068 decision 5):
                 Roles reads it in its headings and buttons.
               */}
-              <Label htmlFor="vocab-tier">Role tier</Label>
-              <Input
-                id="vocab-tier"
-                value={tier}
-                onChange={(event) => setTier(event.target.value)}
-                placeholder={DEFAULT_TIER_WORD}
-              />
+                <Label htmlFor="vocab-tier">Role tier</Label>
+                <Input
+                  id="vocab-tier"
+                  value={tier}
+                  onChange={(event) => setTier(event.target.value)}
+                  placeholder={DEFAULT_TIER_WORD}
+                />
+              </div>
             </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between gap-3">
-            {manageHint ?? <span />}
-            <Button type="submit" disabled={!canManage || savingConfig}>
-              {savingConfig ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Save vocabulary
-            </Button>
-          </div>
-        </form>
-      </ProfileSection>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {manageHint ?? <span />}
+              <Button type="submit" disabled={!canManage || savingConfig}>
+                {savingConfig ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Save vocabulary
+              </Button>
+            </div>
+          </form>
+        </ProfileSection>
+      </>,
+    );
+  } else {
+    content = (
+      <div className="space-y-8">
+        <section id="settings-chapter-profile" aria-label="Chapter profile">
+          <form onSubmit={saveProfile}>
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-1">
+                  <Label htmlFor="chapter-name">Chapter name</Label>
+                  <Input
+                    id="chapter-name"
+                    maxLength={CHAPTER_NAME_MAX_LENGTH}
+                    value={profileDraft.name}
+                    onChange={(event) =>
+                      setProfileDraft((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="chapter-university">University</Label>
+                  <Input
+                    id="chapter-university"
+                    maxLength={CHAPTER_UNIVERSITY_MAX_LENGTH}
+                    value={profileDraft.university}
+                    onChange={(event) =>
+                      setProfileDraft((prev) => ({
+                        ...prev,
+                        university: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="chapter-donation">
+                  Donation link (optional)
+                </Label>
+                <Input
+                  id="chapter-donation"
+                  type="url"
+                  value={profileDraft.donation_url}
+                  onChange={(event) =>
+                    setProfileDraft((prev) => ({
+                      ...prev,
+                      donation_url: event.target.value,
+                    }))
+                  }
+                  placeholder="https://give.youruniversity.edu/..."
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {profileHint ?? <span />}
+              <Button
+                type="submit"
+                disabled={!canEditProfile || savingProfile || !profileChanged}
+              >
+                {savingProfile ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Save profile
+              </Button>
+            </div>
+          </form>
+        </section>
 
-      {/* Archetype-change confirmation */}
+        <SettingsGroup heading="Look" footnote={CHAPTER_LOOK_FOOTNOTE}>
+          <SettingsRow
+            icon={ImageIcon}
+            label="Chapter mark"
+            value={markValue}
+            id={`chapter-row-mark`}
+            href={pageHref("mark")}
+          />
+          <SettingsRow
+            icon={Palette}
+            label="Accent color"
+            value={
+              <span
+                aria-label="The chapter's accent"
+                className="inline-block h-3.5 w-3.5 rounded-full bg-primary align-middle"
+              />
+            }
+            id={`chapter-row-accent`}
+            href={pageHref("accent")}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup
+          heading="About the chapter"
+          footnote={CHAPTER_ABOUT_FOOTNOTE}
+        >
+          <SettingsRow
+            icon={Landmark}
+            label="Identity & founding"
+            value={identityValue}
+            id={`chapter-row-identity`}
+            href={pageHref("identity")}
+          />
+          <SettingsRow
+            icon={Building2}
+            label="Organization type"
+            value={current.short}
+            id={`chapter-row-type`}
+            href={pageHref("type")}
+          />
+          <SettingsRow
+            icon={Type}
+            label="Vocabulary"
+            value={vocabularyCustom ? "Custom" : "Defaults"}
+            id={`chapter-row-vocabulary`}
+            href={pageHref("vocabulary")}
+          />
+        </SettingsGroup>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {markPage}
+      {content}
+
       <Dialog
         open={pendingArchetype !== null}
         onOpenChange={(open) => {
@@ -623,6 +807,6 @@ export function SettingsOrgTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

@@ -35,7 +35,9 @@ const directory = buildWhoDirectory({
     { id: "r-rec", name: "Recruitment", tier_id: null },
     { id: "r-hist", name: "Historian", tier_id: null },
   ],
-  groups: [{ id: "g-1", name: "Formal planning", kind: "manual", member_ids: [] }],
+  groups: [
+    { id: "g-1", name: "Formal planning", kind: "manual", member_ids: [] },
+  ],
   viewerUserId: "u-me",
 });
 
@@ -113,7 +115,9 @@ describe("WhoPickerBody", () => {
   it("ticks a second person into a list", () => {
     const onPick = vi.fn();
     const list = rows(body({ kind: "person", userId: "u-sam" }, onPick));
-    expect(byLabel(list, "Sam Lee").props.accessibilityState.checked).toBe(true);
+    expect(byLabel(list, "Sam Lee").props.accessibilityState.checked).toBe(
+      true,
+    );
     act(() => byLabel(list, "Alex Kim").props.onPress());
     expect(onPick).toHaveBeenLastCalledWith({
       kind: "each",
@@ -126,14 +130,15 @@ describe("WhoPickerBody", () => {
     const list = rows(
       body({ kind: "each", target: { kind: "role", id: "r-rec" } }, onPick),
     );
-    expect(byLabel(list, "Recruitment, 2").props.accessibilityState.checked).toBe(
-      true,
-    );
+    expect(
+      byLabel(list, "Recruitment, 2").props.accessibilityState.checked,
+    ).toBe(true);
     const historian = byLabel(list, `Historian, ${NOBODY_YET}`);
     expect(historian.props.accessibilityState.disabled).toBe(true);
     // Everyone reads partly on while one role is.
     expect(
-      byLabel(list, `${EVERYONE_IN_CHAPTER}, 3`).props.accessibilityState.checked,
+      byLabel(list, `${EVERYONE_IN_CHAPTER}, 3`).props.accessibilityState
+        .checked,
     ).toBe("mixed");
   });
 
@@ -149,7 +154,56 @@ describe("WhoPickerBody", () => {
       ),
     ).toHaveLength(0);
     act(() => byLabel(list, "Alex Kim").props.onPress());
-    expect(onPick).toHaveBeenLastCalledWith({ kind: "person", userId: "u-alex" });
+    expect(onPick).toHaveBeenLastCalledWith({
+      kind: "person",
+      userId: "u-alex",
+    });
+  });
+});
+
+describe("WhoPickerBody for Add people (#5905)", () => {
+  const add = {
+    marked: new Set(["u-me"]),
+    alreadyNote: TASK_AUDIENCE_COPY.alreadyHasIt,
+    label: TASK_AUDIENCE_COPY.addButton,
+    onAdd: () => undefined,
+  };
+
+  it("lists people only, with who has it ticked and fixed", () => {
+    const onPick = vi.fn();
+    const tree = body(null, onPick, { add });
+    // No Roles and groups tab: people only.
+    expect(
+      tree.root.findAll(
+        (node) => node.props.accessibilityLabel === "Pick from",
+      ),
+    ).toHaveLength(0);
+    const list = rows(tree);
+    expect(
+      list.root.findAll(
+        (node) => node.props.accessibilityLabel === `${EVERYONE_IN_CHAPTER}, 3`,
+      ),
+    ).toHaveLength(0);
+    const me = byLabel(
+      list,
+      `Paul Carlson · ${WHO_PICKER_COPY.you}, ${TASK_AUDIENCE_COPY.alreadyHasIt}`,
+    );
+    expect(me.props.accessibilityState).toEqual({
+      checked: true,
+      disabled: true,
+    });
+  });
+
+  it("ticks more than one person, as a copy each", () => {
+    const onPick = vi.fn();
+    const list = rows(
+      body({ kind: "person", userId: "u-sam" }, onPick, { add }),
+    );
+    act(() => byLabel(list, "Alex Kim").props.onPress());
+    expect(onPick).toHaveBeenLastCalledWith({
+      kind: "each",
+      target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+    });
   });
 });
 

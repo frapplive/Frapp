@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   useActiveChapterId,
+  useCurrentChapter,
   useCurrentUser,
+  useMySchools,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
@@ -29,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchoolStep } from "@/components/onboarding/school-step";
 import { WelcomeAbout } from "@/components/onboarding/welcome-about";
 import type { ProfileFields } from "@/components/profile/profile-save-body";
 import { markWelcomeDue } from "@/lib/onboarding/welcome-due";
@@ -47,7 +50,7 @@ type Me = ProfileFields & {
  * then notifications"). The phone's s03 shows the same screen, in the same
  * order and words (`apps/mobile/app/(auth)/welcome.tsx`); the phone then asks
  * about notifications, which the web has no second screen for, so here the
- * one button goes to chat.
+ * one button goes to chat, or to the school step below.
  *
  * The name is pre-filled when sign-in carried a real one (Apple or Google). A
  * name that is only the API's `Member` or the email before the `@` starts
@@ -58,6 +61,10 @@ type Me = ProfileFields & {
  * Then **About you** (#5284), when phone, major, graduation year or birthday
  * is empty (`needsAboutYou`): optional, with Skip for now
  * (`welcome-about.tsx`). The name's button says Continue when it follows.
+ *
+ * Then, for a member with no verified school, "Where do you go to school?"
+ * (#5929, `school-step.tsx`), which can be skipped. The name's button says
+ * Continue when either follows.
  *
  * Leaving marks onboarding done (`has_completed_onboarding`), as the phone's
  * s03 does, so the Directory stops listing the member as pending. The phone
@@ -71,12 +78,25 @@ export function WelcomeYou() {
   const updateUser = useUpdateUser();
   const updateOnboarding = useUpdateOnboarding();
   const chapterId = useActiveChapterId();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
   const me = userQuery.data as Me | undefined;
+  // The school step, once the name is saved (#5929).
+  const [askingSchool, setAskingSchool] = useState(false);
   // `null` until typed in: the field shows the loaded name until then.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [step, setStep] = useState<"you" | "about">("you");
+
+  if (askingSchool) {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        onLeave={() => router.replace("/chat")}
+      />
+    );
+  }
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -166,8 +186,20 @@ export function WelcomeYou() {
     }
     // The welcome card in the default channel shows once (#5627).
     if (me?.id && chapterId) markWelcomeDue(me.id, chapterId);
-    // Stays busy: the page is on its way to chat.
-    router.replace("/chat");
+    // A member already verified at a school goes straight to chat; anyone
+    // else is asked, and can skip (#5929). A list still loading is waited
+    // for, not read as "no school"; a failed read asks, since the step can
+    // be skipped.
+    const schools =
+      mySchools.data ??
+      (await mySchools.refetch().catch(() => undefined))?.data;
+    if ((schools?.length ?? 0) > 0) {
+      // Stays busy: the page is on its way to chat.
+      router.replace("/chat");
+      return;
+    }
+    setLeaving(false);
+    setAskingSchool(true);
   }
 
   if (step === "about") {
@@ -252,7 +284,7 @@ export function WelcomeYou() {
           {leaving ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {askAbout
+          {askAbout || (mySchools.data?.length ?? 0) === 0
             ? ONBOARDING_YOU_COPY.continue
             : ONBOARDING_YOU_COPY.goToChat}
         </Button>

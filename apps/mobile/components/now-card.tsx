@@ -7,6 +7,7 @@ import { EVENT_NOW_COPY } from "@repo/validation";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { ForwardGlyph } from "@/components/control-glyphs";
 import { ListSection, PressableRow } from "@/components/list-section";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * The Now card (`spec/behavior/activity.md` § Now, #5777): the event on right
@@ -28,7 +29,8 @@ export function NowCard({ testID = "now-card" }: { testID?: string }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const router = useRouter();
-  const { events } = useEventsOnNow();
+  // A council has no events yet, and the route refuses it (#5933).
+  const { events } = useEventsOnNow({ enabled: useServesChapterFeatures() });
   const lead = events[0];
   if (!lead) return null;
   const more = events.length - 1;

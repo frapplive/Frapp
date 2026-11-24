@@ -42,6 +42,8 @@ import {
   isModuleEnabled as isStoredModuleEnabled,
 } from "@repo/validation";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
+import { CouncilSettingsPage } from "@/components/councils/council-settings-page";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { asArray, getErrorMessage } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale-image";
@@ -61,15 +63,19 @@ import {
 } from "@/components/settings/settings-modules";
 import { chapterProfileSaveBody } from "@/components/settings/chapter-profile-save-body";
 import { ModuleSettingsPage } from "@/components/settings/module-settings-page";
+import { RushModuleSettings } from "@/components/settings/rush-module-settings";
 import {
   SettingsToolBody,
   SettingsToolSubpage,
 } from "@/components/settings/settings-tool-views";
 import {
   SETTINGS_SUBPAGE_PARAMS,
+  chapterSettingsHref,
+  isChapterSettingsPage,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
+import { settingEntryById } from "@repo/hooks/settings-search";
 import { MeetingSectionsRules } from "@/components/meetings/meeting-sections-rules";
 import {
   DuesGraceRule,
@@ -123,6 +129,12 @@ const DEFAULT_DUES: OrgDues = {
   grace_days: 7,
   scholarship_pool_cents: 0,
 };
+
+/** The Chapter tab page a settings-search result lives on, if any. */
+function chapterPageOfSetting(settingId: string | null): string | undefined {
+  const web = settingEntryById(settingId)?.web;
+  return web?.page === "org" ? web.params?.page : undefined;
+}
 
 function SettingsPageContent() {
   const { toast } = useToast();
@@ -199,6 +211,24 @@ function SettingsPageContent() {
   */
   const channelParam = searchParams.get("channel");
   const toolParam = searchParams.get("tool");
+  // A search result (`?setting=`) on one of the Chapter tab's pages opens that
+  // page even from a link made before the pages existed, and the old Accent
+  // tab (`?tab=theme`) opens Accent color.
+  const pageParam =
+    searchParams.get("page") ??
+    chapterPageOfSetting(searchParams.get("setting")) ??
+    (rawTabParam === "theme" ? "accent" : null);
+  const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
+  // Write a page the address only implied into it, so it stays open once the
+  // setting jump drops `?setting=`, and a refresh lands on it.
+  useEffect(() => {
+    if (!chapterPage) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("page") === chapterPage) return;
+    url.searchParams.set("tab", "org");
+    url.searchParams.set("page", chapterPage);
+    window.history.replaceState(null, "", url.toString());
+  }, [chapterPage]);
   // Switching rows starts the panel at its top, not wherever the last one
   // was scrolled to: the panel scrolls inside the shell's tool pane. The
   // address follows the row, without the params that opened a page inside
@@ -682,7 +712,10 @@ function SettingsPageContent() {
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
             // settings, Discord import) and goes back to the row's own page.
-            if (value === shownTab && (channelParam || toolParam)) {
+            if (
+              value === shownTab &&
+              (channelParam || toolParam || chapterPage)
+            ) {
               changeTab(value);
             }
           }}
@@ -704,6 +737,8 @@ function SettingsPageContent() {
                 }}
                 canManage={canManage}
                 canEditProfile={canEditProfile}
+                page={chapterPage}
+                pageHref={chapterSettingsHref}
                 onSaveProfile={saveProfile}
                 onPatchConfig={(diff) =>
                   patchConfig(diff, "Organization settings saved")
@@ -724,7 +759,7 @@ function SettingsPageContent() {
                 }
               />,
             )}
-            {config ? (
+            {config && !chapterPage ? (
               <div className="mt-10">
                 <SettingsBirthdayPosts
                   channelId={
@@ -745,7 +780,7 @@ function SettingsPageContent() {
                 />
               </div>
             ) : null}
-            {config ? (
+            {config && !chapterPage ? (
               <div className="mt-10">
                 <SettingsMemberNames
                   enabled={config.members_can_change_name === true}
@@ -885,7 +920,17 @@ function SettingsPageContent() {
                     focusSwitch={focusModuleKey === module.key}
                     onSwitchFocused={handleModuleFocused}
                     rules={
-                      canViewConfig ? renderModuleRules(module.key) : undefined
+                      // Recruitment's stages, tags and notes access read
+                      // through the pipeline's own routes, not the config.
+                      module.key === "rush" ? (
+                        <RushModuleSettings
+                          moduleOn={moduleOn(module.key)}
+                          canEditRoles={can("roles:manage", permissions)}
+                          canSeeWhoCan={canSeeWhoCan}
+                        />
+                      ) : canViewConfig ? (
+                        renderModuleRules(module.key)
+                      ) : undefined
                     }
                   />
                 )}
@@ -927,10 +972,33 @@ function SettingsPageContent() {
 // `SettingsPageContent` reads `?tab=` via `useSearchParams`, which Next requires
 // to sit under a Suspense boundary (matches the sign-in/sign-up/join pattern).
 export function SettingsPage() {
+  const activeChapterId = useChapterStore((s) => s.activeChapterId);
+  const tenantKind = useTenantKind();
+  const chapterRead = useCurrentChapter({
+    chapterId: activeChapterId,
+    enabled: !!activeChapterId,
+  });
+  // Held only while the read is actually running: a paused or failed one
+  // falls through to the chapter page, which says it is offline or failed.
+  const kindLoading =
+    !!activeChapterId &&
+    tenantKind === undefined &&
+    chapterRead.fetchStatus === "fetching";
   return (
     <>
       <Suspense fallback={<SettingsBodySkeleton />}>
-        <SettingsPageContent />
+        {
+          // A council's settings are its own few rows (#5933). Its kind is
+          // read before either page mounts, so the chapter page's config,
+          // semester and AI reads never go to a council's routes.
+          kindLoading ? (
+            <SettingsBodySkeleton />
+          ) : tenantKind === "council" ? (
+            <CouncilSettingsPage />
+          ) : (
+            <SettingsPageContent />
+          )
+        }
       </Suspense>
     </>
   );

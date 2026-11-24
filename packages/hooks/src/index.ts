@@ -42,6 +42,8 @@ export * from "./member-avatar-color";
 export * from "./member-phone-reach";
 export * from "./member-threads";
 export * from "./open-chat-transport";
+// Your own custom-field values (#581).
+export * from "./own-custom-fields";
 export * from "./pay-errors";
 export * from "./permission-preview";
 export * from "./profile-stats";
@@ -49,6 +51,8 @@ export * from "./put-signed-upload";
 export * from "./read-cursor";
 export * from "./read-receipts";
 export * from "./rush-card";
+export * from "./rush-pipeline";
+export * from "./rush-work";
 export * from "./scheduled-message-times";
 export * from "./search-analytics";
 export * from "./service-entry-card";
@@ -62,7 +66,6 @@ export * from "./task-views";
 export * from "./unset-features";
 export * from "./use-act";
 export * from "./use-activity";
-export * from "./use-activity-feed";
 export * from "./use-activity-layout";
 export * from "./use-activity-links";
 export * from "./use-activity-nudge";
@@ -99,6 +102,7 @@ export {
   useSidebarPreferences,
   useSidebarPreferencesRefetch,
 } from "./use-chat-sidebar";
+export * from "./use-councils";
 export * from "./use-custom-fields";
 export * from "./use-debounced-value";
 export * from "./use-discord-author-link";
@@ -141,7 +145,9 @@ export * from "./use-reports";
 export * from "./use-role-tiers";
 export * from "./use-roles";
 export * from "./use-rush";
+export * from "./use-rush-pipeline";
 export * from "./use-scheduled-messages";
+export * from "./use-schools";
 export * from "./use-search";
 export * from "./use-self-assignable-roles";
 export * from "./use-semesters";

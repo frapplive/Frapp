@@ -687,7 +687,6 @@ describe('ActivityService', () => {
         senderId: ME,
         limit: 100,
       });
-      expect(view.made_by_you.files).toEqual([]);
     });
 
     it('reads no polls while the Polls module is off', async () => {

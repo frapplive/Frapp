@@ -80,9 +80,6 @@ export default [
         // Flag and Remind menus, styled and non-modal like them.
         "components/chat/message-item.tsx",
       ],
-      // #5947's sweep: My tasks / Everyone's onto ViewLabels, once #5916
-      // (which holds the Tasks screen) has merged.
-      viewSwitch: ["components/tasks/tasks-board.tsx"],
       // #5682: native date and time inputs onto DateField / TimeField.
       nativeDateTime: [
         "components/tasks/due-time-control.tsx",

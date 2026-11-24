@@ -61,6 +61,7 @@ export * from './prediction.entity';
 export * from './role.entity';
 export * from './rush-candidate.entity';
 export * from './scheduled-notification-dispatch.entity';
+export * from './school.entity';
 export * from './semester-archive.entity';
 export * from './service-entry.entity';
 export * from './stripe-webhook-event.entity';

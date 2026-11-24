@@ -29,6 +29,8 @@ const SCREENS_BY_ROUTE: readonly (readonly [string, readonly string[]])[] = [
   ["/points", ["points"]],
   ["/service", ["service"]],
   ["/members", ["members"]],
+  // Recruitment follow-ups and stale alerts (#5934) open on the pipeline.
+  ["/rush", ["rush"]],
 ];
 
 const NONE: readonly string[] = [];

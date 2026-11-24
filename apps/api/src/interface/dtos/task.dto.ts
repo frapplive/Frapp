@@ -769,6 +769,42 @@ export class RemoveFromTaskGroupResponseDto {
   group: TaskGroupSummaryDto;
 }
 
+/**
+ * The most members one `POST /v1/tasks/:id/group/add` adds (#5905): the
+ * bound on picking people for a new task.
+ */
+export const TASK_GROUP_ADD_MAX = TASK_PEOPLE_MAX;
+
+/** `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupDto {
+  @ApiProperty({
+    description: `The members who get a copy, 1 to ${TASK_GROUP_ADD_MAX}, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.`,
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: TASK_GROUP_ADD_MAX,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TASK_GROUP_ADD_MAX)
+  @IsUUID('all', { each: true })
+  assignee_ids: string[];
+}
+
+/** The group after `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupResponseDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The members who got a copy; anyone who already had one is left out.',
+  })
+  added: string[];
+
+  @ApiProperty({ type: () => TaskGroupSummaryDto })
+  group: TaskGroupSummaryDto;
+}
+
 /** `DELETE /v1/tasks/:id` (#5119). */
 export class DeleteTaskQueryDto {
   @ApiPropertyOptional({

@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -32,6 +33,8 @@ import type { Member } from '#domain/entities/member.entity';
 // scoped to chapter settings but not to the roster should not be able to read
 // who removed whom.
 @RequirePermissions(SystemPermissions.CHAPTER_CONFIG_VIEW)
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('audit-log')
 export class ChapterAuditLogController {
   constructor(private readonly auditLogService: ChapterAuditLogService) {}

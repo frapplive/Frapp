@@ -8,7 +8,7 @@ A **Frapp link** is one entry in a list of things a task or an event points at. 
 
 | Kind | Stored | Points at |
 | --- | --- | --- |
-| `link` | `url` (http or https only, `normalizeFrappLinkUrl`) and a `title` (the domain when none is given) | A web page |
+| `link` | `url` (http or https only, `normalizeFrappLinkUrl`; a new one must also name a public site, [§ Writing a list](#writing-a-list)) and a `title` (the domain when none is given) | A web page |
 | `document` | `document_id` | A Chapter Files document ([`chapter-docs.md`](chapter-docs.md)) |
 | `minutes` | `meeting_id` | A meeting's minutes ([`meetings.md`](meetings.md)) |
 | `event` | `event_id` | An event ([`events.md`](events.md)) |
@@ -25,16 +25,18 @@ A record link stores ids, not a name. A name copied into the list would show to 
   - `hidden`, when the record is there but not theirs to open (a restricted document, minutes they can't read, an event they can't see, a message in a channel they aren't in), or its module is off for the chapter (Chapter Files, Meetings, Events). Its name is never sent;
   - `removed`, when it was deleted or was never this chapter's.
 - **A row** reads the same on both apps (`frappLinkRow`): the live name and its quiet line ("Chapter Files", "Minutes · Nov 16", "Event · Nov 16", "#general · Moiz · Nov 16"); "You don't have access" or "Removed", which don't open; and the kind's word, dimmed, while the resolve is out.
-- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A record entry's title is its kind's word ("Document", "Minutes", "Event", "Message"), never its name, so no copied name reaches a reader who can't open it; the API sets it whatever is sent, and a name an older save stored is replaced on the event's next save. Those builds show a document as "Document". A task's record links keep no title.
+- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A record entry's title is its kind's word ("Document", "Minutes", "Event", "Message"), never its name, so no copied name reaches a reader who can't open it; the API sets it whatever is sent, and the names saved before Frapp links were rewritten once (`20261124034254_scrub_event_attachment_titles`, #5921); any name written later by an older API revision is replaced on the event's next save. Those builds show a document as "Document". A task's record links keep no title.
 - **Older phone builds** read only web links and documents, and save an event's list whole. So a save without `attachments_all_kinds: true` (which this build's hook sends) keeps the stored minutes, event and message links the build couldn't see, after the list it sent.
 
 ## Writing a list
 
 A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id`, and `PATCH /v1/events/:id` (with `POST /v1/events`). The API normalizes each entry (`normalizeFrappLinks`), and checks that each record **newly added** is one of the chapter's and from a module the chapter has on (one read per kind, `FrappLinkChecker`). A record the list already held isn't checked again, so one deleted since never blocks a later save, and a held message keeps the channel stored with it. A refused entry is a 400 naming it.
 
+- **A web link must open on a phone** (#5883, a task proof link's rule since #5882, `frappWebLinkOpens`): a name that resolves nowhere, such as `https://test`, `http://localhost:3000`, an IP address or a `.local` name, is refused, with the reason under the picker's field on both apps and as the API's 400 (`FRAPP_LINK_NOT_PUBLIC_MESSAGE`). An address the list already held isn't checked again, as a held record isn't, so one saved before the rule never blocks a later save. Its row reads as text, its domain then "not a working link", and doesn't open (`frappLinkRow`).
+
 - **A group task** (`tasks.md` § Tasks for everyone): every copy holds the same list. A group edit (`scope: "group"`) changes it on every copy, checked once.
 - **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields, checked once and written to the open copy as checked.
-- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261123183858_task_attachments`), as `events.attachments` is.
+- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261124034200_task_attachments`), as `events.attachments` is.
 
 ## Where a link opens
 

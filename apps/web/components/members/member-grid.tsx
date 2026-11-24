@@ -23,7 +23,8 @@ export interface MemberFacts {
   roleName: string | null;
   joined: string | null;
   className: string | null;
-  points: number;
+  /** Null where the chapter keeps no points (module off, or a council). */
+  points: number | null;
   status: PresenceStatus | null;
   customLine: string | null;
   /**
@@ -160,8 +161,12 @@ export function MemberGrid({
                 ) : null}
               </span>
               <span className="text-caption tabular-nums text-muted">
-                {formatPoints(facts.points)}
-                {facts.joined ? ` · joined ${facts.joined}` : null}
+                {[
+                  facts.points !== null ? formatPoints(facts.points) : null,
+                  facts.joined ? `joined ${facts.joined}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </button>
             <label

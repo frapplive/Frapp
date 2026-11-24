@@ -242,6 +242,7 @@ then, and the Member rows took the chapter accent before that.
 |---|---|---|
 | Study hours | `study`, `graduation-cap` | `StudyGlyph` |
 | Service hours | `service`, `hand-heart` | `ServiceGlyph` |
+| Recruitment (#5924; two-tone since #5931) | `recruitment`, `funnel` | `RecruitmentGlyph` |
 | Dues | `billing`, `credit-card` | `BillingGlyph` |
 | Documents | `documents`, `file-text` | `DocumentsGlyph` |
 | Directory | `directory`, `users-three` | `DirectoryGlyph` |
@@ -345,6 +346,7 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Points | `PointsGlyph` | `points`, `trophy` |
 | Study hours | `StudyGlyph` | `study`, `graduation-cap` |
 | Service hours | `ServiceGlyph` | `service`, `hand-heart` |
+| Recruitment (#5924; two-tone since #5931) | `RecruitmentGlyph` | `recruitment`, `funnel` |
 | Polls (no nav row since #3871; kept for the chat composer's + menu, #3865) | `PollsGlyph` | `polls`, `chart-bar` |
 | Meetings (minutes) | `MeetingsGlyph` | `meetings`, `notebook` |
 | Documents | `DocumentsGlyph` | `documents`, `file-text` |

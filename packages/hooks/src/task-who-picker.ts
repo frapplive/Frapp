@@ -192,7 +192,8 @@ export function buildWhoDirectory(input: {
     people.push({
       userId,
       name,
-      named: typeof row.display_name === "string" && row.display_name.trim() !== "",
+      named:
+        typeof row.display_name === "string" && row.display_name.trim() !== "",
       avatarUrl: row.avatar_url ?? null,
       isViewer: userId === input.viewerUserId,
     });
@@ -252,7 +253,8 @@ export function buildWhoDirectory(input: {
         id: tier.id,
         name: tier.name,
         roles: tierRoles,
-        set: tierRoles.length > 0 ? tierSet(tier.id, tier.name, tierRoles) : null,
+        set:
+          tierRoles.length > 0 ? tierSet(tier.id, tier.name, tierRoles) : null,
         holdsEveryone: everyRole.some(
           (role) => role.tier_id === tier.id && isEveryoneRole(role),
         ),
@@ -279,7 +281,12 @@ export function buildWhoDirectory(input: {
     if (memberIds.length === 0 && group.kind && group.kind !== "manual") {
       return [];
     }
-    const set: WhoSet = { kind: "group", id: group.id, name: group.name, memberIds };
+    const set: WhoSet = {
+      kind: "group",
+      id: group.id,
+      name: group.name,
+      memberIds,
+    };
     sets.set(set.id, set);
     return [set];
   });
@@ -329,6 +336,20 @@ export function tickedIds(
   if (!who) return [];
   if (who.kind === "person") return [who.userId];
   return targetMemberIds(who.target, directory);
+}
+
+/**
+ * Who Add people would give a copy to (#5905): everyone ticked, minus
+ * those who already have one. Web's panel and the phone's sheet both send
+ * this, and their Add button counts it, so a pick who got a copy meanwhile
+ * neither counts nor goes.
+ */
+export function peopleToAdd(
+  who: TaskWho | null,
+  directory: WhoDirectory,
+  holders: ReadonlySet<string>,
+): string[] {
+  return tickedIds(who, directory).filter((userId) => !holders.has(userId));
 }
 
 /** How many people a value reaches. */

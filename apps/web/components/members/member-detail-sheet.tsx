@@ -23,7 +23,11 @@ import {
   formatBirthday,
   phoneHref,
 } from "@repo/validation";
-import { formatDay, formatPhone } from "@repo/formatting";
+import {
+  formatCustomFieldValue,
+  formatDay,
+  formatPhone,
+} from "@repo/formatting";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,6 +68,7 @@ import {
 } from "@/components/members/member-detail-rows";
 import { MemberAssignments } from "@/components/members/member-assignments";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { MemberCorrectionDialog } from "@/components/members/member-correction-dialog";
 
 type CustomFieldValue = {
@@ -76,12 +81,7 @@ type CustomFieldValue = {
 function formatCustomValue(
   field: CustomFieldValue & { value: string },
 ): string {
-  if (field.type === "boolean") {
-    return field.value === "true" ? "Yes" : "No";
-  }
-  // A chapter's own phone field reads like the member's Phone row (#5798).
-  if (field.type === "phone") return formatPhone(field.value);
-  return field.value;
+  return formatCustomFieldValue(field.type, field.value) ?? field.value;
 }
 
 /**
@@ -231,6 +231,7 @@ export function MemberDetailSheet({
   const { avatarTintFor } = useMemberDisplayNames();
   const myPermissionsQuery = useMyPermissions();
   const myPermissions = myPermissionsQuery.data?.permissions;
+  const isCouncil = useIsCouncil();
   const removeMemberMutation = useRemoveMember();
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -586,7 +587,10 @@ export function MemberDetailSheet({
                   !!memberId &&
                   fetched !== null &&
                   !memberQuery.isError &&
-                  can("roles:manage", myPermissions)
+                  can("roles:manage", myPermissions) &&
+                  // Pledge classes are a chapter's (#5933): their routes
+                  // refuse a council.
+                  !isCouncil
                 }
               />
 

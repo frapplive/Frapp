@@ -1,8 +1,11 @@
+import type { TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
+import type { VocabConfig } from "@repo/org-archetypes";
 import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import {
   DASHBOARD_NAV_ITEMS,
   navItemHolds,
+  navItemLabel,
   type NavItem,
 } from "@/components/layout/nav-config";
 
@@ -46,10 +49,19 @@ export type PageTitle = {
  * off the account menu; Chapter settings opens from the chapter menu atop the
  * nav, under the words that menu item uses; Frapp Intelligence from the Ask bar.
  */
+/**
+ * Settings' name in each tenant kind, as the chapter menu's item and the top
+ * bar both say it: a council's is "Council settings" (#5933).
+ */
+export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
+  chapter: "Chapter settings",
+  council: "Council settings",
+};
+
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/profile": "Profile",
   "/preferences": "Settings",
-  "/settings": "Chapter settings",
+  "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
   // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
   [ASK_ROUTE]: "Frapp Intelligence",
@@ -88,12 +100,21 @@ function matchesRoute(pathname: string, href: string): boolean {
  * @param isNavItemVisible whether the nav shows a row to this viewer
  *   (`isNavItemVisible` in `protected-nav-item.tsx`, bound to their
  *   permissions and modules). Omitted, every parent shows.
+ * @param vocabulary the chapter's words, for a row named by them
+ *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
+  vocabulary?: VocabConfig,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
+  if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {
+    return { title: SETTINGS_TITLE.council };
+  }
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
     navItemHolds(item, pathname),
@@ -110,11 +131,14 @@ export function resolvePageTitle(
     return isNavItemVisible(navItem)
       ? {
           title: subPage[1].title,
-          parent: { label: navItem.label, href: subPage[1].back },
+          parent: {
+            label: navItemLabel(navItem, vocabulary),
+            href: subPage[1].back,
+          },
         }
       : { title: subPage[1].title };
   }
-  if (navItem) return { title: navItem.label };
+  if (navItem) return { title: navItemLabel(navItem, vocabulary) };
 
   const offNav = Object.entries(OFF_NAV_TITLES).find(([href]) =>
     matchesRoute(pathname, href),

@@ -46,7 +46,8 @@ export class FrappLinkDto {
 
   @ApiPropertyOptional({
     maxLength: TASK_PROOF_LINK_MAX,
-    description: "A `link`'s address: http or https only. Never fetched.",
+    description:
+      "A `link`'s address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the list already holds that address). Never fetched.",
   })
   @ValidateIf((o: FrappLinkDto) => o.kind === 'link')
   @IsString()

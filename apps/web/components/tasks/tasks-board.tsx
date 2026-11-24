@@ -62,7 +62,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
@@ -122,7 +122,7 @@ import {
   FilterMenu,
   type FilterMenuFilter,
 } from "@/components/shared/filter-menu";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
 
 type Task = BoardTask;
@@ -1236,27 +1236,27 @@ export function TasksBoard() {
         */
         <>
           {/*
-            The page's actions sit in its header beside the X
-            (`page-actions.tsx`), as every list's do (rulebook § Filtering a
-            list, `components.md` § Filter bar, Paul 2026-11-20): My tasks /
-            Everyone's as the view switch, since a viewer moves between the
-            two sets all day (Asana's My tasks beside a project, Linear's My
-            issues beside the team's); the one Filter button with its count;
-            New task. Grouping and List / Grid are rows in the Filter menu, as
+            The page's header holds its views and its actions
+            (`page-actions.tsx`; rulebook § Filtering a list, `components.md`
+            § Filter bar and § View labels): My tasks and Everyone's as plain
+            words beside the title, since a viewer moves between the two sets
+            all day (Asana's My tasks beside a project, Linear's My issues
+            beside the team's; Paul 2026-11-24, #5947: no boxed switch), and
+            none for a member with only their own; then the one Filter button
+            with its count and New task beside the X. Grouping and List / Grid are rows in the Filter menu, as
             Sort is on other lists. Nothing sits between the header and the
             first task at rest (#5578); a filter that is on shows as a
             removable chip under the header.
           */}
+          <PageViews>
+            <ViewLabels
+              label="Whose tasks"
+              options={canSwitchView ? VIEW_OPTIONS : []}
+              value={view}
+              onChange={setViewPick}
+            />
+          </PageViews>
           <PageActions>
-            {canSwitchView ? (
-              <SegmentedChoice
-                label="Whose tasks"
-                dense
-                options={VIEW_OPTIONS}
-                value={view}
-                onChange={setViewPick}
-              />
-            ) : null}
             <FilterMenu filters={taskFilters} thing="tasks" />
             {canManage ? (
               <NewButton
@@ -1495,6 +1495,9 @@ export function TasksBoard() {
         onReject={(task) => rejectCompletion(task)}
         onDelete={(task) => void removeTask(task)}
         onDeleteGroup={(tile) => void removeGroup(tile)}
+        groupCopies={(groupId) =>
+          tasks.filter((row) => row.group_id === groupId)
+        }
       />
       {canManage ? (
         <OpenTaskPanel
@@ -1755,9 +1758,9 @@ function TaskCard({
              * 403, and the optimistic write would flip the label to
              * "Confirmed" and snap back. A confirmed task carries neither
              * control: it sits in the Confirmed list, which says so, and the
-             * API refuses a reject once points are awarded. Reject stays on
-             * your own unconfirmed task: it withholds points rather than
-             * awarding them, so the self-confirm rule does not cover it.
+             * API refuses a reject once points are awarded. Send back is
+             * hidden on your own task too (#5917): the API refuses it, and
+             * Mark not done takes your own "done" back.
              */}
             {cannotConfirm || !needsSignOff ? null : (
               <Button
@@ -1770,16 +1773,18 @@ function TaskCard({
                 {TASK_ACTION_LABELS.confirm}
               </Button>
             )}
-            <Button
-              size="toolbar"
-              variant="secondary"
-              className="gap-1.5"
-              {...gate.controlProps(lifecycleWritePending)}
-              onClick={onReject}
-            >
-              <Undo2 className="h-4 w-4" />
-              {TASK_ACTION_LABELS.reject}
-            </Button>
+            {cannotConfirm ? null : (
+              <Button
+                size="toolbar"
+                variant="secondary"
+                className="gap-1.5"
+                {...gate.controlProps(lifecycleWritePending)}
+                onClick={onReject}
+              >
+                <Undo2 className="h-4 w-4" />
+                {TASK_ACTION_LABELS.reject}
+              </Button>
+            )}
           </>
         ) : null}
         {/*

@@ -801,6 +801,20 @@ describe("deepLinkFor: task notifications", () => {
   });
 });
 
+describe("deepLinkFor: recruitment (#5934)", () => {
+  const rush = (target: Record<string, string>) => ({
+    ...notification("n-rush", "rush", "2026-11-24T15:00:00Z"),
+    data: { target: { screen: "rush", ...target } },
+  });
+
+  it("opens the prospect's panel over the pipeline", () => {
+    expect(deepLinkFor(rush({ candidateId: "c 1" }))).toBe(
+      "/rush?prospect=c%201",
+    );
+    expect(deepLinkFor(rush({}))).toBe("/rush");
+  });
+});
+
 describe("deepLinkFor: opening at a message (#4957, #4977)", () => {
   const chat = (
     target: Record<string, string>,
@@ -910,7 +924,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
     renderDrawer();
     expect(screen.getAllByRole("link")).toHaveLength(2);
 
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveTextContent("message g2");
@@ -921,7 +935,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
   it("says all caught up when Unread leaves nothing", async () => {
     notifications.value = [{ ...EVENT, read_at: "2026-09-22T09:30:00Z" }];
     renderDrawer();
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.getByText(/all caught up/)).toBeInTheDocument();
   });

@@ -27,7 +27,6 @@ import {
   useVoteRushCandidate,
 } from "@repo/hooks";
 import { vocab } from "@repo/org-archetypes";
-import { can } from "@repo/validation";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -47,9 +46,10 @@ interface RushCardProps {
  * Which controls show, the badge and the tally are `rushCardControls`,
  * `rushCardBadgeLabel` and `rushCardTally` in `@repo/hooks`, the rules the
  * mobile card applies too. Nothing live is drawn until the candidate is read:
- * the snapshot has no votes and its bid is `"none"` forever. Every member may
- * vote and extend a bid; only `members:view` is needed to read the candidate,
- * so nobody known to lack it asks. While Recruitment is known to be off the card
+ * the snapshot has no votes and its bid is `"none"` forever. Vote and Extend
+ * bid show only for a role holding `rush:vote` / `rush:bid`, the count only
+ * for one holding `rush:view_results` (#4084), and nobody known to lack
+ * `members:view` or `rush:view` reads the candidate. While Recruitment is known to be off the card
  * offers nothing (the server refuses both writes), and a gate's refusal is
  * told in a member's words (`rushCardGateRefusal`), not the officer-addressed
  * message the guard sends.
@@ -59,15 +59,10 @@ export function RushCard({ message, isConfirmed }: RushCardProps) {
   const chapterVocabulary = useChapterVocabulary();
   const { data: permissionsPayload } = useMyPermissions();
   const permissions = permissionsPayload?.permissions;
-  const canViewMembers = can("members:view", permissions);
   // Hooks must run before the malformed-payload return; the read no-ops
   // without an id.
   const liveQuery = useRushCandidate(
-    payload &&
-      canReadCardRushCandidate({
-        canViewMembers,
-        permissionsKnown: Array.isArray(permissions),
-      })
+    payload && canReadCardRushCandidate(permissions)
       ? payload.candidate_id
       : undefined,
   );
@@ -91,7 +86,7 @@ export function RushCard({ message, isConfirmed }: RushCardProps) {
   const label = vocab("recruitment", chapterVocabulary);
   const recruitmentOff =
     moduleGate.status === "ready" && !moduleGate.isModuleEnabled("rush");
-  const controls = rushCardControls({ live, recruitmentOff });
+  const controls = rushCardControls({ live, recruitmentOff, permissions });
   const actionsDisabled = !isConfirmed || vote.isPending || bid.isPending;
   const tally = live
     ? rushCardTally(live)
