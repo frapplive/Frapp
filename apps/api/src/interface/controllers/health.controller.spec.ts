@@ -327,6 +327,24 @@ describe('HealthController', () => {
       await expect(controller.ready()).rejects.toThrow(
         ServiceUnavailableException,
       );
+      // One liveness probe, then readiness's probe and its confirming one.
+      expect(supabase.from).toHaveBeenCalledTimes(3);
+    });
+
+    // A lone probe that missed its bound while the instance was busy
+    // answered 503 and sent an error event with nothing down (FRAPP-API-7).
+    it('probes once more before calling a dependency degraded', async () => {
+      supabase.from.mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          limit: jest.fn(() =>
+            Promise.resolve({ error: { message: 'timeout' } }),
+          ),
+        })),
+      }));
+
+      await expect(controller.ready()).resolves.toMatchObject({
+        status: 'ok',
+      });
       expect(supabase.from).toHaveBeenCalledTimes(2);
     });
 
@@ -351,7 +369,7 @@ describe('HealthController', () => {
         await expect(controller.ready()).rejects.toThrow(
           ServiceUnavailableException,
         );
-        expect(supabase.from).toHaveBeenCalledTimes(2);
+        expect(supabase.from).toHaveBeenCalledTimes(3);
       });
 
       it('keeps a degraded probe only as long, so a recovery shows within the TTL', async () => {

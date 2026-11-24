@@ -118,6 +118,9 @@ const EXPECTED_AUTH_ERROR_CODES: ReadonlySet<string> = new Set([
   "email_confirmed",
   "flow_state_expired",
   "flow_state_not_found",
+  // A Google or Apple return whose OAuth state is stale: a second tab, a
+  // back button, or a sign-in left open too long (FRAPP-WEB-K).
+  "bad_oauth_state",
   // A PKCE link opened in another browser than the one that asked for it.
   // Web's callback names it `exchange_failed`. A spike of it (every link
   // failing, not a few) is what Beta Watch reads the daily count for.

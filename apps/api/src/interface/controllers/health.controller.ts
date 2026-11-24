@@ -124,7 +124,7 @@ export class HealthController {
   @ApiOkResponse({ type: HealthPayloadDto })
   async ready(): Promise<HealthPayloadDto> {
     const payload = this.buildPayload(
-      await this.readiness.get(() => this.probe()),
+      await this.readiness.get(() => this.probeConfirmingDegraded()),
     );
 
     if (payload.status === 'degraded') {
@@ -182,6 +182,19 @@ export class HealthController {
       this.probeStorage(),
     ]);
     return { database, storage };
+  }
+
+  // Readiness probes again before calling a dependency degraded. A single
+  // probe that misses its 3-second bound while the one vCPU is busy (the
+  // hourly crons all start at :00) answered 503 on its own and sent an
+  // error event (FRAPP-API-7, about a dozen a day with nothing down). A real
+  // outage fails both probes, so it still 503s, a few seconds later.
+  private async probeConfirmingDegraded(): Promise<DependencyProbes> {
+    const first = await this.probe();
+    if (first.database === 'connected' && first.storage === 'connected') {
+      return first;
+    }
+    return this.probe();
   }
 
   private buildPayload({
