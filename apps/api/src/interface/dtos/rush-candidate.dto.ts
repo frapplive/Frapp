@@ -6,7 +6,12 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { RUSH_CLOSED_REASONS, type RushClosedReason } from '@repo/validation';
+import {
+  RUSH_BID_STATES,
+  RUSH_CLOSED_REASONS,
+  type RushBidState,
+  type RushClosedReason,
+} from '@repo/validation';
 import type {
   RushBidStatus,
   RushCandidate,
@@ -88,8 +93,18 @@ export class CreateRushCandidateResponseDto implements RushCandidate {
   })
   closed_reason: RushClosedReason | null;
 
-  @ApiProperty({ enum: ['none', 'extended'] })
+  @ApiProperty({
+    enum: ['none', 'extended'],
+    description:
+      'The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.',
+  })
   bid_status: RushBidStatus;
+
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description: 'The bid’s full state (#5973).',
+  })
+  bid_state: RushBidState;
 
   @ApiProperty({ format: 'uuid' })
   created_by: string;
@@ -130,8 +145,18 @@ export class RushCandidateViewDto implements RushCandidateView {
   })
   closed_reason: RushClosedReason | null;
 
-  @ApiProperty({ enum: ['none', 'extended'] })
+  @ApiProperty({
+    enum: ['none', 'extended'],
+    description:
+      'The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.',
+  })
   bid_status: RushBidStatus;
+
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description: 'The bid’s full state (#5973).',
+  })
+  bid_state: RushBidState;
 
   @ApiProperty({ format: 'uuid' })
   created_by: string;

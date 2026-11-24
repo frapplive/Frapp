@@ -13,6 +13,13 @@ import { RbacModule } from '../rbac/rbac.module';
 import { ChapterModule } from '../chapter/chapter.module';
 import { ChannelAccessModule } from '../channel-access/channel-access.module';
 import { RushSettingsService } from '../../application/services/rush-settings.service';
+import { RushBidService } from '../../application/services/rush-bid.service';
+import { RushBidController } from '../../interface/controllers/rush-bid.controller';
+import { RushBidConfirmationController } from '../../interface/controllers/rush-bid-confirmation.controller';
+import { SupabaseRushBidRepository } from '../../infrastructure/supabase/repositories/supabase-rush-bid.repository';
+import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
+import { InviteModule } from '../invite/invite.module';
+import { EmailModule } from '../email/email.module';
 import { SupabaseChatChannelRepository } from '../../infrastructure/supabase/repositories/supabase-chat-channel.repository';
 import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.interface';
 
@@ -28,12 +35,23 @@ import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.in
     AuthModule,
     ChapterModule,
     ChannelAccessModule,
+    // InviteModule → the accepted PNM's invite; EmailModule → the one-tap
+    // confirmation email (#5973).
+    InviteModule,
+    EmailModule,
   ],
-  controllers: [RushController, RushPipelineController],
+  controllers: [
+    RushController,
+    RushPipelineController,
+    RushBidController,
+    RushBidConfirmationController,
+  ],
   providers: [
     RushService,
     RushPipelineService,
     RushSettingsService,
+    RushBidService,
+    { provide: RUSH_BID_REPOSITORY, useClass: SupabaseRushBidRepository },
     {
       provide: CHAT_CHANNEL_REPOSITORY,
       useClass: SupabaseChatChannelRepository,

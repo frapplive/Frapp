@@ -321,6 +321,7 @@ export class ScheduledJobsService {
     for (const [site, sweep] of [
       ['rush-follow-up-sweep', () => this.sweepRushFollowUps(now)],
       ['rush-stale-sweep', () => this.sweepRushStale(now)],
+      ['rush-bid-expiry-sweep', () => this.sweepRushBidExpiry(now)],
     ] as const) {
       try {
         await sweep();
@@ -1136,6 +1137,21 @@ export class ScheduledJobsService {
   }
 
   /** The chapters' module switches and stale days, or null when unread. */
+  /**
+   * Recruitment bids past their day expire (#5973, `ifc-recruitment.md`
+   * § Bids), a recorded acceptance nobody confirmed with them. One statement
+   * in the database, a compare-and-set on the state, so two instances firing
+   * together expire each bid once and need no dispatch claim. Hourly, so a
+   * bid expires within the hour; every write and the PNM's page also refuse
+   * one whose day has passed, so the hour never lets a late answer in.
+   */
+  async sweepRushBidExpiry(now: Date): Promise<{ expired: number }> {
+    if (isBetaOffModule('rush')) return { expired: 0 };
+    const expired = await this.repository.expireRushBids(now.toISOString());
+    if (expired > 0) this.logger.log(`rush bid expiry sweep: ${expired}`);
+    return { expired };
+  }
+
   private async rushChapters(
     chapterIds: readonly string[],
     site: string,

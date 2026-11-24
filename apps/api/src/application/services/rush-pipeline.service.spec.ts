@@ -22,6 +22,7 @@ import type {
   RushCandidateRow,
 } from '#domain/entities/rush-candidate.entity';
 import { RbacService } from './rbac.service';
+import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
 import type {
   RushCandidateNote,
   RushStage,
@@ -99,6 +100,7 @@ describe('RushPipelineService', () => {
     stage: 'new',
     closed_reason: null,
     bid_status: 'none',
+    bid_state: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
   };
@@ -112,6 +114,15 @@ describe('RushPipelineService', () => {
     follow_up_on: null,
     follow_up_note: null,
     follow_up_user_id: null,
+    bid_extended_at: null,
+    bid_extended_by: null,
+    bid_expires_at: null,
+    bid_acceptance_recorded_at: null,
+    bid_acceptance_recorded_by: null,
+    bid_answered_at: null,
+    bid_answered_by: null,
+    bid_answered_via: null,
+    bid_rescind_reason: null,
   };
 
   beforeEach(async () => {
@@ -198,6 +209,14 @@ describe('RushPipelineService', () => {
         { provide: RUSH_CANDIDATE_REPOSITORY, useValue: candidateRepo },
         { provide: USER_REPOSITORY, useValue: userRepo },
         { provide: RbacService, useValue: rbac },
+        {
+          provide: RUSH_BID_REPOSITORY,
+          useValue: {
+            candidatesWithConfirmationEmail: jest
+              .fn()
+              .mockResolvedValue(new Set()),
+          },
+        },
       ],
     }).compile();
 
@@ -907,6 +926,7 @@ describe('RushPipelineService', () => {
       pipelineRepo.findSettings.mockResolvedValue({
         chapter_id: CHAPTER,
         stale_days: 5,
+        bid_expiry_days: 7,
         new_member_role_id: null,
         contacts_group_id: null,
         card_channel_id: null,

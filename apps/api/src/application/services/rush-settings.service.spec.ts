@@ -9,8 +9,10 @@ import type { IUserRepository } from '#domain/repositories/user.repository.inter
 import type { RushSettingsRow } from '#domain/entities/rush-pipeline.entity';
 import type { ChannelAccessService } from './channel-access.service';
 import type { RbacService } from './rbac.service';
+import type { InviteService } from './invite.service';
 
 const CHAPTER = 'ch-1';
+const ACTOR = 'officer-1';
 
 const role = (
   id: string,
@@ -41,6 +43,7 @@ describe('RushSettingsService', () => {
   let userRepo: { findByIds: jest.Mock };
   let channelAccess: { channelReaders: jest.Mock };
   let rbac: { getChapterMemberAccess: jest.Mock };
+  let inviteService: { findInvitableRoleIds: jest.Mock };
   let service: RushSettingsService;
 
   const roles = [
@@ -58,11 +61,12 @@ describe('RushSettingsService', () => {
         row = {
           chapter_id,
           stale_days: 7,
+          bid_expiry_days: 7,
           new_member_role_id: null,
           contacts_group_id: null,
           card_channel_id: null,
           ...row,
-          ...patch,
+          ...(patch as Partial<RushSettingsRow>),
           updated_at: 'now',
         };
         return Promise.resolve(row);
@@ -128,6 +132,11 @@ describe('RushSettingsService', () => {
         { user_id: 'u-none', permissions: new Set(['members:view']) },
       ]),
     };
+    inviteService = {
+      findInvitableRoleIds: jest
+        .fn()
+        .mockResolvedValue(['nm', 'pledge-a', 'brother']),
+    };
     service = new RushSettingsService(
       pipelineRepo as unknown as IRushPipelineRepository,
       roleRepo as unknown as IRoleRepository,
@@ -137,12 +146,14 @@ describe('RushSettingsService', () => {
       userRepo as unknown as IUserRepository,
       channelAccess as unknown as ChannelAccessService,
       rbac as unknown as RbacService,
+      inviteService as unknown as InviteService,
     );
   });
 
   it('reads the defaults with no row: 7 days, the first New members role', async () => {
     await expect(service.get(CHAPTER)).resolves.toEqual({
       stale_days: 7,
+      bid_expiry_days: 7,
       new_member_role_id: null,
       default_new_member_role_id: 'pledge-a',
       contacts_group_id: null,
@@ -160,10 +171,14 @@ describe('RushSettingsService', () => {
   });
 
   it('saves only the fields it is sent and keeps the rest', async () => {
-    await service.save(CHAPTER, { stale_days: 10 });
-    const saved = await service.save(CHAPTER, {
-      new_member_role_id: 'brother',
-    });
+    await service.save(CHAPTER, { stale_days: 10 }, ACTOR);
+    const saved = await service.save(
+      CHAPTER,
+      {
+        new_member_role_id: 'brother',
+      },
+      ACTOR,
+    );
     expect(saved).toMatchObject({
       stale_days: 10,
       new_member_role_id: 'brother',
@@ -175,53 +190,80 @@ describe('RushSettingsService', () => {
   });
 
   it('refuses stale days out of range', async () => {
-    await expect(service.save(CHAPTER, { stale_days: 0 })).rejects.toThrow(
-      BadRequestException,
+    await expect(
+      service.save(CHAPTER, { stale_days: 0 }, ACTOR),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.save(CHAPTER, { stale_days: 61 }, ACTOR),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('refuses a role the person picking it could not invite someone into', async () => {
+    inviteService.findInvitableRoleIds.mockResolvedValue(['pledge-a']);
+    await expect(
+      service.save(CHAPTER, { new_member_role_id: 'brother' }, ACTOR),
+    ).rejects.toThrow("Your role can't invite someone in as brother");
+    expect(inviteService.findInvitableRoleIds).toHaveBeenCalledWith(
+      CHAPTER,
+      ACTOR,
     );
-    await expect(service.save(CHAPTER, { stale_days: 61 })).rejects.toThrow(
-      BadRequestException,
-    );
+  });
+
+  it('saves bid days from 1 to 30', async () => {
+    await expect(
+      service.save(CHAPTER, { bid_expiry_days: 3 }, ACTOR),
+    ).resolves.toMatchObject({ bid_expiry_days: 3 });
+    await expect(
+      service.save(CHAPTER, { bid_expiry_days: 31 }, ACTOR),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.save(CHAPTER, { bid_expiry_days: 0 }, ACTOR),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("refuses another chapter's role and a role that can do everything", async () => {
     await expect(
-      service.save(CHAPTER, { new_member_role_id: 'elsewhere' }),
+      service.save(CHAPTER, { new_member_role_id: 'elsewhere' }, ACTOR),
     ).rejects.toThrow(NotFoundException);
     await expect(
-      service.save(CHAPTER, { new_member_role_id: 'president' }),
+      service.save(CHAPTER, { new_member_role_id: 'president' }, ACTOR),
     ).rejects.toThrow(BadRequestException);
     expect(pipelineRepo.saveSettings).not.toHaveBeenCalled();
   });
 
   it('names the contacts Group members who are skipped for lacking rush:view', async () => {
-    const saved = await service.save(CHAPTER, { contacts_group_id: 'group-1' });
+    const saved = await service.save(
+      CHAPTER,
+      { contacts_group_id: 'group-1' },
+      ACTOR,
+    );
     expect(saved.contacts_group_skipped).toEqual([
       { user_id: 'u-none', display_name: 'Name u-none' },
     ]);
     await expect(
-      service.save(CHAPTER, { contacts_group_id: 'group-x' }),
+      service.save(CHAPTER, { contacts_group_id: 'group-x' }, ACTOR),
     ).rejects.toThrow(NotFoundException);
   });
 
   it('takes a card channel only when everyone who can read it holds rush:view', async () => {
     await expect(
-      service.save(CHAPTER, { card_channel_id: 'recruitment' }),
+      service.save(CHAPTER, { card_channel_id: 'recruitment' }, ACTOR),
     ).resolves.toMatchObject({ card_channel_id: 'recruitment' });
     await expect(
-      service.save(CHAPTER, { card_channel_id: 'open' }),
+      service.save(CHAPTER, { card_channel_id: 'open' }, ACTOR),
     ).rejects.toThrow("1 person who can read #open can't open recruitment");
     await expect(
-      service.save(CHAPTER, { card_channel_id: 'dm' }),
+      service.save(CHAPTER, { card_channel_id: 'dm' }, ACTOR),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.save(CHAPTER, { card_channel_id: 'missing' }),
+      service.save(CHAPTER, { card_channel_id: 'missing' }, ACTOR),
     ).rejects.toThrow(NotFoundException);
   });
 
   it('clears a pick with null', async () => {
-    await service.save(CHAPTER, { card_channel_id: 'recruitment' });
+    await service.save(CHAPTER, { card_channel_id: 'recruitment' }, ACTOR);
     await expect(
-      service.save(CHAPTER, { card_channel_id: null }),
+      service.save(CHAPTER, { card_channel_id: null }, ACTOR),
     ).resolves.toMatchObject({ card_channel_id: null });
   });
 });

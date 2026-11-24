@@ -321,9 +321,10 @@ export class RushPipelineController {
   @ApiOkResponse({ type: RushSettingsDto })
   async saveSettings(
     @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
     @Body() dto: SaveRushSettingsDto,
   ) {
-    return this.settingsService.save(chapterId, dto);
+    return this.settingsService.save(chapterId, dto, userId);
   }
 
   @Get('candidates/:id/contacts')

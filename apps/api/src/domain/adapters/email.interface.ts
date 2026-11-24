@@ -30,6 +30,19 @@ export interface SendSchoolCodeEmailParams {
   validMinutes: number;
 }
 
+export interface SendBidConfirmEmailParams {
+  /** The PNM's address, as the member who recorded the acceptance gave it. */
+  to: string;
+  /** The one-tap page, its token in the fragment so no server logs it. */
+  confirmUrl: string;
+  /** The chapter's name, for the subject and body. */
+  chapterName: string;
+  /** Who recorded the acceptance, by display name. Null drops it. */
+  recorderName: string | null;
+  /** The day the bid expires if nobody confirms it, written out ("February 9"). */
+  expiresOn: string;
+}
+
 /**
  * Transport for transactional invite email. Delivery is best-effort per
  * address: implementations must never throw, and report success/failure via
@@ -43,4 +56,9 @@ export interface IEmailProvider {
    * `false` when the code didn't go out.
    */
   sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean>;
+  /**
+   * A recorded bid acceptance's one-tap confirmation (#5973). Same contract:
+   * never throws, `false` when it didn't go out.
+   */
+  sendBidConfirmEmail(params: SendBidConfirmEmailParams): Promise<boolean>;
 }

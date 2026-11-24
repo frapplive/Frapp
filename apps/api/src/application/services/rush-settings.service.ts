@@ -1,10 +1,14 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  RUSH_BID_EXPIRY_DAYS_DEFAULT,
+  RUSH_BID_EXPIRY_DAYS_MAX,
+  RUSH_BID_EXPIRY_DAYS_MIN,
   RUSH_STALE_DAYS_DEFAULT,
   RUSH_STALE_DAYS_MAX,
   RUSH_STALE_DAYS_MIN,
@@ -32,6 +36,7 @@ import type {
 import type { Role } from '#domain/entities/role.entity';
 import { ChannelAccessService } from './channel-access.service';
 import { RbacService } from './rbac.service';
+import { InviteService } from './invite.service';
 
 /** Whether a member's resolved permissions reach `rush:view`. */
 function canViewRush(permissions: ReadonlySet<string>): boolean {
@@ -60,6 +65,7 @@ export class RushSettingsService {
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly channelAccess: ChannelAccessService,
     private readonly rbac: RbacService,
+    private readonly inviteService: InviteService,
   ) {}
 
   /** The settings, defaults filled in; no row reads as the defaults. */
@@ -78,6 +84,7 @@ export class RushSettingsService {
   async save(
     chapterId: string,
     patch: RushSettingsPatch,
+    actorId: string,
   ): Promise<RushSettings> {
     const write: RushSettingsPatch = {};
     if (patch.stale_days !== undefined) {
@@ -93,9 +100,26 @@ export class RushSettingsService {
       }
       write.stale_days = days;
     }
+    if (patch.bid_expiry_days !== undefined) {
+      const days = patch.bid_expiry_days;
+      if (
+        !Number.isInteger(days) ||
+        days < RUSH_BID_EXPIRY_DAYS_MIN ||
+        days > RUSH_BID_EXPIRY_DAYS_MAX
+      ) {
+        throw new BadRequestException(
+          `Bids last from ${RUSH_BID_EXPIRY_DAYS_MIN} to ${RUSH_BID_EXPIRY_DAYS_MAX} days`,
+        );
+      }
+      write.bid_expiry_days = days;
+    }
     if (patch.new_member_role_id !== undefined) {
       if (patch.new_member_role_id !== null) {
-        await this.requireNewMemberRole(chapterId, patch.new_member_role_id);
+        await this.requireNewMemberRole(
+          chapterId,
+          patch.new_member_role_id,
+          actorId,
+        );
       }
       write.new_member_role_id = patch.new_member_role_id;
     }
@@ -145,6 +169,7 @@ export class RushSettingsService {
     ]);
     return {
       stale_days: row?.stale_days ?? RUSH_STALE_DAYS_DEFAULT,
+      bid_expiry_days: row?.bid_expiry_days ?? RUSH_BID_EXPIRY_DAYS_DEFAULT,
       new_member_role_id: row?.new_member_role_id ?? null,
       default_new_member_role_id: defaultRoleId,
       contacts_group_id: groupId,
@@ -176,15 +201,32 @@ export class RushSettingsService {
     return first?.id ?? null;
   }
 
+  /**
+   * The role is the chapter's, doesn't hold everything, and is one the person
+   * picking it could invite someone into themself (the invite rank rules,
+   * #4546): the accepted PNM's invite is sent without checking a sender's
+   * rank (`InviteService.createForAcceptedProspect`), so it is checked here,
+   * where someone chooses it.
+   */
   private async requireNewMemberRole(
     chapterId: string,
     roleId: string,
+    actorId: string,
   ): Promise<void> {
     const [role] = await this.roleRepo.findByIds([roleId], chapterId);
     if (!role) throw new NotFoundException('Role not found');
     if (holdsEverything(role)) {
       throw new BadRequestException(
         "A new member can't join with a role that can do everything",
+      );
+    }
+    const invitable = await this.inviteService.findInvitableRoleIds(
+      chapterId,
+      actorId,
+    );
+    if (!invitable.includes(role.id)) {
+      throw new ForbiddenException(
+        `Your role can't invite someone in as ${role.name}`,
       );
     }
   }

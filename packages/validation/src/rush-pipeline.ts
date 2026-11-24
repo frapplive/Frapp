@@ -402,3 +402,43 @@ export function rushNewMembersTier<T extends { name: string }>(
     ) ?? null
   );
 }
+
+// ── Bids (#5973) ─────────────────────────────────────────────────────────────
+
+/**
+ * A bid's full state (`spec/behavior/ifc-recruitment.md` § Bids). Only bid
+ * actions move it, never a stage move. A recorded acceptance stays
+ * `extended` until it is confirmed.
+ */
+export const RUSH_BID_STATES = [
+  "none",
+  "extended",
+  "accepted",
+  "declined",
+  "expired",
+  "rescinded",
+] as const;
+export type RushBidState = (typeof RUSH_BID_STATES)[number];
+
+/**
+ * The two values shipped clients read in `bid_status` (§ Compatibility with
+ * shipped clients): an acceptance still reads as a bid out, and every other
+ * state as none.
+ */
+export function rushLegacyBidStatus(state: RushBidState): "none" | "extended" {
+  return state === "extended" || state === "accepted" ? "extended" : "none";
+}
+
+/** Extend is allowed only from these; anything else is answered 409. */
+export function canExtendRushBid(state: RushBidState): boolean {
+  return state === "none" || state === "expired";
+}
+
+/** How long a bid stays open, a chapter setting until councils land. */
+export const RUSH_BID_EXPIRY_DAYS_DEFAULT = 7;
+export const RUSH_BID_EXPIRY_DAYS_MIN = 1;
+export const RUSH_BID_EXPIRY_DAYS_MAX = 30;
+export const RUSH_BID_RESCIND_REASON_MAX = 200;
+
+/** A recorded acceptance's state's words: "Waiting to confirm". */
+export const RUSH_BID_WAITING_TO_CONFIRM = "Waiting to confirm";

@@ -15931,6 +15931,312 @@
         ]
       }
     },
+    "/v1/rush/candidates/{id}/bid/decline": {
+      "post": {
+        "operationId": "RushBidController_decline_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid to decline"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a decline the PNM gave on paper or aloud",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/accept": {
+      "post": {
+        "operationId": "RushBidController_accept_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRushAcceptanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid, or an acceptance is already recorded"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record an acceptance the PNM gave on paper or aloud; it waits for the PNM or `rush:manage` to confirm",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/confirm": {
+      "post": {
+        "operationId": "RushBidController_confirm_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No recorded acceptance to confirm"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm a recorded acceptance; the PNM is invited with the chapter's new-member role",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/rescind": {
+      "post": {
+        "operationId": "RushBidController_rescind_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RescindRushBidDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid to rescind"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Take back an open bid, with a reason",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/bid-confirmations/preview": {
+      "post": {
+        "operationId": "RushBidConfirmationController_preview_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushBidConfirmTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidConfirmationPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No waiting confirmation for that link"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A recorded bid acceptance's chapter, who recorded it and whether it waits, with no account needed",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/bid-confirmations/confirm": {
+      "post": {
+        "operationId": "RushBidConfirmationController_confirm_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushBidConfirmTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidConfirmationPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No waiting confirmation for that link"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The PNM confirms the acceptance a member recorded, with one tap from the emailed link",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
     "/v1/geofences": {
       "get": {
         "operationId": "StudyGeofenceController_list_v1",
@@ -36225,7 +36531,20 @@
             "enum": [
               "none",
               "extended"
-            ]
+            ],
+            "description": "The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole."
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state (#5973)."
           },
           "created_by": {
             "type": "string",
@@ -36253,6 +36572,7 @@
           "stage",
           "closed_reason",
           "bid_status",
+          "bid_state",
           "created_by",
           "created_at",
           "viewer_has_voted"
@@ -36383,7 +36703,20 @@
             "enum": [
               "none",
               "extended"
-            ]
+            ],
+            "description": "The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole."
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state (#5973)."
           },
           "created_by": {
             "type": "string",
@@ -36407,6 +36740,7 @@
           "stage",
           "closed_reason",
           "bid_status",
+          "bid_state",
           "created_by",
           "created_at"
         ]
@@ -36618,6 +36952,67 @@
           "follow_up_user_name": {
             "type": "string",
             "nullable": true
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state; `bid_status` is its two-value form for shipped clients. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed."
+          },
+          "bid_extended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_extended_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_confirm_emailed": {
+            "type": "boolean",
+            "description": "Whether the PNM was emailed the one-tap confirmation. The address is never returned."
+          },
+          "bid_answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_answered_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_answered_via": {
+            "type": "string",
+            "enum": [
+              "member",
+              "pnm",
+              "system"
+            ],
+            "nullable": true
+          },
+          "bid_rescind_reason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -36641,7 +37036,18 @@
           "follow_up_on",
           "follow_up_note",
           "follow_up_user_id",
-          "follow_up_user_name"
+          "follow_up_user_name",
+          "bid_state",
+          "bid_extended_at",
+          "bid_extended_by_name",
+          "bid_expires_at",
+          "bid_acceptance_recorded_at",
+          "bid_acceptance_recorded_by_name",
+          "bid_confirm_emailed",
+          "bid_answered_at",
+          "bid_answered_by_name",
+          "bid_answered_via",
+          "bid_rescind_reason"
         ]
       },
       "RushPipelineDto": {
@@ -36914,6 +37320,12 @@
             "maximum": 60,
             "description": "Days without a logged contact before an open prospect needs a follow-up."
           },
+          "bid_expiry_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30,
+            "description": "Days a bid stays open before it expires."
+          },
           "new_member_role_id": {
             "type": "string",
             "format": "uuid",
@@ -36948,6 +37360,7 @@
         },
         "required": [
           "stale_days",
+          "bid_expiry_days",
           "new_member_role_id",
           "default_new_member_role_id",
           "contacts_group_id",
@@ -36963,11 +37376,16 @@
             "minimum": 1,
             "maximum": 60
           },
+          "bid_expiry_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30
+          },
           "new_member_role_id": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
-            "description": "A role of this chapter; null goes back to the default."
+            "description": "A role of this chapter that the caller could invite someone into; null goes back to the default."
           },
           "contacts_group_id": {
             "type": "string",
@@ -37159,6 +37577,164 @@
           "follow_up_note",
           "follow_up_user_id",
           "follow_up_user_name"
+        ]
+      },
+      "RushBidDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed."
+          },
+          "bid_extended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_extended_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Set while a recorded acceptance waits for confirmation."
+          },
+          "bid_acceptance_recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_confirm_emailed": {
+            "type": "boolean",
+            "description": "Whether the PNM was emailed the one-tap confirmation. The address is never returned."
+          },
+          "bid_answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_answered_by_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who recorded the decline, confirmed or rescinded; null for the PNM and for an expiry."
+          },
+          "bid_answered_via": {
+            "type": "string",
+            "enum": [
+              "member",
+              "pnm",
+              "system"
+            ],
+            "nullable": true,
+            "description": "`member` by a member, `pnm` by the PNM’s own tap, `system` by expiry."
+          },
+          "bid_rescind_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "invite_sent": {
+            "type": "boolean",
+            "description": "On a confirmation: whether the accepted PNM’s invite went out to the email kept for it."
+          }
+        },
+        "required": [
+          "id",
+          "bid_state",
+          "bid_extended_at",
+          "bid_extended_by_name",
+          "bid_expires_at",
+          "bid_acceptance_recorded_at",
+          "bid_acceptance_recorded_by_name",
+          "bid_confirm_emailed",
+          "bid_answered_at",
+          "bid_answered_by_name",
+          "bid_answered_via",
+          "bid_rescind_reason"
+        ]
+      },
+      "RecordRushAcceptanceDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 320,
+            "description": "The PNM’s email for the one-tap confirmation and the invite. Omit to use a linked member’s account email; with neither, only `rush:manage` can confirm. Never shown to members."
+          }
+        }
+      },
+      "RescindRushBidDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "RushBidConfirmTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the emailed link’s fragment."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "RushBidConfirmationPreviewDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          },
+          "recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "confirmed",
+              "closed"
+            ],
+            "description": "`waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm."
+          }
+        },
+        "required": [
+          "chapter_name",
+          "recorded_by_name",
+          "expires_at",
+          "status"
         ]
       },
       "GeofenceCircleDto": {

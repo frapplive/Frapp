@@ -12,6 +12,7 @@ import type { IUserRepository } from '#domain/repositories/user.repository.inter
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import type { RushStage } from '#domain/entities/rush-pipeline.entity';
 import { ChatService } from './chat.service';
+import { RushBidService } from './rush-bid.service';
 import { RushPipelineService } from './rush-pipeline.service';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 
@@ -26,6 +27,7 @@ describe('RushService', () => {
   let mockRushRepo: jest.Mocked<IRushCandidateRepository>;
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
   let mockChatService: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
+  let mockBids: { extend: jest.Mock };
   let mockPipeline: jest.Mocked<
     Pick<RushPipelineService, 'stageForNewCandidate' | 'listStages'>
   >;
@@ -39,6 +41,7 @@ describe('RushService', () => {
     stage: 'new',
     closed_reason: null,
     bid_status: 'none',
+    bid_state: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
   };
@@ -48,7 +51,6 @@ describe('RushService', () => {
       findById: jest.fn(),
       findByNameKey: jest.fn(),
       create: jest.fn(),
-      setBidExtended: jest.fn(),
       insertVote: jest.fn(),
       countVotes: jest.fn().mockResolvedValue(0),
       viewerHasVoted: jest.fn().mockResolvedValue(false),
@@ -62,6 +64,7 @@ describe('RushService', () => {
       sendMessage: jest.fn().mockResolvedValue({}),
     };
 
+    mockBids = { extend: jest.fn().mockResolvedValue({}) };
     mockPipeline = {
       stageForNewCandidate: jest.fn().mockResolvedValue('new'),
       listStages: jest
@@ -79,6 +82,7 @@ describe('RushService', () => {
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: ChatService, useValue: mockChatService },
         { provide: RushPipelineService, useValue: mockPipeline },
+        { provide: RushBidService, useValue: mockBids },
       ],
     }).compile();
 
@@ -118,6 +122,7 @@ describe('RushService', () => {
         stage: 'new',
         closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: 'user-1',
       });
       expect(result).toEqual(baseCandidate);
@@ -258,32 +263,28 @@ describe('RushService', () => {
   });
 
   describe('bid', () => {
-    it('extends none → extended', async () => {
-      mockRushRepo.findById.mockResolvedValue(baseCandidate);
-      mockRushRepo.setBidExtended.mockResolvedValue({
-        ...baseCandidate,
-        bid_status: 'extended',
-      });
-
-      const result = await service.bid('cand-1', 'ch-1', sees('user-1'));
-
-      expect(mockRushRepo.setBidExtended).toHaveBeenCalledWith(
-        'cand-1',
-        'ch-1',
-      );
-      expect(result.bid_status).toBe('extended');
-    });
-
-    it('is a no-op when already extended', async () => {
+    it('extends through the bid rules, then answers the card view', async () => {
       mockRushRepo.findById.mockResolvedValue({
         ...baseCandidate,
         bid_status: 'extended',
+        bid_state: 'extended',
       });
 
       const result = await service.bid('cand-1', 'ch-1', sees('user-1'));
 
-      expect(mockRushRepo.setBidExtended).not.toHaveBeenCalled();
+      expect(mockBids.extend).toHaveBeenCalledWith('cand-1', 'ch-1', 'user-1');
       expect(result.bid_status).toBe('extended');
+      expect(result.bid_state).toBe('extended');
+    });
+
+    it('passes on a refusal, writing nothing (an answered bid is 409)', async () => {
+      mockBids.extend.mockRejectedValue(
+        new ConflictException('This prospect already accepted'),
+      );
+      await expect(
+        service.bid('cand-1', 'ch-1', sees('user-1')),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(mockRushRepo.findById).not.toHaveBeenCalled();
     });
   });
 

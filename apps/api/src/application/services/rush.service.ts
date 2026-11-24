@@ -17,6 +17,7 @@ import type {
 } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
 import { RushPipelineService } from './rush-pipeline.service';
+import { RushBidService } from './rush-bid.service';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 
 export interface CreateRushCandidateInput {
@@ -69,6 +70,7 @@ export class RushService {
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly chatService: ChatService,
     private readonly pipelineService: RushPipelineService,
+    private readonly bidService: RushBidService,
   ) {}
 
   async findView(
@@ -141,6 +143,7 @@ export class RushService {
         ),
         closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: input.created_by,
       });
     } catch (error) {
@@ -176,14 +179,13 @@ export class RushService {
     chapterId: string,
     viewer: RushViewer,
   ): Promise<RushCandidateView> {
-    const existing = await this.rushRepo.findById(id, chapterId);
-    if (!existing) {
+    // Extend only from `none` or `expired`; anything else is 409, so an old
+    // card's Extend can't undo an answer (`ifc-recruitment.md` § Bids).
+    await this.bidService.extend(id, chapterId, viewer.id);
+    const candidate = await this.rushRepo.findById(id, chapterId);
+    if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    const candidate =
-      existing.bid_status === 'extended'
-        ? existing
-        : await this.rushRepo.setBidExtended(id, chapterId);
     return this.toView(candidate, viewer);
   }
 

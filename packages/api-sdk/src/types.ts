@@ -4676,6 +4676,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rush/candidates/{id}/bid/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a decline the PNM gave on paper or aloud */
+        post: operations["RushBidController_decline_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record an acceptance the PNM gave on paper or aloud; it waits for the PNM or `rush:manage` to confirm */
+        post: operations["RushBidController_accept_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a recorded acceptance; the PNM is invited with the chapter's new-member role */
+        post: operations["RushBidController_confirm_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/rescind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take back an open bid, with a reason */
+        post: operations["RushBidController_rescind_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/bid-confirmations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A recorded bid acceptance's chapter, who recorded it and whether it waits, with no account needed */
+        post: operations["RushBidConfirmationController_preview_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/bid-confirmations/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The PNM confirms the acceptance a member recorded, with one tap from the emailed link */
+        post: operations["RushBidConfirmationController_confirm_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geofences": {
         parameters: {
             query?: never;
@@ -11524,8 +11626,16 @@ export interface components {
              * @enum {string|null}
              */
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
-            /** @enum {string} */
+            /**
+             * @description The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.
+             * @enum {string}
+             */
             bid_status: "none" | "extended";
+            /**
+             * @description The bid’s full state (#5973).
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
             /** Format: uuid */
             created_by: string;
             /** Format: date-time */
@@ -11577,8 +11687,16 @@ export interface components {
              * @enum {string|null}
              */
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
-            /** @enum {string} */
+            /**
+             * @description The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.
+             * @enum {string}
+             */
             bid_status: "none" | "extended";
+            /**
+             * @description The bid’s full state (#5973).
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
             /** Format: uuid */
             created_by: string;
             /** Format: date-time */
@@ -11668,6 +11786,27 @@ export interface components {
              */
             follow_up_user_id: string | null;
             follow_up_user_name: string | null;
+            /**
+             * @description The bid’s full state; `bid_status` is its two-value form for shipped clients. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
+            /** Format: date-time */
+            bid_extended_at: string | null;
+            bid_extended_by_name: string | null;
+            /** Format: date-time */
+            bid_expires_at: string | null;
+            /** Format: date-time */
+            bid_acceptance_recorded_at: string | null;
+            bid_acceptance_recorded_by_name: string | null;
+            /** @description Whether the PNM was emailed the one-tap confirmation. The address is never returned. */
+            bid_confirm_emailed: boolean;
+            /** Format: date-time */
+            bid_answered_at: string | null;
+            bid_answered_by_name: string | null;
+            /** @enum {string|null} */
+            bid_answered_via: "member" | "pnm" | "system" | null;
+            bid_rescind_reason: string | null;
         };
         RushPipelineDto: {
             /** @description In board order: by category, then position. */
@@ -11750,6 +11889,8 @@ export interface components {
         RushSettingsDto: {
             /** @description Days without a logged contact before an open prospect needs a follow-up. */
             stale_days: number;
+            /** @description Days a bid stays open before it expires. */
+            bid_expiry_days: number;
             /**
              * Format: uuid
              * @description The role an accepted PNM’s invite carries, as picked. Null means the default.
@@ -11775,9 +11916,10 @@ export interface components {
         };
         SaveRushSettingsDto: {
             stale_days?: number;
+            bid_expiry_days?: number;
             /**
              * Format: uuid
-             * @description A role of this chapter; null goes back to the default.
+             * @description A role of this chapter that the caller could invite someone into; null goes back to the default.
              */
             new_member_role_id?: string | null;
             /** Format: uuid */
@@ -11853,6 +11995,62 @@ export interface components {
             /** Format: uuid */
             follow_up_user_id: string | null;
             follow_up_user_name: string | null;
+        };
+        RushBidDto: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description The bid’s full state. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
+            /** Format: date-time */
+            bid_extended_at: string | null;
+            bid_extended_by_name: string | null;
+            /** Format: date-time */
+            bid_expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description Set while a recorded acceptance waits for confirmation.
+             */
+            bid_acceptance_recorded_at: string | null;
+            bid_acceptance_recorded_by_name: string | null;
+            /** @description Whether the PNM was emailed the one-tap confirmation. The address is never returned. */
+            bid_confirm_emailed: boolean;
+            /** Format: date-time */
+            bid_answered_at: string | null;
+            /** @description Who recorded the decline, confirmed or rescinded; null for the PNM and for an expiry. */
+            bid_answered_by_name: string | null;
+            /**
+             * @description `member` by a member, `pnm` by the PNM’s own tap, `system` by expiry.
+             * @enum {string|null}
+             */
+            bid_answered_via: "member" | "pnm" | "system" | null;
+            bid_rescind_reason: string | null;
+            /** @description On a confirmation: whether the accepted PNM’s invite went out to the email kept for it. */
+            invite_sent?: boolean;
+        };
+        RecordRushAcceptanceDto: {
+            /** @description The PNM’s email for the one-tap confirmation and the invite. Omit to use a linked member’s account email; with neither, only `rush:manage` can confirm. Never shown to members. */
+            email?: string | null;
+        };
+        RescindRushBidDto: {
+            reason: string;
+        };
+        RushBidConfirmTokenDto: {
+            /** @description The token from the emailed link’s fragment. */
+            token: string;
+        };
+        RushBidConfirmationPreviewDto: {
+            chapter_name: string;
+            recorded_by_name: string | null;
+            /** Format: date-time */
+            expires_at: string | null;
+            /**
+             * @description `waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm.
+             * @enum {string}
+             */
+            status: "waiting" | "confirmed" | "closed";
         };
         GeofenceCircleDto: {
             lat: number;
@@ -25109,6 +25307,240 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RushFollowUpDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_decline_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid to decline */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_accept_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRushAcceptanceDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid, or an acceptance is already recorded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_confirm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No recorded acceptance to confirm */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_rescind_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RescindRushBidDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid to rescind */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidConfirmationController_preview_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushBidConfirmTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidConfirmationPreviewDto"];
+                };
+            };
+            /** @description No waiting confirmation for that link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidConfirmationController_confirm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushBidConfirmTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidConfirmationPreviewDto"];
+                };
+            };
+            /** @description No waiting confirmation for that link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

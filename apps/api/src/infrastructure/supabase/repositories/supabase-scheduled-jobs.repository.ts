@@ -261,6 +261,14 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
     );
   }
 
+  async expireRushBids(now: string): Promise<number> {
+    const { data, error } = await this.supabase.rpc('expire_rush_bids', {
+      p_now: now,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return typeof data === 'number' ? data : 0;
+  }
+
   async findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]> {
     const rows = await this.fetchAllPages<
       Omit<SweepRushOwnedRow, 'owner_id'> & { owner_id: string | null }

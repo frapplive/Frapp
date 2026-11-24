@@ -19,7 +19,6 @@ export interface IRushCandidateRepository {
       created_at?: string;
     },
   ): Promise<RushCandidate>;
-  setBidExtended(id: string, chapterId: string): Promise<RushCandidate>;
   insertVote(
     candidateId: string,
     chapterId: string,

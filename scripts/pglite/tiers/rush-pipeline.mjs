@@ -27,6 +27,15 @@ import { db, miss } from "../harness.mjs";
 //   at the first morning push;
 // - account deletion clears the prospects the member owned and the
 //   follow-ups set for them, touches nobody else's, and keeps their contacts.
+// Slice 3 (#5973) adds:
+// - a candidate starts with no bid, and a bid's state is one of six;
+// - `expire_rush_bids` expires only open bids past their day, writes the
+//   shipped clients' `bid_status` with them, clears a recorded acceptance and
+//   deletes its pending confirmation (with the PNM's email), and leaves an
+//   answered or later bid alone; the API calls it from the hourly sweep with
+//   its own mocked repository, so this is the one place it runs;
+// - a pending confirmation can't point at another chapter's candidate, and
+//   two confirmations without a token (no email) can coexist.
 try {
   const U = {
     a: "c5c5c5c5-0000-4000-8000-00000000000a",
@@ -196,6 +205,94 @@ try {
   checks.push([
     (await count("rush_candidate_notes", `author_id = '${U.a}'`)) === 1,
     "account deletion keeps the notes the member wrote",
+  ]);
+
+  // Bids (#5973).
+  const BID = {
+    due: "c5c5c5c5-0000-4000-8000-0000000000d1",
+    open: "c5c5c5c5-0000-4000-8000-0000000000d2",
+    answered: "c5c5c5c5-0000-4000-8000-0000000000d3",
+  };
+  await db.exec(`
+    insert into rush_candidates (id, chapter_id, display_name, created_by) values
+      ('${BID.due}', '${CH.a}', 'Due', '${U.b}'),
+      ('${BID.open}', '${CH.a}', 'Open', '${U.b}'),
+      ('${BID.answered}', '${CH.a}', 'Answered', '${U.b}');
+  `);
+  checks.push([
+    (await count(
+      "rush_candidates",
+      `id = '${BID.due}' and bid_state = 'none' and bid_status = 'none'`,
+    )) === 1,
+    "a new candidate has no bid (#5973)",
+  ]);
+  checks.push([
+    await rejects(
+      `update rush_candidates set bid_state = 'maybe' where id = '${BID.due}';`,
+    ),
+    "a bid's state is one of six (#5973)",
+  ]);
+  await db.exec(`
+    update rush_candidates
+       set bid_state = 'extended', bid_status = 'extended',
+           bid_expires_at = '2026-12-01T00:00:00Z',
+           bid_acceptance_recorded_at = '2026-11-25T00:00:00Z',
+           bid_acceptance_recorded_by = '${U.b}'
+     where id = '${BID.due}';
+    update rush_candidates
+       set bid_state = 'extended', bid_status = 'extended',
+           bid_expires_at = '2026-12-09T00:00:00Z'
+     where id = '${BID.open}';
+    update rush_candidates
+       set bid_state = 'declined', bid_expires_at = '2026-11-30T00:00:00Z'
+     where id = '${BID.answered}';
+    insert into rush_bid_confirmations (candidate_id, chapter_id, email, token_hash)
+      values ('${BID.due}', '${CH.a}', 'due@example.com', 'hash-due'),
+             ('${BID.open}', '${CH.a}', null, null),
+             ('${BID.answered}', '${CH.a}', null, null);
+  `);
+  checks.push([
+    await rejects(
+      `insert into rush_bid_confirmations (candidate_id, chapter_id)
+         values ('${CAND.b}', '${CH.a}');`,
+    ),
+    "a bid confirmation can't land on another chapter's candidate (#5973)",
+  ]);
+  const expired = (
+    await db.query(
+      `select public.expire_rush_bids('2026-12-02T00:00:00Z'::timestamptz) as n`,
+    )
+  ).rows[0].n;
+  checks.push([
+    expired === 1 &&
+      (await count(
+        "rush_candidates",
+        `id = '${BID.due}' and bid_state = 'expired' and bid_status = 'none'
+           and bid_answered_via = 'system' and bid_acceptance_recorded_at is null`,
+      )) === 1 &&
+      (await count("rush_bid_confirmations", `candidate_id = '${BID.due}'`)) ===
+        0,
+    "expire_rush_bids expires a bid past its day, its recorded acceptance and its emailed confirmation with it (#5973)",
+  ]);
+  checks.push([
+    (await count(
+      "rush_candidates",
+      `(id = '${BID.open}' and bid_state = 'extended')
+         or (id = '${BID.answered}' and bid_state = 'declined')`,
+    )) === 2 &&
+      (await count(
+        "rush_bid_confirmations",
+        `candidate_id in ('${BID.open}', '${BID.answered}')`,
+      )) === 2,
+    "expire_rush_bids leaves an open bid not yet due and an answered one alone (#5973)",
+  ]);
+  checks.push([
+    (
+      await db.query(
+        `select public.expire_rush_bids('2026-12-02T00:00:00Z'::timestamptz) as n`,
+      )
+    ).rows[0].n === 0,
+    "expire_rush_bids expires each bid once (#5973)",
   ]);
 
   console.log("\n=== Recruitment pipeline (#5924) ===");

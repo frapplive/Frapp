@@ -756,6 +756,76 @@ export class InviteService {
   }
 
   /**
+   * The invite a confirmed bid acceptance sends (#5973,
+   * `spec/behavior/ifc-recruitment.md` § Bids): one emailed invite to the
+   * PNM, carrying the chapter's new-member role, through the same token,
+   * email and daily ceilings as any emailed invite.
+   *
+   * Unlike {@link createWithEmails} it doesn't check the role against
+   * `createdBy`'s rank: the role was picked on the Recruitment settings page
+   * by a `rush:manage` holder, or is the New members tier's first, never one
+   * that holds everything, and the PNM's own confirmation has no inviter
+   * whose rank could apply. `createdBy` is who the invite names as sending
+   * it. Best-effort, like every invite email: a refusal at the ceiling or a
+   * failed send answers `false`, and the acceptance stands either way.
+   */
+  async createForAcceptedProspect(input: {
+    chapterId: string;
+    createdBy: string;
+    roleId: string;
+    email: string;
+  }): Promise<boolean> {
+    try {
+      const [role] = await this.roleRepo.findByIds(
+        [input.roleId],
+        input.chapterId,
+      );
+      if (!role || role.permissions.includes('*')) return false;
+      const origin = resolveAppOrigin(this.config);
+      assertHttpsJoinOrigin(new URL(origin));
+      const data = this.prepareInviteData(
+        input.chapterId,
+        input.createdBy,
+        role.name,
+        input.email.trim().toLowerCase(),
+      );
+      const [invites, chapter, inviter] = await Promise.all([
+        this.insertWithinDailyCeilings(input.chapterId, input.createdBy, [
+          data,
+        ]),
+        this.chapterRepo.findById(input.chapterId).catch(() => null),
+        this.userRepo.findById(input.createdBy).catch(() => null),
+      ]);
+      const invite = invites[0];
+      if (!invite) return false;
+      const sent = await this.emailProvider
+        .sendInviteEmail({
+          to: data.email as string,
+          joinUrl: buildJoinUrl(invite.token, origin),
+          role: role.system_key === SystemRoleKeys.EVERYONE ? null : role.name,
+          validDays: INVITE_DAYS,
+          chapterName: chapter?.name ?? null,
+          inviterName: inviter?.display_name ?? null,
+        })
+        .catch(() => false);
+      if (!sent) {
+        await this.inviteRepo
+          .markEmailFailed(input.chapterId, [invite.id])
+          .catch(() => undefined);
+      }
+      return sent;
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Accepted prospect's invite was not sent (chapter ${input.chapterId})`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Inserts the batch only when it fits under the daily emailed-invite
    * ceilings (`daily-send-limits.ts`): the chapter's, and the sender's across
    * all their chapters, each counting the emailed invites of the last 24

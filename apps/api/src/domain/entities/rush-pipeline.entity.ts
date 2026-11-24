@@ -3,7 +3,11 @@ import type {
   RushContactKind,
   RushStageCategory,
 } from '@repo/validation';
-import type { RushBidStatus } from './rush-candidate.entity';
+import type {
+  RushBidAnsweredVia,
+  RushBidState,
+  RushBidStatus,
+} from './rush-candidate.entity';
 
 /** A chapter's own stage, in one of the six fixed categories (#5924). */
 export interface RushStage {
@@ -85,6 +89,8 @@ export interface RushContactView {
 export interface RushSettingsRow {
   chapter_id: string;
   stale_days: number;
+  /** Days a bid stays open before it expires (Winston, 2026-11-24). */
+  bid_expiry_days: number;
   /** The role an accepted PNM's invite carries; null means the default. */
   new_member_role_id: string | null;
   /** The recruitment contacts Group (#5973). */
@@ -97,6 +103,7 @@ export interface RushSettingsRow {
 /** What a settings save changes; a field left out keeps its value. */
 export interface RushSettingsPatch {
   stale_days?: number;
+  bid_expiry_days?: number;
   new_member_role_id?: string | null;
   contacts_group_id?: string | null;
   card_channel_id?: string | null;
@@ -111,6 +118,7 @@ export interface RushSettingsSkippedMember {
 /** A chapter's recruitment settings, defaults filled in. */
 export interface RushSettings {
   stale_days: number;
+  bid_expiry_days: number;
   /** The role picked on the settings page, or null for the default. */
   new_member_role_id: string | null;
   /**
@@ -159,6 +167,19 @@ export interface RushPipelineCandidate {
   follow_up_note: string | null;
   follow_up_user_id: string | null;
   follow_up_user_name: string | null;
+  /** The bid's full state and who did what when (#5973). */
+  bid_state: RushBidState;
+  bid_extended_at: string | null;
+  bid_extended_by_name: string | null;
+  bid_expires_at: string | null;
+  bid_acceptance_recorded_at: string | null;
+  bid_acceptance_recorded_by_name: string | null;
+  /** The PNM was emailed the one-tap confirmation; never the address. */
+  bid_confirm_emailed: boolean;
+  bid_answered_at: string | null;
+  bid_answered_by_name: string | null;
+  bid_answered_via: RushBidAnsweredVia | null;
+  bid_rescind_reason: string | null;
 }
 
 export interface RushPipeline {

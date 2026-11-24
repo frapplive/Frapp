@@ -216,6 +216,11 @@ export interface IScheduledJobsRepository {
   /** Every open candidate with an owner, across chapters. */
   findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]>;
   /**
+   * Expires every open recruitment bid past its day, across chapters
+   * (`expire_rush_bids`, #5973); the count. Throws on a database error.
+   */
+  expireRushBids(now: string): Promise<number>;
+  /**
    * Per chapter: whether the `rush` module is on, and its stale days (no
    * entry for a chapter with no settings row). Throws on a database error.
    */

@@ -51,6 +51,9 @@ import type {
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
 import { RbacService } from './rbac.service';
+import { rushBidPeople, rushBidView } from './rush-bid.service';
+import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
+import type { IRushBidRepository } from '#domain/repositories/rush-bid.repository.interface';
 
 /**
  * Who is reading the pipeline. The two permission reads are promises so the
@@ -83,6 +86,7 @@ export class RushPipelineService {
     private readonly candidateRepo: IRushCandidateRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly rbac: RbacService,
+    @Inject(RUSH_BID_REPOSITORY) private readonly bidRepo: IRushBidRepository,
   ) {}
 
   /**
@@ -183,6 +187,7 @@ export class RushPipelineService {
       votes,
       results,
       staleDays,
+      emailed,
     ] = await Promise.all([
       this.listStages(chapterId),
       this.pipelineRepo.listTags(chapterId),
@@ -192,6 +197,7 @@ export class RushPipelineService {
       this.pipelineRepo.listVotes(chapterId),
       viewer.canViewResults,
       this.staleDays(chapterId),
+      this.bidRepo.candidatesWithConfirmationEmail(chapterId),
     ]);
 
     const names = await this.userNames(
@@ -200,6 +206,7 @@ export class RushPipelineService {
         candidate.owner_id,
         candidate.last_contact_by,
         candidate.follow_up_user_id,
+        ...rushBidPeople(candidate),
       ]),
     );
     const nameOf = (id: string | null) =>
@@ -221,6 +228,7 @@ export class RushPipelineService {
             ? null
             : own.reduce((sum, row) => sum + row.rating, 0) / own.length;
         return {
+          ...rushBidView(candidate, names, emailed.has(candidate.id)),
           id: candidate.id,
           display_name: candidate.display_name,
           user_id: candidate.user_id,
