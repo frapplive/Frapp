@@ -35,6 +35,7 @@ const { RushRecruitmentPicks, namesList } =
 
 const BASE = {
   stale_days: 7,
+  bid_expiry_days: 7,
   new_member_role_id: null,
   default_new_member_role_id: "nm",
   contacts_group_id: null,
@@ -55,6 +56,18 @@ describe("RushRecruitmentPicks (#5973)", () => {
     expect(
       screen.getByRole("combobox", { name: "Card channel" }),
     ).toHaveTextContent("No card");
+  });
+
+  it("shows how long bids last, typed by rush:manage and read by others", () => {
+    const { unmount } = render(<RushRecruitmentPicks canEdit canSeeRoles />);
+    expect(
+      screen.getByRole("textbox", {
+        name: "Days a bid stays open before it expires",
+      }),
+    ).toHaveValue("7");
+    unmount();
+    render(<RushRecruitmentPicks canEdit={false} canSeeRoles />);
+    expect(screen.getByText("Bids expire after 7 days")).toBeInTheDocument();
   });
 
   it("asks for a pick when the New members tier holds no role", () => {

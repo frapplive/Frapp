@@ -1,6 +1,9 @@
 import { serverMessageOf, statusOf } from "@repo/api-sdk";
 import {
+  RUSH_BID_STATES,
   can,
+  canExtendRushBid,
+  type RushBidState,
   moduleRefusalFromServerMessage,
   subscriptionRefusalFromServerMessage,
 } from "@repo/validation";
@@ -29,6 +32,11 @@ export interface LiveRushCandidate {
   vote_count: number | null;
   viewer_has_voted: boolean;
   bid_extended: boolean;
+  /**
+   * The bid's full state (#5973), from `bid_state`; an API before it sent
+   * only `bid_status`, read as `extended` or `none`.
+   */
+  bid_state: RushBidState;
 }
 
 /**
@@ -56,6 +64,11 @@ export function readLiveRushCandidate(data: unknown): LiveRushCandidate | null {
     vote_count: counted ? (r.vote_count as number) : null,
     viewer_has_voted: r.viewer_has_voted === true,
     bid_extended: r.bid_status === "extended",
+    bid_state: (RUSH_BID_STATES as readonly unknown[]).includes(r.bid_state)
+      ? (r.bid_state as RushBidState)
+      : r.bid_status === "extended"
+        ? "extended"
+        : "none",
   };
 }
 
@@ -113,9 +126,9 @@ export type RushCardControl = "vote" | "voted" | "bid";
  * - **Voted** once the viewer has, whatever they hold now: it records what
  *   they did, not something they may do.
  * - **Vote** before that, for a viewer who may (`rush:vote`).
- * - **Extend bid** until a bid is out, for a viewer who may (`rush:bid`).
- *   Once it is out the badge says so and the control goes, since a repeat
- *   bid changes nothing.
+ * - **Extend bid** with no bid out or an expired one, for a viewer who may
+ *   (`rush:bid`). Once a bid is out, answered or rescinded the badge says so
+ *   and the control goes: the server refuses a repeat (409, #5973).
  *
  * A control the viewer's role can't use is left out, not disabled (#4084):
  * a role without the key has nothing to wait for. `permissions` is read as
@@ -131,15 +144,31 @@ export function rushCardControls(input: {
   const controls: RushCardControl[] = [];
   if (live.viewer_has_voted) controls.push("voted");
   else if (rushCardMay("rush:vote", permissions)) controls.push("vote");
-  if (!live.bid_extended && rushCardMay("rush:bid", permissions)) {
+  if (
+    canExtendRushBid(live.bid_state) &&
+    rushCardMay("rush:bid", permissions)
+  ) {
     controls.push("bid");
   }
   return controls;
 }
 
-/** What a rush card's badge says: whether a bid is out. */
+/** What a rush card's badge says: where the bid stands, or Open. */
 export function rushCardBadgeLabel(live: LiveRushCandidate): string {
-  return live.bid_extended ? "Bid extended" : "Open";
+  switch (live.bid_state) {
+    case "extended":
+      return "Bid extended";
+    case "accepted":
+      return "Accepted";
+    case "declined":
+      return "Declined";
+    case "expired":
+      return "Bid expired";
+    case "rescinded":
+      return "Rescinded";
+    default:
+      return "Open";
+  }
 }
 
 /**

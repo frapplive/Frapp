@@ -14,7 +14,14 @@ const DASHBOARD: RushDashboard = {
   needsFollowUp: 2,
   followUpsDue: 1,
   mine: 3,
-  bidsExtended: 1,
+  bids: {
+    extended: 3,
+    out: 1,
+    waiting: 1,
+    accepted: 1,
+    declined: 1,
+    expired: 0,
+  },
   results: {
     topRated: [{ id: "ana", display_name: "Ana", value: 4.5, count: 2 }],
     mostVotes: [],
@@ -37,6 +44,11 @@ describe("RushSummary (#5973)", () => {
         .getAllByRole("listitem")
         .map((row) => row.textContent),
     ).toEqual(["New4", "Met2", "Closed1"]);
+
+    const bids = screen.getByRole("region", { name: "Bids" });
+    expect(
+      within(bids).getByText("Waiting to confirm").nextSibling,
+    ).toHaveTextContent("1");
 
     expect(screen.getByText("4.5 from 2 ratings")).toBeInTheDocument();
     expect(

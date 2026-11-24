@@ -48,6 +48,7 @@ import {
 } from "@/lib/rush/rush-entry";
 import {
   RUSH_ADD_PROSPECT,
+  rushBidBadge,
   rushListSubtitle,
   rushOwnerWords,
   rushRowMark,
@@ -359,7 +360,7 @@ export function emptyStageLine(
 
 /**
  * A prospect's row: their name, their owner and rating summary on one muted
- * line, then the follow-up mark (a due one and a stale prospect in the
+ * line, then the bid's badge in web's words ("Waiting to confirm"), the follow-up mark (a due one and a stale prospect in the
  * warning hue, a later one quiet), up to two tags and a count of the rest.
  */
 export function ProspectRow({
@@ -382,6 +383,7 @@ export function ProspectRow({
   const rating = rushRatingSummary(candidate);
   const meta = [rushOwnerWords(candidate), rating].filter(Boolean).join(" · ");
   const mark = rushRowMark(candidate, staleDays, today);
+  const bid = rushBidBadge(candidate);
   const labels = rushAppliedTags(candidate.tag_ids, tags).map((t) => t.label);
   const cut = rushTagOverflow(labels);
   return (
@@ -391,6 +393,7 @@ export function ProspectRow({
       accessibilityLabel={candidate.display_name}
       accessibilityHint={[
         meta,
+        bid?.label ?? null,
         mark?.label ?? null,
         labels.length ? labels.join(", ") : null,
       ]
@@ -408,8 +411,24 @@ export function ProspectRow({
         <Text numberOfLines={1} style={styles.meta}>
           {meta}
         </Text>
-        {mark || cut.shown.length > 0 ? (
+        {bid || mark || cut.shown.length > 0 ? (
           <View style={styles.tags}>
+            {bid ? (
+              bid.tone === "ended" ? (
+                <HairlineChip label={bid.label} />
+              ) : (
+                <StatusChip
+                  label={bid.label}
+                  hue={
+                    bid.tone === "waiting"
+                      ? tokens.color.semantic.warning
+                      : bid.tone === "done"
+                        ? tokens.color.semantic.success
+                        : tokens.color.semantic.info
+                  }
+                />
+              )
+            ) : null}
             {mark ? (
               mark.tone === "planned" ? (
                 <HairlineChip label={mark.label} />

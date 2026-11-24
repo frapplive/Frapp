@@ -80,8 +80,9 @@ export function useVoteRushCandidate() {
 }
 
 /**
- * Extend a bid to a candidate (`rush:bid`). Idempotent on the server. The
- * returned view replaces the card's live read.
+ * Extend a bid to a candidate (`rush:bid`). Taken only with no bid out or an
+ * expired one; any other state is a 409 that says why (#5973). The returned
+ * view replaces the card's live read.
  */
 export function useBidRushCandidate() {
   const client = useFrappClient();

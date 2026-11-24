@@ -2,6 +2,7 @@
 
 import {
   RUSH_DASHBOARD_TITLES,
+  rushDashboardBidRows,
   rushDashboardStats,
   rushRankedFact,
   type RushDashboard,
@@ -18,9 +19,10 @@ import { cn } from "@/lib/utils";
  * count of the board's own cards (`rushDashboard` in `@repo/hooks`), so the
  * two never disagree.
  *
- * Three bordered groups, top to bottom in the order a recruitment chair reads
- * them: the numbers that need doing something (open, yours, follow-ups, bids),
- * the funnel by stage in the chapter's order, then, only with
+ * Bordered groups, top to bottom in the order a recruitment chair reads
+ * them: the numbers that need doing something (open, yours, follow-ups, bids
+ * out), the funnel by stage in the chapter's order (Bid extended among the
+ * columns, as on the board), the bids by where they stand, then, only with
  * `rush:view_results`, who members rate highest and who has the most votes. A
  * ranked name opens the prospect.
  */
@@ -82,6 +84,24 @@ export function RushSummary({
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="space-y-2" aria-labelledby="rush-summary-bids">
+        <SectionLabel id="rush-summary-bids">
+          {RUSH_DASHBOARD_TITLES.bids}
+        </SectionLabel>
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[14px] border border-border bg-border @[34rem]:grid-cols-3 @[52rem]:grid-cols-6">
+          {rushDashboardBidRows(dashboard.bids).map((row) => (
+            <div key={row.key} className="bg-card px-4 py-2">
+              <dt className="truncate text-caption text-muted-foreground">
+                {row.label}
+              </dt>
+              <dd className="text-sm font-semibold tabular-nums text-foreground">
+                {row.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {dashboard.results ? (

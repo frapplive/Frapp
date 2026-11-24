@@ -42,6 +42,8 @@ const prospect = (
     stage: "new",
     closed_reason: null,
     bid_status: "none",
+    bid_state: "none",
+    bid_acceptance_recorded_at: null,
     created_by: "u",
     created_by_name: "U",
     created_at: `${TODAY}T10:00:00Z`,
@@ -79,9 +81,17 @@ const CANDIDATES = [
     follow_up_on: TODAY,
     follow_up_user_id: "other",
     bid_status: "extended",
+    bid_state: "extended",
+    bid_acceptance_recorded_at: `${TODAY}T12:00:00Z`,
     owner_id: "me",
   }),
   prospect("dan", { stage: "old", follow_up_on: "2026-11-30" }),
+  prospect("fay", {
+    bid_status: "extended",
+    bid_state: "accepted",
+    owner_id: "me",
+  }),
+  prospect("gil", { stage: "met", bid_state: "expired" }),
   prospect("eve", {
     stage: "passed",
     closed_reason: "chapter_passed",
@@ -113,22 +123,32 @@ describe("rushDashboard (#5973)", () => {
       })),
     );
     // A hidden stage that still holds someone keeps its row, as its column.
+    // Cal's bid is out, so they sit in Bid extended; Fay accepted, so in
+    // Closed, whatever their stages.
     expect(dashboard.funnel.map((row) => [row.id, row.count])).toEqual([
       ["new", 1],
       ["met", 2],
       ["old", 1],
-      ["closed", 1],
+      ["bid-extended", 1],
+      ["closed", 2],
     ]);
   });
 
   it("counts open, follow-up, owned and bid numbers from the open prospects", () => {
     const dashboard = rushDashboard(STAGES, CANDIDATES, options);
     expect(dashboard).toMatchObject({
-      open: 4,
+      open: 5, // ana, ben, cal, dan, gil; eve is closed and fay accepted
       needsFollowUp: 1, // ben: 23 days without a contact
       followUpsDue: 1, // cal's, though it isn't the viewer's
-      mine: 2, // ana and cal; eve is closed
-      bidsExtended: 1,
+      mine: 2, // ana and cal; eve is closed and fay accepted
+      bids: {
+        extended: 3,
+        out: 1,
+        waiting: 1,
+        accepted: 1,
+        declined: 0,
+        expired: 1,
+      },
     });
   });
 

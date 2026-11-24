@@ -37,10 +37,22 @@ export interface RushDashboard {
   followUpsDue: number;
   /** Open prospects the viewer owns. */
   mine: number;
-  /** Prospects with a bid out (`bid_status` extended). */
-  bidsExtended: number;
+  /** Bids by state, as `ifc-recruitment.md` § Dashboard lists them. */
+  bids: RushDashboardBids;
   /** Null without `rush:view_results`. */
   results: RushDashboardResults | null;
+}
+
+export interface RushDashboardBids {
+  /** Every bid extended that is still on record: out, answered or expired. */
+  extended: number;
+  /** Open, waiting for an answer (recorded acceptances included). */
+  out: number;
+  /** Recorded acceptances waiting to be confirmed. */
+  waiting: number;
+  accepted: number;
+  declined: number;
+  expired: number;
 }
 
 export interface RushFunnelRow {
@@ -85,8 +97,13 @@ export function rushDashboard(
   const closedKeys = new Set(
     stages.filter((stage) => stage.category === "closed").map((s) => s.key),
   );
+  // An accepted prospect folds into Closed on the board, so isn't open.
   const isOpen = (c: RushPipelineCandidate) =>
-    !closedKeys.has(c.stage) && c.closed_reason == null;
+    !closedKeys.has(c.stage) &&
+    c.closed_reason == null &&
+    c.bid_state !== "accepted";
+  const inState = (state: RushPipelineCandidate["bid_state"]) =>
+    candidates.filter((c) => c.bid_state === state).length;
   const open = candidates.filter(isOpen);
 
   const funnel = columns.map((column) => ({
@@ -114,7 +131,17 @@ export function rushDashboard(
       options.viewerId === null
         ? 0
         : open.filter((c) => c.owner_id === options.viewerId).length,
-    bidsExtended: candidates.filter((c) => c.bid_status === "extended").length,
+    bids: {
+      extended: candidates.filter((c) => c.bid_state !== "none").length,
+      out: inState("extended"),
+      waiting: candidates.filter(
+        (c) =>
+          c.bid_state === "extended" && c.bid_acceptance_recorded_at !== null,
+      ).length,
+      accepted: inState("accepted"),
+      declined: inState("declined"),
+      expired: inState("expired"),
+    },
     results: hasResults
       ? {
           topRated: rank(
@@ -162,7 +189,7 @@ function rank(
 
 /** One number on the dashboard's top row. */
 export interface RushDashboardStat {
-  key: "open" | "needsFollowUp" | "followUpsDue" | "mine" | "bidsExtended";
+  key: "open" | "needsFollowUp" | "followUpsDue" | "mine" | "bidsOut";
   label: string;
   value: number;
 }
@@ -187,7 +214,7 @@ export function rushDashboardStats(
       label: "Follow-ups due",
       value: dashboard.followUpsDue,
     },
-    { key: "bidsExtended", label: "Bids out", value: dashboard.bidsExtended },
+    { key: "bidsOut", label: "Bids out", value: dashboard.bids.out },
   ];
   if (options.canOwn) {
     stats.splice(1, 0, { key: "mine", label: "Yours", value: dashboard.mine });
@@ -195,9 +222,27 @@ export function rushDashboardStats(
   return stats;
 }
 
+/**
+ * The Bids section's rows, in order: extended, then where they stand. Rows at
+ * zero stay, so a chair reads "Accepted 0" rather than wondering.
+ */
+export function rushDashboardBidRows(
+  bids: RushDashboardBids,
+): { key: keyof RushDashboardBids; label: string; value: number }[] {
+  return [
+    { key: "extended", label: "Extended", value: bids.extended },
+    { key: "out", label: "Out", value: bids.out },
+    { key: "waiting", label: "Waiting to confirm", value: bids.waiting },
+    { key: "accepted", label: "Accepted", value: bids.accepted },
+    { key: "declined", label: "Declined", value: bids.declined },
+    { key: "expired", label: "Expired", value: bids.expired },
+  ];
+}
+
 /** The dashboard's section titles, shared by both apps. */
 export const RUSH_DASHBOARD_TITLES = {
   funnel: "By stage",
+  bids: "Bids",
   topRated: "Top rated",
   mostVotes: "Most votes",
 } as const;

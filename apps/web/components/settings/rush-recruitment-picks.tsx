@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { toastFailure } from "@/lib/failure-toast";
 import { asArray } from "@/lib/utils";
+import { RushDaysRow } from "./rush-stale-days";
+import {
+  RUSH_BID_EXPIRY_DAYS_MAX,
+  RUSH_BID_EXPIRY_DAYS_MIN,
+} from "@repo/validation";
 
 /** The menu value for "no pick": the default role, no Group, no card. */
 const NONE = "__none";
@@ -43,7 +48,9 @@ export function namesList(names: readonly string[]): string {
 /**
  * The rest of the Recruitment module page (#5973,
  * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live):
- * the role an accepted prospect joins with, and, for interest-form sign-ups,
+ * how long a bid stays open (Winston, 2026-11-24: a chapter setting until
+ * councils land), the role an accepted prospect joins with, and, for
+ * interest-form sign-ups,
  * the recruitment contacts Group and the channel their card goes to. Each is a
  * settings row whose value opens its menu and saves on pick (rulebook § 9);
  * a holder of `rush:manage` changes them, everyone else reads them.
@@ -117,6 +124,33 @@ export function RushRecruitmentPicks({
 
   return (
     <>
+      <ProfileSection id="settings-module-rush-bids" title="Bids">
+        <SettingsGroup>
+          {canEdit ? (
+            <RushDaysRow
+              days={settings.bid_expiry_days}
+              min={RUSH_BID_EXPIRY_DAYS_MIN}
+              max={RUSH_BID_EXPIRY_DAYS_MAX}
+              label="Bids expire after"
+              description="Unless the prospect answers first"
+              ariaLabel="Days a bid stays open before it expires"
+              failTitle="Couldn't save how long bids last"
+              onSave={(days, done) =>
+                save.mutate({ bid_expiry_days: days }, done)
+              }
+            />
+          ) : (
+            <SettingsRow
+              label={`Bids expire after ${settings.bid_expiry_days} ${
+                settings.bid_expiry_days === 1 ? "day" : "days"
+              }`}
+              description="Your role can't change this."
+              control={null}
+            />
+          )}
+        </SettingsGroup>
+      </ProfileSection>
+
       <ProfileSection id="settings-module-rush-joining" title="Joining">
         <SettingsGroup footnote="A prospect whose acceptance is confirmed is invited to join with this role.">
           <SettingsRow

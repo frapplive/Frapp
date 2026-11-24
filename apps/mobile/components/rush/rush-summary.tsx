@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
   RUSH_DASHBOARD_TITLES,
+  rushDashboardBidRows,
   rushDashboardStats,
   rushRankedFact,
   type RushDashboard,
@@ -19,7 +20,7 @@ import { useFrappTheme } from "@/lib/theme";
  *
  * Read-only fact rows, as iOS Settings' About and Pipedrive's phone insights
  * list a number beside its name: the counts, then the funnel by stage in the
- * chapter's order, then, only with `rush:view_results`, who members rate
+ * chapter's order, then the bids by where they stand, then, only with `rush:view_results`, who members rate
  * highest and who has the most votes, each opening the prospect.
  */
 export function RushSummary({
@@ -55,6 +56,19 @@ export function RushSummary({
               variant="detail"
               label={row.label}
               value={String(row.count)}
+            />
+          ))}
+        </ListSection>
+      </View>
+      <View>
+        <SectionHeader>{RUSH_DASHBOARD_TITLES.bids}</SectionHeader>
+        <ListSection>
+          {rushDashboardBidRows(dashboard.bids).map((row) => (
+            <ListRow
+              key={row.key}
+              variant="detail"
+              label={row.label}
+              value={String(row.value)}
             />
           ))}
         </ListSection>
