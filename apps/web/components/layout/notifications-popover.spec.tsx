@@ -942,7 +942,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
     renderDrawer();
     expect(screen.getAllByRole("link")).toHaveLength(2);
 
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveTextContent("message g2");
@@ -953,7 +953,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
   it("says all caught up when Unread leaves nothing", async () => {
     notifications.value = [{ ...EVENT, read_at: "2026-09-22T09:30:00Z" }];
     renderDrawer();
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.getByText(/all caught up/)).toBeInTheDocument();
   });

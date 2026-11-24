@@ -259,7 +259,6 @@ const mockSetSidebarFilter = vi.fn();
 const sidebarState = {
   /** `GET /v1/threads` rows, for the rail's thread rows (#5300). */
   memberThreads: [] as unknown[],
-  sort: "chapter" as "chapter" | "recent" | "alpha",
   pinOptions: undefined as { onError?: () => void } | undefined,
   foldOptions: undefined as { onError?: () => void } | undefined,
   filterOptions: undefined as { onError?: () => void } | undefined,
@@ -895,7 +894,6 @@ vi.mock("@repo/hooks", async () => ({
     pinnedIds: sidebarState.pinnedIds,
     collapsed: new Set<string>(),
     filters: { unreadOnly: false, hideMuted: false },
-    sort: sidebarState.sort,
   }),
   useSetChannelPinned: (options?: { onError?: () => void }) => {
     sidebarState.pinOptions = options;
@@ -989,14 +987,11 @@ vi.mock("./channel-list", () => ({
     "Nothing changed. Check your connection and try again.",
   ChannelFilters: ({
     onChange,
-    sort,
   }: {
     onChange: (change: { hide_muted: boolean }) => void;
-    sort?: string;
   }) => (
     <button
       data-testid="filters-hide-muted"
-      data-sort={sort}
       onClick={() => onChange({ hide_muted: true })}
     >
       hide muted
@@ -7208,48 +7203,12 @@ describe("ChatShell's two lists (#3774)", () => {
     expect(screen.queryByTestId("composer")).not.toBeInTheDocument();
   });
 
-  it("reads the latest messages on the channels rail only under Recent, and offers the sort there alone (#2877)", () => {
+  it("never reads the latest messages for the channels rail, which is always in the chapter's order (#5947)", () => {
     latestReads.enabled = [];
-    latestReads.rows = [
-      {
-        channel_id: "chan-group",
-        sender_id: "other-1",
-        author_name: "Cole Bennett",
-        content: "hi",
-        kind: "text",
-        attachment_count: 0,
-        created_at: "2026-11-12T01:20:00.000Z",
-      },
-    ];
     channelsQueryState.value = { data: [...CHANNELS, DM, GROUP] };
-    sidebarState.sort = "recent";
-    try {
-      const { unmount } = render(<ChatShell />);
-      expect(latestReads.enabled.at(-1)).toBe(true);
-      expect(rail()).toHaveAttribute("data-latest", "chan-group");
-      // The times order the rail; no preview line is drawn from them.
-      expect(rail()).not.toHaveAttribute("data-previews");
-      expect(screen.getByTestId("filters-hide-muted")).toHaveAttribute(
-        "data-sort",
-        "recent",
-      );
-      unmount();
-
-      sidebarState.sort = "alpha";
-      latestReads.enabled = [];
-      const alpha = render(<ChatShell />);
-      expect(latestReads.enabled.every((on) => on === false)).toBe(true);
-      expect(rail()).not.toHaveAttribute("data-latest");
-      alpha.unmount();
-
-      // Direct messages always run newest first, so they offer no sort.
-      render(<ChatShell view="direct" />);
-      expect(screen.getByTestId("filters-hide-muted")).not.toHaveAttribute(
-        "data-sort",
-      );
-    } finally {
-      sidebarState.sort = "chapter";
-    }
+    render(<ChatShell />);
+    expect(latestReads.enabled.every((on) => on === false)).toBe(true);
+    expect(rail()).not.toHaveAttribute("data-latest");
   });
 
   it("reads the latest messages only for Direct messages, and words each last line (#3774)", () => {

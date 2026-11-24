@@ -326,7 +326,7 @@ Comparable apps: Google Forms, Microsoft Forms, Typeform and Slack Workflow form
   Which room?", so two questions with one title stay two columns (`formResponsesExportRows` in `@repo/chat-core/form-responses`, shared with the phone).
 - **Responses (phone, step 4).**
   The creator's card adds a secondary **Responses** button beside Fill out, which opens a full-screen page over the thread (`form-responses-page.tsx`), hosted by the form page's own overlay (`FormFillPage` with mode `responses`), so the virtualized row that opened it can't close it and the back button and edge swipe close the page rather than the thread.
-  It draws what web's panel does, with a Summary | Individual segmented control for the tabs, and **Export** at its foot shares the CSV through the share sheet, as the sign-up card's does.
+  It draws what web's panel does, with Summary and Individual as view labels at its head (`ViewLabels`, [`components.md` § View labels](../../ui/design-system/components.md#view-labels-change-a-pages-or-a-lists-view); a segmented control until #5947), and **Export** at its foot shares the CSV through the share sheet, as the sign-up card's does.
 - **Checked on save.**
   `PUT` takes `{ answers }`: text for a short-answer or paragraph question (up to 300 and 4,000 characters), an option id for multiple choice or a dropdown, a list of option ids for checkboxes, and `yes` or `no`.
   A blank answer is dropped; a blank required question, an option the question doesn't list, or an answer to a question the form doesn't ask is a 400 (`normalizeFormAnswers`).

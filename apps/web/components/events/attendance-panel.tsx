@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { NestedError, NestedLoading } from "@/components/shared/nested-states";
 import {
   SubscriptionNotice,
@@ -314,13 +314,12 @@ export function AttendancePanel({
         ) : null}
       </div>
       {/* Not gated: filtering is a read, and §5 gates writes only. */}
-      <SegmentedChoice
+      <ViewLabels
+        flush
         label="Show"
         options={filters}
         value={statusFilter}
         onChange={setStatusFilter}
-        dense
-        fill
       />
       {rows.length >= ATTENDANCE_SEARCH_FROM ? (
         <div className="relative">

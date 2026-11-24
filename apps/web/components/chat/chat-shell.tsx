@@ -2384,9 +2384,9 @@ export function ChatShell({
     Direct messages read like the phone's Messages screen (#3774): newest
     conversation first, each with its last line, worded by the rule both
     clients share (`channelPreviewLine`; spec/behavior/chat/README.md
-    § Channel list previews). The channels rail draws neither, so the read
-    runs there only while the member sorts by Recent (#2877), which orders
-    the rail by the same times and draws no line from them.
+    § Channel list previews). The channels rail draws neither and is always
+    in the chapter's order (#5947), so the read runs for Direct messages
+    alone.
 
     The list waits for the read's first answer behind its skeleton, as the
     phone's does, so the rows never re-sort under the pointer. After that the
@@ -2394,10 +2394,7 @@ export function ChatShell({
     and so the order and the lines. A hidden DM has no latest row (the server
     leaves it out), so it gets no line rather than a false "No messages yet".
   */
-  const recentSort = sidebarPreferences.sort === "recent";
-  const latestQuery = useChannelLatestMessages({
-    enabled: directView || recentSort,
-  });
+  const latestQuery = useChannelLatestMessages({ enabled: directView });
   const latestRows = latestQuery.data;
   // The rows' times read this clock, so "4:46 PM" becomes "Yesterday" on a
   // tab left open: identical refetches keep `latestRows` stable (#5519).
@@ -2443,13 +2440,6 @@ export function ChatShell({
     }
     return { at, previews, meta };
   }, [directView, latestRows, directChannels, userId, nameFor, now]);
-  // Recent on the channels rail (#2877): each channel's latest message time.
-  // Absent until the read answers or if it failed, when the shared
-  // arrangement keeps the chapter's order rather than sorting on nothing.
-  const channelLatestAt = useMemo(() => {
-    if (!recentSort || !latestRows) return undefined;
-    return new Map(latestRows.map((row) => [row.channel_id, row.created_at]));
-  }, [recentSort, latestRows]);
   // A failed fetch must not read as "everything is read". `ChannelList` maps
   // an absent row to zero, so handing it an empty map on error would render
   // every row calm and unbadged — telling a member they have no @-mentions at
@@ -3380,7 +3370,7 @@ export function ChatShell({
   /*
     One list's contents (#5946). `sidebar` is the chapter's channels drawn
     into the sidebar: the list alone, with no title and no control over it
-    (Paul, 2026-11-24), its sort and filters on a category heading's own
+    (Paul, 2026-11-24), its filters on a category heading's own
     control. `pane` is the list as a pane of this panel: the Messages page's
     conversations from `lg` up, and either list below `lg`, where the panel
     is the whole page and the list is one of its two screens.
@@ -3389,10 +3379,6 @@ export function ChatShell({
     <ChannelFilters
       heading={heading}
       filters={sidebarPreferences.filters}
-      // Direct messages always run newest first, so their panel offers no
-      // sort.
-      sort={kind === "direct" ? undefined : sidebarPreferences.sort}
-      reorderable={kind !== "direct" && !!railReorder}
       onChange={sidebarControls.onSetFilters}
     />
   );
@@ -3497,13 +3483,13 @@ export function ChatShell({
             {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
             {place === "pane" ? cards : null}
             {channelsPaneState === "ready" &&
-            (direct || recentSort) &&
+            direct &&
             !latestSettled ? (
               <ChannelListSkeleton />
             ) : channelsPaneState === "ready" ? (
               <ChannelList
                 kind={kind}
-                latestAt={direct ? directLatest?.at : channelLatestAt}
+                latestAt={direct ? directLatest?.at : undefined}
                 previews={direct ? directLatest?.previews : undefined}
                 rowMeta={direct ? directLatest?.meta : undefined}
                 viewerId={userId}
@@ -3519,16 +3505,15 @@ export function ChatShell({
                 onHide={hideFromRail}
                 rowActions={rowActions}
                 sidebar={sidebarControls}
-                // In the sidebar nothing sits over the list, so its sort and
-                // filters open from a heading (`ChannelList`).
+                // In the sidebar nothing sits over the list, so its filters
+                // open from a heading (`ChannelList`).
                 headingControl={
                   place === "sidebar" ? listFilters(kind, true) : undefined
                 }
                 // The chapter's order is for channels: a DM is never placed in
                 // it, and the empty categories an officer drags onto would sit
-                // in a list of conversations (#3774). Under Recent or A–Z the
-                // list keeps categories draggable and turns off channel-row
-                // drag itself (#2877).
+                // in a list of conversations (#3774). Channels are always in
+                // that order (#5947), so their rows always drag.
                 reorder={direct ? undefined : railReorder}
                 onCreateChannel={
                   canManageChannel && !direct
