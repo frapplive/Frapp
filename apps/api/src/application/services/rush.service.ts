@@ -44,7 +44,7 @@ export interface RushViewer {
 }
 
 /** The 409's `code` when a name lookup matches several prospects. */
-export const RUSH_SEVERAL_MATCH_CODE = 'rush.several_match';
+const RUSH_SEVERAL_MATCH_CODE = 'rush.several_match';
 
 /** One prospect a name matched, enough to tell two apart in a picker. */
 export interface RushNameMatch {

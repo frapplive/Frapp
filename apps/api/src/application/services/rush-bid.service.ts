@@ -82,7 +82,7 @@ const NOT_FOUND = 'Candidate not found';
 const LINK_GONE = "This link doesn't work any more";
 
 /** The path the emailed link opens, its token in the fragment. */
-export const RUSH_BID_CONFIRM_PATH = '/recruitment/confirm';
+const RUSH_BID_CONFIRM_PATH = '/recruitment/confirm';
 
 /**
  * A chapter's bids (#5973, `spec/behavior/ifc-recruitment.md` § Bids): extend,
