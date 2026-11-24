@@ -667,6 +667,15 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
       },
     ],
   },
+  'application/services/interest-form.service.ts': {
+    calls: 1,
+    entries: [
+      {
+        status: 'not-hidden',
+        why: 'A new interest-form submission, to rush:manage and the recruitment contacts (#5977). It names a prospect, never a member, so a block has nothing to hide.',
+      },
+    ],
+  },
   'application/services/invite.service.ts': {
     calls: 3,
     entries: [

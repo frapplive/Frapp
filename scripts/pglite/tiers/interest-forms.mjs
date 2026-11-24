@@ -95,10 +95,13 @@ try {
     ]);
   }
   const councilLink = (chapter, side, status) =>
-    fn(
-      `select public.set_council_chapter_status($1, $2, $3, $4, $5, null)`,
-      [IFC, chapter, side, status, USER],
-    );
+    fn(`select public.set_council_chapter_status($1, $2, $3, $4, $5, null)`, [
+      IFC,
+      chapter,
+      side,
+      status,
+      USER,
+    ]);
   await councilLink(CH_A, "council", "proposed");
   await councilLink(CH_A, "chapter", "accepted");
   await councilLink(CH_B, "council", "proposed"); // still pending
@@ -137,10 +140,12 @@ try {
       [formId, email, ip],
     );
   const confirm = (formId, id, codeHash, proof = "proof-hash") =>
-    fn(
-      `select public.confirm_interest_form_code($1, $2, $3, $4, 1800, 5)`,
-      [formId, id, codeHash, proof],
-    );
+    fn(`select public.confirm_interest_form_code($1, $2, $3, $4, 1800, 5)`, [
+      formId,
+      id,
+      codeHash,
+      proof,
+    ]);
   const submit = (formId, id, proof, first, last, extra = {}) =>
     fn(
       `select public.submit_interest_form($1, $2, $3, $4, $5, null, 2030::smallint,
@@ -167,9 +172,15 @@ try {
   // ── Codes ──
   const offDomain = await start(FORM_A, "pat@gmail.com");
   const nphc = await start(FORM_NPHC, "pat@fts-tier.edu");
-  await db.query(`update chapter_interest_forms set is_open = false where id = $1`, [FORM_B]);
+  await db.query(
+    `update chapter_interest_forms set is_open = false where id = $1`,
+    [FORM_B],
+  );
   const closed = await start(FORM_B, "pat@fts-tier.edu");
-  await db.query(`update chapter_interest_forms set is_open = true where id = $1`, [FORM_B]);
+  await db.query(
+    `update chapter_interest_forms set is_open = true where id = $1`,
+    [FORM_B],
+  );
   const lone = await start(FORM_LONE, "anyone@gmail.com");
   const sent = await start(FORM_A, "Pat@FTS-tier.edu");
   const wrong = await confirm(FORM_A, sent.id, "not-the-hash");
@@ -276,8 +287,13 @@ try {
     [CH_B],
   );
   await councilLink(CH_B, "chapter", "accepted");
-  const pushed = await fn(`select public.push_up_chapter_form_interests($1)`, [CH_B]);
-  const pushedAgain = await fn(`select public.push_up_chapter_form_interests($1)`, [CH_B]);
+  const pushed = await fn(`select public.push_up_chapter_form_interests($1)`, [
+    CH_B,
+  ]);
+  const pushedAgain = await fn(
+    `select public.push_up_chapter_form_interests($1)`,
+    [CH_B],
+  );
   const afterAccept = await one(
     `select count(*)::int as n from pnm_interests where chapter_id = $1 and registration_id is not null`,
     [CH_B],
@@ -341,7 +357,13 @@ try {
     },
     {
       name: "a code goes only to the school's domains, an open form, and never an NPHC chapter",
-      got: [reason(offDomain), reason(nphc), reason(closed), reason(lone), reason(sent)],
+      got: [
+        reason(offDomain),
+        reason(nphc),
+        reason(closed),
+        reason(lone),
+        reason(sent),
+      ],
       want: ["wrong_domain", "form_closed", "form_closed", "ok", "ok"],
     },
     {
@@ -356,36 +378,82 @@ try {
     },
     {
       name: "one transaction: PNM, interest, first-stage candidate with pnm_id, push-up, consent",
-      got: [first.candidate_created, first.pushed_up, first.council_id === IFC, afterFirst],
-      want: [true, true, true, {
-        pnms: 1, interests: 1, interest_label: "tabling-quad", registrations: 1, candidates: 1,
-        candidate: "new:pnm:true:true",
-        consent: "2026-11-24:agree_18:tabling-quad:true",
-      }],
+      got: [
+        first.candidate_created,
+        first.pushed_up,
+        first.council_id === IFC,
+        afterFirst,
+      ],
+      want: [
+        true,
+        true,
+        true,
+        {
+          pnms: 1,
+          interests: 1,
+          interest_label: "tabling-quad",
+          registrations: 1,
+          candidates: 1,
+          candidate: "new:pnm:true:true",
+          consent: "2026-11-24:agree_18:tabling-quad:true",
+        },
+      ],
     },
     {
       name: "a repeat submission updates, never duplicates",
-      got: [reason(again), again.candidate_created, again.candidate_id === first.candidate_id, afterAgain],
-      want: ["ok", false, true, { pnms: 1, candidates: 1, name: "Patrick Doe", submissions: 2 }],
+      got: [
+        reason(again),
+        again.candidate_created,
+        again.candidate_id === first.candidate_id,
+        afterAgain,
+      ],
+      want: [
+        "ok",
+        false,
+        true,
+        { pnms: 1, candidates: 1, name: "Patrick Doe", submissions: 2 },
+      ],
     },
     {
       name: "two PNMs may share a name; a hand-added name may not; a namesake is offered, never linked",
-      got: [/duplicate key/.test(manualTwin), /created_by_manual/.test(noAdder), reason(jordan2), names],
-      want: [true, true, "ok", { jordans: 3, offered_links: 2, linked_manual: 0, nobody_referred: 0 }],
+      got: [
+        /duplicate key/.test(manualTwin),
+        /created_by_manual/.test(noAdder),
+        reason(jordan2),
+        names,
+      ],
+      want: [
+        true,
+        true,
+        "ok",
+        { jordans: 3, offered_links: 2, linked_manual: 0, nobody_referred: 0 },
+      ],
     },
     {
       name: "a pending council link feeds only the chapter; accepting it pushes up once, emailing only the newly listed",
-      got: [pending.pushed_up, beforeAccept.n, pushed.pushed.map((p) => p.email), pushedAgain.pushed.length, afterAccept.n],
+      got: [
+        pending.pushed_up,
+        beforeAccept.n,
+        pushed.pushed.map((p) => p.email),
+        pushedAgain.pushed.length,
+        afterAccept.n,
+      ],
       want: [false, 0, ["bo@fts-tier.edu"], 0, 2],
     },
     {
       name: "a chapter with no school matches its own submissions, with no school-wide record",
-      got: [loneFirst.pnm_id, loneAgain.candidate_id === loneFirst.candidate_id, loneRows],
+      got: [
+        loneFirst.pnm_id,
+        loneAgain.candidate_id === loneFirst.candidate_id,
+        loneRows,
+      ],
       want: [null, true, { candidates: 1, unlinked: 1, interests: 0 }],
     },
     {
       name: "every new table has RLS on and no policy",
-      got: posture.every((r) => r.relrowsecurity && r.policies === 0) && posture.length === 4,
+      got:
+        posture.every((r) => r.relrowsecurity && r.policies === 0) &&
+        posture.length === 4,
       want: true,
     },
     {
@@ -402,18 +470,27 @@ try {
     );
   }
 
-  await db.query(`delete from interest_form_submissions where chapter_id = any($1)`, [
+  await db.query(
+    `delete from interest_form_submissions where chapter_id = any($1)`,
+    [[CH_A, CH_B, CH_LONE]],
+  );
+  await db.query(`delete from rush_candidates where chapter_id = any($1)`, [
     [CH_A, CH_B, CH_LONE],
   ]);
-  await db.query(`delete from rush_candidates where chapter_id = any($1)`, [[CH_A, CH_B, CH_LONE]]);
   await db.query(`delete from pnms where school_id = $1`, [SCHOOL]);
   await db.query(`delete from chapters where id = any($1)`, [
     [CH_A, CH_B, CH_NPHC, CH_LONE, IFC],
   ]);
-  await db.query(`delete from users where id = any($1)`, [[USER, REFERRER, NAMESAKE]]);
-  await db.query(`delete from school_email_domains where school_id = $1`, [SCHOOL]);
+  await db.query(`delete from users where id = any($1)`, [
+    [USER, REFERRER, NAMESAKE],
+  ]);
+  await db.query(`delete from school_email_domains where school_id = $1`, [
+    SCHOOL,
+  ]);
   await db.query(`delete from schools where id = $1`, [SCHOOL]);
 } catch (e) {
   miss();
-  console.log(`ERR   interest forms tier\n        ↳ ${String(e?.message ?? e).split("\n")[0]}`);
+  console.log(
+    `ERR   interest forms tier\n        ↳ ${String(e?.message ?? e).split("\n")[0]}`,
+  );
 }

@@ -198,6 +198,9 @@ export function deepLinkFor(notification: Notification): string {
     // Chat, which says nothing about a new member.
     case "members":
       return "/members";
+    // A new interest-form submission (#5977): the pipeline.
+    case "rush":
+      return "/rush";
     // The officer report queue (#2257): the API's new-report notification
     // targets it with a bare screen, and the queue sits last on Chapter
     // settings' Chat page (#3837).

@@ -118,7 +118,8 @@ export class RushPipelineCandidateDto implements RushPipelineCandidate {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'Who added the candidate, by current name; null with `created_by`.',
+    description:
+      'Who added the candidate, by current name; null with `created_by`.',
   })
   created_by_name: string | null;
 

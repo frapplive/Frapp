@@ -10,6 +10,7 @@ import {
   rushAppliedTags,
   rushOpenProspectCount,
   rushTagOverflow,
+  rushAddedByLine,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { SignetTokens } from "@repo/theme/signet";
@@ -237,9 +238,7 @@ export function ProspectRow({
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const rating = rushRatingSummary(candidate);
-  const meta = [`Added by ${candidate.created_by_name}`, rating]
-    .filter(Boolean)
-    .join(" · ");
+  const meta = [rushAddedByLine(candidate), rating].filter(Boolean).join(" · ");
   const labels = rushAppliedTags(candidate.tag_ids, tags).map((t) => t.label);
   const cut = rushTagOverflow(labels);
   return (

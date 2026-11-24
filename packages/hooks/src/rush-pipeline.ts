@@ -245,3 +245,24 @@ export function rushTagOverflow<T>(
   if (items.length <= limit) return { shown: [...items], more: 0 };
   return { shown: items.slice(0, limit), more: items.length - limit };
 }
+
+/** Who added a prospect: a member, or their own interest form (#5977). */
+export interface RushCandidateAdder {
+  created_by_name: string | null;
+  origin?: "manual" | "pnm";
+}
+
+/** The adder's name, or "Interest form" for one the PNM's form created. */
+export function rushAddedBy(candidate: RushCandidateAdder): string {
+  if (candidate.origin === "pnm" || candidate.created_by_name === null) {
+    return "Interest form";
+  }
+  return candidate.created_by_name;
+}
+
+/** A row's meta line: "Added by Moiz Steenhuis" or "From the interest form". */
+export function rushAddedByLine(candidate: RushCandidateAdder): string {
+  return candidate.origin === "pnm" || candidate.created_by_name === null
+    ? "From the interest form"
+    : `Added by ${candidate.created_by_name}`;
+}

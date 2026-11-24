@@ -10,6 +10,7 @@ import {
   type RushPipelineCandidate,
   type RushStage,
   type RushTag,
+  rushAddedBy,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { sortRushStages } from "@repo/validation";
@@ -77,7 +78,7 @@ export function RushList({
         case "rating":
           return (a.rating_average ?? 0) - (b.rating_average ?? 0);
         case "added_by":
-          return a.created_by_name.localeCompare(b.created_by_name);
+          return rushAddedBy(a).localeCompare(rushAddedBy(b));
         case "added":
           return a.created_at.localeCompare(b.created_at);
       }
@@ -177,7 +178,7 @@ export function RushList({
                     </TableCell>
                   ) : null}
                   <TableCell className="max-w-40 truncate text-sm text-muted-foreground">
-                    {candidate.created_by_name}
+                    {rushAddedBy(candidate)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDay(candidate.created_at)}

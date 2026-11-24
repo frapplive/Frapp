@@ -160,7 +160,9 @@ const SENSITIVE_TOPICS: readonly { topic: string; pattern: RegExp }[] = [
 
 /** The sensitive topic a question's words name, or null. */
 export function interestFormSensitiveTopic(text: string): string | null {
-  return SENSITIVE_TOPICS.find(({ pattern }) => pattern.test(text))?.topic ?? null;
+  return (
+    SENSITIVE_TOPICS.find(({ pattern }) => pattern.test(text))?.topic ?? null
+  );
 }
 
 /** Why the builder refuses a question on a sensitive topic. */
@@ -180,9 +182,7 @@ export function normalizeInterestFormLabel(raw: string): string {
 
 /** The public page's path for a form, with its label when given. */
 export function interestFormPath(slug: string, label?: string | null): string {
-  return label
-    ? `/f/${slug}?src=${encodeURIComponent(label)}`
-    : `/f/${slug}`;
+  return label ? `/f/${slug}?src=${encodeURIComponent(label)}` : `/f/${slug}`;
 }
 
 export const INTEREST_FORM_REFUSAL = {
@@ -223,7 +223,8 @@ export const INTEREST_FORM_COPY = {
     "The link may be old, or the chapter replaced its form. Ask a member for the new one.",
   emailLabel: "Email",
   schoolEmailLabel: "School email",
-  emailHint: "We'll send a code to check it's yours. Nothing else shows until you enter it.",
+  emailHint:
+    "We'll send a code to check it's yours. Nothing else shows until you enter it.",
   sendCode: "Send code",
   codeLabel: "Code",
   verify: "Verify",
@@ -236,7 +237,7 @@ export const INTEREST_FORM_COPY = {
   classYear: "Class year",
   phone: "Phone",
   referrer: "Who referred you?",
-  referrerHint: "A member's name, if someone told you about the chapter.",
+  referrerHint: "A member's name",
   submit: "Send",
   submitting: "Sending…",
   notAnEmail: "Enter your email address.",
@@ -262,7 +263,8 @@ export const INTEREST_FORM_REFUSAL_COPY = {
   tooManyAttempts: "Too many wrong tries. Send a new code.",
   sendFailed: "Couldn't send the code right now. Try again in a moment.",
   badProof: "Your check timed out. Enter your email again to get a new code.",
-  unavailable: "This chapter's school isn't set up to check email addresses yet.",
+  unavailable:
+    "This chapter's school isn't set up to check email addresses yet.",
   consentRequired: "Tick the box to agree before you send.",
 } as const;
 

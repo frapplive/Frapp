@@ -40,7 +40,9 @@ function chapter(overrides: Partial<Chapter> = {}): Chapter {
   } as Chapter;
 }
 
-function form(overrides: Partial<ChapterInterestForm> = {}): ChapterInterestForm {
+function form(
+  overrides: Partial<ChapterInterestForm> = {},
+): ChapterInterestForm {
   return {
     id: 'form-1',
     chapter_id: CHAPTER,
@@ -66,7 +68,7 @@ const AT_SCHOOL = {
 };
 
 function setup() {
-  const forms: jest.Mocked<IInterestFormRepository> = {
+  const forms = {
     findLiveForm: jest.fn().mockResolvedValue(form()),
     createForm: jest.fn().mockResolvedValue(form({ is_open: false })),
     updateForm: jest
@@ -146,7 +148,9 @@ function setup() {
         Promise.resolve(holders[keys[0]] ?? []),
       ),
   };
-  const notifications = { notifyMembers: jest.fn().mockResolvedValue(undefined) };
+  const notifications = {
+    notifyMembers: jest.fn().mockResolvedValue(undefined),
+  };
   const config = { get: jest.fn().mockReturnValue('https://app.frapp.live') };
   const service = new InterestFormService(
     forms,
@@ -294,7 +298,9 @@ describe('InterestFormService — settings', () => {
     forms.addLabel.mockResolvedValueOnce(null);
     await expect(
       service.addLabel(CHAPTER, ACTOR, 'tabling-quad'),
-    ).rejects.toMatchObject({ response: { code: 'interest_form.label.exists' } });
+    ).rejects.toMatchObject({
+      response: { code: 'interest_form.label.exists' },
+    });
   });
 
   it('names the contacts who lack rush:view, since they are not told', async () => {
@@ -387,7 +393,9 @@ describe('InterestFormService — the public page', () => {
     expect(sent.email).toBe('a@rpi.edu');
     const call = forms.startCode.mock.calls[0][0];
     const mail = email.sendInterestFormCodeEmail.mock.calls[0][0];
-    expect(call.codeHash).toBe(hashInterestFormSecret(call.codeSalt, mail.code));
+    expect(call.codeHash).toBe(
+      hashInterestFormSecret(call.codeSalt, mail.code),
+    );
     expect(call.codeHash).not.toContain(mail.code);
     expect(call.ipHash).toMatch(/^[0-9a-f]{64}$/);
     expect(call.maxPerIp).toBeGreaterThanOrEqual(50);
@@ -480,7 +488,9 @@ describe('InterestFormService — a submission', () => {
     const { service, forms } = setup();
     await expect(
       service.submit(SLUG, { ...SUBMISSION, proof: 'nope' }),
-    ).rejects.toMatchObject({ response: { code: 'interest_form.proof.invalid' } });
+    ).rejects.toMatchObject({
+      response: { code: 'interest_form.proof.invalid' },
+    });
     await expect(
       service.submit(SLUG, { ...SUBMISSION, answers: {} }),
     ).rejects.toMatchObject({

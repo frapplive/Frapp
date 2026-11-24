@@ -23,6 +23,7 @@ function pipeline(tagIds: string[]): RushPipeline {
         bid_status: "none",
         created_by: "u",
         created_by_name: "U",
+        origin: "manual",
         created_at: "",
         tag_ids: tagIds,
         viewer_rating: null,

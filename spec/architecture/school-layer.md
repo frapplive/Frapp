@@ -456,6 +456,8 @@ _(Built 2026-11-24, #5974.)_ `pnms`, `council_recruitment_seasons`, `pnm_council
 - **`council_recruitment_seasons.pnm_retention_days`** is N, default and most 180.
 - **A chapter's read** is `GET /v1/pnms/:pnmId` (`rush:view`): shared fields, and the phone only when `phone_shared`.
 
+_(Built 2026-11-24, #5977, the form slice.)_ `submit_interest_form` creates the chapter's candidate beside the interest, in the chapter's first `new`-category stage. A PNM-created candidate has no `created_by` (`rush_candidates.created_by` is required only where `origin = 'manual'`), and `rush_candidates_chapter_name_key` is rebuilt as `rush_candidates_chapter_manual_name_key`, partial on `origin = 'manual'`. `findByNameKey` reads a list. A chapter with no school keeps no `pnms` row: its form's submissions (`interest_form_submissions`) are the match. Test 5's hand-added half holds by construction (the form never links a hand-added row), and the function tier is `scripts/pglite/tiers/interest-forms.mjs`.
+
 **Bids going up are push events, never reads.** The recruitment doc's push-up table (bid extended, recorded, rescinded or expired; a PNM's acceptance, decline or withdrawal) is stored as `pnm_recruitment_events` rows the chapter's or PNM's action writes in the same function call:
 
 ```sql

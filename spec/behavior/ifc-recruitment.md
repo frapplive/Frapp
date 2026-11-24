@@ -302,6 +302,17 @@ All in one transaction, written server-side (ADR-27):
 
      If the PNM deletes their information ([below](#the-pnms-own-view)), their name on the card is rewritten to "Withdrawn prospect". That's the same in-place rewrite the account-deletion name scrub does to cards ([`data-retention.md`](data-retention.md#individual-account-deletion)).
 
+_(Built 2026-11-24, #5977.)_ What the build does, and where it differs from the sections above:
+- **Tables and functions:** `20261124144042_chapter_interest_forms.sql`. The whole submission is `submit_interest_form`, one transaction; telling the chapter and the emails follow it and never fail it. A form exists, closed, from the first read of its settings once Rush is on.
+- **Verify first:** the form has its own one-time codes (`interest_form_verifications`), because #5929's need an account. Same six digits, salted hash and attempt count; ceilings per address (6 an hour) and per IP (200 an hour, for 30 to 50 PNMs on one campus Wi-Fi at a table), counted by the database under locks. A matched code mints a proof the submission spends once, so each submission is one verified address's own and the code ceilings are the submission ceilings. **The bot challenge before a code is sent isn't built:** it needs a provider account (a credential, so Paul's), filed as a follow-up.
+- **Chapters with no school** keep no `pnms` row: the chapter's own submissions are the match (by email), and the candidate has no `pnm_id`. When the chapter joins a school, its next submission from that address links the candidate to the school-wide record.
+- **Push-up** registers the PNM for the council's open season when the chapter's link is accepted, the council verified and recruiting. With no open season, the form feeds the chapter only. Accepting the link, or opening a season, pushes the chapter's earlier form PNMs up and emails each one newly on the list.
+- **A hand-added namesake** is stored on the submission for the chapter to confirm, and the referrer text names a member only when exactly one matches. Confirming either, and the optional channel card, aren't built yet (the follow-up).
+- **Not on the page yet:** the chapter's events open to PNMs (the "Open to PNMs" switch comes with § Events and attendance), the council registration link (no council form exists yet), and "Get the app".
+- **The withdraw link** the consent text promises comes with § The PNM's own view. Until then the receipt and push-up emails say to write to the chapter or team@frapp.live. Forms are created closed, so none takes a submission until a chapter opens it.
+- **The phone** opens and closes the form, shares its link and switches the referrer question; the blurb, questions, QR codes, contacts and replacing the form are on web's Recruitment page. A candidate's page on both apps shows what their form gave.
+- **Name lookup:** two candidates with one name answer `409 rush.candidate.several_match` with their ids (§ Name lookup).
+
 ### Consent and privacy text
 
 The text sits above the submit button, never behind a link. **It's a draft.** Legal and privacy copy is Paul's ([AGENTS.md § ADR discipline](../../AGENTS.md#adr-discipline)).
@@ -311,6 +322,8 @@ The text sits above the submit button, never behind a link. **It's a draft.** Le
 **The boxes:**
 - **Required:** "I agree, and I'm 18 or older." The Terms require 18 ([`legal.md`](legal.md)), and some first-year PNMs are 17. That's [decision 4](#decisions-for-paul).
 - **Optional, under option B only:** "Let every IFC chapter at {School} see that I'm interested in recruitment."
+
+**How the placeholders fill** (built 2026-11-24, #5977, `interestFormConsentText` in `@repo/validation`, pinned word for word by its spec): `{ at {School}}` and the council and eligibility sentences appear only at a school; `{Council}` is the council's name, or the draft's own alternative, "the council it joins", when there is none yet; under option A, `{Under option B or C, …}` adds nothing. _For Paul:_ at a chapter with no school, the build leaves out every sentence about the council and eligibility, since there is neither; the draft doesn't say which sentences `{At a school:}` covers.
 
 **What is stored with each submission:**
 - the consent text version;

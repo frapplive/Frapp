@@ -77,6 +77,8 @@ const ROUTES: Record<
   ai_suggestions: { pathname: "/suggested-tasks" },
   // The weekly recap push (#4985): Activity, where the "Last week" card is.
   activity: { pathname: "/activity" },
+  // A new interest-form submission (#5977): that prospect's screen.
+  rush: { pathname: "/rush-prospect", param: "candidateId" },
 };
 
 /**

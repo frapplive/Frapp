@@ -59,10 +59,7 @@ function setup() {
   const harness = createTenantHarness({
     tables: {
       chapter_interest_forms: [form(CHAPTER_A), form(CHAPTER_B)],
-      interest_form_submissions: [
-        submission(CHAPTER_A),
-        submission(CHAPTER_B),
-      ],
+      interest_form_submissions: [submission(CHAPTER_A), submission(CHAPTER_B)],
     },
   });
   return { harness, repo: new SupabaseInterestFormRepository(harness.client) };

@@ -12283,7 +12283,7 @@ export interface components {
             /** @description A few lines at the top of the form; empty or null clears it. */
             blurb?: string | null;
             /** @description The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`. */
-            questions?: Record<string, never>[];
+            questions?: components["schemas"]["InterestFormQuestionDto"][];
             /** @description Ask "Who referred you?". */
             ask_referrer?: boolean;
             /**

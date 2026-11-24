@@ -66,7 +66,7 @@ export class InterestFormController {
   @ApiOperation({
     summary: "The chapter's interest form, its QR codes and who it tells",
     description:
-      "Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.",
+      'Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.',
   })
   @ApiOkResponse({ type: InterestFormSettingsDto })
   get(
@@ -79,7 +79,8 @@ export class InterestFormController {
   @Patch('interest-form')
   @RequirePermissions(SystemPermissions.RUSH_MANAGE)
   @ApiOperation({
-    summary: 'Open or close the form, or change its blurb, questions or contacts',
+    summary:
+      'Open or close the form, or change its blurb, questions or contacts',
   })
   @ApiOkResponse({ type: InterestFormSettingsDto })
   update(
@@ -119,7 +120,8 @@ export class InterestFormController {
   @RequirePermissions(SystemPermissions.RUSH_MANAGE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Replace the form: a new link, the old link and QR codes stop working',
+    summary:
+      'Replace the form: a new link, the old link and QR codes stop working',
   })
   @ApiOkResponse({ type: InterestFormSettingsDto })
   replace(
@@ -132,7 +134,8 @@ export class InterestFormController {
   @Get('candidates/:id/form')
   @RequirePermissions(SystemPermissions.RUSH_VIEW)
   @ApiOperation({
-    summary: "A candidate's newest interest-form submission: contact details and answers",
+    summary:
+      "A candidate's newest interest-form submission: contact details and answers",
   })
   @ApiOkResponse({ type: CandidateFormDto })
   async candidateForm(

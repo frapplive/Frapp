@@ -51,8 +51,7 @@ export class UpdateInterestFormDto {
   blurb?: string | null;
 
   @ApiPropertyOptional({
-    type: 'array',
-    items: { type: 'object' },
+    type: () => [InterestFormQuestionDto],
     maxItems: INTEREST_FORM_QUESTIONS_MAX,
     description:
       "The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`.",
@@ -61,7 +60,7 @@ export class UpdateInterestFormDto {
   @IsArray()
   @ArrayMaxSize(INTEREST_FORM_QUESTIONS_MAX)
   @IsObject({ each: true })
-  questions?: Record<string, unknown>[];
+  questions?: InterestFormQuestionDto[];
 
   @ApiPropertyOptional({ description: 'Ask "Who referred you?".' })
   @IsOptional()
@@ -206,7 +205,8 @@ export class SubmitInterestFormDto {
     type: String,
     nullable: true,
     maxLength: INTEREST_FORM_LABEL_MAX_LENGTH,
-    description: "The QR code's source label; one the form doesn't have is recorded as none.",
+    description:
+      "The QR code's source label; one the form doesn't have is recorded as none.",
   })
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
@@ -302,7 +302,8 @@ export class InterestFormSkippedContactDto {
 
 export class InterestFormSettingsDto {
   @ApiProperty({
-    description: 'False for an NPHC chapter, which never gets an interest form.',
+    description:
+      'False for an NPHC chapter, which never gets an interest form.',
   })
   offered: boolean;
 
@@ -338,7 +339,8 @@ export class PublicInterestFormVerifyDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'The school whose address gets the code; null takes any address.',
+    description:
+      'The school whose address gets the code; null takes any address.',
   })
   school_name: string | null;
 

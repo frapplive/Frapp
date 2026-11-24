@@ -12,6 +12,7 @@ import {
   type RushStage,
   type RushTag,
   rushNotesMode,
+  rushAddedBy,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { RUSH_CLOSED_REASON_LABELS, sortRushStages } from "@repo/validation";
@@ -33,6 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { FieldRow, StaticValue } from "@/components/tasks/task-panel";
+import { RushProspectForm } from "./rush-prospect-form";
 import { toastFailure } from "@/lib/failure-toast";
 import { cn } from "@/lib/utils";
 import { RushRatingControl } from "./rush-rating";
@@ -174,7 +176,7 @@ function ProspectBody({
         ) : null}
         <FieldRow label="Added">
           <StaticValue>
-            {`${candidate.created_by_name} · ${formatDay(candidate.created_at) ?? ""}`}
+            {`${rushAddedBy(candidate)} · ${formatDay(candidate.created_at) ?? ""}`}
           </StaticValue>
         </FieldRow>
         {access.vote || rating ? (
@@ -310,6 +312,10 @@ function ProspectBody({
           </div>
         </FieldRow>
       </dl>
+      <RushProspectForm
+        candidateId={candidate.id}
+        fromForm={candidate.origin === "pnm"}
+      />
       {rushNotesMode(access, candidate.user_id, viewerId) ? (
         <div className="border-t border-border pt-4">
           <RushNotes

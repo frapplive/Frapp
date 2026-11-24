@@ -78,6 +78,14 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'The card an invite link opens on, before anyone signs in (#5625); the unguessable invite token in the body is the credential, and it shows only the chapter, sender, role and whether the link works.',
   'InviteDetailsController.funnelStep':
     "A step of the invite card's funnel (#5663), before anyone signs in; the invite token in the body proves the chapter whose analytics opt-out applies, and the route returns nothing.",
+  'PublicInterestFormController.get':
+    "A chapter's interest form at /f/<form-slug> (ADR-27, #5977); the slug names one form, and it answers only the form's public fields.",
+  'PublicInterestFormController.startCode':
+    "Sends the form's one-time code before anything else shows (#5977); ceilings per address and per IP in start_interest_form_code.",
+  'PublicInterestFormController.verify':
+    "Checks the form code (#5977); a match answers a proof and the address's own last details, nothing else.",
+  'PublicInterestFormController.submit':
+    'Submits the form (#5977); the single-use proof a matched code minted is the credential, checked in submit_interest_form.',
   'DevLogController.post':
     'Posts to the dev-log channel; guarded by DevLogTokenGuard (a shared secret), not a user session.',
 };

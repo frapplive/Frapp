@@ -11,6 +11,7 @@ const { notesEnabled, notes } = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCandidateForm: () => ({ data: undefined }),
   useRateRushCandidate: () => ({ mutate: vi.fn() }),
   useVoteRushCandidate: () => ({ mutate: vi.fn(), isPending: false }),
   useSetRushCandidateTags: () => ({ change: vi.fn(), isPending: false }),
@@ -64,6 +65,7 @@ const PROSPECT = {
   bid_status: "none" as const,
   created_by: "u-1",
   created_by_name: "Moiz Steenhuis",
+  origin: "manual" as const,
   created_at: "2026-11-20T12:00:00Z",
   tag_ids: ["t-1"],
   rating_average: 3.5,

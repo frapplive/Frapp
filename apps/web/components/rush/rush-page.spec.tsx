@@ -49,6 +49,7 @@ const candidate = (id: string, name: string, stageKey = "new") => ({
   bid_status: "none",
   created_by: "u-1",
   created_by_name: "Moiz Steenhuis",
+  origin: "manual" as const,
   created_at: "2026-11-20T12:00:00Z",
   tag_ids: [],
   viewer_rating: null,

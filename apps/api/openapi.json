@@ -38085,12 +38085,12 @@
             "description": "A few lines at the top of the form; empty or null clears it."
           },
           "questions": {
+            "maxItems": 10,
+            "description": "The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`.",
             "type": "array",
             "items": {
-              "type": "object"
-            },
-            "maxItems": 10,
-            "description": "The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`."
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
           },
           "ask_referrer": {
             "type": "boolean",

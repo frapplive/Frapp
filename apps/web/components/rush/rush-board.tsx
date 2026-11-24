@@ -11,6 +11,7 @@ import {
   type RushPipelineCandidate,
   type RushStage,
   type RushTag,
+  rushAddedByLine,
 } from "@repo/hooks";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { SectionLabel } from "@/components/shared/section-label";
@@ -243,7 +244,7 @@ function RushCard({
               {candidate.display_name}
             </span>
             <span className="w-full truncate text-caption text-muted-foreground">
-              Added by {candidate.created_by_name}
+              {rushAddedByLine(candidate)}
             </span>
             {closed ? (
               // Which Closed stage, and why, since the column folds them.

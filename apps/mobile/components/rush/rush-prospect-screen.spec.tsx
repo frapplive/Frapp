@@ -33,6 +33,7 @@ const deleteNote = vi.hoisted(() => vi.fn());
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCandidateForm: () => ({ data: undefined }),
   useMyPermissions: () => ({ data: { permissions: state.permissions } }),
   useCurrentChapter: () => ({ data: { enabled_modules: {} } }),
   useViewerUserId: () => state.viewerId,
@@ -115,6 +116,7 @@ const CANDIDATE = {
   bid_status: "none",
   created_by: "user-a",
   created_by_name: "Alice Park",
+  origin: "manual" as const,
   created_at: "2026-11-04T18:00:00.000Z",
   tag_ids: ["t1"],
   viewer_rating: null,

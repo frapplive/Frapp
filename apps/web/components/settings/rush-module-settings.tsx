@@ -14,6 +14,7 @@ import { useTierPermissionToggle } from "@/components/roles/use-role-permission-
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { RushStageEditor } from "./rush-stage-editor";
 import { RushTagList } from "./rush-tag-list";
+import { InterestFormSettingsSection } from "./interest-form-settings";
 
 /** The key that lets a role read recruitment notes. */
 export const RUSH_READ_NOTES = "rush:read_notes";
@@ -21,8 +22,8 @@ export const RUSH_READ_NOTES = "rush:read_notes";
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
  * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live):
- * its stages, its tags, and turning notes on for a chapter where nobody can
- * read them yet. One page, no second recruitment settings screen. The
+ * the interest form (#5977), its stages, its tags, and turning notes on for
+ * a chapter where nobody can read them yet. One page, no second recruitment settings screen. The
  * stages and tags read through the pipeline's routes, so they show only to a
  * viewer who can open the pipeline while the module is on; `rush:manage`
  * edits them.
@@ -44,6 +45,9 @@ export function RushModuleSettings({
 
   return (
     <div className="space-y-10">
+      {moduleOn && access.view ? (
+        <InterestFormSettingsSection canManage={access.manage} />
+      ) : null}
       {moduleOn && access.view ? (
         pipeline.data ? (
           <>
