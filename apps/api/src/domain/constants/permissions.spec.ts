@@ -54,6 +54,7 @@ const EXEC_BOARD = [
   'polls:view_all',
   'predictions:manage',
   'roles:manage',
+  'rush:read_notes',
   'service:approve',
   'tasks:manage',
 ].sort();
@@ -97,6 +98,8 @@ describe('DEFAULT_SYSTEM_ROLES permissions', () => {
       'channels:create',
       'channels:manage',
       'groups:manage',
+      // Reading recruitment notes (#5924).
+      'rush:read_notes',
       'service:approve',
       'tasks:manage',
     ];

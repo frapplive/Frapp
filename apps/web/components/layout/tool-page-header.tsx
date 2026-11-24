@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { PageTitleText } from "@/components/layout/top-bar";
 import type { PageTitle } from "@/components/layout/page-title";
+import { VIEW_LABELS_FLUSH_NARROW } from "@/components/shared/view-labels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,6 +35,7 @@ export function ToolPageHeader({
   titleIsHeading,
   onClose,
   actionSlotRef,
+  viewSlotRef,
 }: {
   pageTitle: PageTitle | null;
   /** Whether this copy is the route's `<h1>` (the shell knows it is wide). */
@@ -44,6 +46,11 @@ export function ToolPageHeader({
    * X (`page-actions.tsx`, Paul 2026-11-19).
    */
   actionSlotRef?: React.Ref<HTMLDivElement>;
+  /**
+   * The box the page's `PageViews` renders into, beside the title
+   * (`page-actions.tsx`, Paul 2026-11-24).
+   */
+  viewSlotRef?: React.Ref<HTMLDivElement>;
 }) {
   return (
     // A `div`, not a `<header>`: the top bar is the page's one banner.
@@ -52,14 +59,32 @@ export function ToolPageHeader({
       // `@container`: a page's actions break on the page's own width, which
       // this header shares, as they did in the row under it.
       // Below the side-by-side width it shows only when a page put actions
-      // in it (`page-actions.tsx`), as one pinned row of them: the title is
-      // in the top bar there and there is nothing to close into.
-      className="@container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 min-[1056px]:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex"
+      // or views in it (`page-actions.tsx`), as one pinned row of them: the
+      // title is in the top bar there and there is nothing to close into.
+      className="group/page-header @container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 min-[1056px]:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex has-[[data-tool-page-views]:not(:empty)]:flex"
     >
-      <div className="hidden min-w-0 flex-1 items-center min-[1056px]:flex">
-        {pageTitle ? (
-          <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
-        ) : null}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {/* The title gives way first: it truncates, the views never wrap. */}
+        <div className="hidden min-w-0 items-center min-[1056px]:flex">
+          {pageTitle ? (
+            <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
+          ) : null}
+        </div>
+        {/*
+          The page's views, as plain words after a hairline. The rule is the
+          slot's own, so it shows only with views and only beside a title:
+          below the side-by-side width the title is in the top bar and the
+          views lead the row, and `VIEW_LABELS_FLUSH_NARROW` lines the first
+          word's text up with the page's gutter.
+        */}
+        <div
+          ref={viewSlotRef}
+          data-tool-page-views=""
+          className={cn(
+            "flex shrink-0 items-center empty:hidden min-[1056px]:before:mr-1.5 min-[1056px]:before:h-4 min-[1056px]:before:w-px min-[1056px]:before:bg-border min-[1056px]:before:content-['']",
+            VIEW_LABELS_FLUSH_NARROW,
+          )}
+        />
       </div>
       <div
         ref={actionSlotRef}

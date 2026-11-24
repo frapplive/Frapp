@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  LINK_RETRY_WAITS_MS,
   EXIT_BAD_INVOCATION,
   EXIT_MIGRATION_FAILED,
   EXIT_OK,
@@ -362,4 +363,73 @@ test("importing this module runs no migration", () => {
   // Reaching this assertion at all proves the guard held, since the import at
   // the top of this file supplied no argv.
   assert.equal(typeof runMigrationCli, "function");
+});
+
+// ── link retries (Deploy production run 45321010194) ────────────────────────
+
+const CLOUDFLARE_502 =
+  'Authorization failed for the access token and project ref pair: {"title":"Error 502: Bad gateway","status":502,"retryable":true}';
+
+function flakyLink(failures, body = CLOUDFLARE_502) {
+  const calls = [];
+  let left = failures;
+  const supabase = (args) => {
+    calls.push(args.join(" "));
+    if (args[0] === "link" && left > 0) {
+      left -= 1;
+      throw Object.assign(new Error("Command failed: supabase link"), { stderr: body });
+    }
+    return "";
+  };
+  return { supabase, calls };
+}
+
+test("a link that Supabase's API answers with a 502 is retried, then pushes", () => {
+  const { supabase, calls } = flakyLink(2);
+  const waits = [];
+  const code = runMigrationCli({
+    argv: ["--env", "staging"],
+    env: baseEnv(),
+    supabase,
+    lookupEnvironment,
+    readDir,
+    sleep: (ms) => waits.push(ms),
+    ...quiet,
+  });
+  assert.equal(code, EXIT_OK);
+  assert.deepEqual(waits, LINK_RETRY_WAITS_MS);
+  assert.equal(calls.filter((c) => c.startsWith("link")).length, 3);
+  assert.ok(calls.at(-1).startsWith("db push"));
+});
+
+test("a link still failing after its retries stops before any push", () => {
+  const { supabase, calls } = flakyLink(LINK_RETRY_WAITS_MS.length + 1);
+  const code = runMigrationCli({
+    argv: ["--env", "staging"],
+    env: baseEnv(),
+    supabase,
+    lookupEnvironment,
+    readDir,
+    sleep: () => {},
+    ...quiet,
+  });
+  assert.equal(code, EXIT_MIGRATION_FAILED);
+  assert.ok(!calls.some((c) => c.startsWith("db push")));
+});
+
+test("a real authorization failure is not retried", () => {
+  const { supabase, calls } = flakyLink(1, "Authorization failed for the access token and project ref pair: {\"message\":\"Unauthorized\"}");
+  const waits = [];
+  const code = runMigrationCli({
+    argv: ["--env", "staging"],
+    env: baseEnv(),
+    supabase,
+    lookupEnvironment,
+    readDir,
+    sleep: (ms) => waits.push(ms),
+    ...quiet,
+  });
+  assert.equal(code, EXIT_MIGRATION_FAILED);
+  assert.deepEqual(waits, []);
+  assert.equal(calls.filter((c) => c.startsWith("link")).length, 1);
 });

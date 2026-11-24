@@ -772,6 +772,8 @@ describe("FindBar and Ask (#5476)", () => {
     render(<FindBar />);
     const input = await openAndType(user, "when is the announce party?");
     expect(input).toHaveAttribute("placeholder", FIND_PLACEHOLDER);
-    expect(screen.queryByRole("option", { name: /Frapp Intelligence/ })).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: /Frapp Intelligence/ }),
+    ).toBeNull();
   });
 });

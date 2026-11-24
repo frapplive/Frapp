@@ -218,7 +218,10 @@ export class SupabaseChapterRepository implements IChapterRepository {
   }
 
   async deleteById(id: string): Promise<void> {
-    const { error } = await this.supabase.from('chapters').delete().eq('id', id);
+    const { error } = await this.supabase
+      .from('chapters')
+      .delete()
+      .eq('id', id);
     if (error) throw new SupabaseQueryError(error);
   }
 

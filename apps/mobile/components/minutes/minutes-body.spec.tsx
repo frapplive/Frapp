@@ -17,6 +17,8 @@ vi.mock("@/lib/chapter-branding", () => ({
 }));
 
 import { MinutesBody } from "./minutes-body";
+import { ViewLabels } from "@/components/view-labels";
+import { Segmented } from "@/components/segmented";
 
 function press(tree: ReactTestRenderer, label: string | RegExp) {
   const node = tree.root.find(
@@ -214,6 +216,31 @@ describe("MinutesBody scanning (#5562)", () => {
     expect(screenText(tree)).not.toContain("Order shirts");
     press(tree, "All 2");
     expect(screenText(tree)).toContain("Order shirts");
+  });
+
+  it("draws Mine and All as plain view words, never the boxed switch (Paul, 2026-11-24)", () => {
+    const tree = render(
+      {
+        action_items: [
+          { text: "Order shirts", owner_user_id: null, due_date: null },
+          {
+            text: "Email alumni",
+            owner_user_id: "11111111-1111-4111-8111-111111111111",
+            due_date: null,
+          },
+        ],
+      },
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(tree.root.findAllByType(ViewLabels)).toHaveLength(1);
+    expect(tree.root.findAllByType(Segmented)).toHaveLength(0);
+    expect(
+      tree.root.findAll(
+        (node) =>
+          node.props.accessibilityRole === "tab" &&
+          node.props.accessibilityLabel === "All 2",
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows the first few of a long list, then all on Show all", () => {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { isCardReadMiss } from "./card-read-miss";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { rushPipelineKeys } from "./use-rush-pipeline";
 
 export const rushKeys = {
   all: ["rush"] as const,
@@ -16,8 +17,9 @@ export type RushCandidateView = components["schemas"]["RushCandidateViewDto"];
 
 /**
  * One candidate, for a chat rush card's live tally and bid. The route needs
- * `members:view`; a caller passes `undefined` when the viewer lacks it, and the
- * hook asks nothing.
+ * `members:view` and `rush:view`; a caller passes `undefined` when the viewer
+ * lacks either (`canReadCardRushCandidate`), and the hook asks nothing. Its
+ * `vote_count` is absent for a viewer without `rush:view_results` (#4084).
  *
  * A 404, or a 403 a retry won't change, resolves to `null` rather than
  * throwing, as `useServiceEntry` does (`isCardReadMiss`): a candidate since
@@ -49,8 +51,8 @@ export function useRushCandidate(id: string | undefined) {
 }
 
 /**
- * Vote for a candidate. Idempotent on the server (a repeat answers 201 with
- * the same view), and there is no unvote. The returned view replaces the
+ * Vote for a candidate (`rush:vote`). Idempotent on the server (a repeat
+ * answers 201 with the same view), and there is no unvote. The returned view replaces the
  * card's live read.
  */
 export function useVoteRushCandidate() {
@@ -69,14 +71,17 @@ export function useVoteRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
+      // The pipeline shows the same vote (#5924).
+      void queryClient.invalidateQueries({
+        queryKey: rushPipelineKeys.pipeline(chapterId),
+      });
     },
   });
 }
 
 /**
- * Extend a bid to a candidate. Idempotent on the server, and any member may
- * (there are no rush permissions). The returned view replaces the card's live
- * read.
+ * Extend a bid to a candidate (`rush:bid`). Idempotent on the server. The
+ * returned view replaces the card's live read.
  */
 export function useBidRushCandidate() {
   const client = useFrappClient();
@@ -96,6 +101,10 @@ export function useBidRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
+      // The pipeline shows the bid too (#5924).
+      void queryClient.invalidateQueries({
+        queryKey: rushPipelineKeys.pipeline(chapterId),
+      });
     },
   });
 }
