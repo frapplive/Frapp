@@ -48,7 +48,7 @@ export function backworkTerm(file: {
 /**
  * What a backwork file is called wherever it is listed: the title it was
  * uploaded with, else its type and number and course ("Midterm 2 · CSCI
- * 1200"), else "Untitled". The `/backwork` library rows and Frapp AI's file
+ * 1200"), else "Untitled". The `/backwork` library rows and Frapp Intelligence's file
  * sources (#5209) both name files with this, so a file reads the same in both.
  */
 export function backworkFileTitle(

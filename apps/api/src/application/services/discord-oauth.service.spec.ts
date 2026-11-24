@@ -1501,3 +1501,125 @@ describe('DiscordOAuthService — a member linking their Discord account (#2878)
     expect(repo.attachPendingConnection).toHaveBeenCalled();
   });
 });
+
+describe('DiscordOAuthService — a member linking from the phone (#5414)', () => {
+  const APP_RETURN = 'frapp://preferences';
+  const PROD_SUPABASE = 'https://unttyvyfezddlyafcydh.supabase.co';
+
+  function phoneLinkState(returnPath: string = APP_RETURN) {
+    return stateRow({ purpose: 'author_link', return_path: returnPath });
+  }
+
+  it("stores the app's Settings address as the handshake's return", async () => {
+    const service = await build();
+    await service.beginAuthorLink(CHAPTER, USER, APP_RETURN);
+
+    expect(repo.createState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        purpose: 'author_link',
+        return_path: APP_RETURN,
+      }),
+    );
+  });
+
+  it.each([
+    ['a web address', 'https://evil.example/preferences'],
+    ['another app screen', 'frapp://chat'],
+    ['a path past Settings', 'frapp://preferences/../chat'],
+    ['an empty address', ''],
+    ['a fragment', 'frapp://preferences#x'],
+    ['a fragment after a query', 'frapp://preferences?a=1#x'],
+    ['a newline', 'frapp://preferences\n'],
+    ['a public Expo Go server', 'exp://203.0.113.9:8081/--/preferences'],
+  ])('refuses %s before minting anything', async (_label, returnUrl) => {
+    const service = await build();
+    await expect(
+      service.beginAuthorLink(CHAPTER, USER, returnUrl),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(repo.createState).not.toHaveBeenCalled();
+  });
+
+  it('takes the staging app outside production only', async () => {
+    const dev = await build();
+    await expect(
+      dev.beginAuthorLink(CHAPTER, USER, 'frapp-staging://preferences'),
+    ).resolves.toBeDefined();
+
+    const prod = await build({ SUPABASE_URL: PROD_SUPABASE });
+    await expect(
+      prod.beginAuthorLink(CHAPTER, USER, 'frapp-staging://preferences'),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      prod.beginAuthorLink(CHAPTER, USER, APP_RETURN),
+    ).resolves.toBeDefined();
+  });
+
+  it('never takes Expo Go, even on a local network', async () => {
+    // A member can send the authorize link to someone else to approve; on a
+    // shared network their own Expo Go server would catch the token.
+    const dev = await build();
+    await expect(
+      dev.beginAuthorLink(
+        CHAPTER,
+        USER,
+        'exp://192.168.1.5:8081/--/preferences',
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(repo.createState).not.toHaveBeenCalled();
+  });
+
+  it('hands the parked account back to the app with the confirm token', async () => {
+    const service = await build();
+    repo.consumeState.mockResolvedValue(phoneLinkState());
+    oauth.exchangeCode.mockResolvedValue({
+      accessToken: 'member-token',
+      scope: 'identify',
+      guild: null,
+    });
+
+    const outcome = await service.handleCallback({ code: 'c', state: STATE });
+
+    expect(outcome.code).toBe('pending');
+    expect(outcome.returnUrl).toMatch(
+      /^frapp:\/\/preferences\?discord=pending&handshake=[0-9a-f-]{36}$/,
+    );
+  });
+
+  it('sends a declined or expired phone link back to the app', async () => {
+    const service = await build();
+    repo.consumeState.mockResolvedValue(phoneLinkState());
+    const declined = await service.handleCallback({
+      state: STATE,
+      error: 'access_denied',
+    });
+    expect(declined.returnUrl).toBe('frapp://preferences?discord=declined');
+
+    repo.consumeState.mockResolvedValue(null);
+    repo.findStateReturnPath.mockResolvedValue(APP_RETURN);
+    const expired = await service.handleCallback({ code: 'c', state: STATE });
+    expect(expired.returnUrl).toBe('frapp://preferences?discord=expired');
+  });
+
+  it('never follows a stored app address production would not take', async () => {
+    // Stored on a dev server, read back by production: the web page wins.
+    const prod = await build({ SUPABASE_URL: PROD_SUPABASE });
+    repo.consumeState.mockResolvedValue(
+      phoneLinkState('frapp-staging://preferences'),
+    );
+    const outcome = await prod.handleCallback({
+      state: STATE,
+      error: 'access_denied',
+    });
+    expect(outcome.returnUrl.startsWith('https://app.example.test/')).toBe(
+      true,
+    );
+  });
+
+  it('keeps an officer connect on the web, whatever its return path says', async () => {
+    const service = await build();
+    await service.beginConnect(CHAPTER, USER, APP_RETURN);
+    expect(repo.createState).toHaveBeenCalledWith(
+      expect.objectContaining({ return_path: DEFAULT_RETURN_PATH }),
+    );
+  });
+});

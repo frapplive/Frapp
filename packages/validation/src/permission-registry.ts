@@ -98,12 +98,13 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
   // Paul, 2026-11-20 (#5725): a switch a chapter turns on for its top tier,
   // so one cabinet officer can make another Stewardship Chair. Without it,
   // the roles must rank below you (#4071); a member at your own rank is
-  // reachable either way, for those roles (#5843).
+  // reachable either way, for those roles (#5843), and so is a member ranked
+  // above you, though never for a role at your own rank (#5903).
   chapterPermission(
     "roles:assign_own_level",
     "chapter",
     "Give roles at your own level",
-    "With Manage roles, also give and take away roles at your own level, not only those below it, including on members at your own level. Nobody reaches anyone ranked above them.",
+    "With Manage roles, also give and take away roles at your own level, not only those below it, on members at your own level or below. On someone ranked above you, only roles below your own.",
   ),
   chapterPermission(
     "chapter-config:view",

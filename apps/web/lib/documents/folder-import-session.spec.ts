@@ -247,6 +247,41 @@ describe("FolderImport", () => {
     ]);
   });
 
+  it("fails a refused batch's files at their upload, with no unhandled rejection (FRAPP-WEB-Q)", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      // The second batch fails while the first one's uploads are still on
+      // the wire, so its files' tickets reject before anything awaits them.
+      let mints = 0;
+      const { run } = harness({
+        mint: vi.fn(async (files: MintRequest[]) => {
+          mints += 1;
+          if (mints > 1) throw { statusCode: 500, message: "Too many connections" };
+          return files.map((f, i) => ({
+            upload_url: `https://put/${i}`,
+            storage_path: `chapters/c/documents/${i}/${f.filename}`,
+          }));
+        }),
+        put: vi.fn(() => new Promise<undefined>((resolve) => setTimeout(resolve, 20))),
+      });
+      run.add(
+        Array.from({ length: 30 }, (_, i) => file(`Drop/f${i}.pdf`, `body ${i}`)),
+        CONTEXT,
+      );
+      await prepared(run);
+      run.apply();
+      await settled(run);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(
+        run.getSnapshot().queue.items.filter((it) => it.status === "failed"),
+      ).toHaveLength(5);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("drops a file that couldn't be read at Import, so progress can finish", async () => {
     const { run } = harness();
     const broken = file("Drop/broken.pdf");

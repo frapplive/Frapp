@@ -50,8 +50,16 @@ import {
   parseTaskFollower,
   type TaskAudience,
   type TaskGroupAudience,
+  type FrappLink,
   type TaskProofKind,
+  readFrappLinks,
+  sameFrappLinks,
 } from '@repo/validation';
+import {
+  normalizeFrappLinks,
+  type FrappLinkInput,
+} from './frapp-link/frapp-link-input';
+import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
 import type { IOpenTaskRepository } from '#domain/repositories/open-task.repository.interface';
 import {
@@ -245,6 +253,8 @@ export interface CreateTaskInput {
    * `role:<id>` or `group:<id>`; the creator must be in it.
    */
   followed_by?: string | null;
+  /** What is attached (Frapp links), as sent; checked before anything is written. */
+  attachments?: FrappLinkInput[];
   created_by: string;
   /** The day it is due; omitted or null for a task with no due date (#5761). */
   due_date?: string | null;
@@ -299,6 +309,8 @@ export interface UpdateTaskInput {
    * A new one must name one the editor is in.
    */
   followed_by?: string | null;
+  /** What is attached, whole: replaces the list; `[]` clears it. */
+  attachments?: FrappLinkInput[];
 }
 
 /** Mark done's proof and reply (#4635). Only read with `COMPLETED`. */
@@ -344,7 +356,23 @@ export class TaskService {
     private readonly audiences: TaskAudienceService,
     @Inject(OPEN_TASK_REPOSITORY)
     private readonly openTaskRepo: IOpenTaskRepository,
+    private readonly links: FrappLinkChecker,
   ) {}
+
+  /**
+   * A write's attachments, normalized and each newly added record checked as
+   * the chapter's (`FrappLinkChecker`); undefined when the write sends none.
+   * `stored` is what the task already holds, which passes unchecked.
+   */
+  async checkedAttachments(
+    chapterId: string,
+    input: readonly FrappLinkInput[] | undefined,
+    stored: readonly FrappLink[] = [],
+  ): Promise<FrappLink[] | undefined> {
+    const links = normalizeFrappLinks(input, 'task');
+    if (!links) return undefined;
+    return this.links.checked(chapterId, links, stored);
+  }
 
   /**
    * A signed upload URL for a task photo (#4565), under the chapter's
@@ -1153,6 +1181,9 @@ export class TaskService {
           input.followed_by,
         )
       : null;
+    const attachments =
+      (await this.checkedAttachments(input.chapter_id, input.attachments)) ??
+      [];
     if (input.audience) {
       return this.createForGroup(
         input,
@@ -1164,6 +1195,7 @@ export class TaskService {
               ? { kind: 'tier', id: input.audience_tier_id }
               : { kind: 'chapter' },
         followedBy,
+        attachments,
       );
     }
     if (input.assignee_ids != null && people.length !== 1) {
@@ -1171,6 +1203,7 @@ export class TaskService {
         input,
         { kind: 'people', userIds: people },
         followedBy,
+        attachments,
       );
     }
     const assigneeId = input.assignee_id ?? people[0];
@@ -1222,6 +1255,7 @@ export class TaskService {
           first_due_at: dueAt,
           latest_due_at: repeat.latest_due_at,
           next_due_date: repeat.next_due_date,
+          attachments,
         })
       : await this.taskRepo.create({
           chapter_id: input.chapter_id,
@@ -1239,6 +1273,7 @@ export class TaskService {
           proof_kind: input.proof_kind ?? 'none',
           ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
           ...(followedBy ? { followed_by: followedBy } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
         });
 
     // Reference photos go in after their task, like the checklist below. A
@@ -1325,6 +1360,7 @@ export class TaskService {
     input: CreateTaskInput,
     target: TaskAudienceTarget,
     followedBy: string | null,
+    attachments: FrappLink[],
   ): Promise<CreateTaskResult> {
     const dueDate = checkedDueDate(input.due_date ?? null);
     if (input.recurrence_rule != null) {
@@ -1361,6 +1397,7 @@ export class TaskService {
       subtask_titles: subtaskTitles,
       ...(input.meeting_id ? { meeting_id: input.meeting_id } : {}),
       followed_by: followedBy,
+      attachments,
     });
 
     // `notifyAssigned` reports its own failures, so one member's push can't
@@ -1442,6 +1479,13 @@ export class TaskService {
       return this.findById(id, chapterId);
     }
     input = rest;
+    // Checked once against the asked copy's list (the copies share one),
+    // not once per copy.
+    const checkedLinks = await this.checkedAttachments(
+      chapterId,
+      input.attachments,
+      task.attachments ?? [],
+    );
     const open = (
       await this.taskRepo.findGroupCopies(chapterId, [groupId])
     ).filter((copy) => !copy.points_awarded);
@@ -1459,7 +1503,9 @@ export class TaskService {
     for (let i = 0; i < open.length; i += GROUP_NOTIFY_CONCURRENCY) {
       const batch = open.slice(i, i + GROUP_NOTIFY_CONCURRENCY);
       const results = await Promise.allSettled(
-        batch.map((copy) => this.applyEdit(copy, chapterId, actorId, input)),
+        batch.map((copy) =>
+          this.applyEdit(copy, chapterId, actorId, input, checkedLinks),
+        ),
       );
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') return;
@@ -1657,6 +1703,8 @@ export class TaskService {
     chapterId: string,
     actorId: string,
     input: UpdateTaskInput,
+    /** `input.attachments` already checked, by a series edit that checked it once. */
+    checkedLinks?: FrappLink[],
   ): Promise<TaskView> {
     const task = await this.taskRepo.findById(id, chapterId);
     if (!task) throw new NotFoundException('Task not found');
@@ -1667,7 +1715,13 @@ export class TaskService {
         'Change who a group task is from on every copy, with scope "group"',
       );
     }
-    const updated = await this.applyEdit(task, chapterId, actorId, input);
+    const updated = await this.applyEdit(
+      task,
+      chapterId,
+      actorId,
+      input,
+      checkedLinks,
+    );
     const [view] = await this.withSubtasks(chapterId, [
       toDisplayStatus(updated),
     ]);
@@ -1703,6 +1757,7 @@ export class TaskService {
     chapterId: string,
     actorId: string,
     input: UpdateTaskInput,
+    checkedLinks?: FrappLink[],
   ): Promise<Task> {
     const id = task.id;
     if (task.points_awarded) {
@@ -1761,6 +1816,17 @@ export class TaskService {
       input.proof_kind !== task.proof_kind
     ) {
       patch.proof_kind = input.proof_kind;
+    }
+
+    if (input.attachments !== undefined) {
+      const stored = task.attachments ?? [];
+      const next =
+        checkedLinks ??
+        (await this.checkedAttachments(chapterId, input.attachments, stored)) ??
+        [];
+      if (!sameFrappLinks(next, readFrappLinks(stored))) {
+        patch.attachments = next;
+      }
     }
 
     if (input.followed_by !== undefined) {

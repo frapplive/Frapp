@@ -828,7 +828,7 @@ describe('conversation and record tools', () => {
         { ...args, channel: 'general' },
         context,
       );
-      expect(off.note).toMatch(/turned off for Frapp AI/);
+      expect(off.note).toMatch(/turned off for Frapp Intelligence/);
       const unnamed = await build(stretchOf([])).tool.run(args, context);
       expect(unnamed.note).toMatch(/Name a channel/);
       const dates = await build(stretchOf([])).tool.run(
@@ -1017,7 +1017,7 @@ describe('conversation and record tools', () => {
       });
       const result = await tool.run({ ...args, query: 'formal' }, context);
       expect(result).toMatchObject({ sources: [], leftOutMessages: 0 });
-      expect(result.note).toMatch(/turned off for Frapp AI/);
+      expect(result.note).toMatch(/turned off for Frapp Intelligence/);
     });
 
     it('counts a message left out for consent once, however many reads met it', async () => {

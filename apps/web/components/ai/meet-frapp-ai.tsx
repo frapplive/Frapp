@@ -24,19 +24,19 @@ import { QUIET_LINK } from "@/components/ui/quiet-link";
 import { PRIVACY_URL } from "@/lib/legal-links";
 
 /**
- * Meet Frapp AI on web (#4790, Paul 2026-11-13): the one screen where a
- * member turns Frapp AI on (`spec/behavior/ai.md` § Consent). The phone draws
+ * Meet Frapp Intelligence on web (#4790, Paul 2026-11-13): the one screen where a
+ * member turns Frapp Intelligence on (`spec/behavior/ai.md` § Consent). The phone draws
  * the same screen from the same words (`FRAPP_AI_COPY`).
  *
  * Three lines of what it does, one line naming the companies it works with
  * and saying that Continue turns it on, with the privacy policy a click
  * away. Continue is the primary; Not now is a quiet underlined link beside
- * it: Frapp AI is encouraged, not forced. The line above the buttons is what
+ * it: Frapp Intelligence is encouraged, not forced. The line above the buttons is what
  * makes Continue an explicit yes under Apple 5.1.2(i). Notion AI and Slack AI
  * introduce themselves the same way, on one card with one button.
  *
  * It opens at the first use of an AI feature by a member who hasn't turned
- * Frapp AI on, whether they never answered or chose Not now
+ * Frapp Intelligence on, whether they never answered or chose Not now
  * ({@link useAiConsentGate}), in the officer's chapter setup, and from
  * Settings when the switch is turned on. It no longer opens by itself after a
  * join (#5627): a member meets it when they reach for it.
@@ -100,7 +100,7 @@ type DialogProps = {
 };
 
 /**
- * Meet Frapp AI as a dialog. Closing it is not an answer: the next AI entry
+ * Meet Frapp Intelligence as a dialog. Closing it is not an answer: the next AI entry
  * point, or the next visit, asks again.
  */
 export function MeetFrappAiDialog({
@@ -169,7 +169,7 @@ export function MeetFrappAiDialog({
 /**
  * For an AI entry point (Ask, Catch me up, minutes from notes): `await
  * ensureConsent()` before the first call. It resolves `true` at once for a
- * member who has Frapp AI on, opens Meet Frapp AI for anyone else and
+ * member who has Frapp Intelligence on, opens Meet Frapp Intelligence for anyone else and
  * resolves `true` on Continue (`false` on Not now or closing it), and
  * resolves `false` when the server has no AI. It rejects when the answer
  * can't be read (offline, a failed request), so the entry point can say so

@@ -3,7 +3,7 @@ import { formatAiAnswerDate } from "./ai-copy";
 import { askMentionQuestion } from "./mentions";
 
 /**
- * Ask Frapp (#450, #451, `spec/behavior/ai.md`): the request, the streamed
+ * Frapp Intelligence (#450, #451, `spec/behavior/ai.md`): the request, the streamed
  * answer's event format and the words both clients show.
  *
  * The format is versioned and defined once, here, for the API that writes it
@@ -143,7 +143,7 @@ export const AskRequestSchema = z.object({
 export type AskRequest = z.infer<typeof AskRequestSchema>;
 
 /**
- * Dictation in Ask's field (#5276, `ai.md` § Ask Frapp, Dictation): the
+ * Dictation in Ask's field (#5276, `ai.md` § Frapp Intelligence, Dictation): the
  * phone's own recogniser turns speech into raw words, and
  * `POST /v1/ai/ask/dictation` hands them back tidied (fillers and false
  * starts out, punctuation in). As long as a question, since it becomes one.
@@ -152,7 +152,7 @@ export const ASK_DICTATION_MAX_LENGTH = ASK_QUESTION_MAX_LENGTH;
 
 /**
  * What the server is doing while a turn works, each named when it happens
- * (`ai.md` § Ask Frapp, #4701):
+ * (`ai.md` § Frapp Intelligence, #4701):
  *
  * - `searching`: the index is being searched and the question read for which
  *   live records it needs.
@@ -194,7 +194,7 @@ export const ASK_ANSWER_STATUSES = [
 export type AskAnswerStatus = (typeof ASK_ANSWER_STATUSES)[number];
 
 export const ASK_UNAVAILABLE_REASONS = [
-  /** The member has not turned Frapp AI on. Show Meet Frapp AI. */
+  /** The member has not turned Frapp Intelligence on. Show Meet Frapp Intelligence. */
   "consent_required",
   /** The president turned Ask off. Hide the entry point. */
   "chapter_off",
@@ -653,12 +653,12 @@ export const askSuggestionText = {
 
 /** The words Ask shows, shared so web and mobile cannot drift. */
 export const ASK_COPY = {
-  name: "Ask Frapp",
+  name: "Frapp Intelligence",
   /** A long question's bubble, folded and open (`askQuestionShown`). */
   question_more: "Show more",
   question_less: "Show less",
-  close: "Close Ask Frapp",
-  placeholder: "Ask Frapp anything",
+  close: "Close Frapp Intelligence",
+  placeholder: "What do you need?",
   /** A step that ended without finding anything (`ask-steps.ts`, #5427). */
   step_nothing: "Nothing found",
   /** A read that failed. Says no more: why is the server's to log. */
@@ -688,22 +688,23 @@ export const ASK_COPY = {
   not_found:
     "I couldn't find that in your chapter's documents, minutes or records.",
   not_found_hint:
-    "Ask can only answer from what your chapter has uploaded or posted in Frapp.",
+    "Frapp Intelligence can only answer from what your chapter has uploaded or posted in Frapp.",
   /** Under an answer in Frapp's own words (`AskAnswer.own_words`). */
   own_words: "Frapp's own words, not from your chapter's records.",
-  refused: "Ask can't help with that question.",
+  refused: "Frapp Intelligence can't help with that question.",
   failed: "That didn't go through. Try again.",
   truncated: "This answer was cut short. Ask a narrower question for the rest.",
   unverified:
     "Part of this answer could not be matched to a source. Check the sources before you rely on it.",
   sources: "Sources",
   unavailable: {
-    consent_required: "Turn on Frapp AI to use Ask.",
-    chapter_off: "Your chapter's president has turned Ask off.",
+    consent_required: "Turn on Frapp Intelligence to ask questions.",
+    chapter_off:
+      "Your chapter's president has turned off questions and requests.",
     chapter_limit:
-      "Your chapter has used its AI allowance for this month. Ask comes back on the 1st.",
+      "Your chapter has used its AI allowance for this month. It comes back on the 1st.",
     member_limit:
-      "You've reached today's limit for questions. Ask comes back tomorrow.",
+      "You've reached today's limit for questions. You can ask again tomorrow.",
     // Frapp's side, not the question's, and with no date a member could be
     // told: the turn offers Try again in its place, as ChatGPT's and
     // Claude's apps do, rather than "later" (#5082).
@@ -727,7 +728,7 @@ export const ASK_COPY = {
   try_again: "Try again",
   /** Clears the thread: the next question starts with nothing before it. */
   new_conversation: "New conversation",
-  consent_action: "Turn on Frapp AI",
+  consent_action: "Turn on Frapp Intelligence",
   /** Under a finished answer: copies its words, without the markers. */
   copy_answer: "Copy answer",
   copied_answer: "Copied",
@@ -738,6 +739,12 @@ export const ASK_COPY = {
    * before it does it.
    */
   only_you_hint: "Only you will see this question and Frapp's answer.",
+  /**
+   * The phone's send button while the draft names `@Frapp`: what pressing it
+   * does, in place of "Send message". A verb, because the product's name
+   * alone tells a screen-reader user nothing about the button.
+   */
+  send_from_channel: "Send to Frapp Intelligence",
   /** The same, where there is room for two words beside the private mark. */
   only_you_short: "Only you",
   /** On an answer drawn in a channel for the asker alone. */
@@ -753,14 +760,14 @@ export const ASK_COPY = {
   /** `@Frapp` and nothing else. */
   no_question: "Type your question after @Frapp.",
   /** `@Frapp` in a reply inside a thread, where there is nowhere to answer. */
-  not_in_reply: "Ask Frapp from the channel, not from a reply.",
+  not_in_reply: "Ask @Frapp from the channel, not from a reply.",
   /**
    * `@Frapp` sent before the app knows whether this member has Ask (the
    * reads are in flight, or failed). Posting it could put a question meant
    * for Frapp in front of the channel, so it waits.
    */
   ask_unknown:
-    "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+    "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
 } as const;
 
 /**
@@ -842,24 +849,24 @@ export function askSourceKindLabel(kind: string): string | null {
  * AI text). Shown only to the one chapter the server offers it to.
  */
 export const ASK_DIAGNOSTICS_COPY = {
-  label: "Save Ask questions for the Frapp team",
+  label: "Save questions for the Frapp team",
   description:
-    "For 14 days, questions members ask in Ask Frapp and the answers they get are saved, encrypted, so the Frapp team can fix wrong answers during the beta. Answers that used channel messages are never saved. It turns itself off on the end date and everything saved is deleted.",
+    "For 14 days, questions members ask in Frapp Intelligence and the answers they get are saved, encrypted, so the Frapp team can fix wrong answers during the beta. Answers that used channel messages are never saved. It turns itself off on the end date and everything saved is deleted.",
   start: "Start saving",
   stop: "Stop and delete",
   on: (endsOn: string) => `Saving until ${endsOn}.`,
   off: "Not saving.",
   presidentOnly: "Only the chapter president can turn this on or off.",
-  confirmStartTitle: "Save Ask questions for 14 days?",
+  confirmStartTitle: "Save questions for 14 days?",
   confirmStartBody: (endsOn: string) =>
-    `Until ${endsOn}, each member sees a line in Ask saying their questions and answers are saved for the Frapp team. You can stop it sooner, which deletes everything saved. Your yes is recorded in the chapter's audit log.`,
+    `Until ${endsOn}, each member sees a line in Frapp Intelligence saying their questions and answers are saved for the Frapp team. You can stop it sooner, which deletes everything saved. Your yes is recorded in the chapter's audit log.`,
   confirmStart: "Start saving",
   confirmStopTitle: "Stop saving and delete?",
   confirmStopBody:
     "Every saved question and answer is deleted now. This can't be undone.",
   confirmStop: "Stop and delete",
   cancel: "Cancel",
-  started: "Ask questions are being saved",
+  started: "Questions are being saved",
   stopped: "Saving stopped and everything saved was deleted",
   failed: "That didn't save. Try again.",
 } as const;

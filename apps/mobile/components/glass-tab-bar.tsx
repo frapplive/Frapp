@@ -81,7 +81,7 @@ const FOLDED_DOT_STEP = 12;
  * screen. The + opens the quick-actions panel above the bar and turns into an
  * X while it is open (`spec/ui/mobile/navigation.md` § Quick actions).
  *
- * Above both, for a member who has Ask, sits the Ask Frapp bar
+ * Above both, for a member who has Ask, sits the Frapp Intelligence bar
  * (`ask/ask-bar.tsx`, #4702): on all four tabs, not inside the + panel, where
  * it was until 2026-11-13. The open panel covers it. While the member reads
  * down a tab screen the bar folds and the Ask bar joins the tabs' row (#4904,
@@ -218,7 +218,7 @@ export function GlassTabBar({
     return () => subscription.remove();
   }, [open, editing, closePanel]);
 
-  // The Ask Frapp bar is there only for a member who has Ask; the server
+  // The Frapp Intelligence bar is there only for a member who has Ask; the server
   // decides. The tab screens are told, so their last row and anything that
   // floats above the tab bar clears it (`useAskBarLift`).
   const hasAsk = useAiSurfaces().ask;
@@ -229,7 +229,7 @@ export function GlassTabBar({
 
   // The fold (#4904, Paul's direction A, 2026-11-17): reading down a tab
   // screen folds the four tabs to the current one, a round the size of the
-  // +, and brings the Ask Frapp bar down into the row between them, Bevel's
+  // +, and brings the Frapp Intelligence bar down into the row between them, Bevel's
   // three pieces and iOS 26's own minimised tab bar. Any move back up opens
   // it (`useBarScroll`). Only with the Ask bar to bring down, never while the
   // + panel is open, and never under a screen reader, which keeps every tab
@@ -276,7 +276,7 @@ export function GlassTabBar({
     FLOATING_TAB_BAR.actionGap;
   const panelWidth = width - FLOATING_TAB_BAR.side * 2;
   const askBarBottom = floatingTabBarTop(bottomInset) + FLOATING_ASK_BAR.gap;
-  // A confirmation sits above the Ask Frapp bar where there is one.
+  // A confirmation sits above the Frapp Intelligence bar where there is one.
   const aboveAskBar = hasAsk
     ? askBarBottom + FLOATING_ASK_BAR.height + FLOATING_TAB_BAR.actionGap
     : aboveBar;

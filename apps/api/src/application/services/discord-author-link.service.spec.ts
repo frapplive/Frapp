@@ -217,6 +217,15 @@ describe('DiscordAuthorLinkService (#2878)', () => {
 
   it('begin delegates to the OAuth handshake for the caller and chapter', async () => {
     await service.begin(CHAPTER, USER);
-    expect(oauth.beginAuthorLink).toHaveBeenCalledWith(CHAPTER, USER);
+    expect(oauth.beginAuthorLink).toHaveBeenCalledWith(CHAPTER, USER, null);
+  });
+
+  it("begin passes the phone's return address through to be checked (#5414)", async () => {
+    await service.begin(CHAPTER, USER, 'frapp://preferences');
+    expect(oauth.beginAuthorLink).toHaveBeenCalledWith(
+      CHAPTER,
+      USER,
+      'frapp://preferences',
+    );
   });
 });

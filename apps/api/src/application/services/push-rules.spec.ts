@@ -406,7 +406,7 @@ describe('officer-set channel defaults and DMs (#2771)', () => {
     ).toBe('all');
   });
 
-  describe('an Ask Frapp answer posted to the channel (#4713)', () => {
+  describe('a Frapp Intelligence answer posted to the channel (#4713)', () => {
     // The member who asked chose to put it there; nobody else asked for it.
     it.each([
       ['a channel set to all', ch('general'), false],

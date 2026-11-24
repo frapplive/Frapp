@@ -86,7 +86,7 @@ export function judgeMessage(question: RealQuestion, answer: string): string {
     ? TERM_CHANNEL_NAMES[question.from.channelId]
     : question.from?.eventId
       ? `the event "${TERM_EVENTS.find((e) => e.id === question.from?.eventId)?.name}"`
-      : 'the Ask Frapp screen';
+      : 'the Frapp Intelligence screen';
   return [
     `Asked by: ${asker.name}, ${asker.role}`,
     `Asked from: ${from}`,

@@ -10,10 +10,11 @@ import { flatStyle } from "@/test/flat-style";
 
 /**
  * s03 is what comes right after joining a chapter, for a new member and for an
- * App Reviewer alike, in two screens (#5627): "How the chapter sees you"
- * (always: the name, pre-filled when sign-in carried a real one, and an
- * optional photo), then "Turn on notifications" when this build can push and
- * push is off. In a build that cannot push (#2299; `isPushAvailable()` false,
+ * App Reviewer alike, in up to three screens (#5627, #5284): "How the
+ * chapter sees you" (always: the name, pre-filled when sign-in carried a real
+ * one, and an optional photo), "About you" when phone, major, graduation year
+ * or birthday is empty, then "Turn on notifications" when this build can push
+ * and push is off. In a build that cannot push (#2299; `isPushAvailable()` false,
  * `spec/ui/mobile/patterns.md` § Push notifications lists the causes) there is
  * no notifications screen at all, rather than a dead "Turn on" and an apology.
  * Then chat. `lib/notifications/primer.spec.ts` covers the rules; this covers
@@ -58,11 +59,19 @@ vi.mock("@/lib/auth-session", () => ({
 
 const completeOnboarding = vi.fn().mockResolvedValue(undefined);
 const updateUser = vi.fn().mockResolvedValue({});
-/** `/v1/users/me`. A real name and a photo by default. */
+/**
+ * `/v1/users/me`. A real name and a photo by default, and all four of About
+ * you's fields (#5284), so a spec about another screen never meets it.
+ */
 const COMPLETE_USER = {
   id: "u-1",
   display_name: "Ada Lovelace",
   avatar_url: "https://example.test/ada.jpg",
+  phone: "+15185550142",
+  major: "Mathematics",
+  graduation_year: 2027,
+  birthday_month: 12,
+  birthday_day: 10,
 };
 let currentUser: Record<string, unknown> | undefined = COMPLETE_USER;
 /** `/v1/schools/mine` (#5929): verified somewhere, so no school beat. */
@@ -121,6 +130,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: () => Promise.resolve({ data: currentUser }),
   }),
   useUpdateUser: () => ({ mutateAsync: updateUser }),
+  usePermissionList: () => [],
+  useChapterMajors: () => [],
 }));
 
 import { useRouter } from "expo-router";
@@ -664,5 +675,180 @@ describe("s03 welcome, the name screen", () => {
       handler![1]();
     });
     expect(field(root)?.props.value).toBe("Ada King");
+  });
+});
+
+/**
+ * About you (#5284): after the name, before notifications, only when phone,
+ * major, graduation year or birthday is empty. Continue saves only what
+ * changed, with the Edit sheet's rules; Skip for now saves nothing.
+ */
+describe("s03 welcome, About you", () => {
+  const NEW_MEMBER = {
+    ...COMPLETE_USER,
+    phone: null,
+    major: null,
+    graduation_year: null,
+    birthday_month: null,
+    birthday_day: null,
+  };
+  const input = (root: Node, label: string) =>
+    root
+      .findAllByType("TextInput" as never, { deep: true })
+      .find((node) => node.props.accessibilityLabel === label);
+  const onAbout = (root: Node) =>
+    root
+      .findAllByType("Text" as never, { deep: true })
+      .some((text) => text.props.children === "About you");
+
+  beforeEach(() => {
+    pushAvailable = false;
+    permission = null;
+    currentUser = NEW_MEMBER;
+    completeOnboarding.mockClear();
+    updateUser.mockClear().mockResolvedValue({});
+    vi.mocked(vi.mocked(useRouter)().replace).mockClear();
+  });
+
+  it("is skipped entirely when all four are filled in", async () => {
+    currentUser = COMPLETE_USER;
+    const { root } = await render();
+
+    expect(onAbout(root)).toBe(false);
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("follows the name when one is empty, and the name says Continue", async () => {
+    const { root } = await render({ passYou: false });
+    expect(button(root, "Continue")).toBeDefined();
+
+    await answerYou(root);
+
+    expect(onAbout(root)).toBe(true);
+    expect(input(root, "Phone")).toBeDefined();
+    expect(input(root, "Major")).toBeDefined();
+    expect(input(root, "Graduation year")).toBeDefined();
+    expect(input(root, "Birthday month, 1 to 12")).toBeDefined();
+    expect(completeOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("Skip for now saves nothing and moves on", async () => {
+    const { root } = await render();
+    act(() => input(root, "Major")?.props.onChangeText("Physics"));
+
+    await press(button(root, "Skip for now"));
+
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(completeOnboarding).toHaveBeenCalled();
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("saves only the fields that changed", async () => {
+    const { root } = await render();
+    act(() => input(root, "Major")?.props.onChangeText(" Physics "));
+    act(() => input(root, "Birthday month, 1 to 12")?.props.onChangeText("3"));
+    act(() => input(root, "Birthday day")?.props.onChangeText("14"));
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateUser).toHaveBeenCalledTimes(1);
+    expect(updateUser).toHaveBeenCalledWith({
+      major: "Physics",
+      birthday_month: 3,
+      birthday_day: 14,
+      birthday_year: null,
+    });
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("refuses half a birthday on Continue and sends nothing", async () => {
+    const { root } = await render();
+    act(() => input(root, "Birthday month, 1 to 12")?.props.onChangeText("3"));
+
+    await press(button(root, "Go to chat"));
+
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(onAbout(root)).toBe(true);
+    expect(
+      root
+        .findAllByType("Text" as never, { deep: true })
+        .some((text) => text.props.accessibilityRole === "alert"),
+    ).toBe(true);
+  });
+
+  it("stays, with the reason and what was typed, when the save fails", async () => {
+    updateUser.mockRejectedValueOnce(new Error("offline"));
+    const { root } = await render();
+    act(() => input(root, "Major")?.props.onChangeText("Physics"));
+
+    await press(button(root, "Go to chat"));
+
+    expect(texts(root).some((t) => t.includes("Couldn't save that"))).toBe(
+      true,
+    );
+    expect(completeOnboarding).not.toHaveBeenCalled();
+    expect(input(root, "Major")?.props.value).toBe("Physics");
+  });
+
+  it("comes before notifications, and Android back returns to it", async () => {
+    const { BackHandler } = await import("react-native");
+    const listen = vi.mocked(BackHandler.addEventListener);
+    listen.mockClear();
+    pushAvailable = true;
+    permission = OFF;
+    const { root } = await render();
+    expect(onAbout(root)).toBe(true);
+
+    await press(button(root, "Continue"));
+    expect(button(root, "Not now")).toBeDefined();
+
+    const calls = listen.mock.calls as unknown as [string, () => boolean][];
+    const handler = calls.filter(([e]) => e === "hardwareBackPress").at(-1);
+    act(() => {
+      handler![1]();
+    });
+    expect(onAbout(root)).toBe(true);
+  });
+
+  it("returns to the name on Android back from About you", async () => {
+    const { BackHandler } = await import("react-native");
+    const listen = vi.mocked(BackHandler.addEventListener);
+    listen.mockClear();
+    const { root } = await render();
+    expect(onAbout(root)).toBe(true);
+
+    const calls = listen.mock.calls as unknown as [string, () => boolean][];
+    const handler = calls.filter(([e]) => e === "hardwareBackPress").at(-1);
+    expect(handler).toBeDefined();
+    let handled = false;
+    act(() => {
+      handled = handler![1]();
+    });
+    expect(handled).toBe(true);
+    expect(onYouScreen(root)).toBe(true);
+  });
+
+  it("sends a clear made after coming back to it from notifications", async () => {
+    const { BackHandler } = await import("react-native");
+    const listen = vi.mocked(BackHandler.addEventListener);
+    listen.mockClear();
+    pushAvailable = true;
+    permission = OFF;
+    const { root } = await render();
+    act(() => input(root, "Major")?.props.onChangeText("Physics"));
+    await press(button(root, "Continue"));
+    expect(updateUser).toHaveBeenLastCalledWith({ major: "Physics" });
+
+    const calls = listen.mock.calls as unknown as [string, () => boolean][];
+    act(() => {
+      calls
+        .filter(([e]) => e === "hardwareBackPress")
+        .at(-1)![1]();
+    });
+    expect(input(root, "Major")?.props.value).toBe("Physics");
+    act(() => input(root, "Major")?.props.onChangeText(""));
+    await press(button(root, "Continue"));
+
+    expect(updateUser).toHaveBeenLastCalledWith({ major: "" });
   });
 });

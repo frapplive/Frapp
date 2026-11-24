@@ -11,7 +11,7 @@ type AskStepEvent = Omit<Extract<AskStreamEvent, { type: 'step' }>, 'v'>;
 
 /**
  * The stream's `step` for a read that ended (#5427, `spec/behavior/ai.md`
- * § Ask Frapp): how it went, how many things it returned and up to
+ * § Frapp Intelligence): how it went, how many things it returned and up to
  * `ASK_STEP_NAMES_MAX` of their names, so the member sees what each read
  * found as it lands.
  *

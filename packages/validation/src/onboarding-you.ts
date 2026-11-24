@@ -1,7 +1,8 @@
 /**
- * The "You" screen: the first screen a member sees after joining (#5627,
- * epic #5624; Paul's pick 2026-11-19, "Two: name, then notifications"; the
- * optional school step joined them for #5929, `school-verification.ts`). The same screen on web and the phone (s03): the name,
+ * The "You" screen: the first of the screens a member sees after joining
+ * (#5627, epic #5624; Paul's pick 2026-11-19, "Two: name, then
+ * notifications"; About you (#5284) and the optional school step (#5929,
+ * `school-verification.ts`) joined since). The same screen on web and the phone (s03): the name,
  * pre-filled when sign-in carried a real one, and an optional photo.
  *
  * Every message a member sends carries their name and photo, so a member

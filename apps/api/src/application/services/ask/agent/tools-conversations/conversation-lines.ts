@@ -315,4 +315,4 @@ export function messageSources(
 
 /** What a result says when the chapter keeps chat away from AI. */
 export const CHAT_OFF_NOTE =
-  'This chapter has channel messages turned off for Frapp AI, so no messages can be read.';
+  'This chapter has channel messages turned off for Frapp Intelligence, so no messages can be read.';

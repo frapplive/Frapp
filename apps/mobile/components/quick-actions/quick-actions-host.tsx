@@ -60,7 +60,7 @@ export function useQuickActionsHost({
   events: boolean;
 }): {
   run: (key: QuickActionKey) => void;
-  /** Opens Ask Frapp, for a member who has it (the bar above the tab bar). */
+  /** Opens Frapp Intelligence, for a member who has it (the bar above the tab bar). */
   ask: () => void;
   sheets: ReactNode;
   /** The last create's confirmation, for a few seconds, or `null`. */

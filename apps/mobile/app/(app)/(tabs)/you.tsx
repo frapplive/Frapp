@@ -19,7 +19,12 @@ import {
 } from "@repo/hooks";
 import { MEMBER_STATUS_LABEL, untilLabel } from "@repo/hooks/member-status";
 import { SignetTokens } from "@repo/theme/signet";
-import { can, isBetaOffModule, isModuleEnabled } from "@repo/validation";
+import {
+  can,
+  isBetaOffModule,
+  isModuleEnabled,
+  SECTION_NAMES,
+} from "@repo/validation";
 import { ScreenShell } from "@/components/screen-shell";
 import { LeadTile } from "@/components/lead-tile";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
@@ -388,7 +393,7 @@ function YouScreen() {
           />
         ) : null}
         <ListRow
-          label="Directory"
+          label={SECTION_NAMES.directory}
           leading={tile(DirectoryGlyph, "directory")}
           accessibilityHint="Opens the member directory."
           onPress={() => router.push("/directory")}

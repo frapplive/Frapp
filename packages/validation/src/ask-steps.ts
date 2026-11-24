@@ -3,7 +3,7 @@ import { ASK_COPY, type AskStreamEvent } from "./ask";
 
 /**
  * Ask's working state as a short list of steps (#5427, Paul 2026-11-17: "we
- * write instead of show"; `spec/behavior/ai.md` § Ask Frapp). Each read Frapp
+ * write instead of show"; `spec/behavior/ai.md` § Frapp Intelligence). Each read Frapp
  * makes is one step with an icon for its kind, a state, and what it found;
  * once the answer starts the list folds into one row. Web and the phone both
  * draw from these functions, so the words and the rules cannot drift.

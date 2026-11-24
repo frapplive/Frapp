@@ -18,7 +18,7 @@ import { UndoBar } from "./undo-bar";
 
 /**
  * What floats over a tab screen sits above everything under it. Once a
- * member has the Ask Frapp bar (#4702) that is the tab bar and the Ask bar,
+ * member has the Frapp Intelligence bar (#4702) that is the tab bar and the Ask bar,
  * so the undo bar and the create button both rise by the Ask bar's room, and
  * neither moves on a screen pushed over the tabs, where no bar is drawn.
  */

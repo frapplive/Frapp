@@ -69,6 +69,7 @@ import {
 } from "@/components/onboarding/onboarding-primary-button";
 import { OnboardingSecondaryButton } from "@/components/onboarding/onboarding-secondary-button";
 import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import { JoinedChannelsCard } from "@/components/onboarding/joined-channels-card";
 import { InviteLinksCard } from "@/components/onboarding/invite-links-card";
 import { ShareGlyph } from "@/components/control-glyphs";
@@ -111,7 +112,7 @@ import { pageSurfaces } from "@/lib/surfaces";
  * match (or describe it by hand), and pick its **Color**. Creating it opens
  * four more: the **live** moment with its channels and an optional logo, the
  * founder's own **display** pick (the same three cards as Settings and the
- * welcome card's Finish your profile, #4056: founders skip s03), **Meet Frapp AI** when the server has AI and
+ * welcome card's Finish your profile, #4056: founders skip s03), **Meet Frapp Intelligence** when the server has AI and
  * the founder never answered it (#4790; their Continue also turns on the new
  * chapter's AI switches, which nobody has set yet), the notifications step
  * when this build can push and push is off, and the **invite** link. Then
@@ -435,7 +436,7 @@ function CreateChapter() {
     }
   }
 
-  // After Meet Frapp AI, or past it when there is none.
+  // After Meet Frapp Intelligence, or past it when there is none.
   function afterAi() {
     if (primer.showPrimer) {
       setStep("primer");
@@ -906,19 +907,12 @@ function Footer({
           disabled={shareBusy || signingOut}
           busy={shareBusy}
         />
-        <OnboardingPressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: signingOut }}
+        <OnboardingQuietButton
+          label={hasShared ? "Go to chat" : "Skip for now"}
           disabled={signingOut}
+          held={signingOut}
           onPress={onFinish}
-          quiet
-          // A quiet line takes no dim of its own (`OnboardingPressable`).
-          style={[styles.quietButton, signingOut ? styles.held : null]}
-        >
-          <Text style={styles.quietButtonText}>
-            {hasShared ? "Go to chat" : "Skip for now"}
-          </Text>
-        </OnboardingPressable>
+        />
       </View>
     );
   }
@@ -1470,23 +1464,6 @@ function createStyles(tokens: SignetTokens) {
     textButtonText: {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.gold.askText,
-    },
-    // The invite step's way out under its gold button: a 44pt line of muted
-    // text, there when wanted and not competing with the invite.
-    quietButton: {
-      alignSelf: "center",
-      minHeight: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
-      justifyContent: "center",
-      marginTop: tokens.spacing.xs,
-    },
-    // The invite step's way to chat while a sign-out holds it.
-    held: {
-      opacity: 0.5,
-    },
-    quietButtonText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.mutedForeground,
     },
     archetypeRow: {
       borderRadius: tokens.radius.control,
