@@ -4,6 +4,8 @@
 
 _(Updated 2026-11-23, [#5929](https://github.com/frapplive/Frapp/issues/5929); Winston, `gampheadband`.)_ **Scheduled and partly built.** Paul approved the IFC recruitment work on 2026-11-23, due 2027-01-11; the plan and record are on [#5833](https://github.com/frapplive/Frapp/issues/5833). **§ 2.1 and § 2.2 are built** in the PR that closes #5929 (`20261123220535_school_layer_schools_and_membership.sql`), with the school-email code, `SchoolGuard` (§ 4.2), § 4.1's posture for these tables, the § 4.3 tests that apply to them, a minimal `school_chapters` (§ 2.4) and an optional onboarding step. Everything else here is still a proposal pending Paul, and so are the open questions in § 8. Three calls Winston made for that build are recorded where they apply, each as "Winston, 2026-11-23": no seeded email domains (§ 7), default school slugs (§ 2.1) and the minimal `school_chapters` (§ 2.4).
 
+_(Updated 2026-11-24, [#5933](https://github.com/frapplive/Frapp/issues/5933); Winston, `gampheadband`.)_ **§ 2.3 and § 5.3 are built, and the council keys of § 5.1** (`20261124010605_councils.sql`), under [#5833](https://github.com/frapplive/Frapp/issues/5833): a council is a `chapters` row of kind `council`, a verified school member starts one, its type's role pack is seeded and every title renames. What differs from the text below is noted where it applies, each as "#5933". Affiliations (§ 2.4's `council_chapters`), the master list, eligibility, the explicit-grant keys and their page are not built.
+
 GitHub hides `whewitt-frapp`'s issues and PRs since 2026-11-11, including #4192, #4218 and this doc's first PR, #4222. The visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833), and #4218 is reopened as [#5834](https://github.com/frapplive/Frapp/pull/5834) (2026-11-21, Winston as `gampheadband`).
 
 This doc is one part of #4192's design. It covers the tables, isolation, permission scopes and the migration of existing chapters. Three parts are decided elsewhere, and this doc defers to them:
@@ -224,6 +226,8 @@ alter table chapters validate constraint chapters_council_fields_kind;
 ```
 
 **Writing the constraint.** It's added `not valid` and then validated, so the long lock is only the validation scan. `npm run check:migration-safety` doesn't judge this: it checks filenames, versions and the promotion and rollback ledgers, not DDL. The advisory Squawk job does judge it (`.squawk.toml`).
+
+_(Built 2026-11-24, #5933, with three differences from the sketch above.)_ **The council's school is a column, `council_school_id`** (`references schools on delete restrict`): the sketch had no column for it, and `school_chapters` is an affiliation an officer confirms (§ 2.4), which a council's own school isn't. **The constraint also ties `org_archetype = 'council'` and the school to the kind**, so a chapter can't take the council archetype and a council can't take a chapter's. **One council of a type per school is a partial unique index** (`chapters_one_council_per_type`), not a check in a creation function, so two founders racing each other can't both win; the API answers the loser `409 council.type_taken`.
 
 **ADR-27 settles the kind values as `chapter` and `council`.** A school's Greek life office is not a tenant: its staff hold a role on the council ([§ 5.2](#52-school-level-roles)).
 
@@ -755,7 +759,7 @@ These extend the layers [`multi-tenancy.md` § How the invariant is tested](../b
 3. **Explicit-grant keys:**
    - A council admin (`*`) without an explicit grant calls `read_academic_record`'s route and is refused. Granted through the explicit-grant page, they're served. Granting `council:matching_operate` grants no eligibility key.
    - A council `roles:manage` holder who tries to add `council:eligibility_manage` to a role gets `400 roles.permission.explicit_grant`, and the role is unchanged.
-4. A chapter role write containing `council:recruitment_view` gets `400 roles.permission.reserved`. This is tested on its own, apart from test 2.
+4. A chapter role write containing `council:recruitment_view` gets `400 roles.permission.reserved`. This is tested on its own, apart from test 2. _(Built 2026-11-24, #5933: `rbac.service.spec.ts`, and `role-tier.service.spec.ts` for tiers. Test 2's kind half is `cross-tenant-isolation.e2e-spec.ts` 5d, on the first council route, `GET /v1/council`, with `council-route-kinds.spec.ts` holding every route that requires a council key to the council kind; the explicit-grant half waits for those keys.)_
 5. **A chapter can't read a PNM it isn't linked to.**
    - Chapter A can't read a PNM linked only to chapter B: 404.
    - Chapter A hand-adds a candidate with that PNM's school email: the candidate gets no `pnm_id`, and reading the PNM is still 404.
@@ -788,7 +792,7 @@ These extend the layers [`multi-tenancy.md` § How the invariant is tested](../b
 **Repository level** (`createTenantHarness`, ledgered in `tenant-scope-coverage.spec.ts`):
 - **A colliding-twin spec per new repository.** Two councils at one school (registrations, eligibility), two schools (`school_members`, `pnms`), two chapters (`pnm_interests`), each proving its filter is applied.
 - **The academic-records repository gets a real spec, not a backlog entry.** It passes the acting council and asserts the function's arguments carry it.
-- **Each tenant-paging sweep** gains a council twin and proves it's filtered by kind.
+- **Each tenant-paging sweep** gains a council twin and proves it's filtered by kind. _(2026-11-24, #5933: the weekly recap push filters to chapters, with its council twin in `supabase-chapter.repository.spec.ts`; the stale-palette sweep keeps every kind, since a council's shell reads its palette too. The other sweeps page feature rows, not `chapters`.)_
 
 **Shared code in a council.** One API spec runs presidency claim, invite redemption with and without a named role, and the default-invite fallback in a seeded council ([§ 5.3](#53-creating-a-council-picking-a-role-renaming-titles)).
 
@@ -825,6 +829,8 @@ New registry entries (`councilPermission(...)`) are mirrored in `SystemPermissio
 - **`PermissionsGuard` changes in one place only:** the explicit-grant check ahead of the wildcard (§ 4.2 rule 2). Tenant kind is ADR-27's check.
 - **School-level roles:** none in this design ([§ 5.2](#52-school-level-roles)).
 
+_(Built 2026-11-24, #5933.)_ `PermissionScope` is `"chapter" | "council"`, and the non-explicit council keys above are in the registry and `SystemPermissions`, under the `council` and `council-recruitment` groups (`PERMISSION_MODULES`; they're not `MODULE_CATALOG` keys). The catalog filters by kind and model as written; the chapter keys a council shares are `COUNCIL_SHARED_PERMISSIONS`. § 4.2 rule 3 is built: a chapter's role or tier write holding a `council:` string gets `400 roles.permission.reserved`. A contract test (`council-route-kinds.spec.ts`) fails when a route requiring a `council:` key serves any kind but `council` (§ 4.2 rule 1). **Not built yet:** the explicit-grant keys (`council:grades_import`, `council:eligibility_manage`, `council:matching_operate`), `explicitGrant` and the explicit-grant page. They join together, so no role can hold an explicit-grant key before the check that keeps `*` from satisfying it exists.
+
 ### 5.2 School-level roles
 
 There's no school-scope key and no school tenant.
@@ -851,6 +857,8 @@ Winston: any IFC member can create the council, the creator picks their own role
    - The creator needs a verified `school_members` row at that school.
    - The school must have no council of that type yet.
    - The council starts **unverified**. It can propose links to chapters and set itself up (`@FreeTier` routes, § 1). It sees nothing until links are accepted, and can't import grades, collect releases or grant eligibility officers until staff, or later the school's FSL office, set `council_verified_at` (ADR-27). How the real IFC proves itself is ⚑ [Q4](#8-open-questions-for-paul).
+
+_(Built 2026-11-24, #5933.)_ `POST /v1/councils` (`CouncilService`) does this, through the same `ChapterService.create` a chapter's onboarding uses rather than a `create_council` function: one seeding path, so a later fix lands once. The packs are `COUNCIL_PROFILES` in `@repo/validation` (rule 1), and each also seeds an Everyone role, as a chapter's does since 2026-11-21. The founder holds Council admin and their pick; "Something else" names a new role in the Executive board, and a name matching a seeded title picks that title. The founder accepts the Terms for the council as a chapter's founder does, and starting a council counts against the same daily ceiling as starting a chapter. A council's `enabled_modules` lists every chapter module as off but chat, members, announcements, the audit log and settings (`COUNCIL_MODULES_ON`), so each client's module gates hide chapter features; the routes' kinds are what lock them. Billing: a council starts `active` while chapter billing is off for the beta (`CHAPTER_BILLING_BETA_OFF`), which covers Q3's free pilot; when billing comes back, the council routes it needs are marked `@FreeTier` (`CouncilController` is). Rule 4's "the school must have no council of that type yet" is the unique index (§ 2.3). Who verifies a council is still ⚑ Q4: nothing in this slice reads `council_verified_at`.
 
 ## 6. Risks
 
