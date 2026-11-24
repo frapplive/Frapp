@@ -22,6 +22,8 @@ import {
   TASK_SEND_BACK_REASON_MISSING,
   acceptAttribute,
   inspectUploadFile,
+  LINK_NOT_WORKING_CAPTION,
+  LINK_NOT_WORKING_LABEL,
   proofLinkDomain,
   proofLinkOpens,
   readSignedUpload,
@@ -301,11 +303,11 @@ export function ProofLinkChip({ link }: { link: string }) {
       <span
         role="note"
         className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-caption text-muted-foreground"
-        aria-label={`Proof link, not a working web address: ${link}`}
+        aria-label={`Proof link, ${LINK_NOT_WORKING_LABEL}: ${link}`}
       >
         <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="truncate">{link}</span>
-        <span className="shrink-0">· not a working link</span>
+        <span className="shrink-0">· {LINK_NOT_WORKING_CAPTION}</span>
       </span>
     );
   }
@@ -656,7 +658,10 @@ export function MarkDoneControl({
    * (the list row's check circle): it gets the press, and the sheet still
    * opens when the task asks for proof.
    */
-  renderTrigger?: (props: { onClick: () => void; disabled: boolean }) => React.ReactNode;
+  renderTrigger?: (props: {
+    onClick: () => void;
+    disabled: boolean;
+  }) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const kind = task.proof_kind ?? "none";

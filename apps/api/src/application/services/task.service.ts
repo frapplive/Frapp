@@ -369,7 +369,7 @@ export class TaskService {
     input: readonly FrappLinkInput[] | undefined,
     stored: readonly FrappLink[] = [],
   ): Promise<FrappLink[] | undefined> {
-    const links = normalizeFrappLinks(input, 'task');
+    const links = normalizeFrappLinks(input, 'task', stored);
     if (!links) return undefined;
     return this.links.checked(chapterId, links, stored);
   }

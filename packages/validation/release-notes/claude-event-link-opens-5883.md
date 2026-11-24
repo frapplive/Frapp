@@ -1,0 +1,1 @@
+A link attached to an event or a task that won't open on a phone, like an address with no real website behind it, is now refused when you add it, and one already attached shows as text instead of opening a page that can't be found.
