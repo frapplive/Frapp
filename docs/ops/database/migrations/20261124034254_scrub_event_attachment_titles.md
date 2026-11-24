@@ -13,7 +13,7 @@ Rewrites the `title` of every document entry in `events.attachments` to "Documen
      and entry ->> 'title' is distinct from 'Document';
   ```
   Zero rows.
-- **Promoter notes**: Writes data: one `update` on the events that hold a document entry with another title, a small set (attachments arrived with #4934). Any order against the API works: #5923's API already writes "Document" on save, and an older API revision writing a name back is corrected on the next save by the current one. Phone builds then show "Document" for those entries, and the web and current phone builds show the live name per reader.
+- **Promoter notes**: Writes data: one `update` on the events that hold a document entry with another title, a small set (attachments arrived with #4934). Production must already run, or get in the same run, the API from #5923, which writes "Document" on every save. Deploy production migrates before it ships the API, so an attachment saved through the old revision in that gap can store a name again, and so can any save while the API is older than #5923 (a migrations-only run, or an API rollback). So run the Checks query once the new API is live: if it returns more than zero, run this migration's `update` again by hand (it is idempotent and touches only the rows still holding a name). After that, the API keeps every save clean.
 
 ## Rollback
 
