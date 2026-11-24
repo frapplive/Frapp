@@ -207,6 +207,8 @@ describe("the sidebar's rows (#5946)", () => {
       "Messages",
       "Calendar",
       "Resources",
+      // A council's row only (#5974); a chapter's sidebar never draws it.
+      "Chapters",
       "Directory",
     ]);
   });
@@ -218,7 +220,9 @@ describe("the sidebar's rows (#5946)", () => {
       isNavItemVisible(item, ["members:view"], () => true),
     );
     expect(memberRows.map((item) => item.id)).toEqual(
-      SIDEBAR_ROWS.map((item) => item.id),
+      SIDEBAR_ROWS.filter((item) => item.id !== "chapters").map(
+        (item) => item.id,
+      ),
     );
   });
 
