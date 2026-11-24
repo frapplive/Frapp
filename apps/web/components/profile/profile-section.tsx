@@ -1,5 +1,15 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { createContext, useContext, type ReactNode } from "react";
 import { SectionLabel } from "@/components/shared/section-label";
+import { cn } from "@/lib/utils";
+
+/**
+ * True inside a settings page opened from a row (`SettingsSubpage`), whose
+ * heading already names the section: its own label is then read, not drawn,
+ * so the page doesn't say "Chapter mark" twice.
+ */
+export const SectionTitledByPage = createContext(false);
 
 /**
  * One block of `/profile` or of the personal Settings page (`/preferences`):
@@ -24,14 +34,19 @@ export function ProfileSection({
   children: ReactNode;
 }) {
   const labelId = `${id}-label`;
+  const titledByPage = useContext(SectionTitledByPage);
   return (
     <section
       id={id}
       aria-labelledby={labelId}
       className="scroll-mt-16 space-y-4"
     >
-      <div className="space-y-1">
-        <SectionLabel id={labelId}>{title}</SectionLabel>
+      <div
+        className={cn("space-y-1", titledByPage && hint == null && "sr-only")}
+      >
+        <div className={titledByPage ? "sr-only" : undefined}>
+          <SectionLabel id={labelId}>{title}</SectionLabel>
+        </div>
         {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
       </div>
       {children}

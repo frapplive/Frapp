@@ -50,7 +50,34 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "handshake",
   // Consumed once by the module page's switch focus (#492).
   "module",
+  // A page opened from one of the Chapter tab's rows.
+  "page",
 ] as const;
+
+/**
+ * The pages the Chapter tab's rows open (`?tab=org&page=`): each holds what
+ * was one long section of the tab, so the tab itself is the profile's fields
+ * and a few rows (Paul, 2026-11-20, Discord's channel settings).
+ */
+export const CHAPTER_SETTINGS_PAGES = [
+  "mark",
+  "accent",
+  "identity",
+  "type",
+  "vocabulary",
+] as const;
+export type ChapterSettingsPage = (typeof CHAPTER_SETTINGS_PAGES)[number];
+
+export function isChapterSettingsPage(
+  value: string | null | undefined,
+): value is ChapterSettingsPage {
+  return (CHAPTER_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
+}
+
+/** The Chapter tab, or one of the pages its rows open. */
+export function chapterSettingsHref(page: ChapterSettingsPage | null): string {
+  return page ? `/settings?tab=org&page=${page}` : "/settings?tab=org";
+}
 
 /**
  * Where an old tool route sends its visitor: `target` (a Chapter settings
