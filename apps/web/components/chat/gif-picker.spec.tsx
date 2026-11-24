@@ -109,7 +109,7 @@ describe("GifPickerPanel favorites (#5772)", () => {
       expect.anything(),
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: "Favorites" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Favorites" }));
     expect(screen.getByText("No favorites yet")).toBeInTheDocument();
     expect(screen.queryByRole("searchbox")).toBeNull();
 

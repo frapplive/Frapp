@@ -38,7 +38,7 @@ import {
 } from "@/components/ai/report-ai-sheet";
 import { CloseGlyph } from "@/components/control-glyphs";
 import { eyebrowStyle } from "@/components/eyebrow";
-import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { fontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -331,9 +331,10 @@ function CatchUpBlock({
         {scope.kind === "channel" ? (
           // Never disabled while it works: picking another range replaces
           // the request in flight.
-          <Segmented
+          <ViewLabels
+            compact
+            flush
             accessibilityLabel={CHAT_CATCH_UP_COPY.range_label}
-            dense
             value={range}
             onChange={onRange}
             options={catchUpRangesFor(scope).map((value) => ({

@@ -251,7 +251,7 @@ The Chip step ([foundations.md](foundations.md) §9): height 24px on every point
 
 Underline style only — no segmented pill controls for tabs. Choosing one answer from a short set inside a form is a different control: § Segmented control.
 
-_Changed 2026-11-24 (Paul, [#5947](https://github.com/frapplive/Frapp/issues/5947)): a page's or a list's views are [§ View labels](#view-labels-change-a-pages-or-a-lists-view), the same words without the rule or the accent underline. This primitive's three view uses (the Directory's Actives / Alumni, a form's responses, chat reports) move to it in #5947's sweep; what stays here is navigation between pages of one surface (the Settings rail, sign in / sign up)._
+_Changed 2026-11-24 (Paul, [#5947](https://github.com/frapplive/Frapp/issues/5947)): a page's or a list's views are [§ View labels](#view-labels-change-a-pages-or-a-lists-view), the same words without the rule or the accent underline. A form's responses and chat reports moved to it in #5947's sweep, and the Directory's Actives / Alumni moves with the Directory's own step (#5950); what stays here is navigation between pages of one surface (the Settings rail, sign in / sign up)._
 
 - Row: 1px bottom hairline `--border` (`rgba(255,255,255,.12)`); items gap 22px. An item is the Small step: 36px to a fine pointer, 44 on touch, set by a min-height so a caller's padding cannot push it past its row.
 - Active: 15px / 600 `--foreground` (web: 14), 2px bottom underline `accent-9`.

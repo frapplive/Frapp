@@ -38,6 +38,17 @@ export type MemberLabel = (userId: string) => string;
 /** The card's button for its creator, and the view's title. */
 export const VIEW_RESPONSES_LABEL = "Responses";
 
+/** The two ways the responses read, drawn as view labels on both apps (#5947). */
+export type FormResponsesView = "summary" | "individual";
+
+export const FORM_RESPONSES_VIEWS = [
+  { value: "summary", label: "Summary" },
+  { value: "individual", label: "Individual" },
+] as const satisfies readonly { value: FormResponsesView; label: string }[];
+
+/** What the views are views of, for a screen reader. */
+export const FORM_RESPONSES_VIEWS_LABEL = "Show responses as";
+
 /**
  * Whether the viewer may open a form's responses: only the member who posted
  * it, as the API decides (`ChatFormService.getResponses`). No permission
