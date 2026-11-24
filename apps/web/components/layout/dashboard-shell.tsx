@@ -67,6 +67,7 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
+import { DesktopRuntime } from "@/components/layout/desktop-runtime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -517,6 +518,8 @@ export function DashboardShell({
       <WelcomeGate />
       {/* What's new, by itself once after an update (#3943). */}
       <WhatsNewHost />
+      {/* Inside the desktop app only: the icon's count and system notifications (#4842). */}
+      <DesktopRuntime />
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*
