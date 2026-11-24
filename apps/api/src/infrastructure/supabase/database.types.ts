@@ -577,7 +577,7 @@ export interface Database {
         }[];
       };
       /**
-       * `20261123220535` (#5929). Checks a school-email code against the
+       * `20261124182353` (#5929). Checks a school-email code against the
        * account's open verification and writes the `school_members` row on a
        * match. Answers `{ ok, reason, attempts_left, member_id }`.
        */
@@ -747,7 +747,7 @@ export interface Database {
         } | null;
       };
       /**
-       * `20261123220535` (#5929). Deletes the user's open school-email code
+       * `20261124182353` (#5929). Deletes the user's open school-email code
        * whose email didn't go out.
        */
       discard_school_email_verification: {
@@ -1394,7 +1394,7 @@ export interface Database {
         Returns: ChatMessage[];
       };
       /**
-       * `20261123220535` (#5929). Schools by name, short name or alias for
+       * `20261124182353` (#5929). Schools by name, short name or alias for
        * the onboarding step, best match first; suspended schools left out.
        * Global reference data, no tenant scope; at most 50 rows.
        */
@@ -1526,7 +1526,7 @@ export interface Database {
         Returns: string;
       };
       /**
-       * `20261123220535` (#5929). Opens a school-email code, counting the
+       * `20261124182353` (#5929). Opens a school-email code, counting the
        * address, IP and account ceilings under advisory locks. Answers
        * `{ ok, reason, id, expires_at, retry_after_seconds }`.
        */

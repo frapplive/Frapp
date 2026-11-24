@@ -1,4 +1,4 @@
-# 20261123220535_school_layer_schools_and_membership.sql
+# 20261124182353_school_layer_schools_and_membership.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
