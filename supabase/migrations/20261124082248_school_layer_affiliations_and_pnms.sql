@@ -425,12 +425,15 @@ revoke all on function public.set_school_chapter_status(uuid, uuid, text, uuid)
 --   declined  — the other side declines a proposal
 --   suspended — the council, on an accepted link
 --   ended     — either side, on a live link (a proposer withdrawing too)
+-- A step on an existing link names it (`p_link_id`), and the pair's live
+-- link must be that one.
 create or replace function public.set_council_chapter_status(
   p_council_id uuid,
   p_chapter_id uuid,
   p_side       text,
   p_status     text,
-  p_actor      uuid
+  p_actor      uuid,
+  p_link_id    uuid
 )
 returns jsonb
 language plpgsql
@@ -486,6 +489,11 @@ begin
   if v_link.id is null then
     return jsonb_build_object('ok', false, 'reason', 'not_found');
   end if;
+  -- A step on a link the caller saw acts on that link only: an ended or
+  -- declined one is never stood in for by the pair's newer live link.
+  if p_link_id is not null and p_link_id <> v_link.id then
+    return jsonb_build_object('ok', false, 'reason', 'invalid_transition');
+  end if;
 
   if p_status = 'accepted' then
     if v_link.status = 'proposed' and v_link.proposed_by_side <> p_side then
@@ -515,7 +523,7 @@ begin
 end;
 $$;
 
-revoke all on function public.set_council_chapter_status(uuid, uuid, text, text, uuid)
+revoke all on function public.set_council_chapter_status(uuid, uuid, text, text, uuid, uuid)
   from public, anon, authenticated;
 
 -- The live PNM a row has become: itself, or the survivor it was merged into.
@@ -586,11 +594,18 @@ begin
   end if;
 
   -- Two first submissions of one address at once: the unique index holds,
-  -- and the loser takes the winner's row.
+  -- and the loser takes the winner's row. An address merged into another
+  -- record is that record's person, so it finds the survivor (§ 2.5).
   loop
     select * into v_row
       from public.pnms
-     where school_id = p_school_id and school_email = v_email and merged_into_id is null
+     where id = coalesce(
+             (select id from public.pnms
+               where school_id = p_school_id and school_email = v_email
+                 and merged_into_id is null),
+             (select public.pnm_survivor(id) from public.pnms
+               where school_id = p_school_id and school_email = v_email
+               order by created_at limit 1))
      for update;
     exit when found;
     begin
@@ -737,7 +752,8 @@ revoke all on function public.record_pnm_interest(uuid, uuid, text, text, uuid, 
 -- duplicates"): both at the council's school, both on its master list, and
 -- neither already merged. Two different accounts are two people, so that is
 -- refused. In one transaction it moves the loser's registrations and
--- interests to the survivor (dropping any the survivor already has),
+-- interests to the survivor (where both have one, the live one wins: a
+-- live interest or registration is never dropped for a withdrawn one),
 -- repoints each chapter's candidate where that chapter has none for the
 -- survivor yet (a chapter that has both keeps both until it merges them
 -- itself, and the count comes back), keeps the earlier `created_at`, and
@@ -795,7 +811,20 @@ begin
   insert into public.pnm_merges (council_id, survivor_id, loser_id, actor_user_id, survivor_before, loser_before)
   values (p_council_id, p_survivor, p_loser, p_actor, to_jsonb(v_survivor), to_jsonb(v_loser));
 
-  -- 1. Registrations and interests.
+  -- 1. Registrations and interests. Where both hold one, the survivor's
+  --    takes the live state before the loser's goes.
+  update public.pnm_council_registrations s
+     set status = 'registered'
+    from public.pnm_council_registrations l
+   where s.pnm_id = p_survivor and l.pnm_id = p_loser
+     and s.council_id = l.council_id and s.term = l.term
+     and s.status = 'withdrawn' and l.status <> 'withdrawn';
+  update public.pnm_interests s
+     set withdrawn_at = null
+    from public.pnm_interests l
+   where s.pnm_id = p_survivor and l.pnm_id = p_loser
+     and s.chapter_id = l.chapter_id
+     and s.withdrawn_at is not null and l.withdrawn_at is null;
   delete from public.pnm_council_registrations l
    using public.pnm_council_registrations s
    where l.pnm_id = p_loser and s.pnm_id = p_survivor
@@ -822,7 +851,6 @@ begin
   update public.pnms
      set created_at        = least(v_survivor.created_at, v_loser.created_at),
          user_id           = coalesce(v_survivor.user_id, v_loser.user_id),
-         email_verified_at = coalesce(v_survivor.email_verified_at, v_loser.email_verified_at),
          preferred_name    = coalesce(v_survivor.preferred_name, v_loser.preferred_name),
          class_year        = coalesce(v_survivor.class_year, v_loser.class_year),
          updated_at        = now()
@@ -866,8 +894,10 @@ revoke all on function public.delete_pnm(uuid)
 -- The retention sweep (§ 3.5, ifc-recruitment.md § Retention and deletion;
 -- Paul, #4218: 180 days). A PNM on a master list goes once every season they
 -- registered for has closed plus that council's N days (default 180, at
--- most 180). A PNM on no master list (only chapter forms) goes 180 days
--- after their last interest or update. Returns how many it deleted.
+-- most 180), unless they showed interest after that season closed, which
+-- starts a fresh 180 days. A PNM on no master list (only chapter forms)
+-- goes 180 days after their last interest or update. Returns how many it
+-- deleted.
 create or replace function public.purge_expired_pnms(p_now timestamptz)
 returns integer
 language plpgsql
@@ -884,11 +914,23 @@ begin
        and (
          case
            when exists (select 1 from public.pnm_council_registrations r where r.pnm_id = p.id) then
-             (select max(s.closes_at + make_interval(days => s.pnm_retention_days))
-                from public.pnm_council_registrations r
-                join public.council_recruitment_seasons s
-                  on s.council_id = r.council_id and s.term = r.term
-               where r.pnm_id = p.id)
+             greatest(
+               (select max(s.closes_at + make_interval(days => s.pnm_retention_days))
+                  from public.pnm_council_registrations r
+                  join public.council_recruitment_seasons s
+                    on s.council_id = r.council_id and s.term = r.term
+                 where r.pnm_id = p.id),
+               -- Interest shown after their last season closed starts a
+               -- fresh 180 days, as for a PNM on no master list.
+               (select max(i.created_at) + interval '180 days'
+                  from public.pnm_interests i
+                 where i.pnm_id = p.id
+                   and i.created_at > (
+                     select max(s.closes_at)
+                       from public.pnm_council_registrations r
+                       join public.council_recruitment_seasons s
+                         on s.council_id = r.council_id and s.term = r.term
+                      where r.pnm_id = p.id)))
            else
              greatest(
                p.updated_at,
@@ -930,7 +972,7 @@ do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.set_school_chapter_status(uuid, uuid, text, uuid) to service_role;
-    grant execute on function public.set_council_chapter_status(uuid, uuid, text, text, uuid) to service_role;
+    grant execute on function public.set_council_chapter_status(uuid, uuid, text, text, uuid, uuid) to service_role;
     grant execute on function public.upsert_verified_pnm(uuid, text, text, text, text, smallint, text, boolean, text, uuid) to service_role;
     grant execute on function public.record_pnm_interest(uuid, uuid, text, text, uuid, text) to service_role;
     grant execute on function public.merge_pnms(uuid, uuid, uuid, uuid) to service_role;

@@ -72,12 +72,18 @@ export interface IAffiliationRepository {
     chapterId: string,
     linkId: string,
   ): Promise<CouncilChapter | null>;
+  /**
+   * `linkId` names the link a step acts on: the function refuses it when
+   * the pair's live link is another (an ended link never stands in for a
+   * newer one). Null for a proposal.
+   */
   setCouncilLinkStatus(
     councilId: string,
     chapterId: string,
     side: AffiliationSide,
     status: CouncilChapterStatus,
     actor: string,
+    linkId: string | null,
   ): Promise<CouncilChapterStatusResult>;
 
   /** Chapter-kind tenants with an `active` link to the school. */

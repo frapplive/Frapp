@@ -1,5 +1,4 @@
 import type { CouncilChapterRow, InviteCandidate } from "@repo/hooks";
-import { ARCHETYPES } from "@repo/org-archetypes";
 import {
   can,
   COUNCIL_CHAPTERS_COPY,
@@ -8,9 +7,10 @@ import {
 
 /**
  * The council's Chapters section on its home (#5974,
- * `components/council/council-chapters.tsx`): how its links group, what a
- * viewer may do to each, and how a chapter's second line reads. Pure, for
- * the spec.
+ * `components/council/council-chapters.tsx`): what a viewer may do to each
+ * link. How the links group and a chapter's second line read are
+ * `groupCouncilChapters` and `chapterListingLine` in `@repo/hooks`, shared
+ * with web. Pure, for the spec.
  */
 
 /** The phone's own words for the section; the shared ones are `COUNCIL_CHAPTERS_COPY`. */
@@ -20,45 +20,6 @@ export const COUNCIL_CHAPTERS_PHONE_COPY = {
   inviteHint: "Opens the chapters at your school you can invite.",
   removeConfirm: "Remove",
 } as const;
-
-/** The live links, in the three lists the section draws. */
-export interface CouncilChapterGroups {
-  /** A chapter asked to join and the council hasn't answered. */
-  requests: CouncilChapterRow[];
-  /** Accepted and suspended, by name. */
-  members: CouncilChapterRow[];
-  /** The council invited and the chapter hasn't answered. */
-  invited: CouncilChapterRow[];
-}
-
-const byName = (a: CouncilChapterRow, b: CouncilChapterRow) =>
-  a.chapter.name.localeCompare(b.chapter.name);
-
-/**
- * Splits the council's links into the section's lists. Declined and ended
- * links are history, not chapters, and are left out. Requests and invites
- * keep the API's order (newest first); members read by name, a suspended one
- * in its place among them, so the list doesn't reshuffle when one is
- * suspended.
- */
-export function groupCouncilChapters(
-  rows: readonly CouncilChapterRow[],
-): CouncilChapterGroups {
-  const groups: CouncilChapterGroups = {
-    requests: [],
-    members: [],
-    invited: [],
-  };
-  for (const row of rows) {
-    const { status, proposed_by_side: side } = row.link;
-    if (status === "proposed" && side === "chapter") groups.requests.push(row);
-    else if (status === "proposed") groups.invited.push(row);
-    else if (status === "accepted" || status === "suspended")
-      groups.members.push(row);
-  }
-  groups.members.sort(byName);
-  return groups;
-}
 
 /** Whether the viewer can read the list (`GET /v1/council/chapters`). */
 export function canViewCouncilChapters(permissions: readonly string[]) {
@@ -154,23 +115,6 @@ export function councilChapterActions(
             ? ["reinstate", "remove"]
             : [];
   return keys.map((key) => ACTIONS[key]);
-}
-
-/**
- * A chapter's second line: what kind of chapter it is and its school
- * ("IFC Fraternity · Rensselaer Polytechnic Institute"). Only the public
- * listing, never anything of its members. An archetype this app doesn't
- * know is left out rather than guessed.
- */
-export function chapterListingLine(
-  chapter: Pick<CouncilChapterRow["chapter"], "org_archetype" | "university">,
-): string {
-  const key = chapter.org_archetype;
-  const kind =
-    key && Object.hasOwn(ARCHETYPES, key)
-      ? ARCHETYPES[key as keyof typeof ARCHETYPES].label
-      : null;
-  return [kind, chapter.university.trim() || null].filter(Boolean).join(" · ");
 }
 
 /**

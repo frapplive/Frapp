@@ -209,6 +209,7 @@ describe('AffiliationService — the chapter side', () => {
       'chapter',
       'proposed',
       ACTOR,
+      null,
     );
     expect(link.proposed_by_side).toBe('chapter');
   });
@@ -319,6 +320,7 @@ describe('AffiliationService — the council side', () => {
       'council',
       'suspended',
       ACTOR,
+      'cl-1',
     );
     expect(link.status).toBe('suspended');
   });

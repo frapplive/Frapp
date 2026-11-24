@@ -164,6 +164,7 @@ describe('PnmService — the master list', () => {
     expect(pnms.findInterests).toHaveBeenCalledWith(
       ['pnm-1', 'pnm-2'],
       [CH_A, CH_B],
+      '2027-02-10T00:00:00Z',
     );
     // PNMs only at the council's own school.
     expect(pnms.findLivePnmsAtSchool).toHaveBeenCalledWith(SCHOOL, [
@@ -315,8 +316,8 @@ describe('PnmService — the merge queue', () => {
   it('suggests the same name with the same phone or class year, without the number', async () => {
     const { service, pnms } = setup();
     pnms.findLivePnmsAtSchool.mockResolvedValue([
-      pnm({ id: 'a', phone: '(555) 000-1111' }),
-      pnm({ id: 'b', school_email: 'pat.t@rpi.edu', phone: '5550001111' }),
+      pnm({ id: 'a', phone: '(518) 555-0142' }),
+      pnm({ id: 'b', school_email: 'pat.t@rpi.edu', phone: '5185550142' }),
       pnm({ id: 'c', first_name: 'Someone', last_name: 'Else' }),
     ]);
 
@@ -327,7 +328,39 @@ describe('PnmService — the merge queue', () => {
       'same_name_and_phone',
       'same_name_and_class_year',
     ]);
-    expect(JSON.stringify(pairs)).not.toContain('5550001111');
+    expect(JSON.stringify(pairs)).not.toContain('555');
+  });
+
+  it('logs every PNM a suggested pair shows', async () => {
+    const { service, pnms } = setup();
+    pnms.findLivePnmsAtSchool.mockResolvedValue([
+      pnm({ id: 'a' }),
+      pnm({ id: 'b', school_email: 'pat.t@rpi.edu' }),
+    ]);
+
+    await service.duplicates(COUNCIL, ACTOR);
+
+    expect(pnms.logCouncilAccess).toHaveBeenCalledWith(COUNCIL, ACTOR, [
+      { pnmId: 'a', fields: ['name', 'school_email', 'class_year'] },
+      { pnmId: 'b', fields: ['name', 'school_email', 'class_year'] },
+    ]);
+  });
+
+  it('matches one number written with and without its country code', async () => {
+    const { service, pnms } = setup();
+    pnms.findLivePnmsAtSchool.mockResolvedValue([
+      pnm({ id: 'a', class_year: null, phone: '+1 518 555 0142' }),
+      pnm({
+        id: 'b',
+        class_year: 2031,
+        school_email: 'b@rpi.edu',
+        phone: '(518) 555-0142',
+      }),
+    ]);
+
+    const pairs = await service.duplicates(COUNCIL, ACTOR);
+
+    expect(pairs.map((p) => p.reasons)).toEqual([['same_name_and_phone']]);
   });
 
   it('leaves out a pair an officer dismissed', async () => {
@@ -360,6 +393,22 @@ describe('PnmService — the merge queue', () => {
     await expect(
       service.dismissDuplicate(COUNCIL, ACTOR, 'pnm-1', 'pnm-9'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('orders mixed-case ids the way Postgres compares uuids', async () => {
+    const { service, pnms } = setup();
+    const upper = 'B1000000-0000-4000-8000-000000000000';
+    const lower = 'a2000000-0000-4000-8000-000000000000';
+    pnms.findRegistrantIds.mockResolvedValue([upper.toLowerCase(), lower]);
+
+    await service.dismissDuplicate(COUNCIL, ACTOR, upper, lower);
+
+    expect(pnms.dismissDuplicate).toHaveBeenCalledWith(
+      COUNCIL,
+      lower,
+      upper.toLowerCase(),
+      ACTOR,
+    );
   });
 
   it.each([

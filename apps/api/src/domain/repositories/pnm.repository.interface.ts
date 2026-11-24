@@ -61,19 +61,27 @@ export interface IPnmRepository {
     patch: SeasonPatch,
   ): Promise<CouncilRecruitmentSeason | null>;
 
-  /** The council's registrations for one term. */
+  /** The council's live (not withdrawn) registrations for one term. */
   findRegistrations(
     councilId: string,
     term: string,
   ): Promise<PnmCouncilRegistration[]>;
-  /** The PNMs among these ids that registered with the council, any term. */
+  /** The PNMs among these ids on the council's list (not withdrawn), any term. */
   findRegistrantIds(councilId: string, pnmIds: string[]): Promise<string[]>;
-  /** Every PNM id registered with the council, any term. */
+  /** Every PNM id on the council's list (not withdrawn), any term. */
   findAllRegistrantIds(councilId: string): Promise<string[]>;
   /** Live (unmerged) PNMs among these ids, at this school only. */
   findLivePnmsAtSchool(schoolId: string, pnmIds: string[]): Promise<Pnm[]>;
-  /** Live interests of these PNMs in these chapters only. */
-  findInterests(pnmIds: string[], chapterIds: string[]): Promise<PnmInterest[]>;
+  /**
+   * Live interests of these PNMs in these chapters only, shown at or before
+   * `createdBy` when given (a season's close: a later season's interest
+   * isn't this season's).
+   */
+  findInterests(
+    pnmIds: string[],
+    chapterIds: string[],
+    createdBy?: string,
+  ): Promise<PnmInterest[]>;
 
   /** Writes the council's reads to `council_pnm_access_log`. */
   logCouncilAccess(

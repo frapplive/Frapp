@@ -243,7 +243,7 @@ export class AffiliationService {
     actor: string,
     councilId: string,
   ): Promise<CouncilLinkView> {
-    return this.write(councilId, chapterId, 'chapter', 'proposed', actor);
+    return this.write(councilId, chapterId, 'chapter', 'proposed', actor, null);
   }
 
   async decideForChapter(
@@ -254,7 +254,14 @@ export class AffiliationService {
   ): Promise<CouncilLinkView> {
     const link = await this.affiliations.findChapterLink(chapterId, linkId);
     if (!link) throw notFound();
-    return this.write(link.council_id, chapterId, 'chapter', status, actor);
+    return this.write(
+      link.council_id,
+      chapterId,
+      'chapter',
+      status,
+      actor,
+      link.id,
+    );
   }
 
   // The council's side ---------------------------------------------------------
@@ -307,7 +314,7 @@ export class AffiliationService {
     actor: string,
     chapterId: string,
   ): Promise<CouncilLinkView> {
-    return this.write(councilId, chapterId, 'council', 'proposed', actor);
+    return this.write(councilId, chapterId, 'council', 'proposed', actor, null);
   }
 
   async decideForCouncil(
@@ -318,7 +325,14 @@ export class AffiliationService {
   ): Promise<CouncilLinkView> {
     const link = await this.affiliations.findCouncilLink(councilId, linkId);
     if (!link) throw notFound();
-    return this.write(councilId, link.chapter_id, 'council', status, actor);
+    return this.write(
+      councilId,
+      link.chapter_id,
+      'council',
+      status,
+      actor,
+      link.id,
+    );
   }
 
   private async write(
@@ -327,6 +341,7 @@ export class AffiliationService {
     side: AffiliationSide,
     status: CouncilChapterStatus,
     actor: string,
+    linkId: string | null,
   ): Promise<CouncilLinkView> {
     const result = await this.affiliations.setCouncilLinkStatus(
       councilId,
@@ -334,6 +349,7 @@ export class AffiliationService {
       side,
       status,
       actor,
+      linkId,
     );
     if (!result.ok) throw refusal(result.reason);
     return linkView(result.link);

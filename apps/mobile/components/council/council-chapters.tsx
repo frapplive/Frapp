@@ -9,6 +9,8 @@ import {
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   affiliationErrorCopy,
+  chapterListingLine,
+  groupCouncilChapters,
   useDecideCouncilChapter,
   useInviteChapter,
   type CouncilChapterRow,
@@ -43,10 +45,8 @@ import { StatusChip } from "@/components/status-chip";
 import { tintedControlStyles } from "@/components/tinted-control";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import {
-  chapterListingLine,
   councilChapterActions,
   COUNCIL_CHAPTERS_PHONE_COPY as PHONE_COPY,
-  groupCouncilChapters,
   orderedInviteCandidates,
   type CouncilChapterAction,
 } from "@/lib/council/chapters";

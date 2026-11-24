@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { getArchetype } from "@repo/org-archetypes";
 import { chapterMarkFor, CrestTile } from "@/components/layout/crest-tile";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { cn } from "@/lib/utils";
@@ -71,21 +70,4 @@ export function AffiliationRow({
       {body}
     </RowMenu>
   );
-}
-
-/**
- * A chapter's line under its name, from its public listing only: its kind of
- * organization, then its school ("IFC Fraternity · Rensselaer Polytechnic
- * Institute"). Never anything of the chapter's own data.
- */
-export function chapterListingMeta(chapter: {
-  org_archetype: string | null;
-  university: string;
-}): string {
-  const archetype =
-    chapter.org_archetype &&
-    getArchetype(chapter.org_archetype).key === chapter.org_archetype
-      ? getArchetype(chapter.org_archetype).label
-      : null;
-  return [archetype, chapter.university || null].filter(Boolean).join(" · ");
 }

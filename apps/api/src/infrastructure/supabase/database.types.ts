@@ -707,17 +707,17 @@ export interface Database {
         Args: { p_import_id: string; p_chapter_id: string };
         Returns: string[];
       };
+      /** `20261124082248` (#5974) — deletes a PNM and its cascade; returns the count. */
+      delete_pnm: {
+        Args: { p_pnm_id: string };
+        Returns: number;
+      };
       /**
        * `20261113040010` (#4620) — delete the upcoming occurrences a series
        * edit rebuilt, carrying each matched pair's excuses (and an approved
        * one's EXCUSED attendance) to the new meeting in the same transaction.
        * Returns the pending and approved excuses no new meeting took.
        */
-      /** `20261124082248` (#5974) — deletes a PNM and its cascade; returns the count. */
-      delete_pnm: {
-        Args: { p_pnm_id: string };
-        Returns: number;
-      };
       delete_replaced_occurrences: {
         Args: {
           p_chapter_id: string;
@@ -1094,7 +1094,6 @@ export interface Database {
         };
         Returns: Task[];
       };
-      /** `20261116135639` (#5133) — pays a settled market, or re-pays a paid one whose winner changed. */
       /** `20261124082248` (#5974) — `returns jsonb`: `PnmMergeResult`. */
       merge_pnms: {
         Args: {
@@ -1105,6 +1104,7 @@ export interface Database {
         };
         Returns: Json;
       };
+      /** `20261116135639` (#5133) — pays a settled market, or re-pays a paid one whose winner changed. */
       pay_prediction_market: {
         Args: {
           p_chapter_id: string;
@@ -1128,16 +1128,16 @@ export interface Database {
         };
         Returns: PredictionStake;
       };
-      /**
-       * `20261112170000` (#4314), `kind` since `20261116171551` — a chat window's readable messages, oldest
-       * conversation first; one row with a null `message_id` when it holds
-       * none, no row when it is gone or its channel is a DM.
-       */
       /** `20261124082248` (#5974) — the PNM retention sweep; returns the count. */
       purge_expired_pnms: {
         Args: { p_now: string };
         Returns: number;
       };
+      /**
+       * `20261112170000` (#4314), `kind` since `20261116171551` — a chat window's readable messages, oldest
+       * conversation first; one row with a null `message_id` when it holds
+       * none, no row when it is gone or its channel is a DM.
+       */
       read_chat_corpus_window: {
         Args: { p_chapter_id: string; p_window_id: string };
         Returns: {
@@ -1180,11 +1180,6 @@ export interface Database {
           chunk_count: number;
         }[];
       };
-      /**
-       * `20261119181810` (#5471). Undoes a minutes reminder the API could not
-       * send: takes back the caller's ask, un-counts the asks it spoke for and
-       * clears the meeting's cooldown.
-       */
       /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
       record_pnm_interest: {
         Args: {
@@ -1197,6 +1192,11 @@ export interface Database {
         };
         Returns: Json;
       };
+      /**
+       * `20261119181810` (#5471). Undoes a minutes reminder the API could not
+       * send: takes back the caller's ask, un-counts the asks it spoke for and
+       * clears the meeting's cooldown.
+       */
       release_meeting_minutes_ping: {
         Args: { p_meeting_id: string; p_chapter_id: string; p_user_id: string };
         Returns: undefined;
@@ -1503,11 +1503,6 @@ export interface Database {
         };
         Returns: ChatSidebarPreferences[];
       };
-      /**
-       * `20261113184311` (#4830). Writes a member's `role_ids` only if the row
-       * still holds `p_expected` and every newly given id names a live role;
-       * returns the row, or none when it wrote nothing.
-       */
       /** `20261124082248` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
       set_council_chapter_status: {
         Args: {
@@ -1516,9 +1511,15 @@ export interface Database {
           p_side: string;
           p_status: string;
           p_actor: string;
+          p_link_id: string | null;
         };
         Returns: Json;
       };
+      /**
+       * `20261113184311` (#4830). Writes a member's `role_ids` only if the row
+       * still holds `p_expected` and every newly given id names a live role;
+       * returns the row, or none when it wrote nothing.
+       */
       set_member_role_ids: {
         Args: {
           p_chapter_id: string;
@@ -1528,11 +1529,6 @@ export interface Database {
         };
         Returns: Member[];
       };
-      /**
-       * `20261112165020` (#714) — settles a hold with the call's real counts
-       * and cost, or records a call made with no hold. Returns `settled`,
-       * `inserted` or `missing`.
-       */
       /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
       set_school_chapter_status: {
         Args: {
@@ -1543,6 +1539,11 @@ export interface Database {
         };
         Returns: Json;
       };
+      /**
+       * `20261112165020` (#714) — settles a hold with the call's real counts
+       * and cost, or records a call made with no hold. Returns `settled`,
+       * `inserted` or `missing`.
+       */
       settle_ai_spend: {
         Args: {
           p_reservation_id: string | null;
@@ -1612,7 +1613,6 @@ export interface Database {
         Args: { p_chapter_id: string; p_user_id: string };
         Returns: number | null;
       };
-      /** `20261116135639` (#5133) — refunds every stake; a paid market's payouts are reversed first. */
       /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
       upsert_verified_pnm: {
         Args: {
@@ -1629,6 +1629,7 @@ export interface Database {
         };
         Returns: Json;
       };
+      /** `20261116135639` (#5133) — refunds every stake; a paid market's payouts are reversed first. */
       void_prediction_market: {
         Args: {
           p_chapter_id: string;

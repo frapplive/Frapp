@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { SUPABASE_CLIENT } from '../supabase.provider';
 import type { FrappSupabaseClient } from '../database.types';
 import { SupabaseQueryError } from '../supabase-query-error';
+import { fetchAllPages } from '../supabase.utils';
+import { chunkIds } from '#domain/utils/chunk-ids';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import type {
   IPnmRepository,
@@ -23,6 +25,8 @@ const SEASON_COLUMNS =
 const PNM_COLUMNS =
   'id, school_id, user_id, school_email, email_verified_at, first_name, last_name, preferred_name, class_year, phone, phone_shared, merged_into_id, created_via, created_at, updated_at';
 const REGISTRATION_COLUMNS = 'id, pnm_id, council_id, term, status, created_at';
+/** Rows per page: the server's row cap (`max_rows`, 1000). */
+const PAGE_SIZE = 1000;
 const INTEREST_COLUMNS =
   'id, pnm_id, chapter_id, registration_id, source, source_label, created_at, withdrawn_at';
 
@@ -97,67 +101,99 @@ export class SupabasePnmRepository implements IPnmRepository {
     councilId: string,
     term: string,
   ): Promise<PnmCouncilRegistration[]> {
-    const { data, error } = await this.supabase
-      .from('pnm_council_registrations')
-      .select(REGISTRATION_COLUMNS)
-      .eq('council_id', councilId)
-      .eq('term', term)
-      .order('created_at', { ascending: true });
-    if (error) throw new SupabaseQueryError(error);
-    return data ?? [];
+    // A withdrawn registrant is off the list (ifc-recruitment.md: the
+    // council stops seeing them). Paged: a big season passes the row cap.
+    return fetchAllPages(
+      (from, to) =>
+        this.supabase
+          .from('pnm_council_registrations')
+          .select(REGISTRATION_COLUMNS)
+          .eq('council_id', councilId)
+          .eq('term', term)
+          .neq('status', 'withdrawn')
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      { pageSize: PAGE_SIZE },
+    );
   }
 
   async findRegistrantIds(
     councilId: string,
     pnmIds: string[],
   ): Promise<string[]> {
-    if (!pnmIds.length) return [];
-    const { data, error } = await this.supabase
-      .from('pnm_council_registrations')
-      .select('pnm_id')
-      .eq('council_id', councilId)
-      .in('pnm_id', pnmIds);
-    if (error) throw new SupabaseQueryError(error);
-    return [...new Set((data ?? []).map((row) => row.pnm_id))];
+    const ids = new Set<string>();
+    for (const chunk of chunkIds([...new Set(pnmIds)])) {
+      const { data, error } = await this.supabase
+        .from('pnm_council_registrations')
+        .select('pnm_id')
+        .eq('council_id', councilId)
+        .neq('status', 'withdrawn')
+        .in('pnm_id', chunk);
+      if (error) throw new SupabaseQueryError(error);
+      for (const row of data ?? []) ids.add(row.pnm_id);
+    }
+    return [...ids];
   }
 
   async findAllRegistrantIds(councilId: string): Promise<string[]> {
-    const { data, error } = await this.supabase
-      .from('pnm_council_registrations')
-      .select('pnm_id')
-      .eq('council_id', councilId);
-    if (error) throw new SupabaseQueryError(error);
-    return [...new Set((data ?? []).map((row) => row.pnm_id))];
+    const rows = await fetchAllPages(
+      (from, to) =>
+        this.supabase
+          .from('pnm_council_registrations')
+          .select('id, pnm_id')
+          .eq('council_id', councilId)
+          .neq('status', 'withdrawn')
+          .order('id', { ascending: true })
+          .range(from, to),
+      { pageSize: PAGE_SIZE },
+    );
+    return [...new Set(rows.map((row) => row.pnm_id))];
   }
 
   async findLivePnmsAtSchool(
     schoolId: string,
     pnmIds: string[],
   ): Promise<Pnm[]> {
-    if (!pnmIds.length) return [];
-    const { data, error } = await this.supabase
-      .from('pnms')
-      .select(PNM_COLUMNS)
-      .eq('school_id', schoolId)
-      .is('merged_into_id', null)
-      .in('id', pnmIds);
-    if (error) throw new SupabaseQueryError(error);
-    return data ?? [];
+    const rows: Pnm[] = [];
+    for (const chunk of chunkIds([...new Set(pnmIds)])) {
+      const { data, error } = await this.supabase
+        .from('pnms')
+        .select(PNM_COLUMNS)
+        .eq('school_id', schoolId)
+        .is('merged_into_id', null)
+        .in('id', chunk);
+      if (error) throw new SupabaseQueryError(error);
+      rows.push(...(data ?? []));
+    }
+    return rows;
   }
 
   async findInterests(
     pnmIds: string[],
     chapterIds: string[],
+    createdBy?: string,
   ): Promise<PnmInterest[]> {
-    if (!pnmIds.length || !chapterIds.length) return [];
-    const { data, error } = await this.supabase
-      .from('pnm_interests')
-      .select(INTEREST_COLUMNS)
-      .in('pnm_id', pnmIds)
-      .in('chapter_id', chapterIds)
-      .is('withdrawn_at', null);
-    if (error) throw new SupabaseQueryError(error);
-    return data ?? [];
+    if (!chapterIds.length) return [];
+    const rows: PnmInterest[] = [];
+    for (const chunk of chunkIds([...new Set(pnmIds)])) {
+      rows.push(
+        ...(await fetchAllPages(
+          (from, to) => {
+            let query = this.supabase
+              .from('pnm_interests')
+              .select(INTEREST_COLUMNS)
+              .in('pnm_id', chunk)
+              .in('chapter_id', chapterIds)
+              .is('withdrawn_at', null);
+            if (createdBy) query = query.lte('created_at', createdBy);
+            return query.order('id', { ascending: true }).range(from, to);
+          },
+          { pageSize: PAGE_SIZE },
+        )),
+      );
+    }
+    return rows;
   }
 
   async logCouncilAccess(

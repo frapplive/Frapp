@@ -15,6 +15,7 @@ import {
   PNM_RETENTION_DEFAULT_DAYS,
   PNM_TWO_ACCOUNTS_CODE,
 } from '@repo/validation';
+import { normalizePhone } from '@repo/formatting';
 import {
   PNM_REPOSITORY,
   type IPnmRepository,
@@ -199,9 +200,12 @@ export class PnmService {
       registrations.map((r) => r.pnm_id),
     );
     if (!records.length) return empty;
+    // Interest shown by the season's close: a later season's interest in
+    // an accepted chapter is that season's, and stays counts-only there.
     const interests = await this.pnms.findInterests(
       records.map((p) => p.id),
       accepted.map((c) => c.id),
+      season.closes_at,
     );
     const registeredAt = new Map(
       registrations.map((r) => [r.pnm_id, r.created_at]),
@@ -302,7 +306,11 @@ export class PnmService {
           );
           if (dismissed.has(`${a.id}:${b.id}`)) continue;
           const reasons: DuplicatePairView['reasons'] = [];
-          if (a.phone && b.phone && digits(a.phone) === digits(b.phone)) {
+          if (
+            a.phone &&
+            b.phone &&
+            normalizePhone(a.phone) === normalizePhone(b.phone)
+          ) {
             reasons.push('same_name_and_phone');
           }
           if (a.class_year !== null && a.class_year === b.class_year) {
@@ -330,13 +338,17 @@ export class PnmService {
     second: string,
   ): Promise<void> {
     const council = await this.recruitingCouncil(councilId);
-    if (first === second || !council.council_verified_at) throw pnmNotFound();
+    // Lower case, as Postgres prints a uuid, so the pair sorts in the
+    // order the `pnm_a < pnm_b` check compares.
+    const one = first.toLowerCase();
+    const two = second.toLowerCase();
+    if (one === two || !council.council_verified_at) throw pnmNotFound();
     const registrants = await this.pnms.findRegistrantIds(councilId, [
-      first,
-      second,
+      one,
+      two,
     ]);
     if (registrants.length !== 2) throw pnmNotFound();
-    const [a, b] = [first, second].sort();
+    const [a, b] = [one, two].sort();
     await this.pnms.dismissDuplicate(councilId, a, b, actorUserId);
   }
 
@@ -468,10 +480,6 @@ function sharedView(pnm: Pnm): PnmSharedView {
 
 function norm(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function digits(value: string): string {
-  return value.replace(/\D/g, '');
 }
 
 function checkDates(

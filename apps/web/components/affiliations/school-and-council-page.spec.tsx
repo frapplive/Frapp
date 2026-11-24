@@ -20,6 +20,9 @@ const state = vi.hoisted(() => ({
   toast: vi.fn(),
 }));
 
+vi.mock("@/lib/hooks/use-tenant-kind", () => ({
+  useTenantKind: () => "chapter",
+}));
 vi.mock("@repo/hooks", () => ({
   SCHOOL_SEARCH_MIN_LENGTH: 2,
   affiliationErrorCopy: (_e: unknown, fallback: string) => fallback,
@@ -125,6 +128,16 @@ beforeEach(() => {
 });
 
 describe("councilRowStep", () => {
+  it("tells a member without chapter-config:view the page is officers'", () => {
+    state.permissions = ["members:view"];
+    render(<SchoolAndCouncilPage />);
+    expect(
+      screen.getByText(
+        "Only your chapter's officers can see its school and councils.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("offers each link's own next step", () => {
     expect(councilRowStep(council("c", "IFC", null))).toBe("ask");
     expect(

@@ -114,13 +114,14 @@ try {
   await schoolStatus(linkElsewhere, CH_ELSEWHERE, "active");
 
   // ── Council links ──
-  const link = (council, chapter, side, status) =>
-    fn(`select public.set_council_chapter_status($1, $2, $3, $4, $5)`, [
+  const link = (council, chapter, side, status, linkId = null) =>
+    fn(`select public.set_council_chapter_status($1, $2, $3, $4, $5, $6)`, [
       council,
       chapter,
       side,
       status,
       USER,
+      linkId,
     ]);
   const councilToCouncil = await link(IFC, IFC_2, "council", "proposed");
   const noSharedSchool = await link(IFC, CH_ELSEWHERE, "council", "proposed");
@@ -133,8 +134,10 @@ try {
   const reinstated = await link(IFC, CH_A, "council", "accepted");
   const askB = await link(IFC, CH_B, "chapter", "proposed");
   const declineB = await link(IFC, CH_B, "council", "declined");
-  await link(IFC, CH_B, "chapter", "proposed");
-  await link(IFC, CH_B, "council", "accepted");
+  const askBAgain = await link(IFC, CH_B, "chapter", "proposed");
+  // A stale page still showing the declined link can't decide the new one.
+  const staleLink = await link(IFC, CH_B, "council", "accepted", declineB.link.id);
+  await link(IFC, CH_B, "council", "accepted", askBAgain.link.id);
   await link(IFC, CH_NPHC, "chapter", "proposed");
   await link(IFC, CH_NPHC, "council", "accepted");
   await link(NONE_COUNCIL, CH_A, "council", "proposed");
@@ -232,6 +235,24 @@ try {
     [pnm, dupe],
   );
   const viaLoser = await interest(dupe, CH_B);
+  // The merged-away address is the survivor's person: it finds the survivor.
+  const mergedAddress = await upsert(SCHOOL, "pat.t@ats-tier.edu", "Pat");
+
+  // A merge keeps a live interest over a withdrawn one.
+  const keepS = (await upsert(SCHOOL, "keep-s@ats-tier.edu", "Kim")).pnm_id;
+  const keepL = (await upsert(SCHOOL, "keep-l@ats-tier.edu", "Kim")).pnm_id;
+  await interest(keepS, CH_A, IFC, "Spring 2027");
+  await interest(keepL, CH_A, IFC, "Spring 2027");
+  await db.query(
+    `update pnm_interests set withdrawn_at = now() where pnm_id = $1`,
+    [keepS],
+  );
+  await fn(`select public.merge_pnms($1, $2, $3, $4)`, [IFC, keepS, keepL, USER]);
+  const keptLive = await one(
+    `select count(*)::int as n from pnm_interests
+      where pnm_id = $1 and chapter_id = $2 and withdrawn_at is null`,
+    [keepS, CH_A],
+  );
 
   // ── Append-only log ──
   await db.query(
@@ -261,10 +282,17 @@ try {
   const expired = (await upsert(SCHOOL, "expired@ats-tier.edu")).pnm_id;
   const keptShort = (await upsert(SCHOOL, "kept@ats-tier.edu")).pnm_id;
   const stale = (await upsert(SCHOOL, "stale@ats-tier.edu")).pnm_id;
+  const returning = (await upsert(SCHOOL, "returning@ats-tier.edu")).pnm_id;
   await db.query(
     `insert into pnm_council_registrations (pnm_id, council_id, term) values
-       ($1, $3, 'Fall 2025'), ($2, $3, 'Spring 2026')`,
-    [expired, keptShort, IFC],
+       ($1, $3, 'Fall 2025'), ($2, $3, 'Spring 2026'), ($4, $3, 'Fall 2025')`,
+    [expired, keptShort, IFC, returning],
+  );
+  // Back after their season expired: a fresh interest keeps them.
+  await db.query(
+    `insert into pnm_interests (pnm_id, chapter_id, source, created_at)
+     values ($1, $2, 'interest_form', now() - interval '1 day')`,
+    [returning, CH_A],
   );
   await db.query(
     `insert into rush_candidates (chapter_id, display_name, created_by, pnm_id, origin)
@@ -278,9 +306,10 @@ try {
             (select count(*)::int from pnms where id = $2) as kept,
             (select count(*)::int from pnms where id = $3) as stale,
             (select count(*)::int from pnms where id = $4) as live,
+            (select count(*)::int from pnms where id = $6) as returning,
             (select count(*)::int from rush_candidates
               where chapter_id = $5 and display_name = 'Expired Pnm' and pnm_id is null) as unlinked`,
-    [expired, keptShort, stale, pnm, CH_A],
+    [expired, keptShort, stale, pnm, CH_A, returning],
   );
 
   // ── Account deletion ──
@@ -311,7 +340,7 @@ try {
         from pg_roles r
         cross join (values
           ('public.set_school_chapter_status(uuid, uuid, text, uuid)'),
-          ('public.set_council_chapter_status(uuid, uuid, text, text, uuid)'),
+          ('public.set_council_chapter_status(uuid, uuid, text, text, uuid, uuid)'),
           ('public.upsert_verified_pnm(uuid, text, text, text, text, smallint, text, boolean, text, uuid)'),
           ('public.record_pnm_interest(uuid, uuid, text, text, uuid, text)'),
           ('public.merge_pnms(uuid, uuid, uuid, uuid)'),
@@ -349,6 +378,16 @@ try {
       name: "the council declines a chapter's request, and the chapter may ask again",
       got: [reason(askB), reason(declineB), declineB.link?.status],
       want: ["ok", "ok", "declined"],
+    },
+    {
+      name: "a step naming a link that isn't the pair's live one is refused",
+      got: [reason(askBAgain), reason(staleLink)],
+      want: ["ok", "invalid_transition"],
+    },
+    {
+      name: "a merged-away address finds its survivor; a merge keeps a live interest",
+      got: [mergedAddress.pnm_id === pnm, mergedAddress.created, keptLive.n],
+      want: [true, false, 1],
     },
     {
       name: "ending a chapter's school link ends its council link there",
@@ -402,7 +441,7 @@ try {
     {
       name: "purge_expired_pnms deletes past close plus N days, keeps a second short, unlinks the candidate",
       got: [purged >= 2, afterPurge],
-      want: [true, { expired: 0, kept: 1, stale: 0, live: 1, unlinked: 1 }],
+      want: [true, { expired: 0, kept: 1, stale: 0, live: 1, returning: 1, unlinked: 1 }],
     },
     {
       name: "account deletion deletes the person's PNM records and leaves candidates unlinked",

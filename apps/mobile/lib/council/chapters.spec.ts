@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { CouncilChapterRow, InviteCandidate } from "@repo/hooks";
+import {
+  chapterListingLine,
+  groupCouncilChapters,
+  type CouncilChapterRow,
+  type InviteCandidate,
+} from "@repo/hooks";
 import {
   canManageCouncilChapters,
   canViewCouncilChapters,
-  chapterListingLine,
   councilChapterActions,
-  groupCouncilChapters,
   orderedInviteCandidates,
 } from "./chapters";
 

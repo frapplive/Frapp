@@ -10,6 +10,7 @@ import {
   type CouncilLinkDecision,
   type SchoolLinkDecision,
 } from "@repo/validation";
+import { ARCHETYPES } from "@repo/org-archetypes";
 import { errorCopy } from "./error-copy";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
@@ -255,4 +256,59 @@ export function affiliationErrorCopy(error: unknown, fallback: string): string {
     }
   }
   return errorCopy(error, fallback);
+}
+
+/** The live links, in the three lists both apps draw. */
+export interface CouncilChapterGroups {
+  /** A chapter asked to join and the council hasn't answered. */
+  requests: CouncilChapterRow[];
+  /** Accepted and suspended, by name. */
+  members: CouncilChapterRow[];
+  /** The council invited and the chapter hasn't answered. */
+  invited: CouncilChapterRow[];
+}
+
+/**
+ * Splits the council's links into the lists the Chapters page (web) and the
+ * council home's Chapters section (phone) draw. Declined and ended links are
+ * history and show nowhere. Requests and invitations keep the API's order
+ * (newest first); members read by name, a suspended one in its place among
+ * them, so the list doesn't reshuffle when one is suspended.
+ */
+export function groupCouncilChapters(
+  rows: readonly CouncilChapterRow[],
+): CouncilChapterGroups {
+  const groups: CouncilChapterGroups = {
+    requests: [],
+    members: [],
+    invited: [],
+  };
+  for (const row of rows) {
+    const { status, proposed_by_side: side } = row.link;
+    if (status === "proposed" && side === "chapter") groups.requests.push(row);
+    else if (status === "proposed") groups.invited.push(row);
+    else if (status === "accepted" || status === "suspended") {
+      groups.members.push(row);
+    }
+  }
+  groups.members.sort((a, b) => a.chapter.name.localeCompare(b.chapter.name));
+  return groups;
+}
+
+/**
+ * A chapter's line under its name, from its public listing only: its kind
+ * of organization, then its school ("IFC Fraternity · Rensselaer
+ * Polytechnic Institute"). An archetype it doesn't know is left out, never
+ * guessed; a blank school is left out too.
+ */
+export function chapterListingLine(chapter: {
+  org_archetype: string | null;
+  university: string;
+}): string {
+  const key = chapter.org_archetype;
+  const kind =
+    key && Object.hasOwn(ARCHETYPES, key)
+      ? ARCHETYPES[key as keyof typeof ARCHETYPES].label
+      : null;
+  return [kind, chapter.university.trim() || null].filter(Boolean).join(" · ");
 }

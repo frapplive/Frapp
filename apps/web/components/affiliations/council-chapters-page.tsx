@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   affiliationErrorCopy,
+  chapterListingLine,
+  groupCouncilChapters,
   useCouncil,
   useCouncilChapters,
   useCouncilInviteCandidates,
@@ -29,12 +31,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InviteGlyph } from "@/components/members/directory-glyphs";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useChapterStore } from "@/lib/stores/chapter-store";
-import {
-  AffiliationRow,
-  chapterListingMeta,
-} from "@/components/affiliations/affiliation-row";
+import { AffiliationRow } from "@/components/affiliations/affiliation-row";
 import { CouncilChapterRowsSkeleton } from "@/components/affiliations/council-chapters-skeleton";
 
 /**
@@ -56,48 +56,17 @@ export function CouncilChaptersPage() {
   return <CouncilChapters key={councilId ?? "none"} />;
 }
 
-/** The three sets the page draws, from one list (`councilChapterSets`). */
-export interface CouncilChapterSets {
-  requests: CouncilChapterRow[];
-  members: CouncilChapterRow[];
-  invited: CouncilChapterRow[];
-}
-
-/**
- * Splits the council's links: a chapter's request waiting on the council,
- * member and suspended chapters (by name), and the council's own invitations.
- * Declined and ended links are history, and show nowhere.
- */
-export function councilChapterSets(
-  rows: readonly CouncilChapterRow[],
-): CouncilChapterSets {
-  const byName = (a: CouncilChapterRow, b: CouncilChapterRow) =>
-    a.chapter.name.localeCompare(b.chapter.name);
-  return {
-    requests: rows.filter(
-      (row) =>
-        row.link.status === "proposed" &&
-        row.link.proposed_by_side === "chapter",
-    ),
-    members: rows
-      .filter(
-        (row) =>
-          row.link.status === "accepted" || row.link.status === "suspended",
-      )
-      .sort(byName),
-    invited: rows.filter(
-      (row) =>
-        row.link.status === "proposed" &&
-        row.link.proposed_by_side === "council",
-    ),
-  };
-}
-
 function CouncilChapters() {
   const councilId = useChapterStore((s) => s.activeChapterId);
   const permissions = useNavPermissions();
   const canManage = can("council:chapters_manage", permissions ?? []);
-  const chaptersQuery = useCouncilChapters();
+  // Held until the tenant is known to be a council and the viewer can read
+  // the list, so a chapter's typed visit never sends a refused read before
+  // the route gate moves it on.
+  const isCouncil = useTenantKind() === "council";
+  const chaptersQuery = useCouncilChapters({
+    enabled: isCouncil && can("members:view", permissions ?? []),
+  });
   const { data: council } = useCouncil(councilId);
   const decide = useDecideCouncilChapter();
   const invite = useInviteChapter();
@@ -106,7 +75,7 @@ function CouncilChapters() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const sets = useMemo(
-    () => councilChapterSets(chaptersQuery.data ?? []),
+    () => groupCouncilChapters(chaptersQuery.data ?? []),
     [chaptersQuery.data],
   );
 
@@ -196,7 +165,7 @@ function CouncilChapters() {
                   <AffiliationRow
                     key={row.link.id}
                     name={row.chapter.name}
-                    meta={chapterListingMeta(row.chapter)}
+                    meta={chapterListingLine(row.chapter)}
                     busy={busyId === row.link.id}
                     trailing={
                       <>
@@ -247,7 +216,7 @@ function CouncilChapters() {
                     <AffiliationRow
                       key={row.link.id}
                       name={row.chapter.name}
-                      meta={chapterListingMeta(row.chapter)}
+                      meta={chapterListingLine(row.chapter)}
                       busy={busyId === row.link.id}
                       trailing={
                         suspended ? (
@@ -307,7 +276,7 @@ function CouncilChapters() {
                   <AffiliationRow
                     key={row.link.id}
                     name={row.chapter.name}
-                    meta={chapterListingMeta(row.chapter)}
+                    meta={chapterListingLine(row.chapter)}
                     busy={busyId === row.link.id}
                     trailing={
                       <Button
@@ -368,7 +337,7 @@ function InviteChapterPicker({
             {item.chapter.name}
           </span>
           <span className="block truncate text-caption text-muted-foreground">
-            {chapterListingMeta(item.chapter)}
+            {chapterListingLine(item.chapter)}
           </span>
         </span>
       )}

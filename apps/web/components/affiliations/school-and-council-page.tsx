@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { COUNCIL_HOME_COPY } from "@/components/councils/council-copy";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useChapterStore } from "@/lib/stores/chapter-store";
 import { AffiliationRow } from "@/components/affiliations/affiliation-row";
@@ -78,7 +79,12 @@ export function councilRowStep(row: ChapterCouncilRow): CouncilRowStep {
 function SchoolAndCouncil() {
   const permissions = useNavPermissions();
   const canManage = can("chapter-config:manage", permissions ?? []);
-  const query = useChapterAffiliations();
+  // Held until the tenant is known to be a chapter and the viewer holds
+  // `chapter-config:view`, so a council's visit sends no refused read.
+  const isChapter = useTenantKind() === "chapter";
+  const query = useChapterAffiliations({
+    enabled: isChapter && can("chapter-config:view", permissions ?? []),
+  });
   const linkSchool = useLinkChapterSchool();
   const decideSchool = useDecideChapterSchool();
   const requestCouncil = useRequestCouncil();
@@ -106,6 +112,11 @@ function SchoolAndCouncil() {
   const council = (linkId: string, status: CouncilLinkDecision) =>
     run(linkId, () => decideCouncil.mutateAsync({ linkId, status }));
 
+  // Without the read key there is nothing to load: say so rather than
+  // sit on the skeleton (a typed visit; the chapter menu hides the item).
+  if (permissions && !can("chapter-config:view", permissions)) {
+    return <InlineNote>{COPY.noAccess}</InlineNote>;
+  }
   if (query.isPending) return <SchoolAndCouncilSectionsSkeleton />;
   if (query.isError && !query.data) {
     return (

@@ -144,6 +144,7 @@ export class SupabaseAffiliationRepository implements IAffiliationRepository {
     side: AffiliationSide,
     status: CouncilChapterStatus,
     actor: string,
+    linkId: string | null,
   ): Promise<CouncilChapterStatusResult> {
     const { data, error } = await this.supabase.rpc(
       'set_council_chapter_status',
@@ -153,6 +154,7 @@ export class SupabaseAffiliationRepository implements IAffiliationRepository {
         p_side: side,
         p_status: status,
         p_actor: actor,
+        p_link_id: linkId,
       },
     );
     if (error) throw new SupabaseQueryError(error);

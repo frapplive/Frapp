@@ -19,13 +19,22 @@ const state = vi.hoisted(() => ({
   toast: vi.fn(),
 }));
 
-vi.mock("@repo/hooks", () => ({
-  affiliationErrorCopy: (_e: unknown, fallback: string) => fallback,
-  useCouncil: () => ({ data: state.council }),
-  useCouncilChapters: () => state.chapters,
-  useCouncilInviteCandidates: () => state.candidates,
-  useDecideCouncilChapter: () => ({ mutateAsync: state.decide }),
-  useInviteChapter: () => ({ mutateAsync: state.invite }),
+vi.mock("@repo/hooks", async () => {
+  const actual =
+    await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks");
+  return {
+    chapterListingLine: actual.chapterListingLine,
+    groupCouncilChapters: actual.groupCouncilChapters,
+    affiliationErrorCopy: (_e: unknown, fallback: string) => fallback,
+    useCouncil: () => ({ data: state.council }),
+    useCouncilChapters: () => state.chapters,
+    useCouncilInviteCandidates: () => state.candidates,
+    useDecideCouncilChapter: () => ({ mutateAsync: state.decide }),
+    useInviteChapter: () => ({ mutateAsync: state.invite }),
+  };
+});
+vi.mock("@/lib/hooks/use-tenant-kind", () => ({
+  useTenantKind: () => "council",
 }));
 vi.mock("@repo/hooks/error-copy", () => ({
   describeLoadFailure: () => "Check your connection and try again.",
@@ -41,10 +50,7 @@ vi.mock("@/lib/stores/chapter-store", () => ({
     select({ activeChapterId: "council-1" }),
 }));
 
-import {
-  CouncilChaptersPage,
-  councilChapterSets,
-} from "./council-chapters-page";
+import { CouncilChaptersPage } from "./council-chapters-page";
 
 function row(
   id: string,
@@ -91,18 +97,6 @@ beforeEach(() => {
   state.decide.mockClear();
   state.invite.mockClear();
   state.toast.mockClear();
-});
-
-describe("councilChapterSets", () => {
-  it("splits requests, members (by name) and invitations, and drops history", () => {
-    const sets = councilChapterSets(ROWS);
-    expect(sets.requests.map((r) => r.chapter.name)).toEqual(["Theta Xi"]);
-    expect(sets.members.map((r) => r.chapter.name)).toEqual([
-      "Phi Gamma Delta",
-      "Sigma Chi",
-    ]);
-    expect(sets.invited.map((r) => r.chapter.name)).toEqual(["Delta Upsilon"]);
-  });
 });
 
 describe("CouncilChaptersPage", () => {

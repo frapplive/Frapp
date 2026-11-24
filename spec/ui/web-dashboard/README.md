@@ -940,7 +940,7 @@ Flushed together on 2026-11-05 (with `/polls`, since retired, #3871); the board 
 ### Council and school links
 
 Built for [#5974](https://github.com/frapplive/Frapp/issues/5974) (`school-layer.md` § 2.4, `council-types.md` § What each council's space shows).
-Two pages, one per side of a link; the phone draws the same sections in the same words (`COUNCIL_CHAPTERS_COPY`, `CHAPTER_AFFILIATIONS_COPY` in `@repo/validation`).
+Two pages, one per side of a link. The phone draws the council's side as a section of the council home, in the same words (`COUNCIL_CHAPTERS_COPY` in `@repo/validation`); the chapter's side is web only for now (`CHAPTER_AFFILIATIONS_COPY`), and a chapter officer on the phone can't yet confirm a school or answer a council.
 
 - **Chapters (`/chapters`, a council's nav row).**
   `apps/web/components/affiliations/council-chapters-page.tsx`.

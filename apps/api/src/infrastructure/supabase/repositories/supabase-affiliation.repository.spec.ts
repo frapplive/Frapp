@@ -131,13 +131,14 @@ describe("SupabaseAffiliationRepository — a council's links", () => {
     expect(row).toBeNull();
   });
 
-  it('setCouncilLinkStatus names both tenants and the side to the function', async () => {
+  it('setCouncilLinkStatus names both tenants, the side and the link seen to the function', async () => {
     await repo.setCouncilLinkStatus(
       CHAPTER_A,
       CHAPTER_B,
       'council',
       'accepted',
       'user-1',
+      'cl-seen',
     );
     expect(harness.rpcCalls).toEqual([
       {
@@ -148,6 +149,7 @@ describe("SupabaseAffiliationRepository — a council's links", () => {
           p_side: 'council',
           p_status: 'accepted',
           p_actor: 'user-1',
+          p_link_id: 'cl-seen',
         },
       },
     ]);

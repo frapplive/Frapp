@@ -6,7 +6,7 @@ import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 
 /**
  * The dashboard routes a council's space serves (#5933): chat, the
- * Directory, Council settings (Roles and groups is a tab of it, which
+ * Directory, its Chapters (#5974), Council settings (Roles and groups is a tab of it, which
  * `/roles` redirects to), and the member's own Profile, Settings and What's
  * new. Every other page reads a chapter route that refuses a council
  * (`chapter.context.invalid`).

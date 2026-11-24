@@ -101,7 +101,12 @@ export const PNM_RETENTION_DEFAULT_DAYS = 180;
 
 export const RECRUITMENT_TERM_MAX = 40;
 
-// Copy, shared by web and the phone ---------------------------------------------
+// Copy ------------------------------------------------------------------------------
+//
+// `COUNCIL_CHAPTERS_COPY` is the council's Chapters list on both apps (a page
+// on web, a section of the council home on the phone). The chapter's School
+// and council page is web only for now, so `CHAPTER_AFFILIATIONS_COPY` has
+// one reader.
 
 /**
  * How a council link reads, from the side looking at it. "Asked to join" is
@@ -183,6 +188,7 @@ export const CHAPTER_AFFILIATIONS_COPY = {
   askToJoin: "Ask to join",
   cancelRequest: "Cancel request",
   leave: "Leave council",
+  noAccess: "Only your chapter's officers can see its school and councils.",
   loadFailedTitle: "Couldn't load your school and councils",
   actionFailed: "Couldn't save that. Try again in a moment.",
   findSchool: "Find your school",

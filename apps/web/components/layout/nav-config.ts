@@ -89,7 +89,7 @@ import { SECTION_NAMES, type TenantKind } from "@repo/validation";
  *   only. A council (ADR-27) is a tenant served by chat, members, roles,
  *   invites and the audit log, and every other chapter route answers it 403
  *   (`chapter.context.invalid`), so a council's nav shows only the rows that
- *   name `council` here: Chat, Direct messages and Directory. Activity, which
+ *   name `council` here: Chat, Direct messages, Chapters and Directory. Activity, which
  *   has no module to switch off, is the row this gate exists for. Opt-in, so
  *   a new chapter row never reaches a council by default. While the kind is
  *   unknown nothing hides, as with the module gate (`useTenantKind`), except
