@@ -11,13 +11,15 @@ import {
   type RushPipelineCandidate,
   type RushStage,
   type RushTag,
+  rushOwnerWords,
+  rushRowMark,
 } from "@repo/hooks";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { SectionLabel } from "@/components/shared/section-label";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 import { RUSH_BOARD_CLASS, RUSH_COLUMN_CLASS } from "./rush-board-layout";
-import { RushBidBadge, RushTagChips } from "./rush-facts";
+import { RushBidBadge, RushFollowUpFact, RushTagChips } from "./rush-facts";
 
 export interface RushBoardProps {
   stages: readonly RushStage[];
@@ -27,6 +29,10 @@ export interface RushBoardProps {
   /** Writes are allowed now (the subscription gate, offline). */
   writable: boolean;
   selectedId: string | null;
+  /** The chapter's stale days, from the pipeline read. */
+  staleDays: number;
+  /** `YYYY-MM-DD` on this device (`localIsoDate` in `@repo/formatting`). */
+  today: string;
   onOpen: (candidate: RushPipelineCandidate) => void;
   /** Move into one of `stages` (`useRushMove().request`). */
   onMove: (
@@ -43,6 +49,11 @@ export interface RushBoardProps {
  * only, so every card also carries Move to in its menu (the ⋯, right-click,
  * long-press), which is how a keyboard or a screen reader moves a prospect.
  * Bid status is not a stage, so nothing here changes it.
+ *
+ * A card says who owns the prospect and their follow-up (#5934): "Owned by
+ * Chris Lee · Follow-up Thursday", and, once it is due or nobody has logged a
+ * contact for the chapter's stale days, a warning badge. Closed prospects
+ * show neither.
  */
 export function RushBoard({
   stages,
@@ -51,6 +62,8 @@ export function RushBoard({
   access,
   writable,
   selectedId,
+  staleDays,
+  today,
   onOpen,
   onMove,
 }: RushBoardProps) {
@@ -135,6 +148,8 @@ export function RushBoard({
                   stages={stages}
                   tags={tags}
                   closed={column.category === "closed"}
+                  staleDays={staleDays}
+                  today={today}
                   movable={movable}
                   canMove={canMove}
                   selected={candidate.id === selectedId}
@@ -188,6 +203,8 @@ function RushCard({
   stages,
   tags,
   closed,
+  staleDays,
+  today,
   movable,
   canMove,
   selected,
@@ -201,6 +218,8 @@ function RushCard({
   stages: readonly RushStage[];
   tags: readonly RushTag[];
   closed: boolean;
+  staleDays: number;
+  today: string;
   movable: readonly RushStage[];
   canMove: boolean;
   selected: boolean;
@@ -211,6 +230,10 @@ function RushCard({
   onDragEnd: () => void;
 }) {
   const rating = rushRatingSummary(candidate);
+  const work = rushRowMark(candidate, staleDays, today, closed);
+  // A follow-up not yet due is a fact on the owner's line; one that is due,
+  // and Needs follow-up, are badges at the foot with the bid's.
+  const quietFollowUp = work?.tone === "planned";
   const entries: RowMenuEntry[] = [
     { type: "item", key: "open", label: "Open", onSelect: onOpen },
     ...(canMove ? rushMoveEntries(candidate, movable, onMove) : []),
@@ -243,7 +266,8 @@ function RushCard({
               {candidate.display_name}
             </span>
             <span className="w-full truncate text-caption text-muted-foreground">
-              Added by {candidate.created_by_name}
+              {rushOwnerWords(candidate)}
+              {quietFollowUp ? ` · ${work.label}` : ""}
             </span>
             {closed ? (
               // Which Closed stage, and why, since the column folds them.
@@ -262,7 +286,12 @@ function RushCard({
               max={2}
               className="pt-1"
             />
-            <RushBidBadge candidate={candidate} />
+            {candidate.bid_status === "extended" || (work && !quietFollowUp) ? (
+              <span className="flex flex-wrap gap-1 pt-0.5">
+                <RushBidBadge candidate={candidate} />
+                {quietFollowUp ? null : <RushFollowUpFact state={work} />}
+              </span>
+            ) : null}
           </button>
           <div className="absolute right-1.5 top-1.5">{menuButton}</div>
         </li>

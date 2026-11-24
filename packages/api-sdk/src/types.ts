@@ -4645,6 +4645,77 @@ export interface paths {
         patch: operations["RushPipelineController_editNote_v1"];
         trace?: never;
     };
+    "/v1/rush/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's recruitment settings */
+        get: operations["RushPipelineController_settings_v1"];
+        /** Save the chapter's recruitment settings */
+        put: operations["RushPipelineController_saveSettings_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's logged contacts, newest first (notes only with `rush:read_notes`) */
+        get: operations["RushPipelineController_contacts_v1"];
+        put?: never;
+        /** Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted */
+        post: operations["RushPipelineController_logContact_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage` */
+        put: operations["RushPipelineController_setOwner_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default) */
+        put: operations["RushPipelineController_setFollowUp_v1"];
+        post?: never;
+        /** Clear the candidate's follow-up */
+        delete: operations["RushPipelineController_clearFollowUp_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geofences": {
         parameters: {
             query?: never;
@@ -5468,26 +5539,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/activity-feed": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get the chapter activity feed
-         * @description Normalized, newest-first rows aggregated from events, the caller’s own point changes, backwork uploads (only when the caller can view Backwork), new members, and the announcements channel. Read-only aggregation — no separate feed table (`spec/behavior/activity-feed.md`).
-         */
-        get: operations["ActivityFeedController_getFeed_v1"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/activity": {
         parameters: {
             query?: never;
@@ -5497,7 +5548,7 @@ export interface paths {
         };
         /**
          * Get what needs the caller and what they made
-         * @description The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat. Not `GET /v1/activity-feed`, which is a feed of what happened in the chapter.
+         * @description The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat.
          */
         get: operations["ActivityController_getActivity_v1"];
         put?: never;
@@ -12018,6 +12069,33 @@ export interface components {
             /** @description Ballot count. Absent without `rush:view_results`. */
             vote_count?: number;
             viewer_has_voted: boolean;
+            /**
+             * Format: uuid
+             * @description The member who is the prospect's main point of contact.
+             */
+            owner_id: string | null;
+            owner_name: string | null;
+            /**
+             * Format: date
+             * @description The day of the newest logged contact.
+             */
+            last_contact_on: string | null;
+            /** Format: uuid */
+            last_contact_by: string | null;
+            last_contact_by_name: string | null;
+            /**
+             * Format: date
+             * @description The day the open follow-up comes due.
+             */
+            follow_up_on: string | null;
+            /** @description What to do, such as "invite to house dinner". */
+            follow_up_note: string | null;
+            /**
+             * Format: uuid
+             * @description Who the follow-up is for; they get the push.
+             */
+            follow_up_user_id: string | null;
+            follow_up_user_name: string | null;
         };
         RushPipelineDto: {
             /** @description In board order: by category, then position. */
@@ -12025,6 +12103,8 @@ export interface components {
             tags: components["schemas"]["RushTagDto"][];
             /** @description Newest first. */
             candidates: components["schemas"]["RushPipelineCandidateDto"][];
+            /** @description Days without a logged contact before an open prospect needs a follow-up. */
+            stale_days: number;
         };
         RushStageInputDto: {
             /**
@@ -12089,6 +12169,76 @@ export interface components {
         };
         RushNoteInputDto: {
             body: string;
+        };
+        RushSettingsDto: {
+            /** @description Days without a logged contact before an open prospect needs a follow-up. */
+            stale_days: number;
+        };
+        RushContactDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            candidate_id: string;
+            /** Format: uuid */
+            logged_by: string;
+            logged_by_name: string;
+            /** @enum {string} */
+            kind: "text" | "call" | "in_person" | "social_dm" | "email" | "event";
+            /** Format: date */
+            contacted_on: string;
+            /** @description Absent without `rush:read_notes`, and on a prospect linked to the reader. */
+            note?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LogRushContactDto: {
+            /** @enum {string} */
+            kind: "text" | "call" | "in_person" | "social_dm" | "email" | "event";
+            /**
+             * Format: date
+             * @description The day of the contact: today or earlier.
+             */
+            contacted_on: string;
+            /** @description Read only by roles that can read recruitment notes. */
+            note?: string | null;
+        };
+        SetRushOwnerDto: {
+            /**
+             * Format: uuid
+             * @description The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`.
+             */
+            owner_id: string | null;
+        };
+        RushOwnerDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            owner_id: string | null;
+            owner_name: string | null;
+        };
+        SetRushFollowUpDto: {
+            /**
+             * Format: date
+             * @description Today or later.
+             */
+            due_on: string;
+            /** @description What to do, such as "invite to house dinner". */
+            note?: string | null;
+            /**
+             * Format: uuid
+             * @description Who it is for. Defaults to the owner, else the caller.
+             */
+            for_user_id?: string;
+        };
+        RushFollowUpDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            follow_up_on: string | null;
+            follow_up_note: string | null;
+            /** Format: uuid */
+            follow_up_user_id: string | null;
+            follow_up_user_name: string | null;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -12606,29 +12756,6 @@ export interface components {
             /** @description End date (YYYY-MM-DD) */
             end_date?: string;
         };
-        ActivityFeedActorDto: {
-            /** Format: uuid */
-            user_id: string;
-            /** @description Empty when the actor could not be resolved against the current roster (e.g. a member who has since left the chapter) — the server does not invent a placeholder name. */
-            display_name: string;
-            avatar_url: string | null;
-        };
-        ActivityFeedItemDto: {
-            /** @description Stable within one response; not a database primary key. */
-            id: string;
-            /** @enum {string} */
-            type: "event_created" | "event_upcoming" | "points_change" | "backwork_upload" | "member_joined" | "announcement";
-            /**
-             * Format: date-time
-             * @description Feed ordering key — newest first.
-             */
-            timestamp: string;
-            title: string;
-            body: string | null;
-            actor: components["schemas"]["ActivityFeedActorDto"] | null;
-            /** @description The underlying record id (event, point transaction, backwork resource, joining member’s user id, or announcement channel id) for client-side navigation. */
-            target_id: string;
-        };
         ActivityTaskDto: {
             /** Format: uuid */
             id: string;
@@ -13016,15 +13143,6 @@ export interface components {
             /** @description Whether `remind_at` has passed. A due reminder waits on the caller and is counted in `needs_you_count` until they clear it. */
             due: boolean;
         };
-        ActivityFileDto: {
-            /** Format: uuid */
-            id: string;
-            /** @enum {string} */
-            source: "document" | "backwork";
-            title: string;
-            /** Format: date-time */
-            created_at: string;
-        };
         ActivityMadeByYouDto: {
             /** @description Poll cards the caller posted, newest first: up to 25 open and the 25 most recently posted closed ones, so closed polls never push an open one out of the read. A current client lists the open ones and finds the closed in `GET /v1/activity/archive` (#5127); the closed ones are served for phone builds from before it, which draw them as Archived polls (#4258). */
             polls: components["schemas"]["ActivityPollDto"][];
@@ -13032,11 +13150,6 @@ export interface components {
             tasks: components["schemas"]["ActivityTaskDto"][];
             /** @description What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`. */
             task_items: (components["schemas"]["ActivityTaskItemTaskDto"] | components["schemas"]["ActivityTaskItemGroupDto"])[];
-            /**
-             * @deprecated
-             * @description Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.
-             */
-            files: components["schemas"]["ActivityFileDto"][];
             /** @description Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here. */
             events: components["schemas"]["ActivityEventDto"][];
         };
@@ -25453,6 +25566,228 @@ export interface operations {
             };
         };
     };
+    RushPipelineController_settings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_saveSettings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_contacts_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushContactDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_logContact_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogRushContactDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushContactDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setOwner_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushOwnerDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushOwnerDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setFollowUp_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushFollowUpDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushFollowUpDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_clearFollowUp_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushFollowUpDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     StudyGeofenceController_list_v1: {
         parameters: {
             query?: never;
@@ -27340,37 +27675,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    ActivityFeedController_getFeed_v1: {
-        parameters: {
-            query?: {
-                /** @description Max feed rows to return across all domains combined. Clamped to 1–50 inclusive; omitted defaults to 20. */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityFeedItemDto"][];
-                };
             };
             /** @description Error */
             default: {

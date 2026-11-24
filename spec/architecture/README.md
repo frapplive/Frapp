@@ -646,6 +646,8 @@ One gateway in the API's `ai` module makes every model call, behind a provider-n
 
 ## 14. Vault Key Management
 
+> **Not built, and parked** (2026-11-24, #5951): the vault has no code. This section is the design [`behavior/vault.md`](../behavior/vault.md) would need, kept for later.
+
 The vault ([`behavior/vault.md`](../behavior/vault.md)) stores high-sensitivity chapter content (risk, standards, legal). Key management lives in a managed KMS / HSM, not in Frapp application memory.
 
 ### Per-chapter key

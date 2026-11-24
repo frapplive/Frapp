@@ -127,8 +127,8 @@ export function useUpdateUser() {
  * Every query whose rows carry the viewer's profile (name, photo, bio,
  * graduation year, city, company): their own profile, every `["members", …]`
  * read (roster, directory, detail, search, and through the roster every chat
- * author label), the alumni directory and its city and company filters, and
- * the activity feed's actors. For the photo it matters twice over: the server
+ * author label), and the alumni directory and its city and company filters.
+ * For the photo it matters twice over: the server
  * deletes the replaced object, so a query left out here keeps rendering a URL
  * to nothing.
  *
@@ -143,7 +143,6 @@ export const PROFILE_QUERY_FILTERS: readonly InvalidateQueryFilters[] = [
   { queryKey: ["user", "me"], exact: true },
   { queryKey: ["members"] },
   { queryKey: ["alumni"] },
-  { queryKey: ["activity-feed"] },
 ];
 
 function invalidateProfileReads(

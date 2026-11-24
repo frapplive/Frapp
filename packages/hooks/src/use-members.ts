@@ -451,7 +451,7 @@ export function useUpdateMemberRoles() {
  * member who is in another chapter too.
  *
  * The name shows wherever the member does (the directory, chat's author
- * labels through the roster, the alumni list, the activity feed), so this
+ * labels through the roster, the alumni list), so this
  * refetches the same reads a member's own profile edit does.
  */
 export function useCorrectMemberProfile() {

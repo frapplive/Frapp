@@ -611,7 +611,7 @@ describe("membership writes refetch the alumni list", () => {
       body: { display_name: "Ada" },
     });
     expect(keys()).toEqual(
-      expect.arrayContaining([["members"], ["alumni"], ["activity-feed"]]),
+      expect.arrayContaining([["members"], ["alumni"]]),
     );
     expect(keys()).not.toContainEqual(["user", "me"]);
   });

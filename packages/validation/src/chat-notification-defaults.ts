@@ -90,7 +90,7 @@ export function isDirectChannel(
  * pushes at its ordinary default.
  *
  * Still name-keyed, and so one rename from changing; narrowing it is part of
- * #1323. The activity feed finds its announcements channel with this too.
+ * #1323.
  */
 export function isAnnouncementChannel(
   channel: NotificationDefaultChannel,

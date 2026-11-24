@@ -19,6 +19,14 @@ import { db, miss } from "../harness.mjs";
 //   foreign key's cascade never fires: a later `anonymize_user` copied from
 //   an older migration would silently drop the purge, and only this check
 //   would notice.
+// Slice 2 (#5934) adds:
+// - a contact can't land on another chapter's candidate, and its kind is one
+//   of six;
+// - the dispatch log takes the two new sweeps' claims (`RUSH_CANDIDATE`,
+//   `FOLLOW_UP` and `STALE`), which a check constraint would otherwise refuse
+//   at the first morning push;
+// - account deletion clears the prospects the member owned and the
+//   follow-ups set for them, touches nobody else's, and keeps their contacts.
 try {
   const U = {
     a: "c5c5c5c5-0000-4000-8000-00000000000a",
@@ -129,7 +137,57 @@ try {
     "a stage key is unique in its chapter and its category is one of six",
   ]);
 
+  checks.push([
+    (await rejects(
+      `insert into rush_candidate_contacts (candidate_id, chapter_id, logged_by, kind, contacted_on)
+         values ('${CAND.b}', '${CH.a}', '${U.a}', 'text', '2026-11-20');`,
+    )) &&
+      (await rejects(
+        `insert into rush_candidate_contacts (candidate_id, chapter_id, logged_by, kind, contacted_on)
+           values ('${CAND.a}', '${CH.a}', '${U.a}', 'pigeon', '2026-11-20');`,
+      )),
+    "a contact stays in its candidate's chapter and its kind is one of six (#5934)",
+  ]);
+  await db.exec(`
+    insert into rush_candidate_contacts (candidate_id, chapter_id, logged_by, kind, contacted_on)
+      values ('${CAND.a}', '${CH.a}', '${U.a}', 'call', '2026-11-20');
+    update rush_candidates
+       set owner_id = '${U.a}', follow_up_on = '2026-11-26',
+           follow_up_note = 'Dinner', follow_up_user_id = '${U.a}'
+     where id = '${CAND.a}';
+    update rush_candidates
+       set owner_id = '${U.b}', follow_up_on = '2026-11-26',
+           follow_up_user_id = '${U.b}'
+     where id = '${CAND.b}';
+    insert into scheduled_notification_dispatches
+      (chapter_id, entity_type, entity_id, threshold, due_date)
+      values ('${CH.a}', 'RUSH_CANDIDATE', '${CAND.a}', 'FOLLOW_UP', '2026-11-26'),
+             ('${CH.a}', 'RUSH_CANDIDATE', '${CAND.a}', 'STALE', '2026-11-27');
+  `);
+  checks.push([
+    (await count(
+      "scheduled_notification_dispatches",
+      `entity_type = 'RUSH_CANDIDATE'`,
+    )) === 2,
+    "the dispatch log takes the follow-up and stale claims (#5934)",
+  ]);
+
   await db.query(`select public.anonymize_user($1)`, [U.a]);
+  checks.push([
+    (await count(
+      "rush_candidates",
+      `id = '${CAND.a}' and owner_id is null and follow_up_on is null and follow_up_note is null and follow_up_user_id is null`,
+    )) === 1 &&
+      (await count(
+        "rush_candidates",
+        `id = '${CAND.b}' and owner_id = '${U.b}' and follow_up_user_id = '${U.b}'`,
+      )) === 1,
+    "account deletion clears the member's prospects and follow-ups, nobody else's (#5934)",
+  ]);
+  checks.push([
+    (await count("rush_candidate_contacts", `logged_by = '${U.a}'`)) === 1,
+    "account deletion keeps the contacts the member logged (#5934)",
+  ]);
   checks.push([
     (await count("rush_candidate_ratings", `rater_id = '${U.a}'`)) === 0 &&
       (await count("rush_candidate_ratings", `rater_id = '${U.b}'`)) === 1,
@@ -151,6 +209,7 @@ try {
   }
 
   await db.exec(`
+    delete from scheduled_notification_dispatches where entity_type = 'RUSH_CANDIDATE';
     delete from chapters where id in ('${CH.a}', '${CH.b}');
     delete from users where id in ('${U.a}', '${U.b}');
   `);

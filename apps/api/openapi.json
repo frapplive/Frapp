@@ -15666,6 +15666,347 @@
         ]
       }
     },
+    "/v1/rush/settings": {
+      "get": {
+        "operationId": "RushPipelineController_settings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveSettings_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/contacts": {
+      "get": {
+        "operationId": "RushPipelineController_contacts_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushContactDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's logged contacts, newest first (notes only with `rush:read_notes`)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_logContact_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogRushContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushContactDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/owner": {
+      "put": {
+        "operationId": "RushPipelineController_setOwner_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushOwnerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushOwnerDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage`",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/follow-up": {
+      "put": {
+        "operationId": "RushPipelineController_setFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushFollowUpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_clearFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clear the candidate's follow-up",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
     "/v1/geofences": {
       "get": {
         "operationId": "StudyGeofenceController_list_v1",
@@ -18561,64 +18902,9 @@
         ]
       }
     },
-    "/v1/activity-feed": {
-      "get": {
-        "description": "Normalized, newest-first rows aggregated from events, the caller’s own point changes, backwork uploads (only when the caller can view Backwork), new members, and the announcements channel. Read-only aggregation — no separate feed table (`spec/behavior/activity-feed.md`).",
-        "operationId": "ActivityFeedController_getFeed_v1",
-        "parameters": [
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "Max feed rows to return across all domains combined. Clamped to 1–50 inclusive; omitted defaults to 20.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20,
-              "example": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ActivityFeedItemDto"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get the chapter activity feed",
-        "tags": [
-          "Activity Feed"
-        ]
-      }
-    },
     "/v1/activity": {
       "get": {
-        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat. Not `GET /v1/activity-feed`, which is a feed of what happened in the chapter.",
+        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat.",
         "operationId": "ActivityController_getActivity_v1",
         "parameters": [
           {
@@ -37340,6 +37626,52 @@
           },
           "viewer_has_voted": {
             "type": "boolean"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The member who is the prospect's main point of contact."
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_contact_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day of the newest logged contact."
+          },
+          "last_contact_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "last_contact_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day the open follow-up comes due."
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who the follow-up is for; they get the push."
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -37354,7 +37686,16 @@
           "created_at",
           "tag_ids",
           "viewer_rating",
-          "viewer_has_voted"
+          "viewer_has_voted",
+          "owner_id",
+          "owner_name",
+          "last_contact_on",
+          "last_contact_by",
+          "last_contact_by_name",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
         ]
       },
       "RushPipelineDto": {
@@ -37379,12 +37720,17 @@
             "items": {
               "$ref": "#/components/schemas/RushPipelineCandidateDto"
             }
+          },
+          "stale_days": {
+            "type": "number",
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
           }
         },
         "required": [
           "stages",
           "tags",
-          "candidates"
+          "candidates",
+          "stale_days"
         ]
       },
       "RushStageInputDto": {
@@ -37595,6 +37941,199 @@
         },
         "required": [
           "body"
+        ]
+      },
+      "RushSettingsDto": {
+        "type": "object",
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
+          }
+        },
+        "required": [
+          "stale_days"
+        ]
+      },
+      "RushContactDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by_name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "Absent without `rush:read_notes`, and on a prospect linked to the reader."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "logged_by",
+          "logged_by_name",
+          "kind",
+          "contacted_on",
+          "created_at"
+        ]
+      },
+      "LogRushContactDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date",
+            "description": "The day of the contact: today or earlier."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "Read only by roles that can read recruitment notes."
+          }
+        },
+        "required": [
+          "kind",
+          "contacted_on"
+        ]
+      },
+      "SetRushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`."
+          }
+        },
+        "required": [
+          "owner_id"
+        ]
+      },
+      "RushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "owner_name"
+        ]
+      },
+      "SetRushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "due_on": {
+            "type": "string",
+            "format": "date",
+            "description": "Today or later."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "for_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Who it is for. Defaults to the owner, else the caller."
+          }
+        },
+        "required": [
+          "due_on"
+        ]
+      },
+      "RushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
         ]
       },
       "GeofenceCircleDto": {
@@ -39042,82 +39581,6 @@
           }
         }
       },
-      "ActivityFeedActorDto": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "display_name": {
-            "type": "string",
-            "description": "Empty when the actor could not be resolved against the current roster (e.g. a member who has since left the chapter) — the server does not invent a placeholder name."
-          },
-          "avatar_url": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "user_id",
-          "display_name",
-          "avatar_url"
-        ]
-      },
-      "ActivityFeedItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable within one response; not a database primary key."
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "event_created",
-              "event_upcoming",
-              "points_change",
-              "backwork_upload",
-              "member_joined",
-              "announcement"
-            ]
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Feed ordering key — newest first."
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "nullable": true
-          },
-          "actor": {
-            "nullable": true,
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ActivityFeedActorDto"
-              }
-            ]
-          },
-          "target_id": {
-            "type": "string",
-            "description": "The underlying record id (event, point transaction, backwork resource, joining member’s user id, or announcement channel id) for client-side navigation."
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "timestamp",
-          "title",
-          "body",
-          "actor",
-          "target_id"
-        ]
-      },
       "ActivityTaskDto": {
         "type": "object",
         "properties": {
@@ -40005,35 +40468,6 @@
           "due"
         ]
       },
-      "ActivityFileDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "document",
-              "backwork"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "source",
-          "title",
-          "created_at"
-        ]
-      },
       "ActivityMadeByYouDto": {
         "type": "object",
         "properties": {
@@ -40072,14 +40506,6 @@
             },
             "description": "What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`."
           },
-          "files": {
-            "deprecated": true,
-            "description": "Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ActivityFileDto"
-            }
-          },
           "events": {
             "description": "Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here.",
             "type": "array",
@@ -40092,7 +40518,6 @@
           "polls",
           "tasks",
           "task_items",
-          "files",
           "events"
         ]
       },
