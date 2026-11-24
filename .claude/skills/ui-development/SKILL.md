@@ -51,7 +51,9 @@ Reach for these before writing markup. A screen that hand-builds one of these jo
 | Loading, empty, error          | `shared/page-skeletons.tsx`, `shared/async-states.tsx`, `shared/nested-states.tsx`                     | `state-block.tsx`, `card-list-skeleton.tsx` (each route's own skeleton, pinned by `screen-skeletons.spec.tsx`) |
 | Destructive confirm            | `shared/confirm-dialog.tsx` `useConfirmDialog`                                                         | `confirmAlert` (`lib/minutes/meetings-on.ts`), the platform alert with Cancel and the verb                     |
 | Kept form drafts               | `useKeptFormDraft` (`@repo/hooks`)                                                                     | `useKeptSheetDraft` (`lib/kept-sheet-draft.ts`)                                                                |
-| Segmented switch, filter chips | `ui/segmented.tsx`, `shared/filter-chip.tsx`                                                           | `segmented.tsx`, `filter-chips.tsx`                                                                            |
+| A page's or a list's views     | `shared/view-labels.tsx` `ViewLabels`, in a page header inside `layout/page-actions.tsx` `PageViews`   | `view-labels.tsx` `ViewLabels`, in a screen header as `ScreenShell`'s `views`                                  |
+| A short pick inside a form     | `ui/segmented.tsx` `SegmentedChoice` (2 to 4 answers, never a view)                                    | `segmented.tsx` `Segmented`                                                                                    |
+| Filter chips                   | `shared/filter-chip.tsx`                                                                               | `filter-chips.tsx`                                                                                             |
 
 Where frontend code lives and the conventions that aren't obvious from reading it. For which
 tokens and typefaces are current, which reference board is visual truth, and how a cutover

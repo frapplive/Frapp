@@ -1363,6 +1363,262 @@
         ]
       }
     },
+    "/v1/schools": {
+      "get": {
+        "description": "Schools by name, short name or another name, best match first, at most 20. Each says whether a student can verify there today.",
+        "operationId": "SchoolController_search_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Part of the school's name, short name or another name for it (\"rens\", \"RPI\"). Under 2 characters answers an empty list.",
+            "schema": {
+              "maxLength": 100,
+              "example": "rensselaer",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchoolSummaryDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/mine": {
+      "get": {
+        "description": "The schools where the caller proved a school address, newest first. Empty for someone who hasn't verified, or skipped.",
+        "operationId": "SchoolController_listMine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MySchoolDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your schools",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification": {
+      "post": {
+        "description": "Emails a six-digit code to an address on one of the school's verified domains. 404 `school.not_found`; 409 `school.verification_unavailable` when the school can't verify students yet; 400 `school.email.invalid` for anything but a plain `local@domain` address, or `school.email.wrong_domain`; 429 `school.code.cooldown` within a minute of the last code, or `school.code.rate_limited` past the hourly ceilings per address, IP or account; 503 `school.code.send_failed`.",
+        "operationId": "SchoolController_startVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentSchoolCodeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a code to your school email",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/schools/{schoolId}/verification/confirm": {
+      "post": {
+        "description": "Checks the code and makes the caller a member of the school. 400 `school.code.missing`, `school.code.expired` or `school.code.wrong`; 429 `school.code.too_many_attempts`; 409 `school.email.taken` when another account verified that address, or `school.verification_unavailable`.",
+        "operationId": "SchoolController_confirmVerification_v1",
+        "parameters": [
+          {
+            "name": "schoolId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSchoolVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm your school email with its code",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
+    "/v1/school": {
+      "get": {
+        "description": "The school in `x-school-id` and the caller's membership there. 403 `school.context.invalid` for a school the caller isn't verified at (or that doesn't exist); 400 `school.context.required` without the header.",
+        "operationId": "SchoolPageController_get_v1",
+        "parameters": [
+          {
+            "name": "x-school-id",
+            "in": "header",
+            "description": "The school a campus page (`/s/<slug>`) acts in.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The school a campus page names",
+        "tags": [
+          "Schools"
+        ]
+      }
+    },
     "/v1/roles": {
       "get": {
         "operationId": "RbacController_list_v1",
@@ -2197,6 +2453,95 @@
           }
         ],
         "summary": "Whether Frapp's notifications reach each member's phone",
+        "tags": [
+          "Members"
+        ]
+      }
+    },
+    "/v1/members/me/custom-fields": {
+      "get": {
+        "operationId": "MemberController_getOwnCustomFields_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      },
+      "patch": {
+        "description": "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.",
+        "operationId": "MemberController_updateOwnCustomFields_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnCustomFieldsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set your own custom-field values",
         "tags": [
           "Members"
         ]
@@ -14597,6 +14942,644 @@
         ]
       }
     },
+    "/v1/rush/pipeline": {
+      "get": {
+        "operationId": "RushPipelineController_pipeline_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushPipelineDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, tags and candidates, for the pipeline",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/stages": {
+      "get": {
+        "operationId": "RushPipelineController_stages_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, in board order (written on first read)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveStages_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRushStagesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the stage list: rename, reorder, hide and add stages",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/stage": {
+      "patch": {
+        "operationId": "RushPipelineController_moveStage_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRushCandidateStageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateStageDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a candidate to a stage (a Closed stage needs a reason)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags": {
+      "post": {
+        "operationId": "RushPipelineController_createTag_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a tag to the chapter’s list",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags/{tagId}": {
+      "patch": {
+        "operationId": "RushPipelineController_renameTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename a tag",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a tag, taking it off every candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/tags": {
+      "put": {
+        "operationId": "RushPipelineController_setTags_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushCandidateTagsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateTagsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set a candidate's tags",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/rating": {
+      "put": {
+        "operationId": "RushPipelineController_rate_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateRushCandidateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the caller's 1-to-5 rating of a candidate (replaces it)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes": {
+      "get": {
+        "operationId": "RushPipelineController_notes_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushNoteDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's notes, newest first (empty for a candidate linked to the caller)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_addNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Write a note on a candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes/{noteId}": {
+      "patch": {
+        "operationId": "RushPipelineController_editNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit your own note",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a note: your own, or any with `rush:manage`",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
     "/v1/geofences": {
       "get": {
         "operationId": "StudyGeofenceController_list_v1",
@@ -24383,6 +25366,134 @@
           "created_at"
         ]
       },
+      "SchoolSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school's current URL slug (`/s/<slug>`, ADR-27).",
+            "example": "rpi"
+          },
+          "verifiable": {
+            "type": "boolean",
+            "description": "Whether a student can verify at this school today: the school is verified and has at least one verified email domain."
+          },
+          "email_domains": {
+            "description": "The school's verified email domains, for the address field's placeholder. Empty when it can't verify students.",
+            "example": [
+              "rpi.edu"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name",
+          "slug",
+          "verifiable",
+          "email_domains"
+        ]
+      },
+      "MySchoolDto": {
+        "type": "object",
+        "properties": {
+          "school": {
+            "$ref": "#/components/schemas/SchoolSummaryDto"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pnm",
+              "member",
+              "alum"
+            ]
+          },
+          "verified_email": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school address the code went to."
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "school",
+          "status",
+          "verified_email",
+          "verified_at"
+        ]
+      },
+      "StartSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The caller's school address. Only an address on one of the school's verified domains is sent a code.",
+            "example": "student@rpi.edu",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "SentSchoolCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address the code went to, in lower case."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code stops working."
+          },
+          "resend_after_seconds": {
+            "type": "number",
+            "description": "Seconds before another code can be asked for.",
+            "example": 60
+          }
+        },
+        "required": [
+          "email",
+          "expires_at"
+        ]
+      },
+      "ConfirmSchoolVerificationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The six-digit code from the email.",
+            "example": "123456",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
       "PermissionCatalogEntryDto": {
         "type": "object",
         "properties": {
@@ -24998,6 +26109,105 @@
         "required": [
           "scope",
           "members"
+        ]
+      },
+      "OwnCustomFieldDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "decimal",
+              "phone",
+              "select",
+              "boolean"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "self",
+              "chapter",
+              "exec",
+              "president"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "choices": {
+            "nullable": true,
+            "description": "A select field's choices; null for every other type",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_length": {
+            "type": "number",
+            "nullable": true,
+            "description": "A text field's own length cap, when it sets one"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "field_id",
+          "key",
+          "label",
+          "type",
+          "visibility",
+          "required",
+          "choices",
+          "max_length",
+          "value"
+        ]
+      },
+      "OwnCustomFieldValueDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or \"true\"/\"false\". null or an empty string clears it; a required field with a value cannot be cleared."
+          }
+        },
+        "required": [
+          "field_id",
+          "value"
+        ]
+      },
+      "UpdateOwnCustomFieldsDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnCustomFieldValueDto"
+            }
+          }
+        },
+        "required": [
+          "values"
         ]
       },
       "UpdateMemberRolesDto": {
@@ -34645,6 +35855,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -34676,6 +35900,7 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at",
@@ -34731,6 +35956,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -34758,9 +35997,428 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at"
+        ]
+      },
+      "RushStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "What a candidate's `stage` holds. Fixed once made; a rename changes `label` only."
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ]
+          },
+          "position": {
+            "type": "number",
+            "description": "Order within its category."
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "key",
+          "label",
+          "category",
+          "position",
+          "hidden",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushTagDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "label",
+          "created_at"
+        ]
+      },
+      "RushPipelineCandidateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          },
+          "bid_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended"
+            ]
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_by_name": {
+            "type": "string",
+            "description": "Who added the candidate, by current name."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "rating_average": {
+            "type": "number",
+            "nullable": true,
+            "description": "Average 1-to-5 rating; null when nobody has rated. Absent without `rush:view_results`."
+          },
+          "rating_count": {
+            "type": "number",
+            "description": "How many members rated. Absent without `rush:view_results`."
+          },
+          "viewer_rating": {
+            "type": "number",
+            "nullable": true,
+            "description": "The caller's own rating, or null."
+          },
+          "vote_count": {
+            "type": "number",
+            "description": "Ballot count. Absent without `rush:view_results`."
+          },
+          "viewer_has_voted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "user_id",
+          "stage",
+          "closed_reason",
+          "bid_status",
+          "created_by",
+          "created_by_name",
+          "created_at",
+          "tag_ids",
+          "viewer_rating",
+          "viewer_has_voted"
+        ]
+      },
+      "RushPipelineDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "description": "In board order: by category, then position.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageDto"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushTagDto"
+            }
+          },
+          "candidates": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushPipelineCandidateDto"
+            }
+          }
+        },
+        "required": [
+          "stages",
+          "tags",
+          "candidates"
+        ]
+      },
+      "RushStageInputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "An existing stage. Omit to add a new one."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ],
+            "description": "An existing stage's category can't change."
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "category",
+          "hidden"
+        ]
+      },
+      "SaveRushStagesDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "maxItems": 30,
+            "description": "Every stage, in order. Each existing stage must be included: stages are hidden, never removed. New and Closed each keep a visible stage.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageInputDto"
+            }
+          }
+        },
+        "required": [
+          "stages"
+        ]
+      },
+      "MoveRushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's visible stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response"
+            ],
+            "description": "Required for a Closed stage, refused for any other."
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "RushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "closed_reason"
+        ]
+      },
+      "RushTagInputDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "SetRushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "description": "The candidate's tags after the call, replacing what it had.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RateRushCandidateDto": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "rating"
+        ]
+      },
+      "RushNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "author_id",
+          "author_name",
+          "body",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushNoteInputDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "body"
         ]
       },
       "GeofenceCircleDto": {

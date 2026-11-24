@@ -16,6 +16,7 @@ import type {
   RushCandidateView,
 } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
+import { RushPipelineService } from './rush-pipeline.service';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 
 export interface CreateRushCandidateInput {
@@ -54,6 +55,7 @@ export class RushService {
     private readonly rushRepo: IRushCandidateRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly chatService: ChatService,
+    private readonly pipelineService: RushPipelineService,
   ) {}
 
   async findView(
@@ -101,7 +103,12 @@ export class RushService {
         chapter_id: input.chapter_id,
         display_name: displayName,
         user_id: input.user_id ?? null,
-        stage: 'new',
+        // The first visible stage in the New category (#5924): a chapter
+        // that renamed or replaced New still gets its candidates there.
+        stage: await this.pipelineService.stageForNewCandidate(
+          input.chapter_id,
+        ),
+        closed_reason: null,
         bid_status: 'none',
         created_by: input.created_by,
       });

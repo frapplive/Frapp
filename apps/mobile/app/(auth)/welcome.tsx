@@ -5,8 +5,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useChapterMajors,
+  useCurrentChapter,
   useCurrentUser,
   useFieldReveal,
+  useMySchools,
   usePermissionList,
   useUpdateOnboarding,
   useUpdateUser,
@@ -38,6 +40,7 @@ import {
 import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { AboutYouFields } from "@/components/onboarding/about-you-fields";
 import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
+import { SchoolStep } from "@/components/onboarding/school-step";
 import {
   aboutYouPatch,
   applyEdit,
@@ -75,7 +78,13 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *    empty (`needsAboutYou`): optional, the Edit sheet's fields and rules
  *    (`aboutYouPatch`). Continue saves only what changed; Skip for now saves
  *    nothing. Web asks the same after its name screen.
- * 3. **Turn on notifications**, when this build can push and push isn't on
+ * 3. **Where do you go to school?**, for a member with no verified school
+ *    (#5929, `components/onboarding/school-step.tsx`): the school, its email,
+ *    the code, then "You're verified at <school>", with "Not a student? Skip
+ *    for now" throughout. Web asks the same after About you. Changed for
+ *    #5929 by gampheadband, 2026-11-23: Paul's "Two: name, then
+ *    notifications" gains this optional beat before notifications.
+ * 4. **Turn on notifications**, when this build can push and push isn't on
  *    yet (`shouldOfferPrimer`, #2299). Either answer goes to chat; a "Not
  *    now" comes back once, days later, on the chat home (`usePushReminder`).
  *
@@ -94,7 +103,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  */
 const DECIDE_TIMEOUT_MS = 4_000;
 
-type Beat = "you" | "about" | "notifications";
+type Beat = "you" | "about" | "school" | "notifications";
 
 export default function Welcome() {
   const { tokens } = useFrappTheme();
@@ -112,6 +121,11 @@ export default function Welcome() {
   const [waitedOut, setWaitedOut] = useState(false);
   const userQuery = useCurrentUser();
   const updateUser = useUpdateUser();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
+  // Whether the school beat was shown, so back from notifications returns
+  // to it rather than skipping over it (#5929).
+  const [askedSchool, setAskedSchool] = useState(false);
   const profile = useMemo(
     () => selectViewerProfile(userQuery.data),
     [userQuery.data],
@@ -204,7 +218,11 @@ export default function Welcome() {
   const profileKnown =
     userQuery.data !== undefined || userQuery.isError || waitedOut;
   const primerKnown = primer.ready || waitedOut;
-  if (step === "deciding" && profileKnown && primerKnown) {
+  // Whether the school beat comes next waits on the member's schools too, so
+  // a list still loading isn't read as "no school" (#5929).
+  const schoolsKnown = mySchools.isFetched || mySchools.isError || waitedOut;
+  const hasSchool = (mySchools.data?.length ?? 0) > 0;
+  if (step === "deciding" && profileKnown && primerKnown && schoolsKnown) {
     setHadPhoto(!!profile?.photoUrl);
     setStep("you");
   }
@@ -249,6 +267,17 @@ export default function Welcome() {
 
   // Notifications when there is one to ask, else chat.
   function afterAbout() {
+    // A member already verified at a school isn't asked again; a failed or
+    // given-up read asks, since the beat can be skipped (#5929).
+    if (askedSchool || !hasSchool) {
+      setAskedSchool(true);
+      setStep("school");
+      return;
+    }
+    leaveSchool();
+  }
+
+  function leaveSchool() {
     if (primer.showPrimer) setStep("notifications");
     else void finish();
   }
@@ -302,21 +331,28 @@ export default function Welcome() {
     afterAbout();
   }
 
-  // Android's back steps back a screen (notifications to About you when it
-  // was shown, else to the name; About you to the name), as a back gesture
+  // Android's back steps back a screen, to whichever beat came before
+  // (notifications to the school beat, About you or the name; the school beat
+  // to About you or the name; About you to the name), as a back gesture
   // between screens would; it never leaves onboarding half done. Held while
   // an answer is on its way out. The first screen leaves Android's back alone.
   const cameThroughAbout = aboutOriginal !== null;
   useEffect(() => {
-    if (step !== "notifications" && step !== "about") return;
+    if (step === "deciding" || step === "you") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!answering) {
-        setStep(step === "notifications" && cameThroughAbout ? "about" : "you");
+        const before =
+          step === "notifications" && askedSchool
+            ? "school"
+            : step !== "about" && cameThroughAbout
+              ? "about"
+              : "you";
+        setStep(before);
       }
       return true;
     });
     return () => sub.remove();
-  }, [step, answering, cameThroughAbout]);
+  }, [step, answering, cameThroughAbout, askedSchool]);
 
   if (status === "unauthenticated") {
     return <Redirect href="/(auth)/sign-in" />;
@@ -326,6 +362,17 @@ export default function Welcome() {
   // spinner, and no screen that the next read would swap out.
   if (step === "deciding") {
     return <View style={styles.container} testID="welcome-deciding" />;
+  }
+
+  if (step === "school") {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        alreadyVerified={mySchools.data?.[0]?.school ?? null}
+        busy={leaving}
+        onLeave={leaveSchool}
+      />
+    );
   }
 
   return (
@@ -420,8 +467,9 @@ export default function Welcome() {
         </ScrollView>
 
         {/*
-        One gold button per screen. On the name it moves on: to notifications
-        when there is one to ask, else to chat. On notifications it asks, and
+        One gold button per screen. On the name it moves on: to About you or
+        the school beat when either is asked, else to notifications when there
+        is one to ask, else to chat. On notifications it asks, and
         Not now is the quiet line under it; either answer leaves for chat,
         after the OS dialog closes.
       */}
@@ -445,7 +493,7 @@ export default function Welcome() {
             <>
               <OnboardingPrimaryButton
                 label={
-                  primer.showPrimer
+                  primer.showPrimer || askedSchool || !hasSchool
                     ? ONBOARDING_ABOUT_COPY.continue
                     : ONBOARDING_ABOUT_COPY.goToChat
                 }
@@ -462,7 +510,7 @@ export default function Welcome() {
           ) : (
             <OnboardingPrimaryButton
               label={
-                primer.showPrimer || askAbout
+                primer.showPrimer || askAbout || askedSchool || !hasSchool
                   ? ONBOARDING_YOU_COPY.continue
                   : ONBOARDING_YOU_COPY.goToChat
               }

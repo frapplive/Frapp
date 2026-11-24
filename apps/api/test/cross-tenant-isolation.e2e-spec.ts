@@ -68,6 +68,10 @@ const NOTIF_B = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2';
 const CHAPTER_C = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 const COUNCIL = 'c4c4c4c4-c4c4-44c4-84c4-c4c4c4c4c4c4';
 const MEMBER_B_IN_COUNCIL = 'c5c5c5c5-c5c5-45c5-85c5-c5c5c5c5c5c5';
+// School layer (#5929): Bob is verified at school A only; Alice at B.
+const SCHOOL_A = 'd1d1d1d1-d1d1-41d1-81d1-d1d1d1d1d1d1';
+const SCHOOL_B = 'd2d2d2d2-d2d2-42d2-82d2-d2d2d2d2d2d2';
+const SCHOOL_SUSPENDED = 'd3d3d3d3-d3d3-43d3-83d3-d3d3d3d3d3d3';
 
 /**
  * A route that serves councils alone, for ADR-27 test 5. No council route
@@ -195,6 +199,70 @@ function seed(): SeededTables {
       },
     ],
   };
+}
+
+/**
+ * The school layer's rows (#5929, school-layer.md § 4.3): Bob is a live
+ * member of school A and of a suspended school, and left school B, where
+ * Alice is a member. Each membership collides on everything but who and
+ * where, so only `SchoolGuard`'s school and user filters tell them apart.
+ */
+function seedSchools(): SeededTables {
+  const tables = seed();
+  const school = (id: string, name: string, status: string) => ({
+    id,
+    name,
+    short_name: name,
+    aliases: [],
+    status,
+    directory_university: name,
+    created_by: null,
+    created_at: '2026-11-23T00:00:00.000Z',
+    updated_at: '2026-11-23T00:00:00.000Z',
+  });
+  const membership = (
+    id: string,
+    schoolId: string,
+    userId: string,
+    leftAt: string | null = null,
+  ) => ({
+    id,
+    school_id: schoolId,
+    user_id: userId,
+    status: 'member',
+    verified_via: 'email_code',
+    verified_email: `${userId.slice(0, 4)}@example.edu`,
+    verified_at: '2026-11-23T00:00:00.000Z',
+    directory_visibility: 'hidden',
+    left_at: leftAt,
+    created_at: '2026-11-23T00:00:00.000Z',
+  });
+  tables.schools = [
+    school(SCHOOL_A, 'School A', 'verified'),
+    school(SCHOOL_B, 'School B', 'verified'),
+    school(SCHOOL_SUSPENDED, 'School C', 'suspended'),
+  ];
+  tables.school_members = [
+    membership('e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1', SCHOOL_A, USER_B),
+    membership('e2e2e2e2-e2e2-42e2-82e2-e2e2e2e2e2e2', SCHOOL_B, USER_A),
+    membership(
+      'e3e3e3e3-e3e3-43e3-83e3-e3e3e3e3e3e3',
+      SCHOOL_B,
+      USER_B,
+      '2026-11-20T00:00:00.000Z',
+    ),
+    membership(
+      'e4e4e4e4-e4e4-44e4-84e4-e4e4e4e4e4e4',
+      SCHOOL_SUSPENDED,
+      USER_B,
+    ),
+  ];
+  tables.school_slugs = [
+    { slug: 'school-a', school_id: SCHOOL_A, retired_at: null },
+    { slug: 'school-b', school_id: SCHOOL_B, retired_at: null },
+  ];
+  tables.school_email_domains = [];
+  return tables;
 }
 
 /**
@@ -836,6 +904,97 @@ describe('Cross-tenant isolation (e2e)', () => {
       expect(own.status).toBe(200);
       expect(own.body.id).toBe(NOTIF_B);
       expect(own.body.read_at).toEqual(expect.any(String));
+    });
+  });
+
+  describe('school context (SchoolGuard, #5929)', () => {
+    const asBobAt = (req: request.Test, schoolId?: string) => {
+      const authed = req.set('authorization', 'Bearer token-bob');
+      return schoolId ? authed.set('x-school-id', schoolId) : authed;
+    };
+
+    function expectSchoolDenied(body: Record<string, unknown>): void {
+      expect(body.code).toBe('school.context.invalid');
+      expect(body.statusCode).toBe(403);
+    }
+
+    it('serves a school Bob is verified at, with his own membership', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_A,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.school).toMatchObject({ id: SCHOOL_A, slug: 'school-a' });
+      expect(res.body.verified_email).toBe(`${USER_B.slice(0, 4)}@example.edu`);
+    });
+
+    it("refuses another person's school, and one he left, with the same 403", async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      // Alice is a live member of B and Bob's row there has left_at set:
+      // neither lets Bob in, and nothing of Alice's comes back.
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_B,
+      );
+
+      expect(res.status).toBe(403);
+      expectSchoolDenied(res.body);
+      expect(JSON.stringify(res.body)).not.toContain(USER_A.slice(0, 4));
+    });
+
+    it('answers an unknown school, a chapter id and a malformed id exactly as a foreign school', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      for (const id of [
+        'f9f9f9f9-f9f9-49f9-89f9-f9f9f9f9f9f9',
+        CHAPTER_B,
+        'not-a-uuid',
+      ]) {
+        const res = await asBobAt(
+          request(app.getHttpServer()).get(`${V1}/school`),
+          id,
+        );
+        expect(res.status).toBe(403);
+        expectSchoolDenied(res.body);
+      }
+    });
+
+    it('refuses a suspended school even for a live member', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/school`),
+        SCHOOL_SUSPENDED,
+      );
+
+      expect(res.status).toBe(403);
+      expectSchoolDenied(res.body);
+    });
+
+    it('needs the header: neither the chapter header nor the claim stands in for a school', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBob(request(app.getHttpServer()).get(`${V1}/school`));
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('school.context.required');
+    });
+
+    it("lists only Bob's own live schools, a suspended one left out", async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedSchools());
+
+      const res = await asBobAt(
+        request(app.getHttpServer()).get(`${V1}/schools/mine`),
+      );
+
+      expect(res.status).toBe(200);
+      const ids = res.body.map((m: { school: { id: string } }) => m.school.id);
+      expect(ids).toEqual([SCHOOL_A]);
+      expect(ids).not.toContain(SCHOOL_B);
     });
   });
 });

@@ -115,6 +115,21 @@ describe("useScreenBelow", () => {
     });
     expect(seen.below?.title).toBe("Back");
   });
+
+  // #5924: the recruitment list is "Rush", "Intake" or "Recruitment" by
+  // chapter, which the fixed map can't hold; the back row names it from the
+  // label its screen passes.
+  it("leaves a screen titled with the chapter's word for the caller to name", () => {
+    const seen: { below?: ScreenBelow | null } = {};
+    const { element } = stackScreen(
+      [{ name: "rush" }],
+      <Probe onRender={(below) => (seen.below = below)} />,
+    );
+    act(() => {
+      create(element);
+    });
+    expect(seen.below).toMatchObject({ name: "rush", title: null });
+  });
 });
 
 describe("useHoldSwipeBack", () => {

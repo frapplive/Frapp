@@ -53,8 +53,11 @@ vi.mock("@/lib/stores/chapter-store", async () =>
   (await import("@/tests/settings-harness")).chapterStore(),
 );
 
+// The Chapter mark's own page, which its row on the Chapter tab opens.
 vi.mock("next/navigation", async () =>
-  (await import("@/tests/settings-harness")).navigation(),
+  (await import("@/tests/settings-harness")).navigation(
+    () => new URLSearchParams("tab=org&page=mark"),
+  ),
 );
 
 vi.mock("@/components/shared/can", async () =>

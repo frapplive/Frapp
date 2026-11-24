@@ -195,6 +195,13 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["role-tier"] }}
       />
       <Stack.Screen name="role" options={{ title: SCREEN_TITLES.role }} />
+      {/* The recruitment pipeline (#5924), from its row on You, and one
+          prospect from a row of it. */}
+      <Stack.Screen name="rush" options={{ title: SCREEN_TITLES.rush }} />
+      <Stack.Screen
+        name="rush-prospect"
+        options={{ title: SCREEN_TITLES["rush-prospect"] }}
+      />
     </Stack>
   );
 }

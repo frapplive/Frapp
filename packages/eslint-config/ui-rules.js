@@ -136,6 +136,22 @@ webUiRules.moreMenu = [
   },
 ];
 
+// No boxed switch for a page's views (owner, 2026-11-24: "I want to never see
+// one of these switcher things ... too intrusive, draw attention"). A page's
+// views are plain words beside its title: `ViewLabels` inside `PageViews`.
+// The segmented control is only for a short pick inside a form, so it is
+// rejected in the page header's two slots. A switch drawn over a list in the
+// page body is the same defect, and only review catches that one.
+const VIEW_SWITCH_MESSAGE =
+  "No boxed switch for a page's views (owner ruling 2026-11-24). Draw them as ViewLabels from @/components/shared/view-labels inside PageViews; SegmentedChoice is only for a short pick inside a form.";
+webUiRules.viewSwitch = [
+  {
+    selector:
+      "JSXElement[openingElement.name.name=/^(PageActions|PageViews)$/] JSXOpeningElement[name.name=/^(SegmentedChoice|ListLayoutToggle)$/]",
+    message: VIEW_SWITCH_MESSAGE,
+  },
+];
+
 /**
  * Every web UI rule except the named ones, for a grandfathered file.
  *
@@ -177,6 +193,17 @@ const mobileUiRules = {
     },
   ],
 };
+
+const PHONE_VIEW_SWITCH_MESSAGE =
+  "No boxed switch for a screen's views (owner ruling 2026-11-24). Pass them to ScreenShell as `views`, or draw ViewLabels from @/components/view-labels; Segmented is only for a short pick inside a form.";
+mobileUiRules.viewSwitch = [
+  // A screen header's slots: the title row's action, the back row's, the views.
+  {
+    selector:
+      "JSXAttribute[name.name=/^(headerAction|backAction|views)$/] JSXOpeningElement[name.name='Segmented']",
+    message: PHONE_VIEW_SWITCH_MESSAGE,
+  },
+];
 
 /**
  * Every phone UI rule except the named ones.
