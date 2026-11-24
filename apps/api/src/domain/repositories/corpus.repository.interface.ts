@@ -31,11 +31,10 @@ export interface MatchCorpusInput {
   userId: string;
   query: string;
   /**
-   * The question's embedding and the model that made it, or both null to
-   * search by words alone: no passage is "nearest" then.
+   * The question's embedding and the model that made it, or null to search
+   * by words alone: no passage is "nearest" then.
    */
-  embedding: number[] | null;
-  embeddingModel: string | null;
+  embedding: { vector: number[]; model: string } | null;
   /** How many candidates each half returns. */
   limit: number;
   /** Narrows the candidates; never an access rule. */

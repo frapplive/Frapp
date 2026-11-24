@@ -258,8 +258,7 @@ describe('SupabaseCorpusRepository — tenant scope', () => {
         chapterId: CHAPTER_B,
         userId: USER_A,
         query: 'dues',
-        embedding: [0.25, -0.5],
-        embeddingModel: 'gemini-embedding-001',
+        embedding: { vector: [0.25, -0.5], model: 'gemini-embedding-001' },
         limit: 40,
       }),
     ).resolves.toEqual([]);
@@ -284,7 +283,6 @@ describe('SupabaseCorpusRepository — tenant scope', () => {
       userId: USER_A,
       query: 'dues',
       embedding: null,
-      embeddingModel: null,
       limit: 40,
     });
     const args = harness.rpcCalls[0].args as {

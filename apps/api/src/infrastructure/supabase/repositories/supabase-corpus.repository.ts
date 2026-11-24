@@ -196,11 +196,8 @@ export class SupabaseCorpusRepository implements ICorpusRepository {
       p_embedding:
         input.embedding === null
           ? NO_EMBEDDING
-          : vectorLiteral(input.embedding),
-      p_embedding_model:
-        input.embedding === null || input.embeddingModel === null
-          ? ''
-          : input.embeddingModel,
+          : vectorLiteral(input.embedding.vector),
+      p_embedding_model: input.embedding === null ? '' : input.embedding.model,
       p_limit: input.limit,
       // Sent only when the search is narrowed, so an unnarrowed search is
       // the call it always was, against a database with or without

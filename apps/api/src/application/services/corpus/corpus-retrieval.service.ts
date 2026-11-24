@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { LanguageModelError } from '#domain/adapters/language-model.interface';
+import { reportCaughtFailure } from '../../../infrastructure/observability/report-caught-failure';
 import { stripLoneSurrogates } from '#domain/utils/corpus-chunker';
 import type { CorpusCandidate } from '#domain/entities/corpus.entity';
 import {
@@ -125,6 +126,13 @@ export type CorpusRetrievalResult =
        * cannot open. 0 when none.
        */
       leftOutMessages: number;
+      /**
+       * True when the question could not be embedded, so only passages
+       * holding its words were looked for. "Nothing matched" then means
+       * less than it usually does, and a caller with its own word search
+       * has nothing to gain from these passages.
+       */
+      wordsOnly: boolean;
     }
   | AiUnavailable;
 
@@ -137,9 +145,10 @@ export type CorpusRetrievalResult =
  * 1. The question is embedded through the gateway, so the server switch, the
  *    chapter's switch, the member's own answer and the caps all apply to a
  *    retrieval as to any other AI call. A refusal comes back as it is and
- *    nothing is read.
- * 2. The database returns the nearest passages by embedding and the best by
- *    words, for that chapter only and only if the member belongs to it
+ *    nothing is read. When the provider itself fails, the search goes on
+ *    without the embedding and says so (`wordsOnly`).
+ * 2. The database returns the nearest passages by embedding (none, without
+ *    one) and the best by words, for that chapter only and only if the member belongs to it
  *    (`match_corpus_chunks`).
  * 3. Every passage whose source the member could not open is dropped, by the
  *    source's own rule (`CorpusSourceAdapter.readableBy`): minutes by
@@ -222,7 +231,14 @@ export class CorpusRetrievalService {
     const query = stripLoneSurrogates(
       request.query.trim().slice(0, MAX_QUERY_CHARS),
     );
-    if (!query) return { status: 'ok', passages: [], leftOutMessages: 0 };
+    if (!query) {
+      return {
+        status: 'ok',
+        passages: [],
+        leftOutMessages: 0,
+        wordsOnly: false,
+      };
+    }
     const limit = Math.min(
       Math.max(Math.trunc(request.limit ?? DEFAULT_LIMIT), 1),
       MAX_LIMIT,
@@ -236,8 +252,10 @@ export class CorpusRetrievalService {
       chapterId: request.chapterId,
       userId: request.actingUserId,
       query,
-      embedding: embedded?.vectors[0] ?? null,
-      embeddingModel: embedded?.model ?? null,
+      embedding:
+        embedded === null
+          ? null
+          : { vector: embedded.vectors[0], model: embedded.model },
       limit: CANDIDATES_PER_HALF,
       ...(request.filter === undefined ? {} : { filter: request.filter }),
     });
@@ -260,6 +278,7 @@ export class CorpusRetrievalService {
       status: 'ok',
       passages,
       leftOutMessages: this.leftOut(passages, admitted, withheldBySource),
+      wordsOnly: embedded === null,
     };
   }
 
@@ -299,11 +318,16 @@ export class CorpusRetrievalService {
       if (!(error instanceof LanguageModelError) || error.kind === 'aborted') {
         throw error;
       }
-      // The gateway already wrote the failed call to the ledger and its
-      // telemetry; this line says what the search did about it.
-      this.logger.warn(
-        `Question embedding failed (${error.kind}); searching by words only.`,
-      );
+      // The gateway already wrote the failed call to the ledger; this is
+      // the report that reaches Sentry, since the question no longer fails
+      // (`observability.md` § Error Tracking: a read that degrades reports).
+      reportCaughtFailure(this.logger, {
+        level: 'warning',
+        site: 'corpus-retrieval-embed-query',
+        message: `Question embedding failed (${error.kind}); searching by words only`,
+        // Carries the kind and the status, never the provider's text.
+        error,
+      });
       return null;
     }
   }
