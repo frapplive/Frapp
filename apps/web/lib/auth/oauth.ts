@@ -4,7 +4,12 @@ import {
   buildAuthCallbackUrl,
   describeAuthError,
 } from "@/lib/auth/redirect";
-import { DESKTOP_SIGN_IN_PATH, desktopBridge } from "@/lib/desktop/bridge";
+import {
+  type DesktopBridge,
+  DESKTOP_FLOW_PARAM,
+  DESKTOP_HANDOFF_PATH,
+  desktopBridge,
+} from "@/lib/desktop/bridge";
 
 export type OAuthProvider = "apple" | "google";
 
@@ -53,10 +58,13 @@ export const DESKTOP_HANDOFF_COPY = "Sign-in opened in your browser";
  * The start is the same PKCE call, so the verifier cookie is set in this
  * window, but the browser isn't sent anywhere. The shell opens the provider
  * page in the member's default browser, and the return lands there on
- * `/desktop-sign-in`, which hands the code back to the app; the shell then
- * loads `/auth/callback` here and the usual exchange runs (ADR-29 decision 5).
+ * `/auth/desktop` and then `/desktop-sign-in`, which hands the code back to
+ * the app; the shell then loads `/auth/callback` here and the usual exchange
+ * runs (ADR-29 decision 5). The return address carries a random `flow` value,
+ * and the shell takes only the link that brings the same value back.
  * `handedOff` tells the screen to drop its pending state and say where the
- * sign-in went.
+ * sign-in went. A shell that refuses the address answers `false`, which is an
+ * error here, never a sign-in "opened in your browser" that wasn't.
  */
 export async function startWebOAuth(
   supabase: {
@@ -78,7 +86,7 @@ export async function startWebOAuth(
   origin: string,
   redirectTo: string,
   intent?: AuthCallbackIntent,
-  desktop: { openExternal(url: string): void } | null = desktopBridge(),
+  desktop: DesktopBridge | null = desktopBridge(),
 ): Promise<{
   error: { message: string; code?: string } | null;
   handedOff: boolean;
@@ -97,8 +105,11 @@ export async function startWebOAuth(
     };
   }
 
-  const handOff = new URL(callback);
-  handOff.pathname = DESKTOP_SIGN_IN_PATH;
+  // The same guarded `next` as the callback; the intent stays behind, since
+  // only an email link's intent is ever read.
+  const handOff = new URL(DESKTOP_HANDOFF_PATH, origin);
+  handOff.searchParams.set("next", new URL(callback).searchParams.get("next") ?? "");
+  handOff.searchParams.set(DESKTOP_FLOW_PARAM, crypto.randomUUID());
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
@@ -119,6 +130,17 @@ export async function startWebOAuth(
       handedOff: false,
     };
   }
-  desktop.openExternal(data.url);
+  let opened = false;
+  try {
+    opened = (await desktop.openExternal(data.url)) === true;
+  } catch {
+    opened = false;
+  }
+  if (!opened) {
+    return {
+      error: { message: "The desktop app did not open the sign-in address" },
+      handedOff: false,
+    };
+  }
   return { error: null, handedOff: true };
 }

@@ -12,7 +12,7 @@ describe("desktopBridge", () => {
   });
 
   it("is the shell's bridge inside the desktop app", () => {
-    const bridge = { openExternal: () => {} };
+    const bridge = { openExternal: async () => true };
     (window as { frappDesktop?: unknown }).frappDesktop = bridge;
     expect(desktopBridge()).toBe(bridge);
   });
@@ -24,20 +24,21 @@ describe("desktopBridge", () => {
 });
 
 describe("desktopAuthLink", () => {
-  it("hands the code and where to land back to the app", () => {
+  it("hands the code, where to land and the flow back to the app", () => {
     expect(
-      desktopAuthLink(new URLSearchParams("next=%2Fjoin%3Ftoken%3Dinv-1&intent=sign-in&code=abc-123")),
-    ).toBe("frapp-desktop://auth/callback?code=abc-123&next=%2Fjoin%3Ftoken%3Dinv-1&intent=sign-in");
+      desktopAuthLink(new URLSearchParams("next=%2Fjoin%3Ftoken%3Dinv-1&flow=f-1&handoff=abc-123")),
+    ).toBe("frapp-desktop://auth/callback?code=abc-123&next=%2Fjoin%3Ftoken%3Dinv-1&flow=f-1");
   });
 
-  it("passes nothing the callback route doesn't read", () => {
-    expect(desktopAuthLink(new URLSearchParams("code=abc&state=x&token_hash=y"))).toBe(
+  it("passes nothing else", () => {
+    expect(desktopAuthLink(new URLSearchParams("handoff=abc&state=x&token_hash=y&intent=confirm"))).toBe(
       "frapp-desktop://auth/callback?code=abc",
     );
   });
 
-  it("is null when the provider came back without a code", () => {
-    expect(desktopAuthLink(new URLSearchParams("error=access_denied&next=%2Fchat"))).toBeNull();
+  it("is null without a handed-off code, and never reads `code` itself", () => {
+    expect(desktopAuthLink(new URLSearchParams("authError=access_denied"))).toBeNull();
+    expect(desktopAuthLink(new URLSearchParams("code=abc&flow=f-1"))).toBeNull();
     expect(desktopAuthLink(new URLSearchParams(""))).toBeNull();
   });
 });

@@ -4,11 +4,15 @@ import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthScreen } from "@/components/auth/auth-screen";
 import { Button } from "@/components/ui/button";
-import { desktopAuthLink } from "@/lib/desktop/bridge";
+import { isIdentityCollisionError } from "@repo/hooks/auth-error-copy";
+import { IDENTITY_COLLISION_COPY } from "@/lib/auth/oauth";
+import { DESKTOP_AUTH_ERROR_PARAM, desktopAuthLink } from "@/lib/desktop/bridge";
 
 /**
- * Where Google or Apple returns, in the member's browser, when the sign-in
- * was started in the desktop app (ADR-29 decision 5, #4841).
+ * The page a Google or Apple sign-in ends on, in the member's browser, when
+ * it was started in the desktop app (ADR-29 decision 5, #4841). The provider
+ * returns to `/auth/desktop`, which sends the browser here with the code
+ * under `handoff`, never `code` (the route says why).
  *
  * The desktop app can't show the provider's page itself, so it opened this
  * browser. The session belongs in the app, not here: this page exchanges
@@ -24,7 +28,9 @@ import { desktopAuthLink } from "@/lib/desktop/bridge";
  * Reachable signed out: `/desktop-sign-in` is not in `proxy.ts`'s matcher.
  */
 function DesktopSignInContent() {
-  const link = desktopAuthLink(useSearchParams());
+  const params = useSearchParams();
+  const link = desktopAuthLink(params);
+  const authError = params.get(DESKTOP_AUTH_ERROR_PARAM);
 
   useEffect(() => {
     if (link) window.location.assign(link);
@@ -34,7 +40,13 @@ function DesktopSignInContent() {
     return (
       <AuthScreen
         title="Sign-in didn't finish"
-        subtitle="Go back to the Frapp app and try again."
+        subtitle={
+          // The one failure with its own advice: the email already belongs
+          // to another sign-in method.
+          authError && isIdentityCollisionError({ code: authError })
+            ? IDENTITY_COLLISION_COPY
+            : "Go back to the Frapp app and try again."
+        }
       />
     );
   }

@@ -45,14 +45,18 @@ has no web manifest and no service worker.
    `/auth/callback?code=…` route in its window. No second callback route. The scheme is
    `frapp-desktop`, not the phone's, so the two apps never claim each other's links.
    *Changed 2026-11-24 ([#4841](https://github.com/pdcarlson/Frapp/issues/4841)), as built:* the
-   provider returns to a page of the web app in the browser, `/desktop-sign-in`, and that page
-   opens `frapp-desktop://auth/callback?code=…`. Returning straight to the custom scheme, as
-   first written, leaves the member's browser on the provider's page with nothing saying what
-   happened, and needs a `frapp-desktop://` entry on both Supabase allow lists; a page of the web
-   app is already covered by its origin's `/**`. Slack, Discord and Linear land on the same kind of
-   page. It is still not a second callback route: the page exchanges nothing, and the code is no
-   use without the verifier in the app's window. The shell takes the link only for ten minutes
-   after a sign-in starts, because any web page can open a custom scheme.
+   provider returns to the web app in the browser (`/auth/desktop`, which sends the browser on to
+   the `/desktop-sign-in` page), and that page opens `frapp-desktop://auth/callback?code=…&flow=…`.
+   Returning straight to the custom scheme, as first written, leaves the member's browser on the
+   provider's page with nothing saying what happened, and needs a `frapp-desktop://` entry on both
+   Supabase allow lists; a route of the web app is already covered by its origin's `/**`. Slack,
+   Discord and Linear land on the same kind of page. It is still not a second place a code is
+   exchanged: the browser exchanges nothing, and the code is no use without the verifier in the
+   app's window. `/auth/desktop` exists so no page ever loads with `?code=` in its address, which
+   the Supabase browser client would try to exchange. Any web page can open a custom scheme, so
+   the shell takes only the link carrying the random `flow` value of the sign-in the member last
+   started in the app, within ten minutes, and opens the browser only for a sign-in that returns
+   to `/auth/desktop` on its own origin.
 6. **Notifications come from the running app, not a push service.** The shell shows OS
    notifications from the realtime connections the web app already holds, following the member's
    existing settings and mutes, and keeps running in the tray or dock when its window is closed.
@@ -107,7 +111,7 @@ channels that both use production, Developer ID plus Azure signing.
   that needs it.
 - Supabase's Auth redirect allow-list gains `frapp-desktop://auth/callback` on staging and
   production.
-  *Corrected 2026-11-24 (#4841):* it doesn't. The return is a page on the web origin (decision 5).
+  *Corrected 2026-11-24 (#4841):* it doesn't. The return is a route on the web origin (decision 5).
 - The shell itself rarely changes, so most desktop releases are web deploys. A shell release is
   needed only for an Electron security update or a change to the bridge.
 
