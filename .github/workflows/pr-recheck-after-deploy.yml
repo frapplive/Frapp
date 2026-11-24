@@ -1,24 +1,27 @@
 name: PR recheck after deploy
 
-# The base-sync bot's second half (Paul, 2026-11-24): once a deploy has published
-# fresh database state, re-run the failed jobs of each open PR's Migration drift
-# gate, so a gate that went red while staging was stuck (a migration-order race,
-# #4795, #5958) turns green without waiting for the PR's next push. Behaviour:
-# docs/ci-cd/pr-babysitting.md § Recheck after a deploy; logic and the rules on
-# which runs it touches: scripts/ci/pr-recheck-after-deploy.mjs.
+# The base-sync bot's second half (Paul, 2026-11-24): when a deploy recovers from
+# a failure, re-run the failed jobs of each open PR's Migration drift gate run
+# that went red while it was stuck (a migration-order race, #4795, #5958), so the
+# gate turns green without waiting for the PR's next push. Behaviour:
+# docs/ci-cd/pr-babysitting.md § Recheck after a deploy; the rule for which runs
+# it touches: scripts/ci/pr-recheck-after-deploy.mjs.
 #
 # ── Why only the Migration drift gate ───────────────────────────────────────
 # A re-run keeps its run's commit, which for a pull request is the test merge
 # with `main` as it stood when the run started, so re-running CI can't pick up a
-# fix that landed on `main` since. The gate's three jobs read `origin/main` and
-# the published migration snapshot when they run, so a re-run sees the new state.
+# fix that landed on `main` since. The gate's jobs read the published migration
+# snapshot (staging's and production's applied state) when they run, and
+# `migration-drift` also reads live `origin/main`, so a re-run sees the new
+# database state. Paul chose this scope over also merging `main` into red PRs.
 #
-# ── Why it fires on Migration snapshot, not on Deploy staging ───────────────
-# The gate reads staging through the snapshot, which `migration-snapshot.yml`
-# publishes after each deploy finishes. Fired by the deploy itself, a re-run
-# would read the snapshot from before it and go red again. Only a snapshot run a
-# deploy started (`event == 'workflow_run'`) counts; the script also checks that
-# the newest Deploy staging run succeeded.
+# ── Why it fires on Migration snapshot, not on the deploys ──────────────────
+# The gate reads the databases through the snapshot, which
+# `migration-snapshot.yml` publishes after each Deploy staging and Deploy
+# production run. Fired by the deploy itself, a re-run would read the snapshot
+# from before it. Only a snapshot run a deploy started (`event ==
+# 'workflow_run'`) fires a sweep; the script decides per run whether a deploy
+# that was failing when it ran has succeeded since.
 #
 # ── Why its own workflow and not a job in pr-base-sync.yml ──────────────────
 # It needs `actions: write`, which base sync doesn't hold, and none of base
@@ -43,9 +46,13 @@ permissions:
   contents: read
 
 # The newest publish supersedes an older one: a sweep reads every open PR afresh
-# and writes nothing a cancelled one would have needed.
+# and writes nothing a cancelled one would have needed. But concurrency is
+# evaluated before the job `if:`, so a completion the job will skip (a scheduled
+# or dispatched publish, a failed one) must not share the group: it would cancel
+# a running sweep and then do nothing itself, the trap pr-base-sync.yml
+# documents. Those get a group of their own run, which cancels nothing.
 concurrency:
-  group: pr-recheck-after-deploy
+  group: ${{ (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'workflow_run') && 'pr-recheck-after-deploy' || format('pr-recheck-after-deploy-skip-{0}', github.run_id) }}
   cancel-in-progress: true
 
 jobs:
@@ -57,16 +64,16 @@ jobs:
       github.event.workflow_run.event == 'workflow_run' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Re-run stale Migration drift gate runs on open PRs
+      - name: Re-run gate runs that went red while a deploy was stuck
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SNAPSHOT_RUN_ID: ${{ github.event.workflow_run.id }}
-          SNAPSHOT_RUN_COMPLETED_AT: ${{ github.event.workflow_run.updated_at }}
+          SNAPSHOT_RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
         run: node scripts/ci/pr-recheck-after-deploy.mjs
