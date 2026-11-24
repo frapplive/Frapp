@@ -51,6 +51,8 @@ import {
   ProfileSkeleton,
 } from "@/components/you/profile-sections";
 import { useOwnStatus } from "@/lib/account/own-status";
+import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
+import { useIsCouncil } from "@/lib/tenant-kind";
 import {
   destinationHue,
   type YouDestination,
@@ -160,7 +162,11 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * beat at a member who studied all week is worse than one that says nothing
  * yet.
  */
-export default function YouScreen() {
+export default function YouTab() {
+  return useIsCouncil() ? <CouncilYouScreen /> : <YouScreen />;
+}
+
+function YouScreen() {
   const router = useRouter();
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -182,31 +188,7 @@ export default function YouScreen() {
     );
   };
 
-  const userQuery = useCurrentUser();
-  const profile = useMemo(
-    () => selectViewerProfile(userQuery.data),
-    [userQuery.data],
-  );
-  // Only an error with nothing cached: TanStack keeps `data` through a failed
-  // background refetch, and swapping the head out then would drop what was
-  // typed into the Edit sheet. The web panel has the same guard.
-  const profileFailed = userQuery.isError && userQuery.data === undefined;
-  const profileLoaded = !userQuery.isPending && !profileFailed;
-  const editSheetRef = useRef<BottomSheetModal>(null);
-  // The field the sheet opens at: the one the member tapped (#5280).
-  const [editAt, setEditAt] = useState<EditProfileField>("displayName");
-  const openEditor = (field: EditProfileField) => {
-    setEditAt(field);
-    editSheetRef.current?.present();
-  };
-  // Both sheets are hosted here, by the screen whose rows open them
-  // (`spec/ui/mobile/patterns.md` § Bottom sheets).
-  const statusSheetRef = useRef<BottomSheetModal>(null);
-  const own = useOwnStatus();
-  const status = own?.status ?? "online";
-  const statusSub = own?.statusEndsAt
-    ? untilLabel(own.statusEndsAt, new Date())
-    : (own?.line ?? null);
+  const you = useYouProfile();
 
   const chaptersQuery = useListChapters();
   const hasNoChapters =
@@ -332,31 +314,7 @@ export default function YouScreen() {
         ) : undefined
       }
     >
-      {userQuery.isPending ? (
-        <ProfileSkeleton />
-      ) : profileFailed ? (
-        <ErrorState
-          title="Couldn't load your profile"
-          body="You're signed in, but we couldn't reach the server."
-          onRetry={() => void userQuery.refetch()}
-          isRetrying={userQuery.isFetching}
-        />
-      ) : (
-        <ProfileHead profile={profile} onEdit={openEditor} />
-      )}
-
-      <ListSection>
-        {/* Status first under the head, as Discord and Slack put it at the
-            top of the member's own screen: it opens the status sheet. */}
-        <ListRow
-          label="Status"
-          leading={<StatusDot status={status} />}
-          value={MEMBER_STATUS_LABEL[status]}
-          description={statusSub ?? undefined}
-          accessibilityHint="Opens your status and custom status."
-          onPress={() => statusSheetRef.current?.present()}
-        />
-      </ListSection>
+      <YouHead you={you} />
 
       {/* Last week and This semester (#5779): only with a chapter, whose
           reads they are. The strip leaves out Study, whose row below says
@@ -455,6 +413,19 @@ export default function YouScreen() {
             onPress={() => router.push("/(auth)/create-chapter")}
           />
         ) : null}
+        {hasNoChapters ? (
+          <ListRow
+            label={COUNCIL_FORM_COPY.start}
+            leading={tile(ChapterGlyph, "chapter")}
+            accessibilityHint={COUNCIL_FORM_COPY.startHint}
+            onPress={() =>
+              router.push({
+                pathname: "/(auth)/create-chapter",
+                params: { kind: "council" },
+              })
+            }
+          />
+        ) : null}
       </ListSection>
 
       {canHost || canInvite ? (
@@ -504,6 +475,110 @@ export default function YouScreen() {
         </>
       ) : null}
 
+      <YouFoot you={you} />
+    </ScreenShell>
+  );
+}
+
+/**
+ * What both kinds of You share: the member's own profile, status and
+ * details, and the two sheets their rows open (`spec/ui/mobile/patterns.md`
+ * § Bottom sheets: hosted by the screen whose rows open them).
+ */
+function useYouProfile() {
+  const userQuery = useCurrentUser();
+  const profile = useMemo(
+    () => selectViewerProfile(userQuery.data),
+    [userQuery.data],
+  );
+  // Only an error with nothing cached: TanStack keeps `data` through a failed
+  // background refetch, and swapping the head out then would drop what was
+  // typed into the Edit sheet. The web panel has the same guard.
+  const profileFailed = userQuery.isError && userQuery.data === undefined;
+  const profileLoaded = !userQuery.isPending && !profileFailed;
+  const editSheetRef = useRef<BottomSheetModal>(null);
+  // The field the sheet opens at: the one the member tapped (#5280).
+  const [editAt, setEditAt] = useState<EditProfileField>("displayName");
+  const openEditor = (field: EditProfileField) => {
+    setEditAt(field);
+    editSheetRef.current?.present();
+  };
+  const statusSheetRef = useRef<BottomSheetModal>(null);
+  const own = useOwnStatus();
+  const status = own?.status ?? "online";
+  const statusSub = own?.statusEndsAt
+    ? untilLabel(own.statusEndsAt, new Date())
+    : (own?.line ?? null);
+  return {
+    userQuery,
+    profile,
+    profileFailed,
+    profileLoaded,
+    editSheetRef,
+    editAt,
+    openEditor,
+    statusSheetRef,
+    status,
+    statusSub,
+  };
+}
+
+type YouProfile = ReturnType<typeof useYouProfile>;
+
+/** The profile's head, then Status. */
+function YouHead({ you }: { you: YouProfile }) {
+  const {
+    userQuery,
+    profile,
+    profileFailed,
+    openEditor,
+    status,
+    statusSub,
+    statusSheetRef,
+  } = you;
+  return (
+    <>
+      {userQuery.isPending ? (
+        <ProfileSkeleton />
+      ) : profileFailed ? (
+        <ErrorState
+          title="Couldn't load your profile"
+          body="You're signed in, but we couldn't reach the server."
+          onRetry={() => void userQuery.refetch()}
+          isRetrying={userQuery.isFetching}
+        />
+      ) : (
+        <ProfileHead profile={profile} onEdit={openEditor} />
+      )}
+
+      <ListSection>
+        {/* Status first under the head, as Discord and Slack put it at the
+            top of the member's own screen: it opens the status sheet. */}
+        <ListRow
+          label="Status"
+          leading={<StatusDot status={status} />}
+          value={MEMBER_STATUS_LABEL[status]}
+          description={statusSub ?? undefined}
+          accessibilityHint="Opens your status and custom status."
+          onPress={() => statusSheetRef.current?.present()}
+        />
+      </ListSection>
+    </>
+  );
+}
+
+/** Details and Bio close the screen, then the sheets. */
+function YouFoot({ you }: { you: YouProfile }) {
+  const {
+    profileLoaded,
+    profile,
+    openEditor,
+    editSheetRef,
+    editAt,
+    statusSheetRef,
+  } = you;
+  return (
+    <>
       {profileLoaded ? (
         <ProfileDetails profile={profile} onEdit={openEditor} />
       ) : null}
@@ -516,6 +591,66 @@ export default function YouScreen() {
         />
       ) : null}
       <StatusSheet ref={statusSheetRef} />
+    </>
+  );
+}
+
+/**
+ * You in a council (#5933). A council reads no chapter route (points, study,
+ * service, dues, documents, minutes and events all answer it 403), so its
+ * You is the member's own: profile, Status, the Directory and Settings, and
+ * Invite members for whoever can invite, as Slack's and Discord's profile
+ * tab is the same in every workspace or server. It grows as the council's
+ * own areas land (`council-types.md` § What each council's space shows).
+ */
+function CouncilYouScreen() {
+  const router = useRouter();
+  const { tokens } = useFrappTheme();
+  const you = useYouProfile();
+  const canInvite = can("members:invite", usePermissionList());
+  const tile = (
+    Glyph: ComponentType<{ color: string }>,
+    place: YouDestination,
+  ) => {
+    const hue = destinationHue(place);
+    return (
+      <LeadTile on="card" hue={hue} testID={`you-tile-${place}`}>
+        <Glyph color={hue ?? tokens.color.text.disabled} />
+      </LeadTile>
+    );
+  };
+
+  return (
+    <ScreenShell title="You">
+      <YouHead you={you} />
+      <ListSection>
+        <ListRow
+          label="Directory"
+          leading={tile(DirectoryGlyph, "directory")}
+          accessibilityHint="Opens the member directory."
+          onPress={() => router.push("/directory")}
+        />
+        <ListRow
+          label="Settings"
+          leading={tile(SettingsGlyph, "settings")}
+          accessibilityHint="Opens notifications, quiet hours and your account."
+          onPress={() => router.push("/preferences")}
+        />
+      </ListSection>
+      {canInvite ? (
+        <>
+          <SectionHeader>Admin</SectionHeader>
+          <ListSection>
+            <ListRow
+              label="Invite members"
+              leading={tile(InviteGlyph, "invite")}
+              accessibilityHint="Opens invites to email or share with new members."
+              onPress={() => router.push("/invite")}
+            />
+          </ListSection>
+        </>
+      ) : null}
+      <YouFoot you={you} />
     </ScreenShell>
   );
 }

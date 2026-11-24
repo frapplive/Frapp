@@ -32,6 +32,7 @@ import { MEMBER_STATUS_LABEL } from "@repo/hooks/member-status";
 import { useOwnStatus } from "@/lib/account/own-status";
 import { activityCountChip } from "@/lib/activity/count-chip";
 import { useActivityRereadOnTab } from "@/lib/activity/use-activity-reread";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 import { TabLabel } from "@/components/tab-glyphs";
 import {
   unreadConversationsSpoken,
@@ -103,7 +104,11 @@ export function GlassTabBar({
   // became a tab (#4610). It is read again on every change of tab, on every
   // return to the tabs from a pushed screen, on every visit to Activity, and
   // on every return to the app.
-  const needsYou = activityCountChip(useActivity().data);
+  // Not in a council, whose Activity tab is its home and reads no Activity
+  // route (#5933): it would only be refused.
+  const needsYou = activityCountChip(
+    useActivity({ enabled: useServesChapterFeatures() }).data,
+  );
   // Messages' tab carries the count of conversations with anything unread,
   // which Chat home's Messages door carried until the tab replaced it (#5310).
   const unreadConversations = useUnreadConversationCount();

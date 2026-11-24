@@ -90,6 +90,7 @@ import {
 import { FLOATING_TAB_BAR, useTabBarClearance } from "@/lib/floating-chrome";
 import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
+import { useIsCouncil, useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * s13 — Directory (`canvas-screens.dc.html:451`).
@@ -220,7 +221,12 @@ export default function DirectoryScreen() {
   const hasAlumniFilters = countSetFilters(deferredAlumniFilters) > 0;
 
   const membersQuery = useMembers();
-  const classesQuery = usePledgeClasses();
+  // A council has no pledge classes or alumni, and those routes refuse it
+  // (#5933): its directory is its members, filtered by status and role.
+  const council = useIsCouncil();
+  const classesQuery = usePledgeClasses({
+    enabled: useServesChapterFeatures(),
+  });
   const { classTerm, orderTerm } = usePledgeClassTerms();
   const rolesQuery = useRoles();
   const chapterRoles = useMemo(
@@ -423,10 +429,14 @@ export default function DirectoryScreen() {
           quiet
           selected={tab}
           onSelect={(value) => setTab((value as Tab) ?? "actives")}
-          chips={[
-            { value: "actives", label: "Actives", count: activesCount },
-            { value: "alumni", label: "Alumni", count: alumniCount },
-          ]}
+          chips={
+            council
+              ? []
+              : [
+                  { value: "actives", label: "Actives", count: activesCount },
+                  { value: "alumni", label: "Alumni", count: alumniCount },
+                ]
+          }
           trailing={
             tab === "alumni" ? (
               <Chip

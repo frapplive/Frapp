@@ -7,6 +7,7 @@ import {
   useMyPermissions,
 } from "@repo/hooks";
 import { can, type AskAccess } from "@repo/validation";
+import { useIsCouncil } from "@/lib/tenant-kind";
 
 /**
  * Which AI features this member can reach right now, on the phone
@@ -49,7 +50,10 @@ export interface AiSurfaces {
 
 export function useAiSurfaces(): AiSurfaces {
   const consent = useAiConsent();
-  const available = aiAvailableFrom(consent);
+  // A council has no AI yet: every `/v1/ai` chapter route refuses it
+  // (#5933), so it reads as a server without AI and no surface is drawn.
+  const council = useIsCouncil();
+  const available = council ? false : aiAvailableFrom(consent);
   const settings = useAiChapterSettings({ enabled: available === true });
   const permissionsQuery = useMyPermissions();
   const permissionsRead = Array.isArray(permissionsQuery.data?.permissions)

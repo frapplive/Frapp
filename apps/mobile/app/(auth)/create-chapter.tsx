@@ -1,6 +1,6 @@
 import { errorCopy } from "@repo/hooks/error-copy";
 import { useState, type ComponentProps, type ReactNode, type Ref } from "react";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -41,6 +41,7 @@ import {
 import { useAuthSession } from "@/lib/auth-session";
 import { TermsAcceptance } from "@/components/auth/terms-acceptance";
 import { ChoiceRow } from "@/components/auth/choice-row";
+import { CreateCouncil } from "@/components/onboarding/create-council";
 import { AccentPicker } from "@/components/chapter/accent-picker";
 import {
   MeetFrappAiActions,
@@ -190,7 +191,20 @@ export function directoryRowTitle(row: ChapterDirectoryResult): string {
     : row.org_name;
 }
 
-export default function CreateChapter() {
+/**
+ * Starting a council is this route with `kind=council` (#5933,
+ * `components/onboarding/create-council.tsx`). It shares the route rather
+ * than taking its own because a new council, like a new chapter, flips the
+ * membership count mid-flow, and every gate already spares `/create-chapter`
+ * by its pathname (`(auth)/_layout.tsx`, `use-onboarding-redirect.ts`); a
+ * sibling route would be bounced into the tabs before its setup finished.
+ */
+export default function CreateTenant() {
+  const { kind } = useLocalSearchParams<{ kind?: string | string[] }>();
+  return kind === "council" ? <CreateCouncil /> : <CreateChapter />;
+}
+
+function CreateChapter() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const router = useRouter();

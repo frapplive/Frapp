@@ -20,6 +20,13 @@ const state = vi.hoisted(() => ({
   actEnabled: undefined as boolean | undefined,
   actions: undefined as unknown,
 }));
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+  useServesChapterFeatures: () => !tenant.council,
+}));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useAiConsent: () => state.consent,
@@ -90,11 +97,25 @@ beforeEach(() => {
     isPending: false,
   };
   state.actions = ["points", "task"];
+  tenant.council = false;
 });
 
 describe("useAiSurfaces", () => {
   it("offers nothing, and asks nothing more, where the server has no AI", () => {
     state.consent = { data: null, isError: false };
+    expect(read()).toEqual({
+      available: false,
+      ask: false,
+      askAccess: "no",
+      catchUp: false,
+      meetingNotes: false,
+      ready: true,
+    });
+    expect(state.settingsEnabled).toBe(false);
+  });
+
+  it("offers nothing in a council, whose AI routes refuse it (#5933)", () => {
+    tenant.council = true;
     expect(read()).toEqual({
       available: false,
       ask: false,
