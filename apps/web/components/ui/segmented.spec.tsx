@@ -22,7 +22,7 @@ describe("SegmentedChoice: neutral since 2026-11-24 (#5947)", () => {
     );
     const held = radio("Photo").className;
     expect(held).toContain("bg-card");
-    expect(held).toContain("border-input");
+    expect(held).toContain("border-border");
     expect(held).toContain("text-foreground");
     for (const name of ["None", "Photo", "Link"]) {
       expect(radio(name).className).not.toMatch(/accent-subtle|accent-text\b(?!.*focus)/);
@@ -45,7 +45,7 @@ describe("SegmentedChoice: neutral since 2026-11-24 (#5947)", () => {
       />,
     );
     const held = radio("None").className;
-    expect(held).toContain("border-input");
+    expect(held).toContain("border-border");
     expect(held).toContain("text-foreground");
     expect(held).not.toContain("bg-card ");
   });

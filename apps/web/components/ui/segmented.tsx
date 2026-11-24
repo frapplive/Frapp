@@ -100,8 +100,8 @@ export function SegmentedChoice<T extends string>({
               fill && "flex-1",
               held
                 ? option.quiet || quiet
-                  ? "border-input text-foreground"
-                  : "border-input bg-card text-foreground"
+                  ? "border-border text-foreground"
+                  : "border-border bg-card text-foreground"
                 : "text-muted hover:bg-card-hover hover:text-foreground",
               off && "pointer-events-none text-disabled",
               FOCUS_RING,

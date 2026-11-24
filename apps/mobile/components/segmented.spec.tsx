@@ -58,7 +58,7 @@ describe("Segmented: neutral since 2026-11-24 (#5947)", () => {
   it("raises the held answer on the card step with foreground text, never the accent", () => {
     const { style, word } = render(false);
     expect(style("Photo").backgroundColor).toBe(color.surface.card);
-    expect(style("Photo").borderColor).toBe(color.border.input);
+    expect(style("Photo").borderColor).toBe(color.border.hairline);
     expect(word("Photo").color).toBe(color.text.foreground);
     expect(style("None").backgroundColor).toBeUndefined();
     expect(word("None").color).toBe(color.text.muted);
@@ -67,7 +67,7 @@ describe("Segmented: neutral since 2026-11-24 (#5947)", () => {
   it("holds a quiet answer with the edge alone", () => {
     const { style, word } = render(true);
     expect(style("Photo").backgroundColor).toBeUndefined();
-    expect(style("Photo").borderColor).toBe(color.border.input);
+    expect(style("Photo").borderColor).toBe(color.border.hairline);
     expect(word("Photo").color).toBe(color.text.foreground);
   });
 });

@@ -92,7 +92,7 @@ describe("AttendanceEditor", () => {
       "radio",
       { name: "Optional" },
     ).className;
-    expect(following).toContain("border-input");
+    expect(following).toContain("border-border");
     expect(following).not.toContain("bg-card");
   });
 

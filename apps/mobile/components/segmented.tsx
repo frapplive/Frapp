@@ -116,10 +116,10 @@ function createStyles(tokens: SignetTokens) {
     },
     held: {
       backgroundColor: tokens.color.surface.card,
-      borderColor: tokens.color.border.input,
+      borderColor: tokens.color.border.hairline,
     },
     quietHeld: {
-      borderColor: tokens.color.border.input,
+      borderColor: tokens.color.border.hairline,
     },
     heldLabel: {
       color: tokens.color.text.foreground,
