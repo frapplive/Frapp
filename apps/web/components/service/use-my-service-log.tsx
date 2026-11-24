@@ -3,12 +3,10 @@
 import { useMemo } from "react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import {
-  serviceSemesterStartDate,
   useDeleteServiceEntry,
   useMyPermissions,
-  useSemesters,
   useServiceEntries,
-  type SemesterArchive,
+  useServiceSemesterStart,
 } from "@repo/hooks";
 import { can } from "@repo/validation";
 import type { components } from "@repo/api-sdk";
@@ -41,29 +39,6 @@ export function serviceEntryMeta(
   return [formatDay(entry.date), formatMinutesRounded(entry.duration_minutes)]
     .filter(Boolean)
     .join(" · ");
-}
-
-/**
- * The first day of this semester for the service reads, from the chapter's
- * semester archives (`GET /v1/semesters`, `members:view`): a `YYYY-MM-DD`,
- * `null` for a chapter that never rolled over (this semester is all time),
- * or `undefined` while the archives are unread or failed.
- */
-export function useServiceSemesterStart(): {
-  start: string | null | undefined;
-  isError: boolean;
-  refetch: () => void;
-} {
-  const semesters = useSemesters();
-  const start = useMemo(() => {
-    if (!Array.isArray(semesters.data)) return undefined;
-    return serviceSemesterStartDate(semesters.data as SemesterArchive[]);
-  }, [semesters.data]);
-  return {
-    start,
-    isError: semesters.isError,
-    refetch: () => void semesters.refetch(),
-  };
 }
 
 export type MyServiceLog = {

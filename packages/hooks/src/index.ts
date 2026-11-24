@@ -52,9 +52,14 @@ export * from "./rush-card";
 export * from "./scheduled-message-times";
 export * from "./search-analytics";
 export * from "./service-entry-card";
+// What Approve will award at the chapter's rate, for both apps' review (#5950).
+export * from "./service-points-preview";
 export * from "./settings-search";
 export * from "./setup-checklist";
 export * from "./similar-tasks";
+// Standings: the chapter ranked by points or service hours, in the Directory
+// on both apps (#5950).
+export * from "./standings";
 export * from "./task-card";
 export * from "./task-link-choices";
 export * from "./task-review";

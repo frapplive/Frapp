@@ -30,12 +30,12 @@ import {
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
 import { useServiceReview } from "@/components/service/use-service-review";
-import { approvePointsPreview } from "@/components/service/service-points-preview";
 import { useViewServiceProof } from "@/components/service/use-view-service-proof";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { chatDeepLink } from "@/lib/chat/chat-links";
 import { eventDeepLink } from "@/lib/events/event-links";
 import {
+  approvePointsPreview,
   useServiceEntry,
   useServicePointsRate,
   type ActivityRow,

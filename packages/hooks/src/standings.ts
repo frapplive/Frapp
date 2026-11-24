@@ -1,16 +1,48 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import {
-  formatServiceHours,
-  useLeaderboard,
-  useSemesters,
-  useServiceLeaderboard,
-  type SemesterArchive,
-} from "@repo/hooks";
 import { formatPoints } from "@repo/formatting";
-import { useServiceSemesterStart } from "@/components/service/use-my-service-log";
-import { asArray } from "@/lib/utils";
+import { formatServiceHours } from "./profile-stats";
+import { useLeaderboard } from "./use-points";
+import { useSemesters, type SemesterArchive } from "./use-semesters";
+import {
+  serviceSemesterStartDate,
+  useServiceLeaderboard,
+} from "./use-service-entries";
+
+/**
+ * Standings (#5950): the chapter ranked by points or by approved service
+ * hours over a period, drawn in the Directory on web and on the phone as a
+ * sort of the member list, never as a page of its own. One model, so both
+ * apps rank, tie and word a standing the same way.
+ */
+
+function asList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+/**
+ * The first day of this semester for the service reads, from the chapter's
+ * semester archives (`GET /v1/semesters`, `members:view`): a `YYYY-MM-DD`,
+ * `null` for a chapter that never rolled over (this semester is all time),
+ * or `undefined` while the archives are unread or failed.
+ */
+export function useServiceSemesterStart(): {
+  start: string | null | undefined;
+  isError: boolean;
+  refetch: () => void;
+} {
+  const semesters = useSemesters();
+  const start = useMemo(() => {
+    if (!Array.isArray(semesters.data)) return undefined;
+    return serviceSemesterStartDate(semesters.data as SemesterArchive[]);
+  }, [semesters.data]);
+  return {
+    start,
+    isError: semesters.isError,
+    refetch: () => void semesters.refetch(),
+  };
+}
 
 /** What a standings sort ranks the chapter by. */
 export type StandingsMetric = "points" | "service";
@@ -42,7 +74,7 @@ function monthStart(now: Date): string {
  * chapter's board is its whole roster at 0, and numbering that 1 to 40 would
  * rank people who haven't started.
  */
-export function rankBoard(
+export function rankStandings(
   rows: readonly { user_id: string; total: number }[],
 ): Map<string, { rank: number; total: number }> {
   const sorted = [...rows].sort((a, b) => b.total - a.total);
@@ -55,7 +87,7 @@ export function rankBoard(
   return places;
 }
 
-export type DirectoryStandings = {
+export type Standings = {
   /** The periods the sort offers, archived semesters after the live ones. */
   windowOptions: readonly { value: string; label: string }[];
   /** The period in force: `window`, or the default when it doesn't apply. */
@@ -76,7 +108,7 @@ export type DirectoryStandings = {
 };
 
 /**
- * Directory's standings (#5950): the chapter ranked by points or by approved
+ * The Directory's standings: the chapter ranked by points or by approved
  * service hours over a period, read from the two boards that had pages of
  * their own (`GET /v1/points/leaderboard`, `GET
  * /v1/service-entries/leaderboard`). `metric` is `null` under any other sort,
@@ -85,13 +117,13 @@ export type DirectoryStandings = {
  * Archived semesters are a period for points only: the points board takes an
  * archive id, the service board a date range it has no archive for.
  */
-export function useDirectoryStandings(
+export function useStandings(
   metric: StandingsMetric | null,
   requestedWindow: string,
-): DirectoryStandings {
+): Standings {
   const semestersQuery = useSemesters();
   const archives = useMemo(
-    () => asArray<SemesterArchive>(semestersQuery.data),
+    () => asList<SemesterArchive>(semestersQuery.data),
     [semestersQuery.data],
   );
   const windowOptions = useMemo(
@@ -137,8 +169,8 @@ export function useDirectoryStandings(
 
   const places = useMemo(() => {
     if (metric === "points") {
-      return rankBoard(
-        asArray<{ user_id?: unknown; total?: unknown }>(pointsQuery.data)
+      return rankStandings(
+        asList<{ user_id?: unknown; total?: unknown }>(pointsQuery.data)
           .filter(
             (row): row is { user_id: string; total: number } =>
               typeof row.user_id === "string" && typeof row.total === "number",
@@ -146,7 +178,7 @@ export function useDirectoryStandings(
       );
     }
     if (metric === "service") {
-      return rankBoard(
+      return rankStandings(
         (serviceQuery.data ?? []).map((row) => ({
           user_id: row.user_id,
           total: row.total_minutes,

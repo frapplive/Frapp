@@ -25,6 +25,9 @@ import {
   useRoles,
   useUpdateMemberRoles,
   useViewerUserId,
+  DEFAULT_STANDINGS_WINDOW,
+  useStandings,
+  type StandingsMetric,
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -39,11 +42,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilterChip, SortChip } from "@/components/shared/filter-chip";
 import { Badge } from "@/components/ui/badge";
-import {
-  DEFAULT_STANDINGS_WINDOW,
-  useDirectoryStandings,
-  type StandingsMetric,
-} from "@/components/members/use-directory-standings";
 import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { SectionLabel } from "@/components/shared/section-label";
@@ -564,7 +562,7 @@ export function MembersDirectory() {
   // Under a standings sort the rows carry a place and the period's total.
   const standingsMetric: StandingsMetric | null =
     sortKey === "points" || sortKey === "service" ? sortKey : null;
-  const standings = useDirectoryStandings(standingsMetric, standingsWindow);
+  const standings = useStandings(standingsMetric, standingsWindow);
   const standingsPeriodLabel =
     standings.windowOptions.find((o) => o.value === standings.window)?.label ??
     "";

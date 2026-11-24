@@ -16,12 +16,18 @@ import {
   usePledgeClasses,
   useRoles,
   usesFraternalOrder,
+  useCurrentChapter,
+  useStandings,
+  useViewerUserId,
+  DEFAULT_STANDINGS_WINDOW,
   type MemberAvatarTint,
+  type StandingsMetric,
 } from "@repo/hooks";
 import { NO_BASE_ROLE_FILTER } from "@repo/hooks/member-assignments";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   can,
+  isModuleEnabled,
   isBaseRole,
   DIRECTORY_COPY,
   directoryNoSearchMatches,
@@ -60,6 +66,7 @@ import {
   useRefetchAll,
 } from "@/components/pull-to-refresh";
 import { ActivesFilterSheet } from "@/components/directory/actives-filter-sheet";
+import { OptionSheet } from "@/components/option-sheet";
 import {
   phoneReachCountLineFor,
   phoneReachStaleNote,
@@ -88,7 +95,12 @@ import {
   usePledgeClassTerms,
 } from "@/lib/directory/pledge-class";
 import { FLOATING_TAB_BAR, useTabBarClearance } from "@/lib/floating-chrome";
-import { avatarRadius, typeRole, useFrappTheme } from "@/lib/theme";
+import {
+  MONO_FONT_FAMILY,
+  avatarRadius,
+  typeRole,
+  useFrappTheme,
+} from "@/lib/theme";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
 
 /**
@@ -161,6 +173,26 @@ import { ScreenReady } from "@/lib/sentry/screen-ready";
  * are left alone by a search, which looks across both lists.
  */
 type Tab = "actives" | "alumni";
+
+/** The Actives list's orders: by name, fraternal order, or a standing. */
+type DirectorySort = "name" | "order" | "points" | "service";
+
+/** A row's place under a standings sort (#5950). */
+export interface RowStanding {
+  rank: number;
+  /** The period's total, as text: "45 points", "2.5 hours". */
+  figure: string;
+  /** The period, for a screen reader: "This semester". */
+  period: string;
+  isViewer: boolean;
+}
+
+function sortLabel(
+  options: readonly { value: DirectorySort; label: string }[],
+  value: DirectorySort,
+): string {
+  return options.find((option) => option.value === value)?.label ?? "Name";
+}
 
 export default function DirectoryScreen() {
   const { tokens } = useFrappTheme();
@@ -242,7 +274,30 @@ export default function DirectoryScreen() {
     () => classNamesById(pledgeClasses),
     [pledgeClasses],
   );
-  const [sortByOrder, setSortByOrder] = useState(false);
+  // The Actives list's order (#3939, #5950): by name, the chapter's fraternal
+  // order, or a standing. A standing ranks the chapter by points or approved
+  // service hours over a period and each row then leads with its place; it is
+  // the leaderboard the web's Points and Service hours pages drew, on the
+  // list of members that was already here. "See standings" on a member's own
+  // points opens the screen on it (`?sort=points`).
+  const params = useLocalSearchParams<{ sort?: string }>();
+  const [sort, setSort] = useState<DirectorySort>(() =>
+    params.sort === "points" || params.sort === "service"
+      ? params.sort
+      : "name",
+  );
+  const [standingsWindow, setStandingsWindow] = useState<string>(
+    DEFAULT_STANDINGS_WINDOW,
+  );
+  const sortSheetRef = useRef<BottomSheetModal>(null);
+  const periodSheetRef = useRef<BottomSheetModal>(null);
+  // A module that is off offers no standing (P5.8) and its board is never
+  // read. Unknown until the chapter has loaded, so nothing is offered and
+  // then taken away.
+  const chapter = useCurrentChapter().data;
+  const pointsOn = !!chapter && isModuleEnabled(chapter.enabled_modules, "points");
+  const hoursOn = !!chapter && isModuleEnabled(chapter.enabled_modules, "hours");
+  const viewerUserId = useViewerUserId();
   const alumniQuery = useAlumni(deferredAlumniFilters);
   const searchQuery = useMemberSearch(deferredQuery);
 
@@ -350,19 +405,67 @@ export default function DirectoryScreen() {
   const orderOffered =
     pledgeClasses !== null && usesFraternalOrder(pledgeClasses, actives);
 
-  // The Actives list alone: search looks across both lists, and the
-  // Alumni tab has no sort (see the header).
-  const inFraternalOrder =
-    sortByOrder && orderOffered && !isSearching && tab === "actives";
-  const rows = useMemo(
+  // The orders on offer, in the order web's sort menu lists them.
+  const sortOptions = useMemo(
     () =>
-      selectDirectoryRows(listData, {
-        classNames,
-        fraternalOrder:
-          inFraternalOrder && pledgeClasses ? pledgeClasses : undefined,
-      }),
-    [listData, classNames, inFraternalOrder, pledgeClasses],
+      [
+        { value: "name", label: "Name" },
+        orderOffered ? { value: "order", label: orderTerm } : null,
+        pointsOn ? { value: "points", label: "Most points" } : null,
+        hoursOn ? { value: "service", label: "Most service hours" } : null,
+      ].filter((option): option is { value: DirectorySort; label: string } =>
+        Boolean(option),
+      ),
+    [orderOffered, orderTerm, pointsOn, hoursOn],
   );
+  // The Actives list alone: search looks across both lists, and the
+  // Alumni tab has no sort (see the header). A sort the chapter no longer
+  // offers falls back to the name.
+  const sortsActives = !isSearching && tab === "actives";
+  const effectiveSort: DirectorySort =
+    sortsActives && sortOptions.some((option) => option.value === sort)
+      ? sort
+      : "name";
+  const inFraternalOrder = effectiveSort === "order";
+  const standingsMetric: StandingsMetric | null =
+    effectiveSort === "points" || effectiveSort === "service"
+      ? effectiveSort
+      : null;
+  const standings = useStandings(standingsMetric, standingsWindow);
+  const periodLabel =
+    standings.windowOptions.find((o) => o.value === standings.window)
+      ?.label ?? "";
+  const standingTotalOf = standings.totalOf;
+  const rows = useMemo(() => {
+    const selected = selectDirectoryRows(listData, {
+      classNames,
+      fraternalOrder:
+        inFraternalOrder && pledgeClasses ? pledgeClasses : undefined,
+    });
+    if (!standingsMetric) return selected;
+    // Highest first; a tie keeps the name order `selectDirectoryRows` gave.
+    return [...selected].sort(
+      (a, b) => standingTotalOf(b.userId) - standingTotalOf(a.userId),
+    );
+  }, [
+    listData,
+    classNames,
+    inFraternalOrder,
+    pledgeClasses,
+    standingsMetric,
+    standingTotalOf,
+  ]);
+  const standingsWaiting =
+    !!standingsMetric && (standings.isLoading || standings.isError);
+  const standingOf = (userId: string): RowStanding | undefined =>
+    standingsMetric
+      ? {
+          rank: standings.rankOf(userId),
+          figure: standings.figure(standings.totalOf(userId)),
+          period: periodLabel,
+          isViewer: userId === viewerUserId,
+        }
+      : undefined;
   // Counted, not selected: `selectDirectoryRows` maps and sorts, and sorting to
   // read a `.length` would run a full `localeCompare` sort over both lists on
   // every keystroke. `null` until the query succeeds, so a populated tab never
@@ -470,22 +573,32 @@ export default function DirectoryScreen() {
                   quiet
                   onPress={() => activesFilterSheetRef.current?.present()}
                 />
-                {orderOffered ? (
+                {sortOptions.length > 1 ? (
                   <Chip
                     accessibilityRole="button"
-                    accessibilityState={{ selected: sortByOrder }}
-                    accessibilityLabel={`Sort by ${orderTerm}`}
-                    accessibilityHint={
-                      sortByOrder
-                        ? "Lists actives by name again."
-                        : "Lists actives oldest class first, then by number."
-                    }
+                    accessibilityState={{}}
+                    accessibilityLabel={`Sort: ${sortLabel(sortOptions, effectiveSort)}`}
+                    accessibilityHint="Changes the order the actives are listed in."
                     // "Sort:" leads, because beside Actives and Alumni a chip
-                    // reading only the chapter's word looks like a third tab.
-                    label={`Sort: ${orderTerm}`}
-                    on={sortByOrder}
+                    // reading only an order looks like a third tab.
+                    label={`Sort: ${sortLabel(sortOptions, effectiveSort)}`}
+                    on={effectiveSort !== "name"}
                     quiet
-                    onPress={() => setSortByOrder((on) => !on)}
+                    onPress={() => sortSheetRef.current?.present()}
+                  />
+                ) : null}
+                {/* A standing names its period, and changes it, beside the
+                    order (#5950). */}
+                {standingsMetric ? (
+                  <Chip
+                    accessibilityRole="button"
+                    accessibilityState={{}}
+                    accessibilityLabel={`Period: ${periodLabel}`}
+                    accessibilityHint="Changes which period the standings count."
+                    label={periodLabel}
+                    on
+                    quiet
+                    onPress={() => periodSheetRef.current?.present()}
                   />
                 ) : null}
               </>
@@ -534,6 +647,17 @@ export default function DirectoryScreen() {
   );
 
   function renderBody() {
+    // A standing whose board didn't load draws no rows: ranking the chapter
+    // at 0 would be a wrong answer, not a missing one.
+    if (standingsMetric && standings.isError) {
+      return (
+        <ErrorState
+          title="Couldn't load the standings"
+          body="The totals for this period didn't load, so nobody is ranked. Try again, or pick another sort."
+          onRetry={standings.refetch}
+        />
+      );
+    }
     if (!chapterId) return <NoChapterState noun="the member directory" />;
     if (activeQuery.isError && activeQuery.data === undefined) {
       return (
@@ -615,13 +739,16 @@ export default function DirectoryScreen() {
           <PinnedBackRow back={BACK_TO_YOU} />
           <ScreenReady ready={!chapterId || !activeQuery.isPending} />
           <FlatList<DirectoryRow>
-            data={rows}
+            // A standing waits for its board, so no row lands at 0 first.
+            data={standingsWaiting ? [] : rows}
             keyExtractor={(item) => item.userId}
             ListHeaderComponent={header}
             ListEmptyComponent={
               // The skeleton stands in for the rows themselves, so it takes no
               // inset: the empty and error cards do.
-              !!chapterId && activeQuery.isPending ? (
+              !!chapterId &&
+              (activeQuery.isPending ||
+                (standingsMetric && standings.isLoading)) ? (
                 <MemberListSkeleton
                   label={
                     // A search looks across both lists and hides the tabs, so it
@@ -640,6 +767,7 @@ export default function DirectoryScreen() {
             renderItem={({ item }) => (
               <MemberRow
                 row={item}
+                standing={standingOf(item.userId)}
                 reach={rowReach(item.userId)}
                 avatarTint={avatarTintFor(item.userId)}
                 onPress={() =>
@@ -666,6 +794,22 @@ export default function DirectoryScreen() {
           />
         </View>
         <PickRolesSheet ref={pickRolesSheetRef} roles={pickable.roles} />
+        <OptionSheet
+          ref={sortSheetRef}
+          title="Sort"
+          options={sortOptions}
+          selected={effectiveSort}
+          onSelect={(value) => setSort((value as DirectorySort | null) ?? "name")}
+        />
+        <OptionSheet
+          ref={periodSheetRef}
+          title="Period"
+          options={standings.windowOptions}
+          selected={standings.window}
+          onSelect={(value) =>
+            setStandingsWindow(value ?? DEFAULT_STANDINGS_WINDOW)
+          }
+        />
         <ActivesFilterSheet
           ref={activesFilterSheetRef}
           filter={activesFilter}
@@ -700,9 +844,12 @@ export function memberPressLabel(
   row: DirectoryRow,
   presence: MemberPresence = NO_PRESENCE,
   reach?: PhoneReach,
+  standing?: RowStanding,
 ): string {
   return [
-    `View ${row.displayName}'s profile`,
+    standing ? `Ranked ${standing.rank}` : null,
+    `View ${row.displayName}'s profile${standing?.isViewer ? ", you" : ""}`,
+    standing ? `${standing.figure}, ${standing.period.toLowerCase()}` : null,
     presence.status ? presenceLabel(presence.status) : null,
     presence.line,
     row.meta,
@@ -722,8 +869,11 @@ export function MemberRow({
   avatarTint,
   onPress,
   reach,
+  standing,
 }: {
   row: DirectoryRow;
+  /** The member's place and the period's total, under a standings sort. */
+  standing?: RowStanding;
   /**
    * The Phone app filter's answer for this member, drawn at the row's end
    * only while that filter is set (web draws it the same way).
@@ -749,7 +899,7 @@ export function MemberRow({
       // `Text` nodes.
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={
-        onPress ? memberPressLabel(row, presence, reach) : undefined
+        onPress ? memberPressLabel(row, presence, reach, standing) : undefined
       }
       onPress={onPress}
       android_ripple={onPress ? feedback.ripple : undefined}
@@ -758,6 +908,9 @@ export function MemberRow({
         onPress ? feedback.lift(pressed) : null,
       ]}
     >
+      {standing ? (
+        <Text style={styles.rowRank}>{`#${standing.rank}`}</Text>
+      ) : null}
       <AvatarWithPresence
         status={presence.status}
         avatarSize={AVATAR_SIZE}
@@ -773,7 +926,13 @@ export function MemberRow({
         />
       </AvatarWithPresence>
       <View style={styles.rowText}>
-        <Text style={styles.rowName}>{row.displayName}</Text>
+        <Text style={styles.rowName}>
+          {row.displayName}
+          {/* Your own row on a standing, so your place is found at a glance. */}
+          {standing?.isViewer ? (
+            <Text style={styles.rowYou}>{"  You"}</Text>
+          ) : null}
+        </Text>
         {/* The custom status line under the name, one line, as web's
             Directory row draws it (`components.md` § Chat member list). */}
         {presence.line ? (
@@ -786,6 +945,9 @@ export function MemberRow({
           <Text style={styles.rowMeta}>{phoneReachStaleNote(reach)}</Text>
         ) : null}
       </View>
+      {standing ? (
+        <Text style={styles.rowFigure}>{standing.figure}</Text>
+      ) : null}
       {reach ? (
         <Text
           style={[
@@ -936,6 +1098,23 @@ function createStyles(tokens: SignetTokens) {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
       flexShrink: 0,
+    },
+    rowRank: {
+      ...typeRole(tokens.typography.role.caption),
+      fontFamily: MONO_FONT_FAMILY,
+      color: tokens.color.text.mutedForeground,
+      minWidth: tokens.spacing.xl + tokens.spacing.sm,
+      fontVariant: ["tabular-nums"],
+    },
+    rowYou: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+    },
+    rowFigure: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.text.foreground,
+      flexShrink: 0,
+      fontVariant: ["tabular-nums"],
     },
     // The status line reads before the meta line: mutedForeground, one
     // step up the ladder, as the member profile and web draw it.
