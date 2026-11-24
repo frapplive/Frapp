@@ -89,7 +89,7 @@ describe("a row named in the chapter's own word (#5924)", () => {
   it("titles the recruitment page Rush, Recruitment or Intake as the chapter says it", () => {
     expect(resolvePageTitle("/rush")).toEqual({ title: "Rush" });
     expect(
-      resolvePageTitle("/rush", undefined, undefined, {
+      resolvePageTitle("/rush", undefined, {
         vocabulary: { recruitment: "Intake" },
       }),
     ).toEqual({ title: "Intake" });
