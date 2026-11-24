@@ -11,8 +11,10 @@ import { PointsLedger } from "@/components/points/points-ledger";
 import { ReportsPage } from "@/components/reports/reports-page";
 import { ServiceHistory } from "@/components/service/service-history";
 import { SettingsSubpage as SubpageFrame } from "@/components/settings/settings-subpage";
+import { useSearchParams } from "next/navigation";
 import {
   CHAT_SETTINGS_PATH,
+  LEDGER_MEMBER_PARAM,
   type SettingsSubpage,
 } from "@/components/settings/settings-paths";
 import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
@@ -33,13 +35,12 @@ import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
 export function SettingsToolBody({
   moduleKey,
   holdsTool,
-  ledgerMember,
 }: {
   moduleKey: string;
   holdsTool: (toolId: string) => boolean;
-  /** `?member=`: the member the points ledger opens on. */
-  ledgerMember?: string | null;
 }) {
+  // `?member=`: the member the points ledger opens on (a card's Ledger link).
+  const ledgerMember = useSearchParams().get(LEDGER_MEMBER_PARAM);
   if (moduleKey === "points" && holdsTool("points-ledger")) {
     // Keyed by the member, so a second card's Ledger link starts from that
     // member's filter rather than the last one's.

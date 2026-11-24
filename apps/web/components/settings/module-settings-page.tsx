@@ -31,12 +31,6 @@ type Props = {
    * link row.
    */
   toolBody?: ReactNode;
-  /**
-   * Draw `toolBody` last, under the rules and who-can: for a body that is a
-   * list that keeps growing (`SettingsTool.growsLong`), which would otherwise
-   * push the page's settings out of reach.
-   */
-  toolBodyLast?: boolean;
   /** The module's stored rules, or nothing when it has none to set. */
   rules?: ReactNode;
   /** Whether the viewer can read roles (`members:view`) for "Who can". */
@@ -75,7 +69,6 @@ export function ModuleSettingsPage({
   onToggle,
   tools,
   toolBody,
-  toolBodyLast = false,
   rules,
   canSeeWhoCan,
   canEditRoles = false,
@@ -96,6 +89,10 @@ export function ModuleSettingsPage({
 
   const switchId = `settings-module-${module.key}-switch`;
   const linkedTools = tools.filter((tool) => !tool.embedded);
+  // A body that is a list which keeps growing (the points ledger, the
+  // service history, `SettingsTool.growsLong`) goes last, under the rules
+  // and who-can, which it would otherwise push out of reach.
+  const toolBodyLast = tools.some((tool) => tool.embedded && tool.growsLong);
 
   return (
     <div className="space-y-10">
