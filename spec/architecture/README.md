@@ -103,7 +103,8 @@ Frapp/
 - **Framework:** Electron ([ADR-29](adr/adr-29.md)). The window loads the hosted web app at `https://app.frapp.live`; nothing of the web app is bundled, so UI changes ship as web deploys.
 - **Boundary:** The renderer is sandboxed with no Node access. The web app reaches the OS only through `window.frappDesktop` (`apps/desktop/src/shared/bridge.ts`), and links off the app's origin open in the default browser (`src/shared/navigation.ts`).
 - **Running it:** `npm start -w apps/desktop` opens production; `npm start -w apps/desktop -- --app-url=https://app.staging.frapp.live` opens staging, and an unpackaged run also accepts `http://localhost:3000`. Those three origins are the whole allow-list (`src/shared/app-url.ts`). The script is `start`, not `dev`, so the root `npm run dev` (Turbo, web and landing) doesn't open a desktop window. `npm run dist -w apps/desktop` packages for the current OS; the `Desktop build` workflow packages macOS, Windows and Linux on every change and keeps the installers on the run for 14 days. Linux is built only to keep packaging honest: it isn't offered to members, and it has no Open at Login.
-- **Not yet built:** sign-in through the system browser (#4841), notifications and the unread badge (#4842), signing and auto-update (#4843).
+- **Sign-in:** email sign-in runs in the window. Google and Apple open in the member's default browser, return there to the web app's `/desktop-sign-in`, and that page opens `frapp-desktop://auth/callback?code=…`; the shell loads `/auth/callback` in its window, where the code meets the verifier the window already holds (`src/shared/auth-link.ts`, `apps/web/lib/desktop/bridge.ts`). The shell accepts that link only for ten minutes after the member starts a sign-in.
+- **Not yet built:** notifications and the unread badge (#4842), signing and auto-update (#4843).
 
 ### 3.5 Documentation (no `apps/docs` web app)
 

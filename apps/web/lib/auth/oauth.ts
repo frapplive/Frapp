@@ -4,6 +4,7 @@ import {
   buildAuthCallbackUrl,
   describeAuthError,
 } from "@/lib/auth/redirect";
+import { DESKTOP_SIGN_IN_PATH, desktopBridge } from "@/lib/desktop/bridge";
 
 export type OAuthProvider = "apple" | "google";
 
@@ -35,6 +36,9 @@ export function describeOAuthKickoffError(error: unknown): string {
   });
 }
 
+/** The toast a screen shows once the desktop app has opened the browser. */
+export const DESKTOP_HANDOFF_COPY = "Sign-in opened in your browser";
+
 /**
  * Kick off Google or Apple on the browser client.
  *
@@ -43,6 +47,16 @@ export function describeOAuthKickoffError(error: unknown): string {
  * magic-link confirmations already use — so this must not invent a second
  * callback route. The sign-in screen still passes `intent: "sign-in"`, which
  * nothing reads since the "New account created" notice was retired.
+ *
+ * **Inside the desktop app** (`desktop` is the shell's bridge) the provider
+ * page can't load in the window: Google and Apple refuse embedded browsers.
+ * The start is the same PKCE call, so the verifier cookie is set in this
+ * window, but the browser isn't sent anywhere. The shell opens the provider
+ * page in the member's default browser, and the return lands there on
+ * `/desktop-sign-in`, which hands the code back to the app; the shell then
+ * loads `/auth/callback` here and the usual exchange runs (ADR-29 decision 5).
+ * `handedOff` tells the screen to drop its pending state and say where the
+ * sign-in went.
  */
 export async function startWebOAuth(
   supabase: {
@@ -52,25 +66,59 @@ export async function startWebOAuth(
         options?: {
           redirectTo?: string;
           queryParams?: Record<string, string>;
+          skipBrowserRedirect?: boolean;
         };
-      }) => Promise<{ error: { message: string; code?: string } | null }>;
+      }) => Promise<{
+        data?: { url?: string | null } | null;
+        error: { message: string; code?: string } | null;
+      }>;
     };
   },
   provider: OAuthProvider,
   origin: string,
   redirectTo: string,
   intent?: AuthCallbackIntent,
-): Promise<{ error: { message: string; code?: string } | null }> {
-  const { error } = await supabase.auth.signInWithOAuth({
+  desktop: { openExternal(url: string): void } | null = desktopBridge(),
+): Promise<{
+  error: { message: string; code?: string } | null;
+  handedOff: boolean;
+}> {
+  const callback = buildAuthCallbackUrl(origin, redirectTo, { intent });
+  const queryParams =
+    provider === "google" ? { prompt: "select_account" } : undefined;
+  if (!desktop) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: callback, queryParams },
+    });
+    return {
+      error: error ? { message: error.message, code: error.code } : null,
+      handedOff: false,
+    };
+  }
+
+  const handOff = new URL(callback);
+  handOff.pathname = DESKTOP_SIGN_IN_PATH;
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: buildAuthCallbackUrl(origin, redirectTo, { intent }),
-      queryParams:
-        provider === "google" ? { prompt: "select_account" } : undefined,
+      redirectTo: handOff.toString(),
+      queryParams,
+      skipBrowserRedirect: true,
     },
   });
-  if (!error) return { error: null };
-  return {
-    error: { message: error.message, code: error.code },
-  };
+  if (error) {
+    return {
+      error: { message: error.message, code: error.code },
+      handedOff: false,
+    };
+  }
+  if (!data?.url) {
+    return {
+      error: { message: "Auth returned no sign-in address" },
+      handedOff: false,
+    };
+  }
+  desktop.openExternal(data.url);
+  return { error: null, handedOff: true };
 }

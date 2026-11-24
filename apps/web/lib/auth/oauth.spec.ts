@@ -28,6 +28,76 @@ describe("describeOAuthKickoffError", () => {
   });
 });
 
+describe("startWebOAuth inside the desktop app", () => {
+  it("keeps the window where it is and opens the provider page in the browser", async () => {
+    const signInWithOAuth = vi.fn(async () => ({
+      data: { url: "https://abcdefgh.supabase.co/auth/v1/authorize?provider=google" },
+      error: null,
+    }));
+    const openExternal = vi.fn();
+
+    const result = await startWebOAuth(
+      { auth: { signInWithOAuth } },
+      "google",
+      "https://app.frapp.live",
+      "/join?token=inv-1",
+      "sign-in",
+      { openExternal },
+    );
+
+    expect(result).toEqual({ error: null, handedOff: true });
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo:
+          "https://app.frapp.live/desktop-sign-in?next=%2Fjoin%3Ftoken%3Dinv-1&intent=sign-in",
+        queryParams: { prompt: "select_account" },
+        skipBrowserRedirect: true,
+      },
+    });
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://abcdefgh.supabase.co/auth/v1/authorize?provider=google",
+    );
+  });
+
+  it("opens nothing when the start is refused", async () => {
+    const openExternal = vi.fn();
+    const result = await startWebOAuth(
+      {
+        auth: {
+          signInWithOAuth: vi.fn(async () => ({
+            data: { url: null },
+            error: { message: "provider is not enabled" },
+          })),
+        },
+      },
+      "apple",
+      "https://app.frapp.live",
+      "/chat",
+      undefined,
+      { openExternal },
+    );
+    expect(result.handedOff).toBe(false);
+    expect(result.error?.message).toBe("provider is not enabled");
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it("reports a start that came back with no address", async () => {
+    const openExternal = vi.fn();
+    const result = await startWebOAuth(
+      { auth: { signInWithOAuth: vi.fn(async () => ({ data: { url: null }, error: null })) } },
+      "google",
+      "https://app.frapp.live",
+      "/chat",
+      undefined,
+      { openExternal },
+    );
+    expect(result.handedOff).toBe(false);
+    expect(result.error).not.toBeNull();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+});
+
 describe("startWebOAuth", () => {
   it("starts PKCE OAuth toward /auth/callback with the guarded next path", async () => {
     const signInWithOAuth = vi.fn(async () => ({ error: null }));

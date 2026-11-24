@@ -9,6 +9,7 @@
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "node:path";
 import { resolveAppOrigin } from "../shared/app-url";
+import { AUTH_LINK_SCHEME, AUTH_LINK_WINDOW_MS, findAuthLink, parseAuthLink } from "../shared/auth-link";
 import { IPC, parseBadgeCount, parseExternalUrl } from "../shared/bridge";
 import { decideNavigation, isPermissionAllowed } from "../shared/navigation";
 import { offlinePageHtml, WINDOW_BACKGROUND } from "../shared/offline-page";
@@ -28,12 +29,29 @@ if (rejected) console.warn(`Ignoring app URL outside the allow-list: ${rejected}
 let mainWindow: BrowserWindow | null = null;
 /** Set when the member chose Quit, so closing the window really quits. */
 let quitting = false;
+/**
+ * Until when a `frapp-desktop://` sign-in link is accepted: set when the
+ * member starts Google or Apple sign-in, cleared when its link arrives. Any
+ * web page can open the scheme, so outside that window a link does nothing.
+ */
+let authLinkAcceptedUntil = 0;
 
 if (!app.requestSingleInstanceLock()) {
   // A second launch (double-clicking the icon again) hands over to the first.
   app.quit();
 } else {
-  app.on("second-instance", () => showWindow());
+  app.on("second-instance", (_event, argv) => {
+    // Windows and Linux deliver a sign-in link as a second launch.
+    const link = findAuthLink(argv);
+    if (link) openAuthLink(link);
+    showWindow();
+  });
+  // macOS delivers it here, to the running app.
+  app.on("open-url", (event, link) => {
+    event.preventDefault();
+    openAuthLink(link);
+    if (app.isReady()) showWindow();
+  });
   app.on("before-quit", () => {
     quitting = true;
   });
@@ -66,6 +84,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(() => {
+    registerAuthLinkScheme();
     installPermissionHandlers();
     installBridge();
     const menus = { isPackaged: app.isPackaged, showWindow, onChange: () => rebuildMenus() };
@@ -184,8 +203,38 @@ function installBridge(): void {
   ipcMain.on(IPC.openExternal, (event, value: unknown) => {
     const url = parseExternalUrl(value);
     if (!fromApp(event) || url === null) return;
+    // The only page this opens is the start of a sign-in, so its link back
+    // is expected from now on.
+    authLinkAcceptedUntil = Date.now() + AUTH_LINK_WINDOW_MS;
     void shell.openExternal(url);
   });
+}
+
+/**
+ * Claim `frapp-desktop://` for this app. A packaged app registers itself; an
+ * unpackaged `npm start` has to name its entry script, or the link would
+ * start a bare Electron.
+ */
+function registerAuthLinkScheme(): void {
+  const entry = process.argv[1];
+  if (process.defaultApp && entry) {
+    app.setAsDefaultProtocolClient(AUTH_LINK_SCHEME, process.execPath, [path.resolve(entry)]);
+  } else {
+    app.setAsDefaultProtocolClient(AUTH_LINK_SCHEME);
+  }
+}
+
+/**
+ * Finish a sign-in the member started here: load the web app's own callback
+ * route with the code the browser brought back (`shared/auth-link.ts`). A
+ * link nobody asked for, or one that isn't a sign-in, is dropped.
+ */
+function openAuthLink(link: string): void {
+  if (Date.now() > authLinkAcceptedUntil) return;
+  const target = parseAuthLink(link, appOrigin);
+  if (target === null || !mainWindow || mainWindow.isDestroyed()) return;
+  authLinkAcceptedUntil = 0;
+  mainWindow.loadURL(target).catch(ignoreLoadFailure);
 }
 
 /** The Frapp mark for the tray: bundled as an extra resource when packaged. */
