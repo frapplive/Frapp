@@ -19,7 +19,7 @@ export function dictationCeiling(said: string): number {
 }
 
 /**
- * Dictation in Ask's field (#5276, `spec/behavior/ai.md` § Ask Frapp,
+ * Dictation in Ask's field (#5276, `spec/behavior/ai.md` § Frapp Intelligence,
  * Dictation). The phone's own recogniser turns speech into words; this tidies
  * them (fillers and false starts out, punctuation in) through `ask.dictation`
  * and hands them back for the member to read, edit and send. Nothing sends
@@ -31,7 +31,7 @@ export function dictationCeiling(said: string): number {
  *
  * Only consent refuses, as every AI route says it (`aiConsentRefusal`): the
  * gateway checks the Ask switch and the member's yes before the call, so a
- * member without Frapp AI on gets 403 and keeps their raw words on the phone.
+ * member without Frapp Intelligence on gets 403 and keeps their raw words on the phone.
  *
  * Nothing is stored, and no word of it is logged, traced or counted; the
  * gateway's ledger and usage event carry sizes and the prompt version only.

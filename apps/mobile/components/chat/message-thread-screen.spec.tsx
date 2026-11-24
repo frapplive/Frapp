@@ -652,7 +652,7 @@ describe("MessageThreadScreen (#3785)", () => {
     expect(thread.send).not.toHaveBeenCalled();
     expect(composer().props.value).toBe("@Frapp who is driving");
     expect(composer().props.disabledHint).toBe(
-      "Ask Frapp from the channel, not from a reply.",
+      "Ask @Frapp from the channel, not from a reply.",
     );
     expect(composer().props.hintTone).toBe("error");
     // The line is about the words as they were.
@@ -686,7 +686,7 @@ describe("MessageThreadScreen (#3785)", () => {
     expect(thread.send).not.toHaveBeenCalled();
     expect(composer().props.value).toBe("@Frapp who is driving");
     expect(composer().props.disabledHint).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     );
     // The line is about the words as they were.
     act(() => composer().props.onChangeText("who is driving"));

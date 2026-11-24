@@ -108,13 +108,13 @@ import {
  *   sees the row they tapped turn green.
  * - **AI is here and is not drawn** (Paul, 2026-11-17: "maybe we just make an
  *   AI section ... Frap AI, nudges on activity and ... everything else that
- *   comes along with that"). It holds the member's Frapp AI switch, Nudges on
+ *   comes along with that"). It holds the member's Frapp Intelligence switch, Nudges on
  *   Activity, and, for a member who can open Chapter settings, a Chapter AI
  *   row that opens the president's switches there, where the chapter's side
  *   of settings lives. No row names an AI company: they are named on Meet
- *   Frapp AI, which turning Frapp AI on opens, and in the privacy policy,
+ *   Frapp Intelligence, which turning Frapp Intelligence on opens, and in the privacy policy,
  *   which the section's footnote links. Before this the two switches sat
- *   under ACCOUNT, and Frapp AI's caption named the companies.
+ *   under ACCOUNT, and Frapp Intelligence's caption named the companies.
  * - **No CHAPTER · ADMIN.** The drawn group (accent, chat background, study
  *   zones) moved whole to Chapter settings (`app/(app)/chapter-settings.tsx`,
  *   #4074), the chapter's side of settings off Chat home's chapter menu, so this screen
@@ -236,7 +236,7 @@ export default function PreferencesScreen() {
   // only stated off a confirmed read: "None" from a failed one would claim
   // nobody is blocked.
   const blockedMembersSheetRef = useRef<BottomSheetModal>(null);
-  // Frapp AI (#4790): on opens Meet Frapp AI, whose Continue is the yes;
+  // Frapp Intelligence (#4790): on opens Meet Frapp Intelligence, whose Continue is the yes;
   // off is immediate.
   const meetAiSheetRef = useRef<BottomSheetModal>(null);
   const frappAi = useFrappAiChoice();
@@ -601,7 +601,7 @@ export default function PreferencesScreen() {
               <SettingAnchor id="ai">
                 <SectionHeader>{FRAPP_AI_COPY.settingsSection}</SectionHeader>
                 <ListSection>
-                  {/* On opens Meet Frapp AI, so the yes is given where the
+                  {/* On opens Meet Frapp Intelligence, so the yes is given where the
                 companies are named; off is at once. */}
                   <ListRow
                     label={FRAPP_AI_COPY.settingsSwitch}

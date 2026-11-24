@@ -38,7 +38,7 @@ export function suggestionEdits(
     edits.subtasks = steps;
   }
   // Points, proof and From (2026-11-22): only a form that offered them (an
-  // Ask Frapp card's, `full`) can change them; a minutes suggestion's sends
+  // Frapp Intelligence card's, `full`) can change them; a minutes suggestion's sends
   // none, so it never clears what it didn't show.
   if (!options.full) {
     return Object.keys(edits).length > 0 ? edits : undefined;

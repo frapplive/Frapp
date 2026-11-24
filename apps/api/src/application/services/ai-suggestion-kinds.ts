@@ -78,7 +78,7 @@ export interface AiSuggestionKindHandler {
    * Cleans what the AI proposed into the stored payload, or null when it
    * can't be used (it is then dropped, not stored). `context.sourceType` is
    * the suggestion source's type (`request` is the officer's own request to
-   * Ask Frapp), for a kind that trusts some fields only from it.
+   * Frapp Intelligence), for a kind that trusts some fields only from it.
    */
   normalizeProposal(
     raw: unknown,

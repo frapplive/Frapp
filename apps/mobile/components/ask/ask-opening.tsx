@@ -9,7 +9,13 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, {
+  Circle,
+  Defs,
+  Path,
+  RadialGradient,
+  Stop,
+} from "react-native-svg";
 import type { SignetTokens } from "@repo/theme/signet";
 import {
   ASK_COPY,
@@ -97,9 +103,7 @@ export function AskOpening({
       >
         <GlowingCrest height={compact ? 44 : starter ? 64 : 88} />
         <View style={compact ? styles.wordsCompact : styles.words}>
-          {starter ? null : (
-            <Text style={styles.day}>{askDayLine(now)}</Text>
-          )}
+          {starter ? null : <Text style={styles.day}>{askDayLine(now)}</Text>}
           <Text
             style={[styles.greeting, compact ? styles.greetingCompact : null]}
           >
@@ -217,7 +221,12 @@ function GlowingCrest({ height }: { height: number }) {
               <Stop offset="0.7" stopColor={accent} stopOpacity={0} />
             </RadialGradient>
           </Defs>
-          <Circle cx={glow / 2} cy={glow / 2} r={glow / 2} fill="url(#ask-glow)" />
+          <Circle
+            cx={glow / 2}
+            cy={glow / 2}
+            r={glow / 2}
+            fill="url(#ask-glow)"
+          />
         </Svg>
       </Animated.View>
       <FrappCrest height={height} color={accent} />

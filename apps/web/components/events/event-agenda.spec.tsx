@@ -11,8 +11,8 @@ import type { EventAgendaItem, EventAttachment } from "@repo/validation";
  */
 
 const state = vi.hoisted(() => ({
-  signed: vi.fn(),
-  documents: [] as unknown[],
+  resolved: new Map<string, unknown>(),
+  candidates: [] as unknown[],
   toast: vi.fn(),
   toastFailure: vi.fn(),
   gateAllowed: true,
@@ -28,11 +28,10 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
-  useDocumentDownloadUrl: () => ({ mutateAsync: state.signed }),
-  useDocuments: () => ({
-    data: state.documents,
-    isPending: false,
-    isError: false,
+  useFrappLinks: () => ({ resolved: state.resolved, isLoading: false }),
+  useFrappLinkCandidates: () => ({
+    candidates: state.candidates,
+    isLoading: false,
   }),
   useEventListsEditor: (
     _eventId: string,
@@ -108,11 +107,11 @@ function applied<T>(onChange: ReturnType<typeof vi.fn>, current: T[]): T[][] {
 }
 
 beforeEach(() => {
-  state.signed.mockReset();
+  state.resolved = new Map();
   state.toast.mockReset();
   state.toastFailure.mockReset();
   state.change.mockReset();
-  state.documents = [];
+  state.candidates = [];
   state.gateAllowed = true;
 });
 
@@ -298,10 +297,19 @@ describe("checking items off (Paul 2026-11-19)", () => {
 });
 
 describe("EventAttachmentsSection", () => {
-  it("opens a link in a new tab and a document to read, with no edit controls for a member", async () => {
-    const user = userEvent.setup();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    state.signed.mockResolvedValue({ downloadUrl: "https://files.example/x" });
+  it("opens a web link in a new tab and a record in the app, with no edit controls for a member", () => {
+    state.resolved = new Map([
+      [
+        "document:doc-1",
+        {
+          key: "document:doc-1",
+          state: "ok",
+          title: "Bylaws (2026)",
+          date: null,
+          author: null,
+        },
+      ],
+    ]);
     render(
       <EventAttachmentsSection
         attachments={attachments}
@@ -314,59 +322,52 @@ describe("EventAttachmentsSection", () => {
     expect(link).toHaveAttribute("href", "https://docs.example.com/budget");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    await user.click(screen.getByRole("button", { name: /Bylaws/ }));
-    expect(state.signed).toHaveBeenCalledWith("doc-1");
-    expect(open).toHaveBeenCalledWith(
-      "https://files.example/x",
-      "_blank",
-      "noopener",
-    );
+    // The document's live name, not the one it was attached with.
+    expect(
+      screen.getByRole("link", { name: /Bylaws \(2026\)/ }),
+    ).toHaveAttribute("href", "/documents?document=doc-1");
     expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
-    open.mockRestore();
   });
 
-  it("says a document is gone when Chapter Files no longer has it", async () => {
-    const user = userEvent.setup();
-    state.signed.mockRejectedValue({ status: 404 });
+  it("names a record the member can't open, or one that's gone, without opening it", () => {
+    state.resolved = new Map([
+      [
+        "document:doc-1",
+        {
+          key: "document:doc-1",
+          state: "hidden",
+          title: null,
+          date: null,
+          author: null,
+        },
+      ],
+      [
+        "minutes:m-1",
+        {
+          key: "minutes:m-1",
+          state: "removed",
+          title: null,
+          date: null,
+          author: null,
+        },
+      ],
+    ]);
     render(
       <EventAttachmentsSection
-        attachments={[bylaws]}
+        attachments={[
+          bylaws,
+          { id: "x3", kind: "minutes", meeting_id: "m-1", title: "Minutes" },
+        ]}
         canEdit={false}
         documentsOn
         onChange={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Bylaws/ }));
-    expect(state.toast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "This file is gone from Chapter Files",
-      }),
-    );
-  });
-
-  it("keeps a document openable while the module read can't say, and disables it only when it's off", () => {
-    const { rerender } = render(
-      <EventAttachmentsSection
-        attachments={[bylaws]}
-        canEdit
-        documentsOn={null}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /^Bylaws/ })).toBeEnabled();
-    expect(
-      screen.queryByRole("button", { name: "Attach from Chapter Files" }),
-    ).toBeNull();
-    rerender(
-      <EventAttachmentsSection
-        attachments={[bylaws]}
-        canEdit
-        documentsOn={false}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /^Bylaws/ })).toBeDisabled();
-    expect(screen.getByText("Chapter Files is off")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("You don't have access")).toBeInTheDocument();
+    expect(screen.getByText("Removed")).toBeInTheDocument();
+    // The name it was attached with never shows to someone who can't open it.
+    expect(screen.queryByText("Bylaws")).toBeNull();
   });
 
   it("draws nothing for a member when the meeting has none", () => {
@@ -381,7 +382,7 @@ describe("EventAttachmentsSection", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("refuses a bad or too-long link with its reason, and titles an untitled one by its domain", async () => {
+  it("refuses a bad link with its reason, and titles an untitled one by its domain", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -392,12 +393,8 @@ describe("EventAttachmentsSection", () => {
         onChange={onChange}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Add a link" }));
-    const field = screen.getByRole("textbox", { name: "Link" });
-    await user.type(field, "javascript:alert(1)");
-    await user.click(screen.getByRole("button", { name: "Add link" }));
-    expect(screen.getByText(/starting with http/)).toBeInTheDocument();
-    await user.clear(field);
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    const field = screen.getByRole("textbox", { name: "Attach" });
     await user.click(field);
     await user.paste(`https://a.example/${"x".repeat(2100)}`);
     await user.click(screen.getByRole("button", { name: "Add link" }));
@@ -416,13 +413,45 @@ describe("EventAttachmentsSection", () => {
     ]);
   });
 
-  it("attaches a file it doesn't hold yet, with its name cut to the limit", async () => {
+  it("attaches the record a pasted Frapp address names", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <EventAttachmentsSection
+        attachments={[]}
+        canEdit
+        documentsOn
+        onChange={onChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    await user.click(screen.getByRole("textbox", { name: "Attach" }));
+    await user.paste("https://app.frapp.live/meetings/m-9");
+    // A record needs no title field.
+    expect(screen.queryByRole("textbox", { name: "Title" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    expect(at(applied(onChange, [] as EventAttachment[]), 0)).toEqual([
+      expect.objectContaining({ kind: "minutes", meeting_id: "m-9" }),
+    ]);
+  });
+
+  it("attaches a file it doesn't hold yet, storing no name with it", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const long = "Spring budget ".repeat(20);
-    state.documents = [
-      { id: "doc-1", title: "Bylaws", folder: null },
-      { id: "doc-2", title: long, folder: "Treasury" },
+    state.candidates = [
+      {
+        target: { kind: "document", document_id: "doc-1" },
+        name: "Bylaws",
+        kind: "document",
+        date: null,
+      },
+      {
+        target: { kind: "document", document_id: "doc-2" },
+        name: long,
+        kind: "document",
+        date: null,
+      },
     ];
     render(
       <EventAttachmentsSection
@@ -432,25 +461,24 @@ describe("EventAttachmentsSection", () => {
         onChange={onChange}
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: "Attach from Chapter Files" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Attach" }));
     // Bylaws is attached already, so it isn't offered again.
-    expect(screen.queryByRole("button", { name: "Bylaws" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Bylaws/ })).toBeNull();
     await user.click(screen.getByRole("button", { name: /^Spring budget/ }));
     const next = at(applied(onChange, [bylaws]), 0);
     expect(at(next, 1)).toMatchObject({
       kind: "document",
       document_id: "doc-2",
     });
-    expect(at(next, 1).title).toHaveLength(120);
+    // A name stored with it would reach members who can't open the file.
+    expect(at(next, 1)).not.toHaveProperty("title");
   });
 
-  it("offers no add controls once the event holds ten", () => {
+  it("offers no Attach once the event holds ten", () => {
     const ten = Array.from({ length: 10 }, (_, i) => ({
       id: `l${i}`,
       kind: "link" as const,
-      url: "https://a.example",
+      url: `https://a.example/${i}`,
       title: `L${i}`,
     }));
     render(
@@ -461,10 +489,8 @@ describe("EventAttachmentsSection", () => {
         onChange={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: "Add a link" })).toBeNull();
-    expect(
-      screen.getByText("An event holds 10 attachments."),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Attach" })).toBeNull();
+    expect(screen.getByText("Holds 10 attachments.")).toBeInTheDocument();
   });
 });
 

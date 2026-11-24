@@ -163,7 +163,7 @@ export function DashboardShell({
   defaultChatWidth = DEFAULT_CHAT_WIDTH,
   defaultMembersHidden = false,
 }: DashboardShellProps) {
-  // Ask Frapp's bar (#5476) floats at the bottom of the page below `lg`,
+  // Frapp Intelligence's bar (#5476) floats at the bottom of the page below `lg`,
   // where there is no sidebar to hold it (#5560), so a page there reserves
   // room under its last row. Not on the Ask page itself, whose own field is
   // there.
@@ -741,7 +741,7 @@ export function DashboardShell({
 }
 
 /**
- * Ask Frapp's bar (#5476, Paul's pick of 2026-11-18) below `lg`, where the
+ * Frapp Intelligence's bar (#5476, Paul's pick of 2026-11-18) below `lg`, where the
  * shell is one page and has no sidebar: floating 24px above the bottom of the
  * page and centred in it, at most 520px wide, as the phone's bar floats above
  * its tab bar. From `lg` up it lives in the sidebar's foot (`app-nav.tsx`,

@@ -32,7 +32,7 @@ import { aiConsentKey, isAiNotAvailable } from "./use-ai";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 /**
- * Ask Frapp on the client (#450, #451, `spec/behavior/ai.md`), shared by web
+ * Frapp Intelligence on the client (#450, #451, `spec/behavior/ai.md`), shared by web
  * and, when its slice comes, mobile.
  *
  * The answer arrives as a stream of events whose format lives in

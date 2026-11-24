@@ -64,6 +64,8 @@ export type BoardTask = {
    */
   followed_by?: string | null;
   followed_by_name?: string | null;
+  /** Its Frapp links (`spec/behavior/frapp-links.md`); read with `readFrappLinks`. */
+  attachments?: unknown;
 };
 
 /**

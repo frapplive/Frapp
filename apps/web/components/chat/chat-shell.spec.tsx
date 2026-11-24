@@ -1202,7 +1202,7 @@ const channelAskState = vi.hoisted(() => ({
   turns: [] as { id: string }[],
   turnsFor: [] as (string | null | undefined)[],
 }));
-// Ask Frapp's bar (#5476): who gets it is `ask-bar.tsx`'s question
+// Frapp Intelligence's bar (#5476): who gets it is `ask-bar.tsx`'s question
 // (`ask-entry.spec.tsx`); here only where the shell puts it.
 vi.mock("@/components/ask/ask-bar", () => ({
   AskBar: ({
@@ -1217,7 +1217,7 @@ vi.mock("@/components/ask/ask-bar", () => ({
       data-compact={compact ? "" : undefined}
       className={className}
     >
-      Ask Frapp
+      Frapp Intelligence
     </button>
   ),
 }));
@@ -3126,7 +3126,7 @@ describe("ChatShell carries @Frapp to the composer and the timeline (#4713)", ()
     expect(composer.dataset.askUnknown).toBe("true");
     fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
     expect(screen.getByTestId("thread-panel").dataset.refusesFrapp).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.,null",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.,null",
     );
   });
 
@@ -3158,7 +3158,7 @@ describe("ChatShell carries @Frapp to the composer and the timeline (#4713)", ()
     render(<ChatShell initialChannelId="chan-general" />);
     fireEvent.click(await screen.findByTestId("trigger-thread-msg-1"));
     expect(screen.getByTestId("thread-panel").dataset.refusesFrapp).toBe(
-      "Ask Frapp from the channel, not from a reply.,null",
+      "Ask @Frapp from the channel, not from a reply.,null",
     );
   });
 
@@ -5109,7 +5109,7 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
     }
   });
 
-  it("puts Ask Frapp's bar at the foot of the Channels column with chat alone below lg only, and not beside a tool (#5476, #5560)", () => {
+  it("puts Frapp Intelligence's bar at the foot of the Channels column with chat alone below lg only, and not beside a tool (#5476, #5560)", () => {
     stubWidth(1440);
     const view = render(<ChatShell />);
     const bar = screen.getByTestId("ask-bar");

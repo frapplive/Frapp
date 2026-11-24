@@ -1,15 +1,12 @@
 "use client";
 
-import { useId, useMemo, useState, type FormEvent } from "react";
-import { FileText, GripVertical, Link2, Loader2, Plus, X } from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
+import { GripVertical, Loader2, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { randomClientId, statusOf } from "@repo/api-sdk";
+import { randomClientId } from "@repo/api-sdk";
 import {
   useAgendaSuggestionActions,
   useAgendaSuggestions,
-  selectDownloadUrl,
-  useDocumentDownloadUrl,
-  useDocuments,
   useEventListsEditor,
   type EventLists,
 } from "@repo/hooks";
@@ -19,16 +16,9 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
-  attachmentLinkProblem,
-  attachmentLinkTitle,
-  attachmentTitle,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
-  EVENT_ATTACHMENT_TITLE_MAX,
-  EVENT_ATTACHMENTS_MAX,
   normalizeAgendaText,
-  normalizeAttachmentUrl,
-  proofLinkDomain,
   reorderEventEntry,
   toggleAgendaItem,
   type AgendaSuggestion,
@@ -38,9 +28,9 @@ import {
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
 import { QUIET_LINK } from "@/components/ui/quiet-link";
 import { FOCUS_RING, FOCUS_RING_OFFSET } from "@/components/ui/focus";
+import { FrappLinksEditor } from "@/components/shared/frapp-links";
 import { useSortableList } from "@/components/shared/use-sortable-list";
 import {
   dashboardCheckboxHitAreaClassName,
@@ -572,40 +562,11 @@ function AgendaSuggestions({
 }
 
 /**
- * Open a Chapter Files document to read, in a new tab (the inline signed
- * link, not the forced download). A file deleted since it was attached says
- * so rather than failing generically.
+ * The event's attachments: the shared Frapp link list
+ * (`spec/behavior/frapp-links.md`), the same rows and picker as a task's
+ * Attached row. A document keeps its name, as every event entry carries a
+ * title for phone builds from before Frapp links.
  */
-function useOpenDocument() {
-  const signedLinks = useDocumentDownloadUrl();
-  const { toast } = useToast();
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  async function open(documentId: string) {
-    setOpeningId(documentId);
-    try {
-      const url = selectDownloadUrl(await signedLinks.mutateAsync(documentId));
-      if (!url) throw new Error("No link to the file came back.");
-      window.open(url, "_blank", "noopener");
-    } catch (error) {
-      if (statusOf(error) === 404) {
-        toast({
-          title: "This file is gone from Chapter Files",
-          description: "Someone removed it after it was attached.",
-        });
-      } else {
-        toastFailure({
-          title: "Couldn't open that file",
-          error,
-          fallback: "Try again in a moment.",
-        });
-      }
-    } finally {
-      setOpeningId(null);
-    }
-  }
-  return { open, openingId };
-}
-
 export function EventAttachmentsSection({
   attachments,
   canEdit,
@@ -617,307 +578,16 @@ export function EventAttachmentsSection({
   documentsOn: DocumentsModule;
   onChange: (update: (current: EventAttachment[]) => EventAttachment[]) => void;
 }) {
-  const { open, openingId } = useOpenDocument();
-  const [adding, setAdding] = useState<"link" | "document" | null>(null);
   if (attachments.length === 0 && !canEdit) return null;
-
-  const full = attachments.length >= EVENT_ATTACHMENTS_MAX;
-  const attachedDocuments = new Set(
-    attachments.flatMap((a) => (a.kind === "document" ? [a.document_id] : [])),
-  );
-  const add = (attachment: EventAttachment) => {
-    onChange((current) =>
-      current.length >= EVENT_ATTACHMENTS_MAX
-        ? current
-        : [...current, attachment],
-    );
-    setAdding(null);
-  };
-
-  const addLinks = (
-    <div className="flex flex-wrap gap-x-4 gap-y-1">
-      <button
-        type="button"
-        className={QUIET_LINK}
-        onClick={() => setAdding("link")}
-      >
-        Add a link
-      </button>
-      {documentsOn === true ? (
-        <button
-          type="button"
-          className={QUIET_LINK}
-          onClick={() => setAdding("document")}
-        >
-          Attach from Chapter Files
-        </button>
-      ) : null}
-    </div>
-  );
-
   return (
     <section aria-label="Attachments" className={SECTION}>
-      {/* Empty, the add links ride the heading's row: one quiet line, not a
-          section of its own (Paul 2026-11-22). */}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className={HEADING}>Attachments</h3>
-        {attachments.length === 0 && canEdit && !full && adding === null
-          ? addLinks
-          : null}
-      </div>
-      {attachments.length > 0 ? (
-        <ul className="grid gap-1">
-          {attachments.map((attachment) => (
-            <li
-              key={attachment.id}
-              className="flex min-h-9 items-center gap-2 pointer-coarse:min-h-11"
-            >
-              {attachment.kind === "link" ? (
-                <a
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-sm hover:underline",
-                    FOCUS_RING_OFFSET,
-                  )}
-                >
-                  <Link2
-                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{attachment.title}</span>
-                  <span className="shrink-0 text-caption text-muted-foreground">
-                    {proofLinkDomain(attachment.url)}
-                  </span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  // Only a module read that answered "off" disables it; one
-                  // that can't say yet lets the server answer.
-                  disabled={documentsOn === false || openingId !== null}
-                  onClick={() => void open(attachment.document_id)}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left text-sm hover:underline disabled:no-underline",
-                    FOCUS_RING_OFFSET,
-                  )}
-                >
-                  {openingId === attachment.document_id ? (
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <FileText
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="truncate">{attachment.title}</span>
-                  <span className="shrink-0 text-caption text-muted-foreground">
-                    {documentsOn === false
-                      ? "Chapter Files is off"
-                      : "Chapter Files"}
-                  </span>
-                </button>
-              )}
-              {canEdit ? (
-                <IconButton
-                  label={`Remove "${attachment.title}"`}
-                  onClick={() =>
-                    onChange((current) =>
-                      current.filter((entry) => entry.id !== attachment.id),
-                    )
-                  }
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </IconButton>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {canEdit && full ? (
-        <p className="text-caption text-muted-foreground">
-          An event holds {EVENT_ATTACHMENTS_MAX} attachments.
-        </p>
-      ) : null}
-      {canEdit && !full && adding === "link" ? (
-        <AddLinkForm
-          onCancel={() => setAdding(null)}
-          onAdd={(url, title) =>
-            add({ id: randomClientId(), kind: "link", url, title })
-          }
-        />
-      ) : null}
-      {canEdit && !full && adding === "document" ? (
-        <PickDocument
-          attached={attachedDocuments}
-          onCancel={() => setAdding(null)}
-          onPick={(documentId, title) =>
-            add({
-              id: randomClientId(),
-              kind: "document",
-              document_id: documentId,
-              title: attachmentTitle(title),
-            })
-          }
-        />
-      ) : null}
-      {attachments.length > 0 && canEdit && !full && adding === null
-        ? addLinks
-        : null}
+      <h3 className={HEADING}>Attachments</h3>
+      <FrappLinksEditor
+        links={attachments}
+        canEdit={canEdit}
+        documentsOn={documentsOn}
+        onChange={onChange}
+      />
     </section>
-  );
-}
-
-function AddLinkForm({
-  onAdd,
-  onCancel,
-}: {
-  onAdd: (url: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const urlId = useId();
-  const titleId = useId();
-  const problemId = useId();
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const refused = attachmentLinkProblem(url);
-    const normalized = normalizeAttachmentUrl(url);
-    if (refused || !normalized) {
-      setProblem(refused ?? "Paste a web address.");
-      return;
-    }
-    onAdd(normalized, attachmentLinkTitle(title, normalized));
-  }
-
-  return (
-    <form onSubmit={submit} className="grid gap-2">
-      <label htmlFor={urlId} className="sr-only">
-        Link
-      </label>
-      <Input
-        id={urlId}
-        value={url}
-        onChange={(event) => {
-          setUrl(event.target.value);
-          setProblem(null);
-        }}
-        placeholder="https://"
-        inputMode="url"
-        autoFocus
-        aria-invalid={problem ? true : undefined}
-        aria-describedby={problem ? problemId : undefined}
-      />
-      <label htmlFor={titleId} className="sr-only">
-        Title
-      </label>
-      <Input
-        id={titleId}
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="Title (optional)"
-        maxLength={EVENT_ATTACHMENT_TITLE_MAX}
-      />
-      {problem ? (
-        <p id={problemId} className="text-sm text-destructive-text">
-          {problem}
-        </p>
-      ) : null}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={!url.trim()}>
-          Add link
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function PickDocument({
-  attached,
-  onPick,
-  onCancel,
-}: {
-  attached: ReadonlySet<string>;
-  onPick: (documentId: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const [search, setSearch] = useState("");
-  const searchId = useId();
-  const documents = useDocuments();
-  const matches = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return (documents.data ?? [])
-      .filter((doc) => !attached.has(doc.id))
-      .filter((doc) => !needle || doc.title.toLowerCase().includes(needle))
-      .slice(0, 8);
-  }, [documents.data, search, attached]);
-
-  return (
-    <div className="grid gap-2">
-      <label htmlFor={searchId} className="sr-only">
-        Find a file in Chapter Files
-      </label>
-      <Input
-        id={searchId}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Find a file in Chapter Files"
-        autoFocus
-      />
-      {documents.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading files…</p>
-      ) : documents.isError ? (
-        <p className="text-sm text-muted-foreground">
-          Couldn&apos;t load Chapter Files. Try again in a moment.
-        </p>
-      ) : matches.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {search.trim()
-            ? "No file matches that."
-            : "Chapter Files has nothing to attach yet. Upload it there first."}
-        </p>
-      ) : (
-        <ul className="grid gap-1">
-          {matches.map((doc) => (
-            <li key={doc.id}>
-              <button
-                type="button"
-                onClick={() => onPick(doc.id, doc.title)}
-                className={cn(
-                  "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card-hover pointer-coarse:min-h-11",
-                  FOCUS_RING_OFFSET,
-                )}
-              >
-                <FileText
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <span className="truncate">{doc.title}</span>
-                {doc.folder ? (
-                  <span className="ml-auto shrink-0 text-caption text-muted-foreground">
-                    {doc.folder}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
   );
 }

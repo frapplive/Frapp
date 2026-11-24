@@ -186,7 +186,7 @@ vi.mock("@/components/settings/blocked-members-sheet", () => ({
   BlockedMembersSheet: "BlockedMembersSheet",
 }));
 
-// Meet Frapp AI as a stand-in whose `present` a spec can see; the sheet
+// Meet Frapp Intelligence as a stand-in whose `present` a spec can see; the sheet
 // itself has its own spec (`components/ai/meet-frapp-ai.spec.tsx`).
 const aiSheet = vi.hoisted(() => ({ present: vi.fn() }));
 const aiNotNow = vi.hoisted(() => vi.fn(() => Promise.resolve()));
@@ -496,11 +496,11 @@ describe("Settings copy", () => {
     expect(densitySheet.present).toHaveBeenCalled();
   });
 
-  describe("the Frapp AI switch", () => {
+  describe("the Frapp Intelligence switch", () => {
     const aiSwitch = (tree: ReactTestRenderer) =>
       tree.root.findAll(
         (node) =>
-          node.props.accessibilityLabel === "Frapp AI" &&
+          node.props.accessibilityLabel === "Frapp Intelligence" &&
           typeof node.props.onValueChange === "function",
       );
     afterEach(() => {
@@ -518,7 +518,7 @@ describe("Settings copy", () => {
       state.aiConsent = null;
       const tree = render();
       expect(aiSwitch(tree)).toHaveLength(0);
-      expect(screenText(tree)).not.toContain("Frapp AI");
+      expect(screenText(tree)).not.toContain("Frapp Intelligence");
     });
 
     it.each([
@@ -530,7 +530,7 @@ describe("Settings copy", () => {
       const tree = render();
       expect(aiSwitch(tree)[0].props.value).toBe(on);
       // What it does, never who it works with (Paul, 2026-11-17): the
-      // companies are named on Meet Frapp AI, where the yes is given.
+      // companies are named on Meet Frapp Intelligence, where the yes is given.
       expect(screenText(tree)).toContain(FRAPP_AI_COPY.settingsCaption);
       expect(screenText(tree)).not.toMatch(/Anthropic|Google/);
     });
@@ -677,7 +677,7 @@ describe("Settings copy", () => {
       expect(state.setNudges).toHaveBeenCalledWith(false);
     });
 
-    it("opens Meet Frapp AI to turn it on, so the yes is given there", () => {
+    it("opens Meet Frapp Intelligence to turn it on, so the yes is given there", () => {
       aiSheet.present.mockClear();
       aiNotNow.mockClear();
       state.aiConsent = { answer: "no", sheet_changed: false };

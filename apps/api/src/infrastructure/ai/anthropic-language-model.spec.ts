@@ -264,7 +264,7 @@ describe('AnthropicLanguageModel', () => {
       kind: 'agent',
       task: 'ask.answer',
       model: 'claude-sonnet-5-5',
-      system: 'You are Ask Frapp.',
+      system: 'You are Frapp Intelligence.',
       messages: [
         { role: 'user', content: 'When is formal?' },
         { role: 'assistant', content: 'April 12.' },
@@ -317,7 +317,7 @@ describe('AnthropicLanguageModel', () => {
         system: [
           {
             type: 'text',
-            text: 'You are Ask Frapp.',
+            text: 'You are Frapp Intelligence.',
             cache_control: { type: 'ephemeral' },
           },
         ],
@@ -479,7 +479,7 @@ describe('AnthropicLanguageModel', () => {
         { system: unknown; messages: { content: unknown }[] },
       ];
       expect(params.system).toEqual([
-        { type: 'text', text: 'You are Ask Frapp.' },
+        { type: 'text', text: 'You are Frapp Intelligence.' },
       ]);
       expect(params.messages.at(-1)?.content).toEqual([
         {

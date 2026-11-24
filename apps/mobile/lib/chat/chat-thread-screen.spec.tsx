@@ -3790,7 +3790,7 @@ describe("chat thread asks Frapp instead of posting (#4713)", () => {
     expect(channel.send).not.toHaveBeenCalled();
     expect(channel.setDraft).not.toHaveBeenCalled();
     expect(composer(tree).props.disabledHint).toBe(
-      "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+      "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     );
     expect(composer(tree).props.hintTone).toBe("error");
     // The answer arrives: this member has no Ask. The line is no longer

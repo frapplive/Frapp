@@ -64,7 +64,7 @@ export function askChannelPostOffer(
 }
 
 /**
- * Posting an Ask Frapp answer to a channel (#4713, `spec/behavior/ai.md`
+ * Posting a Frapp Intelligence answer to a channel (#4713, `spec/behavior/ai.md`
  * § Posting an answer to the channel), shared by web and mobile. One call does both halves:
  * with `confirm` false it only asks what posting would warn about, and with
  * `confirm` true it posts, when `acknowledged` names every warning. A post
