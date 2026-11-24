@@ -65,6 +65,7 @@ export function useMyPoints(
 export function useLeaderboard(
   window?: PointWindow,
   semesterArchiveId?: string,
+  options?: { enabled?: boolean },
 ) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
@@ -81,7 +82,9 @@ export function useLeaderboard(
       return data;
     },
     staleTime: 30_000,
-    enabled: !!chapterId,
+    // Held by a list that shows points only while the module is on: the route
+    // is module-guarded, and a 403 there would fail the whole list.
+    enabled: (options?.enabled ?? true) && !!chapterId,
   });
 }
 

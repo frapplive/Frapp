@@ -2,6 +2,7 @@
 
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   InviteGlyph,
   SearchGlyph,
@@ -23,6 +24,7 @@ import {
   useRoleTiers,
   useRoles,
   useUpdateMemberRoles,
+  useViewerUserId,
 } from "@repo/hooks";
 import type { MemberProfile } from "@repo/hooks";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
@@ -36,6 +38,14 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilterChip, SortChip } from "@/components/shared/filter-chip";
+import { Badge } from "@/components/ui/badge";
+import {
+  DEFAULT_STANDINGS_WINDOW,
+  useDirectoryStandings,
+  type StandingsMetric,
+} from "@/components/members/use-directory-standings";
+import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
+import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { SectionLabel } from "@/components/shared/section-label";
 import { anyReadUncached } from "@/components/shared/async-states";
 /*
@@ -108,7 +118,7 @@ import {
 
 const PAGE_SIZE = 25;
 
-type SortKey = "name" | "role" | "points" | "order";
+type SortKey = "name" | "role" | "points" | "service" | "order";
 type SortDir = "asc" | "desc";
 
 /**
@@ -133,14 +143,26 @@ type SortDir = "asc" | "desc";
  * Frapp and not when they joined the chapter. The fraternal-order sort takes
  * their place for a chapter that keeps pledge classes or order numbers; it is
  * added in the component, because its label is the chapter's own word.
+ *
+ * **Standings are sorts** (#5950). "Most points", "Fewest points" and "Most
+ * service hours" rank the chapter over a period, this semester unless another
+ * is picked in the same menu, and each row then leads with its place. They
+ * are the leaderboards the Points and Service hours pages drew, on the list
+ * of members that was already here: standing is a fact about a person, read
+ * on the person. Each is offered only while its module is on.
  */
-const SORT_OPTIONS = [
+const BASE_SORT_OPTIONS = [
   { value: "name:asc", label: "Name A to Z" },
   { value: "name:desc", label: "Name Z to A" },
   { value: "role:asc", label: "Role A to Z" },
   { value: "role:desc", label: "Role Z to A" },
+] as const;
+const POINTS_SORT_OPTIONS = [
   { value: "points:desc", label: "Most points" },
   { value: "points:asc", label: "Fewest points" },
+] as const;
+const SERVICE_SORT_OPTIONS = [
+  { value: "service:desc", label: "Most service hours" },
 ] as const;
 
 /**
@@ -150,7 +172,17 @@ const SORT_OPTIONS = [
  */
 const ORDER_SORT = "order:asc";
 
-type SortValue = (typeof SORT_OPTIONS)[number]["value"] | typeof ORDER_SORT;
+type SortValue =
+  | (typeof BASE_SORT_OPTIONS)[number]["value"]
+  | (typeof POINTS_SORT_OPTIONS)[number]["value"]
+  | (typeof SERVICE_SORT_OPTIONS)[number]["value"]
+  | typeof ORDER_SORT;
+
+/** `/members?sort=points` (or `service`) opens on that standing. */
+const SORT_FROM_PARAM: Readonly<Record<string, SortValue>> = {
+  points: "points:desc",
+  service: "service:desc",
+};
 
 const DEFAULT_SORT: SortValue = "name:asc";
 
@@ -244,7 +276,24 @@ export function MembersDirectory() {
   const [statusFilter, setStatusFilter] = useState<"active" | "pending" | null>(
     null,
   );
-  const [sort, setSort] = useState<SortValue>(DEFAULT_SORT);
+  // A link to the standings ("#2 of 23 · Standings" on a member's own points)
+  // arrives as `?sort=points`; the sort is the member's to change from there.
+  const sortParam = useSearchParams().get(STANDINGS_SORT_PARAM);
+  const [sort, setSort] = useState<SortValue>(
+    () => SORT_FROM_PARAM[sortParam ?? ""] ?? DEFAULT_SORT,
+  );
+  const [standingsWindow, setStandingsWindow] = useState<string>(
+    DEFAULT_STANDINGS_WINDOW,
+  );
+  // A module that is off shows no figure and offers no standing (P5.8), and
+  // its board is never read: both routes are module-guarded. Unknown until
+  // the chapter's modules answer, so nothing is drawn and then taken away.
+  const moduleGate = useChapterModuleGateState();
+  const pointsOn =
+    moduleGate.status === "ready" && moduleGate.isModuleEnabled("points");
+  const hoursOn =
+    moduleGate.status === "ready" && moduleGate.isModuleEnabled("hours");
+  const viewerUserId = useViewerUserId();
   const [page, setPage] = useState(1);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [bulkRoleId, setBulkRoleId] = useState<string | null>(null);
@@ -273,7 +322,10 @@ export function MembersDirectory() {
   const classesQuery = usePledgeClasses();
   const searchQuery = useMemberSearch(deferredQuery);
   const rolesQuery = useRoles();
-  const leaderboardQuery = useLeaderboard();
+  // All-time points, the figure a row carries under any sort but a standing.
+  const leaderboardQuery = useLeaderboard(undefined, undefined, {
+    enabled: pointsOn,
+  });
   const updateRolesMutation = useUpdateMemberRoles();
   // Presence is chapter-wide and ephemeral (ADR-02) — it rides the Realtime
   // socket and touches no table, so this adds no query and no write. The
@@ -491,24 +543,36 @@ export function MembersDirectory() {
     classesQuery.data !== undefined &&
     usesFraternalOrder(pledgeClasses, membersQuery.data);
   const sortOptions = useMemo(
-    () =>
-      offersOrderSort
-        ? [
-            ...SORT_OPTIONS,
-            // The chapter's own word, as typed: "Fraternal order", "Roll number".
-            { value: ORDER_SORT, label: vocab("order", chapterWords) } as const,
-          ]
-        : SORT_OPTIONS,
-    [offersOrderSort, chapterWords],
+    (): readonly { value: SortValue; label: string }[] => [
+      ...BASE_SORT_OPTIONS,
+      ...(pointsOn ? POINTS_SORT_OPTIONS : []),
+      ...(hoursOn ? SERVICE_SORT_OPTIONS : []),
+      // The chapter's own word, as typed: "Fraternal order", "Roll number".
+      ...(offersOrderSort
+        ? [{ value: ORDER_SORT, label: vocab("order", chapterWords) } as const]
+        : []),
+    ],
+    [pointsOn, hoursOn, offersOrderSort, chapterWords],
   );
   // A sort the chapter no longer offers (its last class was deleted while the
-  // page was open) falls back to the default rather than ordering by nothing.
-  const effectiveSort: SortValue =
-    sort === ORDER_SORT && !offersOrderSort ? DEFAULT_SORT : sort;
+  // page was open, or a link names a standing whose module is off) falls back
+  // to the default rather than ordering by nothing.
+  const effectiveSort: SortValue = sortOptions.some((o) => o.value === sort)
+    ? sort
+    : DEFAULT_SORT;
   const { key: sortKey, dir: sortDir } = parseSort(effectiveSort);
+  // Under a standings sort the rows carry a place and the period's total.
+  const standingsMetric: StandingsMetric | null =
+    sortKey === "points" || sortKey === "service" ? sortKey : null;
+  const standings = useDirectoryStandings(standingsMetric, standingsWindow);
+  const standingsPeriodLabel =
+    standings.windowOptions.find((o) => o.value === standings.window)?.label ??
+    "";
 
   const pointsOf = (member: MemberProfile) =>
     pointsByUserId.get(member.user_id) ?? 0;
+  const standingTotalOf = (member: MemberProfile) =>
+    standings.totalOf(member.user_id);
   // `null` until presence has resolved for this chapter — the dot renders
   // nothing rather than claiming Offline, which would be a statement about the
   // member sourced from our own unfinished join.
@@ -601,7 +665,12 @@ export function MembersDirectory() {
     return [...filteredMembers].sort((a, b) => {
       switch (sortKey) {
         case "points":
-          return (pointsOf(a) - pointsOf(b)) * factor;
+        case "service":
+          // Ties fall back to the name, so a board tied at 0 reads in order.
+          return (
+            (standingTotalOf(a) - standingTotalOf(b)) * factor ||
+            displayNameOf(a).localeCompare(displayNameOf(b))
+          );
         case "order":
           return byFraternalOrder(a, b);
         case "role": {
@@ -632,6 +701,7 @@ export function MembersDirectory() {
     filteredMembers,
     sortKey,
     sortDir,
+    standings.totalOf,
     pointsByUserId,
     roleNameById,
     allRoles,
@@ -729,7 +799,15 @@ export function MembersDirectory() {
     const className = member.pledge_class_id
       ? (classNameById.get(member.pledge_class_id) ?? null)
       : null;
-    const points = pointsOf(member);
+    // The row's figure: the period's total and the member's place under a
+    // standings sort, else all-time points; nothing while Points is off.
+    const rank = standingsMetric ? standings.rankOf(member.user_id) : null;
+    const figure = standingsMetric
+      ? standings.figure(standingTotalOf(member))
+      : pointsOn
+        ? formatPoints(pointsOf(member))
+        : null;
+    const isViewer = viewerUserId !== null && member.user_id === viewerUserId;
     const status = presenceStatusOf(member);
     const customLine = customLineOf(member);
     // The member's reach, shown on the row only while the Phone app filter is
@@ -741,10 +819,13 @@ export function MembersDirectory() {
     const reachText = reach ? phoneReachStateLabel(reach.state) : null;
     const reachNote = reach ? phoneReachStaleNote(reach) : null;
     const label = [
-      name,
+      rank === null ? null : `ranked ${rank}`,
+      isViewer && rank !== null ? `${name}, you` : name,
       roleName,
       className,
-      `${points} points`,
+      rank === null || !figure
+        ? figure
+        : `${figure}, ${standingsPeriodLabel.toLowerCase()}`,
       joined ? `joined ${joined}` : null,
       member.email || null,
       customLine,
@@ -759,7 +840,9 @@ export function MembersDirectory() {
       roleName,
       joined,
       className,
-      points,
+      figure,
+      rank,
+      isViewer,
       status,
       customLine,
       reachText,
@@ -859,7 +942,14 @@ export function MembersDirectory() {
    * "looks healthy while quietly broken" state the comment on those guards
    * exists to prevent.
    */
-  if (isOffline && anyReadUncached(activeQuery, rolesQuery, leaderboardQuery)) {
+  if (
+    isOffline &&
+    anyReadUncached(
+      activeQuery,
+      rolesQuery,
+      ...(pointsOn ? [leaderboardQuery] : []),
+    )
+  ) {
     return (
       <NestedOffline
         sole
@@ -912,7 +1002,7 @@ export function MembersDirectory() {
     return <MembersRosterSkeleton />;
   }
 
-  if (rolesQuery.isError || leaderboardQuery.isError) {
+  if (rolesQuery.isError || (pointsOn && leaderboardQuery.isError)) {
     return (
       <NestedError
         sole
@@ -1049,10 +1139,24 @@ export function MembersDirectory() {
               }
             />
           ) : null}
+          {/*
+            A standings sort names its period on the chip and lists the
+            periods under the orders, in the same menu (#5950).
+          */}
           <SortChip
             options={sortOptions}
             value={effectiveSort}
             onChange={setSort}
+            detail={
+              standingsMetric
+                ? {
+                    label: "Period",
+                    options: standings.windowOptions,
+                    value: standings.window,
+                    onChange: setStandingsWindow,
+                  }
+                : undefined
+            }
           />
           {/*
           The route's primary action, at the trailing edge of the one toolbar
@@ -1125,8 +1229,17 @@ export function MembersDirectory() {
         </div>
       ) : null}
 
-      {activeQuery.isLoading ? (
+      {activeQuery.isLoading || standings.isLoading ? (
         <MemberRowsSkeleton />
+      ) : standings.isError ? (
+        // A standing whose board didn't load draws no rows: ranking the
+        // chapter at 0 would be a wrong answer, not a missing one. Every
+        // other sort still works from the menu above.
+        <NestedError
+          title="Couldn't load the standings"
+          description="The totals for this period didn't load, so nobody is ranked. Try again, or pick another sort."
+          onRetry={standings.refetch}
+        />
       ) : sortedMembers.length === 0 ? (
         /*
          * One line where the rows go, not a card (empty-states plan rule 7,
@@ -1239,7 +1352,9 @@ export function MembersDirectory() {
                   roleName,
                   joined,
                   className,
-                  points,
+                  figure,
+                  rank,
+                  isViewer,
                   status,
                   customLine,
                   reach,
@@ -1318,6 +1433,12 @@ export function MembersDirectory() {
                         FOCUS_RING_OFFSET,
                       )}
                     >
+                      {/* The member's place leads the row on a standing. */}
+                      {rank !== null ? (
+                        <span className="w-8 shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
+                          {`#${rank}`}
+                        </span>
+                      ) : null}
                       <div className="relative shrink-0">
                         <Avatar className="h-6 w-6">
                           {member.avatar_url ? (
@@ -1352,8 +1473,18 @@ export function MembersDirectory() {
                         both layouts, one muted caption line that truncates.
                       */}
                         <span className="flex min-w-0 flex-col @xl:flex-1">
-                          <span className="min-w-0 truncate text-sm font-semibold">
-                            {name}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 truncate text-sm font-semibold">
+                              {name}
+                            </span>
+                            {/* Your own row on a standing, so your place is
+                                found at a glance (Strava's and Duolingo's
+                                boards mark it the same way). */}
+                            {isViewer && rank !== null ? (
+                              <Badge variant="outline" className="shrink-0">
+                                You
+                              </Badge>
+                            ) : null}
                           </span>
                           <CustomStatusLine line={customLine} />
                         </span>
@@ -1394,9 +1525,20 @@ export function MembersDirectory() {
                           {reachText}
                         </span>
                       ) : null}
-                      <span className="shrink-0 text-caption tabular-nums text-muted">
-                        {formatPoints(points)}
-                      </span>
+                      {figure ? (
+                        <span
+                          className={cn(
+                            "shrink-0 text-caption tabular-nums",
+                            // The number is the point of a standing; under
+                            // any other sort it is one more muted fact.
+                            rank === null
+                              ? "text-muted"
+                              : "font-semibold text-foreground",
+                          )}
+                        >
+                          {figure}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -1469,7 +1611,7 @@ export function MembersDirectory() {
         onOpenChange={setDetailSheetOpen}
         userId={activeUserId}
         initialMember={activeMember}
-        points={activeMember ? pointsOf(activeMember) : null}
+        points={activeMember && pointsOn ? pointsOf(activeMember) : null}
         docked
         backLabel="Back to directory"
       />
