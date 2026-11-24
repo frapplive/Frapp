@@ -1038,7 +1038,7 @@ describe('ChatPushWorkerService', () => {
     expect(findByChapter).not.toHaveBeenCalled();
   });
 
-  it('exits on a posted Ask Frapp answer: no push, no notification, no roster read (#4713)', async () => {
+  it('exits on a posted Frapp Intelligence answer: no push, no notification, no roster read (#4713)', async () => {
     service.__setChannelForTest(ANNOUNCEMENT_CHANNEL);
     setMembers(['sender', 'a', 'b']);
 

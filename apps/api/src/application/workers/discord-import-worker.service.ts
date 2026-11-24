@@ -234,6 +234,9 @@ export interface ImportSweepResult {
  * in the repository rather than from deployment topology — the same reasoning
  * `ScheduledJobsModule` documents for `scheduled_notification_dispatches`.
  */
+/** How long an expired Discord handshake is kept, so its return still reads. */
+const OAUTH_STATE_KEEP_PAST_EXPIRY_MS = 24 * 60 * 60_000;
+
 @Injectable()
 export class DiscordImportWorkerService {
   private readonly logger = new Logger(DiscordImportWorkerService.name);
@@ -283,11 +286,18 @@ export class DiscordImportWorkerService {
    * depends on the rows being gone promptly: an expired state is already inert,
    * `consumeState` refuses it on `expires_at` regardless of whether it is still
    * on disk. This is housekeeping, not a control.
+   *
+   * A row is kept a day past its expiry (#5414): a callback that comes back
+   * after the handshake expired still reads where it was headed, so a phone
+   * that started a member's link gets its `expired` answer in the app rather
+   * than a web page its sign-in sheet can't close on.
    */
   @ReportedCron(CronExpression.EVERY_HOUR)
   async handleOAuthStateSweep(): Promise<void> {
     try {
-      const reaped = await this.connectionRepo.deleteExpiredStates(new Date());
+      const reaped = await this.connectionRepo.deleteExpiredStates(
+        new Date(Date.now() - OAUTH_STATE_KEEP_PAST_EXPIRY_MS),
+      );
       if (reaped > 0) {
         this.logger.log(`Reaped ${reaped} expired Discord OAuth handshakes.`);
       }

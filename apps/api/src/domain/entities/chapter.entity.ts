@@ -1,4 +1,4 @@
-import type { SubscriptionStatus } from '@repo/validation';
+import type { SubscriptionStatus, TenantKind } from '@repo/validation';
 
 /** `@repo/validation`'s, the one declaration the clients read too. */
 export type { SubscriptionStatus };
@@ -7,6 +7,13 @@ export interface Chapter {
   id: string;
   name: string;
   university: string;
+  /**
+   * The tenant kind (ADR-27, 20261123194106): a chapter or a council, both
+   * rows of this table. `not null default 'chapter'`. Optional here only
+   * because the narrower projections don't select it. Never derived from
+   * `org_archetype`.
+   */
+  kind?: TenantKind;
   stripe_customer_id: string | null;
   subscription_status: SubscriptionStatus;
   subscription_id: string | null;

@@ -35,7 +35,7 @@ import type { AskTool } from './ask-tool';
  * the question found, and counts no citation of it.
  */
 
-export const ASK_ANSWER_PROMPT_VERSION = 'ask.answer@v5';
+export const ASK_ANSWER_PROMPT_VERSION = 'ask.answer@v6';
 export const ASK_PLAN_PROMPT_VERSION = 'ask.plan@v3';
 
 /** Earlier questions shown to the planner and added to the search. */
@@ -96,7 +96,7 @@ export function titleStartsLike(title: string, reserved: string): boolean {
  */
 export function askAnswerSystem(today: string, askerKnown: boolean): string {
   return [
-    'You are Ask Frapp. You answer a member of a fraternity or sorority chapter about their own chapter.',
+    'You are Frapp Intelligence. You answer a member of a fraternity or sorority chapter about their own chapter.',
     'Answer only from the sources given with the question. Every claim must rest on a source. Never answer from general knowledge, and never guess.',
     'Say it in your own words. The app shows the member the exact words behind each claim, so do not copy sentences out of a source into the answer: quote only a few words, and only when the wording itself is what was asked about.',
     ...(askerKnown

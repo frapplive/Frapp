@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { LanguageModelMessage } from '#domain/adapters/language-model.interface';
 
 /**
- * Dictation cleanup's prompt (#5276, `spec/behavior/ai.md` § Ask Frapp,
+ * Dictation cleanup's prompt (#5276, `spec/behavior/ai.md` § Frapp Intelligence,
  * Dictation). Bump the version when its text changes: the version is
  * stamped on every ledger row and usage event.
  *

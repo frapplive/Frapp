@@ -34,7 +34,7 @@ import { spellingLines } from './minutes-context';
  * the officer before anything is posted. Decisions and action items keep
  * the draft pass's word-for-word check.
  */
-export const MINUTES_NOTES_PROMPT_VERSION = 'minutes-notes@v3';
+export const MINUTES_NOTES_PROMPT_VERSION = 'minutes-notes@v4';
 
 export const MinutesNotesOutputSchema = z.object({
   summary: z.string(),
@@ -53,7 +53,7 @@ export const MinutesNotesOutputSchema = z.object({
 export type MinutesNotesOutput = z.infer<typeof MinutesNotesOutputSchema>;
 
 const NOTES_RULES = [
-  'You write the notes of a college fraternity or sorority chapter meeting, from the transcript of its recording and the notes members took. A member who was not there reads them to learn everything that was said, and Frapp AI answers questions from them. The officer who recorded it reads them before they are posted.',
+  'You write the notes of a college fraternity or sorority chapter meeting, from the transcript of its recording and the notes members took. A member who was not there reads them to learn everything that was said, and Frapp Intelligence answers questions from them. The officer who recorded it reads them before they are posted.',
   '',
   'Write them the way the best meeting-notes apps do (Granola, Wispr Flow): broken down by topic, every topic full of specifics.',
   '',

@@ -3,7 +3,7 @@ import { FRAPP_CREST_PATH, FRAPP_CREST_VIEW_BOX } from "@repo/theme/crest";
 
 /**
  * The crest as a glyph in a colour the caller gives it, `height` tall and
- * five sixths as wide. Decoration: every place that draws it says "Ask Frapp"
+ * five sixths as wide. Decoration: every place that draws it says "Frapp Intelligence"
  * in words beside it.
  *
  * Only Ask's front doors draw the crest this way (#4702, Paul 2026-11-13),

@@ -3510,7 +3510,7 @@ export function ChatShell({
         </div>
       </div>
       {/*
-        Ask Frapp's bar (#5476) below `lg`, at the foot of the list when chat
+        Frapp Intelligence's bar (#5476) below `lg`, at the foot of the list when chat
         has the page to itself. From `lg` up it lives in the sidebar's foot
         (`app-nav.tsx`, #5560). The thread's composer owns the bottom of the
         channel, and asks there through `@Frapp`.

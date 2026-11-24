@@ -82,7 +82,7 @@ export function NudgeCard({
 }: {
   card: ActivityNudge;
   tray: readonly ActivityNudge[];
-  /** Ask Frapp is on for this member. Off: no "Ask about this". */
+  /** Frapp Intelligence is on for this member. Off: no "Ask about this". */
   canAsk: boolean;
   onOpen: (item: ActivityNudge) => void;
   onAsk: (item: ActivityNudge) => void;

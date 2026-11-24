@@ -66,4 +66,5 @@ export * from './service-entry.entity';
 export * from './stripe-webhook-event.entity';
 export * from './study.entity';
 export * from './task.entity';
+export * from './tenant-slug.entity';
 export * from './user.entity';

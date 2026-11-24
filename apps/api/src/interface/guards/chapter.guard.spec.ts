@@ -20,6 +20,7 @@ import {
   SUBSCRIPTION_GRACE_BLOCKED_KEY,
 } from '../decorators/subscription.decorator';
 import { REQUIRED_MODULE_KEY } from '../decorators/module.decorator';
+import { TENANT_KINDS_KEY } from '../decorators/tenant-kinds.decorator';
 import { moduleRefusalFromServerMessage } from '@repo/validation';
 import type { SubscriptionStatus } from '#domain/entities/chapter.entity';
 import * as Sentry from '@sentry/nestjs';
@@ -81,6 +82,8 @@ describe('ChapterGuard', () => {
       subscription_status: SubscriptionStatus;
       past_due_since?: string | null;
       enabled_modules?: Record<string, boolean> | null;
+      /** `chapters.kind`; `chapter` when left out, as the column defaults. */
+      kind?: string;
     } | null;
     /** Rows returned by the auto-resolve lookup (`.eq(user_id).limit(2)`). */
     memberships?: Array<{
@@ -92,10 +95,15 @@ describe('ChapterGuard', () => {
     let callCount = 0;
     const selectArgs: Record<string, string[]> = {};
     const isArgs: Record<string, Array<[string, unknown]>> = {};
+    const eqArgs: Record<string, Array<[string, unknown]>> = {};
     mockFrom.mockImplementation((table: string) => {
       callCount++;
       const data =
-        table === 'users' ? appUser : table === 'members' ? member : chapter;
+        table === 'users'
+          ? appUser
+          : table === 'members'
+            ? member
+            : chapter && { kind: 'chapter', ...chapter };
       const eqMock: jest.Mock = jest.fn();
       const error = errors[table as 'users' | 'members' | 'chapters'];
       const maybeSingle = jest
@@ -117,7 +125,10 @@ describe('ChapterGuard', () => {
         (isArgs[table] ??= []).push([column, value]);
         return { maybeSingle };
       });
-      eqMock.mockReturnValue({ eq: eqMock, is: isMock, maybeSingle, limit });
+      eqMock.mockImplementation((column: string, value: unknown) => {
+        (eqArgs[table] ??= []).push([column, value]);
+        return { eq: eqMock, is: isMock, maybeSingle, limit };
+      });
       return {
         select: jest.fn().mockImplementation((columns: string) => {
           (selectArgs[table] ??= []).push(columns);
@@ -125,7 +136,7 @@ describe('ChapterGuard', () => {
         }),
       };
     });
-    return { callCount: () => callCount, selectArgs, isArgs };
+    return { callCount: () => callCount, selectArgs, isArgs, eqArgs };
   };
 
   beforeEach(async () => {
@@ -146,9 +157,9 @@ describe('ChapterGuard', () => {
     reflector = module.get(Reflector);
   });
 
-  // spec/behavior/multi-tenancy.md: "the JWT claim is authoritative; the
-  // `x-chapter-id` request header is accepted only as a fallback ... the header
-  // never overrides the JWT."
+  // ADR-27 decision 3 (#5918): an explicit `x-chapter-id` header is
+  // authoritative and the JWT claim is a default. The membership check on the
+  // resolved chapter is the tenant boundary either way.
   describe('chapter context resolution', () => {
     const membership = (chapterId: string) => ({
       id: `member-${chapterId}`,
@@ -156,8 +167,35 @@ describe('ChapterGuard', () => {
       chapter_id: chapterId,
     });
 
-    it('rejects a header that disagrees with the JWT claim (chapter.context.mismatch)', async () => {
-      mockSupabaseChain({ appUser: { id: 'user-1' } });
+    it('serves the header’s chapter when it disagrees with the JWT claim', async () => {
+      const { eqArgs } = mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active' },
+      });
+      const request = buildRequest({
+        headers: { 'x-chapter-id': 'abcdef00-0000-4000-8000-0000000000aa' },
+        jwtClaims: {
+          active_chapter_id: 'bcdef000-0000-4000-8000-0000000000bb',
+        },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).resolves.toBe(true);
+      expect(request.chapterId).toBe('abcdef00-0000-4000-8000-0000000000aa');
+      // The membership checked is the header's chapter's, not the claim's.
+      expect(eqArgs.members).toContainEqual([
+        'chapter_id',
+        'abcdef00-0000-4000-8000-0000000000aa',
+      ]);
+      expect(JSON.stringify(eqArgs)).not.toContain(
+        'bcdef000-0000-4000-8000-0000000000bb',
+      );
+    });
+
+    it('refuses the header’s chapter for a non-member whatever the claim says', async () => {
+      mockSupabaseChain({ appUser: { id: 'user-1' }, member: null });
       const ctx = mockExecutionContext(
         buildRequest({
           headers: { 'x-chapter-id': 'abcdef00-0000-4000-8000-0000000000aa' },
@@ -168,7 +206,7 @@ describe('ChapterGuard', () => {
       );
 
       await expect(guard.canActivate(ctx)).rejects.toMatchObject({
-        response: { code: 'chapter.context.mismatch' },
+        response: { code: 'chapter.context.invalid' },
         status: 403,
       });
     });
@@ -343,11 +381,30 @@ describe('ChapterGuard', () => {
       expect(request.chapterId).toBe('cdef0000-0000-4000-8000-0000000000cc');
     });
 
-    it('still rejects a header and JWT claim that disagree beyond case (chapter.context.mismatch)', async () => {
+    it('lowercases an uppercase header that disagrees with the claim, and serves it', async () => {
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active' },
+      });
+      const request = buildRequest({
+        headers: { 'x-chapter-id': 'ABCDEF00-0000-4000-8000-0000000000AA' },
+        jwtClaims: {
+          active_chapter_id: 'bcdef000-0000-4000-8000-0000000000bb',
+        },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).resolves.toBe(true);
+      expect(request.chapterId).toBe('abcdef00-0000-4000-8000-0000000000aa');
+    });
+
+    it('refuses a malformed header even when the claim is a good chapter', async () => {
       mockSupabaseChain({ appUser: { id: 'user-1' } });
       const ctx = mockExecutionContext(
         buildRequest({
-          headers: { 'x-chapter-id': 'ABCDEF00-0000-4000-8000-0000000000AA' },
+          headers: { 'x-chapter-id': 'not-a-uuid' },
           jwtClaims: {
             active_chapter_id: 'bcdef000-0000-4000-8000-0000000000bb',
           },
@@ -355,9 +412,111 @@ describe('ChapterGuard', () => {
       );
 
       await expect(guard.canActivate(ctx)).rejects.toMatchObject({
-        response: { code: 'chapter.context.mismatch' },
+        response: { code: 'chapter.context.invalid' },
         status: 403,
       });
+    });
+
+    it('falls back to the claim when the header is empty', async () => {
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active' },
+      });
+      const request = buildRequest({
+        headers: { 'x-chapter-id': '' },
+        jwtClaims: {
+          active_chapter_id: 'bcdef000-0000-4000-8000-0000000000bb',
+        },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).resolves.toBe(true);
+      expect(request.chapterId).toBe('bcdef000-0000-4000-8000-0000000000bb');
+    });
+  });
+
+  // ADR-27 decision 3: a route serves the tenant kinds it declares, `chapter`
+  // alone by default, and refuses another kind as it refuses a non-member.
+  describe('tenant kind', () => {
+    const withKinds = (kinds: string[] | undefined) =>
+      jest
+        .spyOn(reflector, 'getAllAndOverride')
+        .mockImplementation(((key: string) =>
+          key === TENANT_KINDS_KEY ? kinds : undefined) as never);
+
+    it('refuses a council tenant on an undecorated route, as a non-member', async () => {
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'canceled', kind: 'council' },
+      });
+      const request = buildRequest({ method: 'POST' });
+
+      // Canceled and a write: a kind check after the subscription check would
+      // answer `chapter.subscription.canceled` and give the tenant away.
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).rejects.toMatchObject({
+        response: { code: 'chapter.context.invalid' },
+        status: 403,
+      });
+      expect(request.chapterId).toBeUndefined();
+    });
+
+    it('serves a council tenant on a council route', async () => {
+      withKinds(['council']);
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active', kind: 'council' },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(buildRequest())),
+      ).resolves.toBe(true);
+    });
+
+    it('refuses a chapter tenant on a council route', async () => {
+      withKinds(['council']);
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active', kind: 'chapter' },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(buildRequest())),
+      ).rejects.toMatchObject({
+        response: { code: 'chapter.context.invalid' },
+        status: 403,
+      });
+    });
+
+    it('serves either kind on a route that declares both', async () => {
+      withKinds(['chapter', 'council']);
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active', kind: 'council' },
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(buildRequest())),
+      ).resolves.toBe(true);
+    });
+
+    it('selects kind in the chapter projection', async () => {
+      const { selectArgs } = mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        member: { id: 'member-1', role_ids: [] },
+        chapter: { subscription_status: 'active' },
+      });
+
+      await guard.canActivate(mockExecutionContext(buildRequest()));
+
+      expect(selectArgs['chapters']?.[0]).toContain('kind');
     });
   });
 
@@ -1081,7 +1240,7 @@ describe('ChapterGuard', () => {
                 data:
                   table === 'members'
                     ? { id: 'member-1', role_ids: [] }
-                    : { subscription_status: 'active' },
+                    : { subscription_status: 'active', kind: 'chapter' },
                 error: null,
               });
         const eq: jest.Mock = jest.fn();
@@ -1151,7 +1310,7 @@ describe('ChapterGuard', () => {
             });
           }
           return Promise.resolve({
-            data: { subscription_status: 'active' },
+            data: { subscription_status: 'active', kind: 'chapter' },
             error: null,
           });
         });
@@ -1195,14 +1354,11 @@ describe('ChapterGuard', () => {
       ]);
     });
 
-    it('still reports a missing profile before a mismatched chapter', async () => {
+    it('still reports a missing profile before a malformed chapter', async () => {
       mockSupabaseChain({ appUser: null });
       const ctx = mockExecutionContext(
         buildRequest({
-          headers: { 'x-chapter-id': 'abcdef00-0000-4000-8000-0000000000aa' },
-          jwtClaims: {
-            active_chapter_id: 'bcdef000-0000-4000-8000-0000000000bb',
-          },
+          headers: { 'x-chapter-id': 'not-a-uuid' },
         }),
       );
 
@@ -1219,7 +1375,11 @@ describe('ChapterGuard', () => {
 
     const CONTEXT = {
       user: { id: 'user-p' },
-      chapter: { subscription_status: 'active', enabled_modules: null },
+      chapter: {
+        subscription_status: 'active',
+        enabled_modules: null,
+        kind: 'chapter',
+      },
       member: {
         id: 'member-p',
         user_id: 'user-p',
@@ -1257,7 +1417,11 @@ describe('ChapterGuard', () => {
                     : 'user-p',
               }
             : table === 'chapters'
-              ? { subscription_status: 'active', enabled_modules: null }
+              ? {
+                  subscription_status: 'active',
+                  enabled_modules: null,
+                  kind: 'chapter',
+                }
               : table === 'members'
                 ? filters.user_id === 'user-real'
                   ? { id: 'member-real', role_ids: ['role-p'] }
@@ -1386,6 +1550,35 @@ describe('ChapterGuard', () => {
         level: 'warning',
         fingerprint: ['get_request_context-failed'],
       });
+    });
+
+    // A `get_request_context` from before 20261123194106 has no `kind`. The
+    // guard must not serve a tenant whose kind it can't check, so that answer
+    // counts as no answer and the rows are read directly, `kind` included.
+    // After the Sentry case above: this answer is reported too, and the
+    // report is throttled per process.
+    it('reads the chapter itself when the call’s chapter carries no kind', async () => {
+      const { reads, client } = tables({
+        data: {
+          ...CONTEXT,
+          chapter: { subscription_status: 'active', enabled_modules: null },
+        },
+        error: null,
+      });
+      const req = request('auth-p9');
+
+      await runWithRequestReads('GET', async () => {
+        prefetchChapterContext(client, 'auth-p9', undefined, req.headers);
+        await settle();
+
+        await expect(
+          guard.canActivate(mockExecutionContext(req)),
+        ).resolves.toBe(true);
+      });
+
+      expect(reads[0]).toBe('rpc:get_request_context');
+      expect(reads).toContain('chapters');
+      expect(req.chapterId).toBe(CHAPTER);
     });
 
     it.each([

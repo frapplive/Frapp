@@ -51,7 +51,7 @@ import { RbacModule } from '../rbac/rbac.module';
 import { TaskModule } from '../task/task.module';
 
 /**
- * Ask Frapp (#450, #451) and its beta diagnostics window (#4315).
+ * Frapp Intelligence (#450, #451) and its beta diagnostics window (#4315).
  *
  * A new live-data tool is a class added to `ASK_TOOL_CLASSES`
  * (`ask-tools.ts`), which is the whole of what `ASK_TOOLS` provides. The list

@@ -69,7 +69,7 @@ import {
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { messageReminderPresetTime } from "@repo/hooks/use-message-reminders";
-import { can, isModuleEnabled } from "@repo/validation";
+import { can, isModuleEnabled, SECTION_NAMES } from "@repo/validation";
 import {
   ActivityFaces,
   ActivityListRow,
@@ -672,7 +672,7 @@ export default function ActivityScreen() {
     <ActivityFaces.Provider value={faceFor}>
       <ActivityRowMenuContext.Provider value={rowMenu.menuFor}>
         <ScreenShell
-          title="Activity"
+          title={SECTION_NAMES.activity}
           refresh={refresh}
           headerAction={
             ring || board ? (

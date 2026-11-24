@@ -186,6 +186,7 @@ function load(permissions: string[]) {
     {} as never,
     audiences as never,
     openTaskRepo,
+    {} as never,
   );
   // Every other read the page makes, one PostgREST request each, except a
   // read by ids given none, which the repositories answer without a request.

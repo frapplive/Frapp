@@ -21,7 +21,7 @@ import {
  * ## What the API actually emits
  *
  * Grepping `category: '…'` across `apps/api/src` yields the notification
- * categories (beside Ask Frapp's unrelated safety ones), and the recap push
+ * categories (beside Frapp Intelligence's unrelated safety ones), and the recap push
  * names its own, `recap`, through `RECAP_NOTIFICATION_CATEGORY` (#4985).
  * Seven are here. The chat reminder's `reminder` answers a reminder the member
  * set themselves, so it has no switch. Three more are deliberately absent:

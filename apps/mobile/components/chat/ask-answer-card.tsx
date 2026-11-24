@@ -13,7 +13,7 @@ import {
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * An Ask Frapp answer its asker posted to the channel (`kind: 'ask_answer'`,
+ * A Frapp Intelligence answer its asker posted to the channel (`kind: 'ask_answer'`,
  * #4713, `spec/behavior/ai.md` § Posting an answer to the channel). Web's twin is
  * `apps/web/components/chat/renderers/ask-answer-card.tsx`, which says what
  * it is modelled on.

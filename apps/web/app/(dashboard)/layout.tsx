@@ -67,7 +67,7 @@ export default async function DashboardLayout({
       */}
       <ChapterAccentStyle paint={accentPaint} />
       {/*
-        Ask Frapp's conversation is owned out here, above the shell, so it is
+        Frapp Intelligence's conversation is owned out here, above the shell, so it is
         the same thread in every channel and is still there after a tool page
         covered the chat (`components/ask/ask-host.tsx`).
       */}

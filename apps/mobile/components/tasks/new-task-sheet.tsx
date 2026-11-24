@@ -192,7 +192,7 @@ export interface NewTaskSheetProps {
    * creates it. Who it is for starts empty when the meeting named nobody, never
    * on the viewer: a wrong owner is worse than none. Points, proof and From
    * are left out for a task suggested from minutes, which carries none, and
-   * offered for an Ask Frapp card (`full`, 2026-11-22), the officer's own
+   * offered for a Frapp Intelligence card (`full`, 2026-11-22), the officer's own
    * request. The host mounts one sheet per suggestion (`key` on its id).
    */
   suggestion?: TaskSuggestionSeed;
@@ -258,7 +258,7 @@ export interface TaskSuggestionSeed {
   subtasks: readonly string[];
   /**
    * The rest of the task form, offered (2026-11-22): points, proof and
-   * From, opening on what the card proposed. Ask Frapp's cards set it; a
+   * From, opening on what the card proposed. Frapp Intelligence's cards set it; a
    * task suggested from minutes doesn't.
    */
   full?: boolean;

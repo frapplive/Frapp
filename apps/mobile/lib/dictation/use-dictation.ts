@@ -26,7 +26,7 @@ import {
  * Phases: `idle`, `listening` (the recogniser is on, words and level arrive)
  * and `cleaning` (the words are with Frapp's AI for about a second). The
  * cleanup is the caller's `clean`, which resolves the tidied text or `null`;
- * `null`, a timeout or no Frapp AI all leave the words as heard.
+ * `null`, a timeout or no Frapp Intelligence all leave the words as heard.
  *
  * **The fast values live outside React state.** The level arrives every
  * 60 ms, so it, the words and the clock are kept in {@link DictationLive}, a
