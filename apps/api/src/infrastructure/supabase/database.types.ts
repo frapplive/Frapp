@@ -824,7 +824,7 @@ export interface Database {
         Returns: number;
       };
       /**
-       * `20261124061638` (#5949). Files a meeting's posted minutes as a
+       * `20261124222254` (#5949). Files a meeting's posted minutes as a
        * `chapter_documents` row, or follows its name when filed already;
        * `null` when the minutes aren't the chapter's or aren't posted.
        */
@@ -833,7 +833,7 @@ export interface Database {
         Returns: string | null;
       };
       /**
-       * `20261124061638` (#5949). Files up to `p_limit` posted minutes that
+       * `20261124222254` (#5949). Files up to `p_limit` posted minutes that
        * have no row yet, in every chapter; returns how many it filed.
        */
       file_unfiled_minutes: {
