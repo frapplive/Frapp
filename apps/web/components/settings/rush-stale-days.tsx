@@ -46,54 +46,87 @@ export function RushStaleDays({
 
 function StaleDaysRow({ staleDays }: { staleDays: number }) {
   const save = useSaveRushSettings();
+  return (
+    <RushDaysRow
+      days={staleDays}
+      min={RUSH_STALE_DAYS_MIN}
+      max={RUSH_STALE_DAYS_MAX}
+      label="Needs follow-up after"
+      description="Days without a logged contact"
+      ariaLabel="Days without a logged contact before a prospect needs follow-up"
+      failTitle="Couldn't save the follow-up days"
+      onSave={(days, done) => save.mutate({ stale_days: days }, done)}
+    />
+  );
+}
+
+/**
+ * A recruitment setting that is a number of days (#5934's stale days, #5973's
+ * bid days): typed, saved on Enter or leaving the field with a quiet "Saved",
+ * Escape putting the old one back (rulebook § 9, settings save on their own),
+ * and a number outside the range said under the label.
+ */
+export function RushDaysRow({
+  days,
+  min,
+  max,
+  label,
+  description,
+  ariaLabel,
+  failTitle,
+  onSave,
+}: {
+  days: number;
+  min: number;
+  max: number;
+  label: string;
+  description: string;
+  ariaLabel: string;
+  failTitle: string;
+  onSave: (
+    days: number,
+    done: { onSuccess: () => void; onError: (error: unknown) => void },
+  ) => void;
+}) {
   const inputId = useId();
   const errorId = useId();
-  const [text, setText] = useState(String(staleDays));
+  const [text, setText] = useState(String(days));
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // A value saved from elsewhere (another officer, the phone) replaces what
   // the field shows; set during render, React's pattern for state that
   // follows a prop.
-  const [shownFor, setShownFor] = useState(staleDays);
-  if (shownFor !== staleDays) {
-    setShownFor(staleDays);
-    setText(String(staleDays));
+  const [shownFor, setShownFor] = useState(days);
+  if (shownFor !== days) {
+    setShownFor(days);
+    setText(String(days));
   }
 
   function commit() {
     const trimmed = text.trim();
-    const days = Number(trimmed);
-    if (
-      !/^\d+$/.test(trimmed) ||
-      days < RUSH_STALE_DAYS_MIN ||
-      days > RUSH_STALE_DAYS_MAX
-    ) {
-      setProblem(
-        `Pick from ${RUSH_STALE_DAYS_MIN} to ${RUSH_STALE_DAYS_MAX} days.`,
-      );
+    const next = Number(trimmed);
+    if (!/^\d+$/.test(trimmed) || next < min || next > max) {
+      setProblem(`Pick from ${min} to ${max} days.`);
       return;
     }
     setProblem(null);
-    if (days === staleDays) return;
-    save.mutate(
-      { stale_days: days },
-      {
-        onSuccess: () => setSaved(true),
-        onError: (error) => {
-          setText(String(staleDays));
-          toastFailure({
-            title: "Couldn't save the follow-up days",
-            error,
-            fallback: "Retry in a moment.",
-          });
-        },
+    if (next === days) return;
+    onSave(next, {
+      onSuccess: () => setSaved(true),
+      onError: (error) => {
+        setText(String(days));
+        toastFailure({
+          title: failTitle,
+          error,
+          fallback: "Retry in a moment.",
+        });
       },
-    );
+    });
   }
 
   return (
     <SettingsRow
-      label="Needs follow-up after"
+      label={label}
       description={
         problem ? (
           <span id={errorId} role="alert" className="text-destructive-text">
@@ -102,7 +135,7 @@ function StaleDaysRow({ staleDays }: { staleDays: number }) {
         ) : saved ? (
           "Saved"
         ) : (
-          "Days without a logged contact"
+          description
         )
       }
       control={
@@ -113,7 +146,7 @@ function StaleDaysRow({ staleDays }: { staleDays: number }) {
             inputMode="numeric"
             autoComplete="off"
             maxLength={2}
-            aria-label="Days without a logged contact before a prospect needs follow-up"
+            aria-label={ariaLabel}
             aria-invalid={problem ? true : undefined}
             aria-describedby={problem ? errorId : undefined}
             onChange={(event) => {
@@ -127,7 +160,7 @@ function StaleDaysRow({ staleDays }: { staleDays: number }) {
                 commit();
               } else if (event.key === "Escape") {
                 event.preventDefault();
-                setText(String(staleDays));
+                setText(String(days));
                 setProblem(null);
               }
             }}

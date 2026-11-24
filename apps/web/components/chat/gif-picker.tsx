@@ -9,7 +9,7 @@ import {
 } from "@repo/hooks";
 import { Button } from "@/components/ui/button";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { StarGlyph } from "@/components/documents/resources-glyphs";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
@@ -208,10 +208,9 @@ export function GifPickerPanel({
       style={{ width: PANEL_WIDTH, height: PANEL_HEIGHT }}
     >
       <div className="flex flex-col gap-2 p-2">
-        <SegmentedChoice
+        <ViewLabels
+          flush
           label="GIFs"
-          fill
-          dense
           options={[
             { value: "search", label: "Search" },
             { value: "favorites", label: "Favorites" },

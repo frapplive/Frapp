@@ -180,7 +180,9 @@ export function FrappLinkRows({
         return (
           <View key={link.id} style={styles.line}>
             <Pressable
-              accessibilityRole={link.kind === "link" ? "link" : "button"}
+              accessibilityRole={
+                link.kind === "link" ? (row.opens ? "link" : "text") : "button"
+              }
               accessibilityLabel={
                 row.detail ? `${row.name}, ${row.detail}` : row.name
               }
@@ -220,7 +222,9 @@ export function FrappLinkRows({
             {canEdit ? (
               <IconButton
                 label={
-                  row.opens
+                  // A web link keeps its title even when it doesn't open
+                  // (#5883); only a record's name can be unreadable.
+                  row.opens || link.kind === "link"
                     ? FRAPP_LINK_COPY.remove(row.name)
                     : FRAPP_LINK_COPY.removeUnnamed(
                         FRAPP_LINK_COPY.kindNames[

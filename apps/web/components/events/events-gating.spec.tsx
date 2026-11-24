@@ -108,7 +108,7 @@ const autoAbsentButton = () =>
 // One status chip a row, web's value picker (`Select`), since 2026-11-22.
 const rowStatusSelect = () =>
   screen.getByRole("combobox", { name: /attendance for alice adams/i });
-const statusFilter = () => screen.getByRole("radiogroup", { name: "Show" });
+const statusFilter = () => screen.getByRole("tablist", { name: "Show" });
 
 describe("EventEditorDialog subscription gating", () => {
   beforeEach(() => vi.clearAllMocks());

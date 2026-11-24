@@ -5,6 +5,7 @@ import {
   RUSH_CONTACT_KIND_PAST,
   formatRushDay,
   isRushCandidateStale,
+  isRushWorkOpen,
   isRushFollowUpForViewer,
   rushStaleOn,
 } from "@repo/validation";
@@ -22,6 +23,7 @@ import {
 type WorkCandidate = Pick<
   RushPipelineCandidate,
   | "closed_reason"
+  | "bid_state"
   | "created_at"
   | "last_contact_on"
   | "last_contact_by_name"
@@ -92,14 +94,18 @@ export type RushRowMark = {
 export function rushRowMark(
   candidate: Pick<
     WorkCandidate,
-    "closed_reason" | "created_at" | "last_contact_on" | "follow_up_on"
+    | "closed_reason"
+    | "bid_state"
+    | "created_at"
+    | "last_contact_on"
+    | "follow_up_on"
   >,
   staleDays: number,
   today: string,
   /** In a Closed stage, which a board knows by its column. */
   closed = false,
 ): RushRowMark | null {
-  if (closed || candidate.closed_reason != null) return null;
+  if (closed || !isRushWorkOpen(candidate)) return null;
   if (candidate.follow_up_on) {
     return {
       label: `Follow-up ${rushDayInSentence(candidate.follow_up_on, today)}`,

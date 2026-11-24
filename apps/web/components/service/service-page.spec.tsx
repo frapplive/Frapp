@@ -1176,8 +1176,8 @@ describe("ServiceHoursPage your own hours and the leaderboard (#4669)", () => {
     ];
     render(<ServiceHoursPage />);
 
-    expect(screen.getByRole("radio", { name: "This semester" })).toBeChecked();
-    await user.click(screen.getByRole("radio", { name: "All time" }));
+    expect(screen.getByRole("tab", { name: "This semester" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: "All time" }));
     expect(mockLeaderboard).toHaveBeenLastCalledWith({}, { enabled: true });
   });
 

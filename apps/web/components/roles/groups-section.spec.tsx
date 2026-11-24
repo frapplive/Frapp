@@ -18,6 +18,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateGroup: () => ({ mutateAsync: mockUpdate, isPending: false }),
   useSetGroupMembers: () => ({ mutateAsync: mockSetMembers, isPending: false }),
   useDeleteGroup: () => ({ mutateAsync: mockDelete, isPending: false }),
+  useChapterRoleColors: () => [],
+  useViewerDisplayName: () => "Me",
 }));
 
 vi.mock("@/lib/hooks/use-toast", () => ({

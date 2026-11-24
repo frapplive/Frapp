@@ -203,6 +203,7 @@ describe('InviteService', () => {
     mockEmailProvider = {
       sendInviteEmail: jest.fn().mockResolvedValue(true),
       sendSchoolCodeEmail: jest.fn().mockResolvedValue(true),
+      sendBidConfirmEmail: jest.fn().mockResolvedValue(true),
     };
     mockConfig = { get: jest.fn().mockReturnValue(undefined) };
 
@@ -2595,6 +2596,70 @@ describe('InviteService', () => {
   // #4071, #1830 (Paul, 2026-11-16): an invite grants only a role ranked
   // below the inviter, and never the President's, checked at create and
   // again at redeem.
+  // #5973: an accepted PNM's invite goes out as from someone the redeem will
+  // accept as its sender, or not at all.
+  describe('createForAcceptedProspect', () => {
+    beforeEach(() => {
+      mockRoleRepo.findByChapter.mockResolvedValue(tieredChapterRoles());
+      mockRoleRepo.findByIds.mockImplementation((ids: string[]) =>
+        Promise.resolve(tieredChapterRoles().filter((r) => ids.includes(r.id))),
+      );
+      mockRbac.getRankContext.mockImplementation((_c: string, userId: string) =>
+        Promise.resolve(tieredRankContext(userId)),
+      );
+      mockInviteRepo.createMany.mockImplementation((rows: Partial<Invite>[]) =>
+        Promise.resolve(
+          rows.map((row, i) => ({ ...row, id: `inv-${i}` }) as Invite),
+        ),
+      );
+    });
+
+    it('skips a sender who may not invite, and sends as the first who may', async () => {
+      const sent = await service.createForAcceptedProspect({
+        chapterId: CHAPTER_ID,
+        senders: [USER.brother, USER.riskChair],
+        roleId: 'role-pledge',
+        email: 'Jake@RPI.edu',
+      });
+      expect(sent).toBe(true);
+      expect(mockInviteRepo.createEmailed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdBy: USER.riskChair,
+          invites: [
+            expect.objectContaining({
+              email: 'jake@rpi.edu',
+              role: 'Associate',
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('sends nothing when no sender may invite into the role', async () => {
+      await expect(
+        service.createForAcceptedProspect({
+          chapterId: CHAPTER_ID,
+          senders: [USER.brother],
+          roleId: 'role-pledge',
+          email: 'jake@rpi.edu',
+        }),
+      ).resolves.toBe(false);
+      expect(mockInviteRepo.createEmailed).not.toHaveBeenCalled();
+      expect(mockEmailProvider.sendInviteEmail).not.toHaveBeenCalled();
+    });
+
+    it('never invites into a role that holds everything', async () => {
+      await expect(
+        service.createForAcceptedProspect({
+          chapterId: CHAPTER_ID,
+          senders: [USER.president],
+          roleId: 'role-president',
+          email: 'jake@rpi.edu',
+        }),
+      ).resolves.toBe(false);
+    });
+  });
+
   describe('invite role rank rule', () => {
     beforeEach(() => {
       mockRoleRepo.findByChapter.mockResolvedValue(tieredChapterRoles());

@@ -2,7 +2,11 @@ import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { EventAgendaItem, EventAttachment } from "@repo/validation";
+import {
+  FRAPP_LINK_NOT_PUBLIC_MESSAGE,
+  type EventAgendaItem,
+  type EventAttachment,
+} from "@repo/validation";
 
 /**
  * An event's agenda and attachments on its sheet (#4934): read by everyone
@@ -411,6 +415,48 @@ describe("EventAttachmentsSection", () => {
         title: "docs.example.com",
       }),
     ]);
+  });
+
+  it.each(["https://test", "http://localhost:3000", "https://192.168.1.20"])(
+    "refuses a link to %s, which no phone can open, saying why (#5883)",
+    async (url) => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <EventAttachmentsSection
+          attachments={[]}
+          canEdit
+          documentsOn={false}
+          onChange={onChange}
+        />,
+      );
+      await user.click(screen.getByRole("button", { name: "Attach" }));
+      await user.type(screen.getByRole("textbox", { name: "Attach" }), url);
+      await user.click(screen.getByRole("button", { name: "Add link" }));
+      expect(
+        screen.getByText(FRAPP_LINK_NOT_PUBLIC_MESSAGE),
+      ).toBeInTheDocument();
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("draws a stored link no phone can open as text, still removable (#5883)", () => {
+    render(
+      <EventAttachmentsSection
+        attachments={[
+          { id: "x9", kind: "link", url: "https://test", title: "Old notes" },
+        ]}
+        canEdit
+        documentsOn
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("Old notes")).toBeInTheDocument();
+    expect(screen.getByText("test · not a working link")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: 'Remove "Old notes"' }),
+    ).toBeInTheDocument();
   });
 
   it("attaches the record a pasted Frapp address names", async () => {

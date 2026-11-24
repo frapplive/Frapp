@@ -172,7 +172,7 @@ describe("WhoPicker", () => {
     );
     await openPicker();
     await userEvent.click(
-      screen.getByRole("radio", { name: "Roles and groups" }),
+      screen.getByRole("tab", { name: "Roles and groups" }),
     );
     await userEvent.click(
       screen.getByRole("checkbox", { name: /Recruitment Committee/ }),
@@ -193,8 +193,8 @@ describe("WhoPicker", () => {
 
     // A role pick opens on Roles and groups.
     expect(
-      screen.getByRole("radio", { name: "Roles and groups" }),
-    ).toHaveAttribute("aria-checked", "true");
+      screen.getByRole("tab", { name: "Roles and groups" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /^Exec board/ })).toHaveAttribute(
       "aria-expanded",
       "true",
@@ -220,7 +220,7 @@ describe("WhoPicker", () => {
     render(<Harness onChange={onChange} />);
     await openPicker();
     await userEvent.click(
-      screen.getByRole("radio", { name: "Roles and groups" }),
+      screen.getByRole("tab", { name: "Roles and groups" }),
     );
 
     const list = screen.getByRole("list", { name: "Exec board" });
@@ -238,7 +238,7 @@ describe("WhoPicker", () => {
     render(<Harness />);
     await openPicker();
     await userEvent.click(
-      screen.getByRole("radio", { name: "Roles and groups" }),
+      screen.getByRole("tab", { name: "Roles and groups" }),
     );
     // Chairs holds one role, Recruitment Committee: picking it is the role.
     const chairs = screen.getByRole("list", { name: "Chairs" });
@@ -265,7 +265,7 @@ describe("WhoPicker", () => {
     render(<Harness />);
     await openPicker();
     await userEvent.click(
-      screen.getByRole("radio", { name: "Roles and groups" }),
+      screen.getByRole("tab", { name: "Roles and groups" }),
     );
 
     const historian = screen.getByRole("checkbox", { name: /Historian/ });
@@ -331,7 +331,7 @@ describe("WhoPicker", () => {
       screen.getByRole("textbox", { name: "Search people" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("radio", { name: "Roles and groups" }),
+      screen.queryByRole("tab", { name: "Roles and groups" }),
     ).toBeNull();
     expect(
       screen.queryByRole("radio", { name: /Everyone in the chapter/ }),
@@ -377,7 +377,7 @@ describe("WhoPicker", () => {
       screen.queryByRole("checkbox", { name: /Everyone in the chapter/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("radio", { name: "Roles and groups" }),
+      screen.queryByRole("tab", { name: "Roles and groups" }),
     ).toBeNull();
     // Who already has a copy is ticked and can't be unticked.
     const paul = screen.getByRole("checkbox", {

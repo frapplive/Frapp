@@ -11,7 +11,7 @@ import {
   type SemesterArchive,
 } from "@repo/hooks";
 import { Badge } from "@/components/ui/badge";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { SkeletonRows } from "@/components/shared/page-skeletons";
@@ -201,7 +201,7 @@ export function ServiceLeaderboard({
         >
           Leaderboard
         </SectionLabel>
-        <SegmentedChoice
+        <ViewLabels
           label="Leaderboard period"
           options={WINDOWS}
           value={period}
@@ -209,7 +209,6 @@ export function ServiceLeaderboard({
             setPeriod(next);
             setExpanded(false);
           }}
-          dense
         />
       </div>
       {body()}

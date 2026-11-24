@@ -22,6 +22,7 @@ import type {
   RushCandidateRow,
 } from '#domain/entities/rush-candidate.entity';
 import { RbacService } from './rbac.service';
+import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
 import type {
   RushCandidateNote,
   RushStage,
@@ -99,6 +100,7 @@ describe('RushPipelineService', () => {
     stage: 'new',
     closed_reason: null,
     bid_status: 'none',
+    bid_state: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
   };
@@ -112,6 +114,16 @@ describe('RushPipelineService', () => {
     follow_up_on: null,
     follow_up_note: null,
     follow_up_user_id: null,
+    bid_extended_at: null,
+    bid_extended_by: null,
+    bid_expires_at: null,
+    bid_acceptance_recorded_at: null,
+    bid_acceptance_recorded_by: null,
+    bid_answered_at: null,
+    bid_answered_by: null,
+    bid_answered_via: null,
+    bid_rescind_reason: null,
+    bid_invite_sent: null,
   };
 
   beforeEach(async () => {
@@ -178,11 +190,7 @@ describe('RushPipelineService', () => {
         }),
       ),
       findSettings: jest.fn().mockResolvedValue(null),
-      saveSettings: jest
-        .fn()
-        .mockImplementation((chapter_id, stale_days) =>
-          Promise.resolve({ chapter_id, stale_days, updated_at: 'now' }),
-        ),
+      saveSettings: jest.fn(),
     };
     rbac = { memberHasAnyPermission: jest.fn().mockResolvedValue(true) };
     candidateRepo = {
@@ -202,6 +210,14 @@ describe('RushPipelineService', () => {
         { provide: RUSH_CANDIDATE_REPOSITORY, useValue: candidateRepo },
         { provide: USER_REPOSITORY, useValue: userRepo },
         { provide: RbacService, useValue: rbac },
+        {
+          provide: RUSH_BID_REPOSITORY,
+          useValue: {
+            candidatesWithConfirmationEmail: jest
+              .fn()
+              .mockResolvedValue(new Set()),
+          },
+        },
       ],
     }).compile();
 
@@ -896,21 +912,6 @@ describe('RushPipelineService', () => {
   describe('contacts, owner, follow-ups and settings (#5934)', () => {
     const NOW = new Date('2026-11-24T15:00:00Z');
 
-    it('reads the default stale days with no settings row, and saves a range', async () => {
-      await expect(service.getSettings(CHAPTER)).resolves.toEqual({
-        stale_days: 7,
-      });
-      await expect(service.saveSettings(CHAPTER, 10)).resolves.toEqual({
-        stale_days: 10,
-      });
-      await expect(service.saveSettings(CHAPTER, 0)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      await expect(service.saveSettings(CHAPTER, 61)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    });
-
     it('puts the owner, last contact and follow-up on the pipeline, by name', async () => {
       pipelineRepo.listCandidates.mockResolvedValue([
         {
@@ -926,6 +927,10 @@ describe('RushPipelineService', () => {
       pipelineRepo.findSettings.mockResolvedValue({
         chapter_id: CHAPTER,
         stale_days: 5,
+        bid_expiry_days: 7,
+        new_member_role_id: null,
+        contacts_group_id: null,
+        card_channel_id: null,
         updated_at: 'x',
       });
 

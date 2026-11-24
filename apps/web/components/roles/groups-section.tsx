@@ -8,8 +8,10 @@ import {
   useDeleteGroup,
   useGroups,
   useMembers,
+  useChapterRoleColors,
   useSetGroupMembers,
   useUpdateGroup,
+  useViewerDisplayName,
   type ChapterGroup,
   type MemberProfile,
 } from "@repo/hooks";
@@ -396,6 +398,8 @@ function GroupEditor({
   // under the officer when a background read lands.
   const [members] = useState(liveMembers);
   const [name, setName] = useState(group.name);
+  const chapterColors = useChapterRoleColors();
+  const viewerName = useViewerDisplayName();
   const [color, setColor] = useState<string | null>(
     roleColorOrNull(group.color),
   );
@@ -500,6 +504,9 @@ function GroupEditor({
             value={color}
             onChange={setColor}
             disabled={busy}
+            previewName={name}
+            memberName={viewerName}
+            chapterColors={chapterColors}
           />
         </div>
 

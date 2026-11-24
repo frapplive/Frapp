@@ -255,7 +255,9 @@ Member invoice payments are applied by the `apply_invoice_payment` RPC — compa
 
 ### Rush / Recruitment
 
-**rush_candidates** — `id`, `chapter_id` (FK chapters), `display_name` (text, 1–200 after trim), generated `name_key` (`lower(trim(display_name))` stored), `user_id` (FK users, nullable, ON DELETE SET NULL), `stage` (text, default `'new'`), `bid_status` (`none` | `extended`), `created_by` (FK users, ON DELETE RESTRICT), `created_at`. Unique on `(chapter_id, name_key)`. RLS enabled, no policies — the API holds the service-role key. Behavior: [`../behavior/rush.md`](../behavior/rush.md).
+**rush_candidates** — `id`, `chapter_id` (FK chapters), `display_name` (text, 1–200 after trim), generated `name_key` (`lower(trim(display_name))` stored), `user_id` (FK users, nullable, ON DELETE SET NULL), `stage` (text, default `'new'`), `bid_status` (`none` | `extended`, kept for shipped clients), `bid_state` (`none` | `extended` | `accepted` | `declined` | `expired` | `rescinded`, #5973) with the bid's who-and-when columns (`bid_extended_*`, `bid_expires_at`, `bid_acceptance_recorded_*`, `bid_answered_*`, `bid_rescind_reason`, `bid_invite_sent`), `created_by` (FK users, ON DELETE RESTRICT), `created_at`. Unique on `(chapter_id, name_key)`. RLS enabled, no policies — the API holds the service-role key. Behavior: [`../behavior/rush.md`](../behavior/rush.md).
+
+**rush_bid_confirmations** — `candidate_id` (PK; with `chapter_id`, FK rush_candidates ON DELETE CASCADE), `chapter_id`, `email` (nullable), `token_hash` (unique, nullable; SHA-256 of the one-tap link's token), `emailed_at` (nullable), `created_at`. A recorded acceptance's pending confirmation (#5973), deleted once the bid is answered or expires. RLS enabled, no policies. `expire_rush_bids(timestamptz)`, `service_role` only, expires open bids past their day hourly.
 
 **rush_candidate_votes** — `id`, `candidate_id` (FK rush_candidates, ON DELETE CASCADE), `chapter_id` (FK chapters), `voter_id` (FK users, ON DELETE CASCADE), `created_at`. Unique on `(candidate_id, voter_id)`. `voter_id` is stored so a member can vote once and is never listed on the card.
 

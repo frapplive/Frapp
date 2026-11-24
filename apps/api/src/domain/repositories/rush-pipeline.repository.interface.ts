@@ -8,6 +8,7 @@ import type {
   RushCandidateNote,
   RushCandidateRating,
   RushCandidateTag,
+  RushSettingsPatch,
   RushSettingsRow,
   RushStage,
   RushTag,
@@ -151,5 +152,9 @@ export interface IRushPipelineRepository {
     followUp: { on: string; note: string | null; userId: string } | null,
   ): Promise<RushCandidateRow>;
   findSettings(chapterId: string): Promise<RushSettingsRow | null>;
-  saveSettings(chapterId: string, staleDays: number): Promise<RushSettingsRow>;
+  /** Writes the fields `patch` names, creating the row on the first save. */
+  saveSettings(
+    chapterId: string,
+    patch: RushSettingsPatch,
+  ): Promise<RushSettingsRow>;
 }

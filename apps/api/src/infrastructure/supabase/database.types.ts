@@ -160,6 +160,7 @@ import type {
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
 import type { RushCandidateTableRow } from '#domain/entities/rush-candidate.entity';
+import type { RushBidConfirmation } from '#domain/repositories/rush-bid.repository.interface';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -323,6 +324,7 @@ export interface Database {
       push_tokens: TableDefinition<PushToken>;
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
+      rush_bid_confirmations: TableDefinition<RushBidConfirmation>;
       rush_candidate_contacts: TableDefinition<RushCandidateContact>;
       rush_candidate_notes: TableDefinition<RushCandidateNote>;
       rush_candidate_ratings: TableDefinition<RushCandidateRating>;
@@ -842,6 +844,11 @@ export interface Database {
       /** `20261112165020` (#714) — expires unsettled holds; returns the count. */
       expire_ai_spend_holds: {
         Args: { p_older_than: string };
+        Returns: number;
+      };
+      /** `20261124214736` (#5973) — expires open bids past their day; returns the count. */
+      expire_rush_bids: {
+        Args: { p_now: string };
         Returns: number;
       };
       /** `20261112165050` (#720) — marks a source indexed or skipped. */
