@@ -36,6 +36,7 @@ const seed = () => ({
       id: CHAPTER_A,
       name: 'Beta Chapter',
       university: 'State University',
+      kind: 'chapter',
       subscription_status: 'active',
       stripe_customer_id: 'cus_chapter_a',
       subscription_id: 'sub_chapter_a',
@@ -46,6 +47,7 @@ const seed = () => ({
       id: CHAPTER_B,
       name: 'Beta Chapter',
       university: 'State University',
+      kind: 'chapter',
       subscription_status: 'active',
       stripe_customer_id: STRIPE_CUSTOMER_B,
       subscription_id: SUBSCRIPTION_B,
@@ -379,6 +381,29 @@ describe('SupabaseChapterRepository — tenant scope', () => {
           name: 'Beta Chapter',
           enabled_modules: { points: false },
         },
+      ]);
+    });
+
+    // #5933: the council twin of the sweep, filtered by kind
+    // (`school-layer.md` § 4.3, "each tenant-paging sweep").
+    it('findForRecapPush leaves a council out', async () => {
+      const council = createTenantHarness({
+        tables: {
+          chapters: [
+            seed().chapters[0],
+            { ...seed().chapters[1], kind: 'council' },
+          ],
+        },
+        tenantColumns: { chapters: 'id' },
+        collisionExempt: {
+          chapters: ['stripe_customer_id', 'subscription_id', 'kind'],
+        },
+      });
+
+      await expect(
+        new SupabaseChapterRepository(council.client).findForRecapPush(),
+      ).resolves.toEqual([
+        { id: CHAPTER_A, name: 'Beta Chapter', enabled_modules: null },
       ]);
     });
   });

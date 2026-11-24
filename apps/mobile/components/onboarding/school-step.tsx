@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -54,17 +54,27 @@ type Stage = "pick" | "email" | "code" | "done";
  *
  * One gold button per stage, pinned above the inset (the #3348 screen rules),
  * and `Not a student? Skip for now` as the quiet line under it. `onLeave`
- * runs for a skip, for a school that can't verify yet, and after done.
+ * runs for a skip, for a school that can't verify yet, and after done, when
+ * it carries the school.
+ *
+ * Starting a council needs the check (#5933, `school-layer.md` § 5.3), so its
+ * setup draws this step `required`: no skip, and a school that can't verify
+ * yet ends the step there, with the setup's own back row (`header`) the way
+ * out.
  */
 export function SchoolStep({
   initialQuery,
   onLeave,
   busy = false,
   alreadyVerified = null,
+  required = false,
+  leaveLabel = SCHOOL_STEP_COPY.goToChat,
+  header = null,
 }: {
   /** The chapter's school name, so the member's school is usually first. */
   initialQuery: string;
-  onLeave: () => void;
+  /** The school verified at, when the step ends on done; else `null`. */
+  onLeave: (verified: SchoolSummary | null) => void;
   /** The screen behind is already leaving (notifications or chat next). */
   busy?: boolean;
   /**
@@ -73,6 +83,12 @@ export function SchoolStep({
    * than an empty search.
    */
   alreadyVerified?: SchoolSummary | null;
+  /** No skip: the screen behind can't go on without a verified school. */
+  required?: boolean;
+  /** The gold button once verified: s03 goes on to chat. */
+  leaveLabel?: string;
+  /** Drawn above the title: a flow's own back row. */
+  header?: ReactNode;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -146,14 +162,15 @@ export function SchoolStep({
       ? schoolVerifiedLine(school.name)
       : SCHOOL_STEP_COPY.title;
 
-  // The one gold button: what moves this stage on.
+  // The one gold button: what moves this stage on. A school that can't
+  // verify yet ends a required step: there is nothing to go on to.
   const primary =
-    stage === "done" || notSetUp ? (
+    stage === "done" || (notSetUp && !required) ? (
       <OnboardingPrimaryButton
-        label={SCHOOL_STEP_COPY.goToChat}
+        label={leaveLabel}
         busy={busy}
         disabled={busy}
-        onPress={onLeave}
+        onPress={() => onLeave(stage === "done" ? school : null)}
       />
     ) : stage === "email" ? (
       <OnboardingPrimaryButton
@@ -179,9 +196,13 @@ export function SchoolStep({
       <KeyboardAvoidingArea style={styles.flex} atScreenBottom>
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            header ? styles.scrollUnderHeader : null,
+          ]}
           keyboardShouldPersistTaps="handled"
         >
+          {header}
           <Text accessibilityRole="header" style={styles.title}>
             {title}
           </Text>
@@ -348,12 +369,12 @@ export function SchoolStep({
 
         <View style={styles.footer}>
           {primary}
-          {stage !== "done" && !notSetUp ? (
+          {stage !== "done" && !notSetUp && !required ? (
             <OnboardingPressable
               accessibilityRole="button"
               accessibilityState={{ disabled: busy }}
               disabled={busy}
-              onPress={onLeave}
+              onPress={() => onLeave(null)}
               quiet
               style={styles.skip}
             >
@@ -383,6 +404,11 @@ function createStyles(tokens: SignetTokens) {
       paddingTop: tokens.spacing["3xl"],
       paddingBottom: tokens.spacing.lg,
       gap: tokens.spacing.sm,
+    },
+    // Under a flow's back row, the row starts the column where chapter
+    // setup's does.
+    scrollUnderHeader: {
+      paddingTop: tokens.spacing.sm,
     },
     title: {
       ...typeRole(tokens.typography.role.headline),

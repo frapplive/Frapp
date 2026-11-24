@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -30,6 +31,8 @@ import { VerifySessionLocally } from '../decorators/session-check.decorator';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('threads')
 export class MemberThreadController {
   constructor(private readonly threads: ChatThreadService) {}

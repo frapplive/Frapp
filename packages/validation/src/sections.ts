@@ -90,6 +90,12 @@ export type NewActionAccess = {
   permissions: readonly string[] | null | undefined;
   /** The chapter's `enabled_modules`, once read. Unread counts as on. */
   enabledModules: Record<string, boolean> | null | undefined;
+  /**
+   * The open tenant is a council (#5933). Its module map already turns the
+   * chapter features off; search goes too, because `GET /v1/search` is a
+   * chapter route and refuses a council.
+   */
+  council?: boolean;
 };
 
 /**
@@ -101,6 +107,7 @@ export type NewActionAccess = {
 export function availableNewActions({
   permissions,
   enabledModules,
+  council = false,
 }: NewActionAccess): NewActionKey[] {
   const on = (key: string) => isModuleEnabled(enabledModules, key);
   const allowed: Record<NewActionKey, boolean> = {
@@ -108,7 +115,7 @@ export function availableNewActions({
     newMinutes: on("meetings") && can("meetings:record", permissions),
     // Members, messages and events come from `GET /v1/search`, which checks
     // `members:view`, as the Directory behind Message does.
-    search: can("members:view", permissions),
+    search: !council && can("members:view", permissions),
     // The event sheet's own gate: creating reads the roster, which the events
     // controller guards with members:view.
     newEvent: on("events") && canAll(EVENT_CREATE_PERMISSIONS, permissions),

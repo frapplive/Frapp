@@ -13,6 +13,21 @@ import { cn } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { Skeleton } from "@/components/shared/async-states";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
+import { councilTypeLabel } from "@/lib/hooks/use-tenant-kind";
+
+/**
+ * The line under a tenant in the switch list: a chapter's school, a council's
+ * type ("Interfraternity Council"), so a council reads as one beside the
+ * chapters (#5933).
+ */
+export function membershipSubtitle(
+  membership: ChapterMembershipSummary,
+): string | null {
+  if (membership.kind === "council") {
+    return councilTypeLabel(membership.chapter?.council_type);
+  }
+  return membership.chapter?.university || null;
+}
 
 /**
  * The chapter the member is in, and moving between the ones they belong to.

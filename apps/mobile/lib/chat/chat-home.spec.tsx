@@ -189,6 +189,13 @@ const allThreads = vi.hoisted(() => ({ data: [] as unknown[] }));
 const homeEventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
 }));
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+  useServesChapterFeatures: () => !tenant.council,
+}));
 vi.mock("@repo/hooks", async () => {
   // The pure helpers run for real: the point is to catch the screen using
   // them wrongly, and a stub would decide the answer itself.
@@ -482,6 +489,7 @@ beforeEach(() => {
   // behind the skeleton while one may still happen.
   settleChatLaunch();
   vi.clearAllMocks();
+  tenant.council = false;
   chapterScope.value = "chapter";
   latestData.value = [];
   latestData.answered = true;
@@ -1924,6 +1932,20 @@ describe("Chat home header: Search and the bell (#3839, #5310)", () => {
     expect(labels).toEqual(["Search", "Notifications"]);
   });
 
+  it("draws only the bell in a council, whose search route refuses it (#5933)", () => {
+    tenant.council = true;
+    const tree = render();
+    const labels = tree.root
+      .findAll(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          (node.props.accessibilityLabel === "Search" ||
+            node.props.accessibilityLabel === "Notifications"),
+      )
+      .map((node) => node.props.accessibilityLabel);
+    expect(labels).toEqual(["Notifications"]);
+  });
+
   describe("bell", () => {
     it("draws no badge while nothing is unread", () => {
       const tree = render();
@@ -2358,6 +2380,12 @@ describe("Chat home setup checklist (spec/product/modules.md § Setup checklist)
       SetupChecklistView,
       ChannelRow,
     ]);
+  });
+
+  it("draws none in a council, whose home holds its first steps (#5933)", () => {
+    tenant.council = true;
+    setupChecklist.value = ONE_LINE;
+    expect(render().root.findAllByType(SetupChecklistView)).toHaveLength(0);
   });
 
   it("asks the shared hook to leave dues off the phone", () => {

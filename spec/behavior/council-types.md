@@ -1,6 +1,8 @@
 # Council types: IFC, Panhellenic, NPHC, MGC and organizations outside the councils
 
-> **Status: Proposed, pending Paul. Nothing here is built.**
+> **Status: Partly built; the rest proposed, pending Paul.** The council profiles, each type's role pack and recruitment-model default, and the type's allowed models are built for [#5933](https://github.com/frapplive/Frapp/issues/5933), scheduled under [#5833](https://github.com/frapplive/Frapp/issues/5833) (dated note below). _(Until 2026-11-24 this line read: Proposed, pending Paul. Nothing here is built.)_
+>
+> _(Updated 2026-11-24, #5933; Winston, `gampheadband`.)_ **Built:** `COUNCIL_PROFILES` in `packages/validation/src/council.ts` carries § Default role titles for all five types (the `none` model drops every `council-recruitment` key), § Recruitment models' defaults and allowed values (the database's `chapters_council_fields_kind` holds the same pairs), and a founder can start a council of any type (`school-layer.md` § 5.3). Each pack also seeds an Everyone role, as a chapter's does since 2026-11-21, so shared chat and mention code finds it. **Not built:** link offers, the recruitment flows, polls and the service push-up, the per-type nav and tab sets of § What each council's space shows: a council's space shows chat, members, roles and settings for now, whatever its type (Winston: the space reuses the chapter shell). Everything else stays a proposal.
 >
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
 > GitHub hides that account's issues and PRs (#4192 and this doc's first PR, #4264) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).

@@ -15,6 +15,17 @@ import { ASK_COPY } from "@repo/validation";
 const who = vi.hoisted(() => ({
   previewing: false,
   permissions: ["ai:use"] as string[] | undefined,
+  council: false,
+}));
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => (who.council ? "council" : "chapter"),
+  useIsCouncil: () => who.council,
+}));
+// The council's home has its own reads; here only that New opens it.
+vi.mock("@/components/councils/council-home", () => ({
+  CouncilHome: () => <section aria-label="Home" data-council-home="" />,
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -122,6 +133,7 @@ const field = () =>
 beforeEach(() => {
   who.previewing = false;
   who.permissions = ["ai:use"];
+  who.council = false;
   nav.go("/events");
 });
 
@@ -153,6 +165,21 @@ describe("New and Frapp Intelligence together", () => {
     who.previewing = false;
     view.rerender(<Page />);
     expect(field()).toBeInTheDocument();
+  });
+
+  it("opens a council's home on New, with no field and no chapter forms (#5933)", async () => {
+    who.council = true;
+    const user = userEvent.setup();
+    render(<Page />);
+    await user.click(newRow());
+    expect(nav.pathname).toBe("/ask");
+    expect(
+      await screen.findByRole("region", { name: "Home" }),
+    ).toBeInTheDocument();
+    expect(field()).toBeNull();
+    expect(
+      screen.queryByRole("list", { name: "Start something new" }),
+    ).toBeNull();
   });
 
   it("keeps what the member had typed when they leave the page and come back", async () => {

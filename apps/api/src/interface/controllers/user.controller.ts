@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -69,6 +70,7 @@ export class UserController {
   @Get('me/permissions')
   @VerifySessionLocally()
   @UseGuards(ChapterGuard)
+  @TenantKinds('chapter', 'council')
   @ApiOperation({
     summary: 'Get effective permissions for the active chapter',
     description:
@@ -178,6 +180,7 @@ export class UserController {
   @Post('me/avatar-url')
   @ThrottleFanOutWrite()
   @UseGuards(ChapterGuard)
+  @TenantKinds('chapter', 'council')
   @ApiOperation({ summary: 'Get signed upload URL for profile photo' })
   @ApiCreatedResponse({ type: AvatarUploadUrlResponseDto })
   async requestAvatarUploadUrl(
@@ -210,6 +213,7 @@ export class UserController {
   // 200, not 201: it updates the caller's profile and returns it.
   @HttpCode(HttpStatus.OK)
   @UseGuards(ChapterGuard)
+  @TenantKinds('chapter', 'council')
   @FeatureEvent('profile-photo-updated')
   @ApiOperation({
     summary: 'Confirm a profile photo upload and make it the current photo',

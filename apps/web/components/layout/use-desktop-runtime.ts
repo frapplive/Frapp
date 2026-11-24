@@ -26,7 +26,11 @@ import {
 } from "@/lib/desktop/notices";
 import { asArray } from "@/lib/utils";
 
-type UnreadRow = { channel_id: string; unread_count: number; mention_count: number };
+type UnreadRow = {
+  channel_id: string;
+  unread_count: number;
+  mention_count: number;
+};
 
 /**
  * How often the list and the counts are read again whatever realtime says.
@@ -68,7 +72,9 @@ export function useDesktopRuntime(): void {
     const chat = addressedUnreadTotal(asArray<UnreadRow>(unread.data), (id) =>
       directIds.has(id),
     );
-    bridge.setBadgeCount(unreadNonChatNotificationCount(notifications.data) + chat);
+    bridge.setBadgeCount(
+      unreadNonChatNotificationCount(notifications.data) + chat,
+    );
   }, [notifications.data, unread.data, channels.data]);
 
   // Signing out or closing the dashboard clears it: the count is this
@@ -80,7 +86,9 @@ export function useDesktopRuntime(): void {
   useEffect(() => {
     const timer = setInterval(() => {
       void invalidateNotificationLists(queryClient);
-      void queryClient.invalidateQueries({ queryKey: CHANNEL_UNREAD_COUNTS_KEY });
+      void queryClient.invalidateQueries({
+        queryKey: CHANNEL_UNREAD_COUNTS_KEY,
+      });
     }, DESKTOP_REFRESH_MS);
     return () => clearInterval(timer);
   }, [queryClient]);
@@ -101,7 +109,9 @@ export function useDesktopRuntime(): void {
     };
   }, [chapterId]);
 
-  const open = useRef<(row: NoticeRow, notice: DesktopNotice) => void>(() => {});
+  const open = useRef<(row: NoticeRow, notice: DesktopNotice) => void>(
+    () => {},
+  );
   useEffect(() => {
     open.current = (row, notice) => {
       desktopBridge()?.showWindow?.();
@@ -109,7 +119,8 @@ export function useDesktopRuntime(): void {
       // row under a chapter it doesn't belong to.
       if (row.chapter_id && chapterId && row.chapter_id !== chapterId) return;
       if (notice.unreadIds.length === 1) markRead.mutate(notice.unreadIds[0]!);
-      else if (notice.unreadIds.length > 1) markManyRead.mutate({ ids: notice.unreadIds });
+      else if (notice.unreadIds.length > 1)
+        markManyRead.mutate({ ids: notice.unreadIds });
       router.push(deepLinkFor(row as Parameters<typeof deepLinkFor>[0]));
     };
   }, [markRead, markManyRead, router, chapterId]);

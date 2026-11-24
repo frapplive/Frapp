@@ -82,9 +82,6 @@ export function SettingsChapterMarkCard({
   const lettersHidden = orgHidingGreekLettersIn(name) !== undefined;
   const [shortName, setShortName] = useState(branding.short_name ?? "");
   const [showLetters, setShowLetters] = useState(greekLettersShown(branding));
-  const [logoError, setLogoError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const logoErrorId = useId();
 
   // Keyed on the stored values, not the `branding` object, which the page
   // rebuilds on every render: an object dependency re-seeded on any re-render,
@@ -104,20 +101,6 @@ export function SettingsChapterMarkCard({
   };
   const mark = resolveChapterMark({ logoUrl, branding: draft, name });
 
-  async function pickLogo(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    // Cleared so choosing the same file again still fires a change.
-    event.target.value = "";
-    if (!file) return;
-    const inspected = inspectLogoFile(file);
-    if (!inspected.ok) {
-      setLogoError(inspected.message);
-      return;
-    }
-    setLogoError(null);
-    await onUploadLogo(inspected.upload);
-  }
-
   function saveMark(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = shortName.trim();
@@ -129,8 +112,6 @@ export function SettingsChapterMarkCard({
     if (trimmed || branding.short_name) brandingDiff.short_name = trimmed;
     void onPatchConfig({ branding: brandingDiff });
   }
-
-  const logoDisabled = !canEditLogo || logoPending;
 
   return (
     <ProfileSection
@@ -148,53 +129,14 @@ export function SettingsChapterMarkCard({
           <span className="text-sm font-bold text-foreground">{name}</span>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="chapter-logo">Logo</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInput}
-              id="chapter-logo"
-              type="file"
-              accept={acceptAttribute("image")}
-              className="sr-only"
-              disabled={logoDisabled}
-              aria-describedby={logoError ? logoErrorId : undefined}
-              onChange={(event) => void pickLogo(event)}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={logoDisabled}
-              onClick={() => fileInput.current?.click()}
-            >
-              {logoPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : null}
-              {logoUrl ? "Replace logo" : "Upload logo"}
-            </Button>
-            {logoUrl ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={logoDisabled}
-                onClick={() => {
-                  setLogoError(null);
-                  void onRemoveLogo();
-                }}
-              >
-                Remove logo
-              </Button>
-            ) : null}
-          </div>
-          {logoError ? (
-            <p id={logoErrorId} className="text-xs text-destructive">
-              {logoError}
-            </p>
-          ) : null}
-          {profileHint}
-        </div>
+        <ChapterLogoField
+          logoUrl={logoUrl}
+          canEditLogo={canEditLogo}
+          onUploadLogo={onUploadLogo}
+          onRemoveLogo={onRemoveLogo}
+          logoPending={logoPending}
+          hint={profileHint}
+        />
 
         <form
           onSubmit={saveMark}
@@ -239,5 +181,102 @@ export function SettingsChapterMarkCard({
         </form>
       </div>
     </ProfileSection>
+  );
+}
+
+/**
+ * The logo's control: Upload (or Replace) and Remove, uploading the moment a
+ * file is chosen. Its own component so a council's settings, which have a
+ * logo and no short name or letters (#5933), draw the same one.
+ */
+export function ChapterLogoField({
+  logoUrl,
+  canEditLogo,
+  onUploadLogo,
+  onRemoveLogo,
+  logoPending,
+  hint,
+  showLabel = true,
+}: {
+  logoUrl: string | null;
+  canEditLogo: boolean;
+  onUploadLogo: (upload: ChapterLogoUpload) => Promise<void>;
+  onRemoveLogo: () => Promise<void>;
+  logoPending?: boolean;
+  /** The permission line under it for a caller who can't change it. */
+  hint?: React.ReactNode;
+  /** Off where a section label above already says "Logo". */
+  showLabel?: boolean;
+}) {
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const logoErrorId = useId();
+  const inputId = useId();
+
+  async function pickLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Cleared so choosing the same file again still fires a change.
+    event.target.value = "";
+    if (!file) return;
+    const inspected = inspectLogoFile(file);
+    if (!inspected.ok) {
+      setLogoError(inspected.message);
+      return;
+    }
+    setLogoError(null);
+    await onUploadLogo(inspected.upload);
+  }
+
+  const logoDisabled = !canEditLogo || logoPending;
+
+  return (
+    <div className="space-y-2">
+      {showLabel ? <Label htmlFor={inputId}>Logo</Label> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={fileInput}
+          id={inputId}
+          aria-label={showLabel ? undefined : "Logo"}
+          type="file"
+          accept={acceptAttribute("image")}
+          className="sr-only"
+          disabled={logoDisabled}
+          aria-describedby={logoError ? logoErrorId : undefined}
+          onChange={(event) => void pickLogo(event)}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={logoDisabled}
+          onClick={() => fileInput.current?.click()}
+        >
+          {logoPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : null}
+          {logoUrl ? "Replace logo" : "Upload logo"}
+        </Button>
+        {logoUrl ? (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={logoDisabled}
+            onClick={() => {
+              setLogoError(null);
+              void onRemoveLogo();
+            }}
+          >
+            Remove logo
+          </Button>
+        ) : null}
+      </div>
+      {logoError ? (
+        <p id={logoErrorId} className="text-xs text-destructive">
+          {logoError}
+        </p>
+      ) : null}
+      {hint}
+    </div>
   );
 }

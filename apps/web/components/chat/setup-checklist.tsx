@@ -12,6 +12,8 @@ import {
 import { FOCUS_RING } from "@/components/ui/focus";
 import { EYEBROW } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
+import { COUNCIL_SETUP_TITLE } from "@/components/councils/council-copy";
 
 /**
  * The officer setup checklist at the top of the channel rail
@@ -22,17 +24,23 @@ import { cn } from "@/lib/utils";
  */
 export function SetupChecklistSection() {
   const { checklist, hide } = useChapterSetupChecklist();
+  // A council's list is its own (#5933): only its invite line applies there.
+  const title = useIsCouncil() ? COUNCIL_SETUP_TITLE : SETUP_CHECKLIST_TITLE;
   if (!checklist) return null;
-  return <SetupChecklistView checklist={checklist} onHide={hide} />;
+  return (
+    <SetupChecklistView checklist={checklist} onHide={hide} title={title} />
+  );
 }
 
 /** The drawn list, without hooks, so a test can render one directly. */
 function SetupChecklistView({
   checklist,
   onHide,
+  title = SETUP_CHECKLIST_TITLE,
 }: {
   checklist: SetupChecklist;
   onHide: () => void;
+  title?: string;
 }) {
   const headingId = "setup-checklist-heading";
   return (
@@ -42,7 +50,7 @@ function SetupChecklistView({
           id={headingId}
           className={cn("min-w-0 flex-1 truncate text-foreground", EYEBROW)}
         >
-          {SETUP_CHECKLIST_TITLE}
+          {title}
         </h3>
         <span className={cn("shrink-0 text-muted-foreground", EYEBROW)}>
           {checklist.doneCount} of {checklist.lines.length}

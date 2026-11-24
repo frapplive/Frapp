@@ -17,6 +17,7 @@ import {
 import { SECTION_NAMES } from "@repo/validation";
 import { cn } from "@/lib/utils";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { AccountMenu } from "@/components/layout/account-menu";
 import { ChannelListSlot } from "@/components/layout/channel-list-slot";
 import {
@@ -157,14 +158,26 @@ export function Sidebar({
   const switcher = useChapterSwitcher();
   const { channels: channelsUnread, messages: unreadMessages } =
     useNavHighlights();
-  const activityCount = activityCountChip(useActivity().data);
+  // A council's rows are only the ones its routes serve (#5933).
+  const tenantKind = useTenantKind();
+  const isCouncil = tenantKind === "council";
+  // A council has no Activity page, so no count to read.
+  const activityCount = activityCountChip(
+    useActivity({ enabled: !isCouncil }).data,
+  );
   // Study hours with no active zone, and Documents with nothing in it for a
   // viewer who can't upload, leave the nav (`nav-config.ts`, Setup gating).
   const hiddenFeatures = useHiddenUnsetFeatures(permissions, isModuleEnabled);
   // A row named in the chapter's own word (Recruitment's Rush / Intake).
   const vocabulary = useChapterVocabulary();
   const visible = (item: NavItem) =>
-    isNavItemVisible(item, permissions, isModuleEnabled, hiddenFeatures);
+    isNavItemVisible(
+      item,
+      permissions,
+      isModuleEnabled,
+      hiddenFeatures,
+      tenantKind,
+    );
 
   const counts: Record<
     string,
@@ -263,7 +276,9 @@ export function Sidebar({
           if (
             permissions === undefined &&
             (item.requirePermission !== undefined ||
-              item.requireAnyOf !== undefined)
+              item.requireAnyOf !== undefined ||
+              item.requireAllOf !== undefined) &&
+            (!tenantKind || (item.kinds ?? ["chapter"]).includes(tenantKind))
           ) {
             return (
               <span
@@ -285,6 +300,7 @@ export function Sidebar({
               focusClassName={FOCUS_RING_SHELL}
               isModuleEnabled={isModuleEnabled}
               hiddenFeatures={hiddenFeatures}
+              tenantKind={tenantKind}
               collapsed={rail}
               count={counts[item.id]}
               {...(onCloseTool && current === "page"

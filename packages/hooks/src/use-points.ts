@@ -65,6 +65,7 @@ export function useMyPoints(
 export function useLeaderboard(
   window?: PointWindow,
   semesterArchiveId?: string,
+  options?: { enabled?: boolean },
 ) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
@@ -81,7 +82,8 @@ export function useLeaderboard(
       return data;
     },
     staleTime: 30_000,
-    enabled: !!chapterId,
+    // Off where Points is, a council included (#5933).
+    enabled: (options?.enabled ?? true) && !!chapterId,
   });
 }
 

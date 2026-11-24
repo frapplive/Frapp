@@ -15,7 +15,7 @@ import {
 } from "@/components/layout/nav-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
-import { SECTION_NAMES } from "@repo/validation";
+import { SECTION_NAMES, type TenantKind } from "@repo/validation";
 import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
 
 /**
@@ -89,6 +89,17 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  *   hours with no active zone hides from everyone, because zones are made in
  *   the Study zones tool, not on its page. Nothing hides while permissions,
  *   modules or the list are still loading, or after the list's read fails.
+ *
+ * Tenant-kind gating (#5933):
+ * - `kinds` — the tenant kinds a row serves. Omitted, a row is a chapter's
+ *   only. A council (ADR-27) is a tenant served by chat, members, roles,
+ *   invites and the audit log, and every other chapter route answers it 403
+ *   (`chapter.context.invalid`), so a council's sidebar keeps only the rows
+ *   that name `council` here, Messages and Directory, beside New, Search and
+ *   the channel list (`sidebar.tsx`). Activity, which has no module to switch
+ *   off, is the row this gate exists for. Opt-in, so a new chapter row never
+ *   reaches a council by default. While the kind is unknown nothing hides,
+ *   as with the module gate (`useTenantKind`).
  */
 
 type NavPermissionRule =
@@ -132,6 +143,8 @@ export type NavItem = {
    * gating" above). Omit for a feature that works with nothing in it.
    */
   hiddenUntilSetUp?: UnsetFeatureKey;
+  /** The tenant kinds this row serves; omitted, chapters only (above). */
+  kinds?: readonly TenantKind[];
   /**
    * Named in the chapter's own word (`vocab()` in `@repo/org-archetypes`):
    * the recruitment row reads Rush, Recruitment or Intake as the chapter
@@ -141,6 +154,9 @@ export type NavItem = {
    */
   vocabLabel?: VocabKey;
 } & NavPermissionRule;
+
+/** A row a council's space shows as well as a chapter's. */
+const EVERY_TENANT: readonly TenantKind[] = ["chapter", "council"];
 
 /** A row's label in the chapter's words (see `vocabLabel`). */
 export function navItemLabel(
@@ -181,6 +197,7 @@ export const SIDEBAR_ROWS: NavItem[] = [
     icon: DirectMessagesGlyph,
     href: MESSAGES_ROUTE,
     description: "Your one-to-one and group conversations.",
+    kinds: EVERY_TENANT,
   },
   {
     id: "events",
@@ -207,6 +224,7 @@ export const SIDEBAR_ROWS: NavItem[] = [
     href: "/members",
     description: "Actives and alumni, profile cards, invites, deactivation.",
     requirePermission: "members:view",
+    kinds: EVERY_TENANT,
   },
 ];
 

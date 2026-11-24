@@ -1,3 +1,4 @@
+import type { TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import type { VocabConfig } from "@repo/org-archetypes";
 import {
@@ -49,11 +50,20 @@ export type PageTitle = {
  * under the words that menu uses; Frapp Intelligence from the New row; and
  * `/chat` is the open conversation, which the channel list opens.
  */
+/**
+ * Settings' name in each tenant kind, as the chapter menu's item and the top
+ * bar both say it: a council's is "Council settings" (#5933).
+ */
+export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
+  chapter: "Chapter settings",
+  council: "Council settings",
+};
+
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/chat": "Chat",
   "/profile": "Profile",
   "/preferences": "Settings",
-  "/settings": "Chapter settings",
+  "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
   // The sidebar's New row opens it (#5946).
   [ASK_ROUTE]: "Frapp Intelligence",
@@ -85,13 +95,19 @@ function matchesRoute(pathname: string, href: string): boolean {
  *   permissions and modules). Omitted, every parent shows.
  * @param vocabulary the chapter's words, for a row named by them
  *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
   vocabulary?: VocabConfig,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
+  if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {
+    return { title: SETTINGS_TITLE.council };
+  }
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
     matchesRoute(pathname, item.href),

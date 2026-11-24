@@ -31,6 +31,10 @@ import {
   PresenceGlyph,
 } from "@/components/members/presence-dot";
 import { CustomStatusDialog } from "@/components/layout/custom-status-dialog";
+import { SETTINGS_TITLE } from "@/components/layout/page-title";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
+import { START_COUNCIL_PATH } from "@/lib/auth/join-visit";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { useChapterPresenceContext } from "@/lib/providers/chapter-presence-provider";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -52,7 +56,10 @@ import { cn, initials } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { PERSONAL_SETTINGS_PATH } from "@/components/personal-settings/personal-settings-sections";
-import type { ChapterSwitcher } from "@/components/layout/chapter-switcher";
+import {
+  membershipSubtitle,
+  type ChapterSwitcher,
+} from "@/components/layout/chapter-switcher";
 import { hasSettingsDestination } from "@/components/settings/settings-access";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -131,6 +138,8 @@ export function AccountMenu({
   // there anything there for this viewer?
   const permissions = useNavPermissions();
   const isModuleEnabled = useChapterModuleGate();
+  // A council's settings are its own (#5933): the menu names them so.
+  const tenantKind = useTenantKind();
   const showChapterSettings = hasSettingsDestination(
     permissions,
     isModuleEnabled,
@@ -274,7 +283,7 @@ export function AccountMenu({
           <DropdownMenuItem asChild>
             <Link href="/settings" onClick={onNavigate}>
               <Landmark className="h-4 w-4" aria-hidden="true" />
-              <span>Chapter settings</span>
+              <span>{SETTINGS_TITLE[tenantKind ?? "chapter"]}</span>
             </Link>
           </DropdownMenuItem>
         ) : null}
@@ -284,10 +293,24 @@ export function AccountMenu({
             <span>Join another chapter</span>
           </Link>
         </DropdownMenuItem>
+        {/*
+          Start a council (#5933): the founder is nearly always already in
+          their own chapter (an IFC's delegates are its chapters' members), so
+          the way in sits beside joining another, as Discord's server list
+          ends in Add a server.
+        */}
+        <DropdownMenuItem asChild>
+          <Link href={START_COUNCIL_PATH} onClick={onNavigate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>{START_COUNCIL_ENTRY.action}</span>
+          </Link>
+        </DropdownMenuItem>
         {switcher.otherChapters.length > 0 ? (
           <>
             <DropdownMenuLabel className="pb-1 pt-2 text-xs font-normal text-muted-foreground">
-              Switch chapter
+              {switcher.memberships.some((m) => m.kind === "council")
+                ? "Switch chapter or council"
+                : "Switch chapter"}
             </DropdownMenuLabel>
             {switcher.otherChapters.map((membership) => (
               <DropdownMenuItem
@@ -298,9 +321,9 @@ export function AccountMenu({
                   <span className="block truncate">
                     {membership.chapter?.name ?? "Untitled chapter"}
                   </span>
-                  {membership.chapter?.university ? (
+                  {membershipSubtitle(membership) ? (
                     <span className="block truncate text-caption text-muted-foreground">
-                      {membership.chapter.university}
+                      {membershipSubtitle(membership)}
                     </span>
                   ) : null}
                 </span>

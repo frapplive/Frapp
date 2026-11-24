@@ -79,6 +79,13 @@ vi.mock("@/lib/hooks/use-nav-permissions", () => ({
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   useChapterModuleGate: () => undefined,
 }));
+// A chapter unless a case makes the open tenant a council (#5933).
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+}));
 
 const { AccountMenu } = await import("./account-menu");
 type Switcher = import("./chapter-switcher").ChapterSwitcher;
@@ -120,6 +127,7 @@ describe("AccountMenu", () => {
     signOutCurrentSession.mockClear();
     select.mockClear();
     nav.permissions = ["*"];
+    tenant.council = false;
     useCurrentUser.mockReturnValue({
       data: {
         display_name: "Paul Carlson",
@@ -244,8 +252,38 @@ describe("AccountMenu", () => {
     expect(
       screen.getByRole("menuitem", { name: "Join another chapter" }),
     ).toHaveAttribute("href", "/join");
+    // Start a council sits beside joining one (#5933).
+    expect(
+      screen.getByRole("menuitem", { name: "Start a council" }),
+    ).toHaveAttribute("href", "/start-council");
     // One chapter: nothing to switch to, so no heading for it.
     expect(screen.queryByText("Switch chapter")).not.toBeInTheDocument();
+  });
+
+  it("in a council, names Council settings and reads each council by its type (#5933)", async () => {
+    tenant.council = true;
+    const council = {
+      chapter_id: "ifc",
+      kind: "council",
+      chapter: { name: "Westfield IFC", council_type: "ifc" },
+    } as unknown as Switcher["memberships"][number];
+    const chapters = switcher([{ id: "two", name: "Alpha Chapter" }]);
+    const withCouncil: Switcher = {
+      ...chapters,
+      memberships: [...chapters.memberships, council],
+      otherChapters: [...chapters.otherChapters, council],
+    };
+    const user = userEvent.setup();
+    render(<AccountMenu variant="foot" switcher={withCouncil} />);
+
+    await user.click(screen.getByRole("button", { name: /account menu/i }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Council settings" }),
+    ).toHaveAttribute("href", "/settings");
+    expect(screen.getByText("Switch chapter or council")).toBeInTheDocument();
+    expect(screen.getByText("Interfraternity Council")).toBeInTheDocument();
+    expect(screen.getByText("Westfield University")).toBeInTheDocument();
   });
 
   it("offers Chapter settings only where Settings holds something for the viewer", async () => {

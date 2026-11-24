@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   availableNewActions,
+  type NewActionAccess,
   NEW_ACTION_LABELS,
   NEW_ACTION_ORDER,
   type NewActionKey,
@@ -77,11 +78,8 @@ export const QUICK_ACTION_HINTS: Record<QuickActionKey, string> = {
   upload: "Opens the upload document sheet.",
 };
 
-export type QuickActionAccess = {
-  permissions: readonly string[];
-  /** The chapter's `enabled_modules`, once read. Unread counts as on. */
-  enabledModules: Record<string, boolean> | null | undefined;
-};
+/** Who is asking: `availableNewActions`'s access, council included (#5933). */
+export type QuickActionAccess = NewActionAccess;
 
 /**
  * The actions this member can use in this chapter: the app's one rule

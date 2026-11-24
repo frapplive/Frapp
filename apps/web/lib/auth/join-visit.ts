@@ -41,6 +41,9 @@ const CREATE_CHAPTER_KEY = "setup";
 const CREATE_CHAPTER_VALUE = "chapter";
 export const CREATE_CHAPTER_PATH = `/chat?${CREATE_CHAPTER_KEY}=${CREATE_CHAPTER_VALUE}`;
 
+/** Start a council (#5933): the form, on the pre-auth frame. */
+export const START_COUNCIL_PATH = "/start-council";
+
 /**
  * Where a fresh join lands: the member's name and photo, then chat (#5627).
  * An "already in" join and opening a chapter the member is in go straight to

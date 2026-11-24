@@ -32,10 +32,21 @@ const rereadOnTab = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/activity/use-activity-reread", () => ({
   useActivityRereadOnTab: rereadOnTab,
 }));
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+  useServesChapterFeatures: () => !tenant.council,
+}));
+const activityReads = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   activityCountChip: (await importOriginal<typeof import("@repo/hooks")>())
     .activityCountChip,
-  useActivity: () => ({ data: activity.data }),
+  useActivity: (options?: { enabled?: boolean }) => {
+    activityReads.options.push(options);
+    return { data: options?.enabled === false ? undefined : activity.data };
+  },
 }));
 // Messages' count has its own spec (`lib/chat/unread-conversations.spec.tsx`);
 // the bar only draws and names it (#5310).
@@ -132,6 +143,8 @@ beforeEach(() => {
   quick.hasAsk = false;
   quick.ask.mockClear();
   activity.data = undefined;
+  activityReads.options = [];
+  tenant.council = false;
   device.bottomInset = 0;
   vi.mocked(BackHandler.addEventListener).mockClear();
 });
@@ -282,6 +295,20 @@ describe("the bar (#3344)", () => {
     expect(
       byLabel(render().root, "Activity, at least 2 waiting on you"),
     ).toBeDefined();
+  });
+
+  it("reads no Activity count in a council, whose Activity tab is its home (#5933)", () => {
+    tenant.council = true;
+    activity.data = { needs_you_count: 8, unavailable: [] };
+    const tree = render();
+    expect(activityReads.options.at(-1)).toEqual({ enabled: false });
+    expect(
+      tree.root.findAll(
+        (node) =>
+          typeof node.type === "string" &&
+          node.props.testID === "tab-activity-badge",
+      ),
+    ).toHaveLength(0);
   });
 
   // #5310: Messages took the third slot from Calendar, with the count the

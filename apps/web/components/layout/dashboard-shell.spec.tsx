@@ -78,6 +78,7 @@ vi.mock("next/navigation", () => ({
 // Find's dialog has its own spec (`find-bar.spec.tsx`).
 vi.mock("@/components/layout/find-dialog", () => ({
   FIND_PLACEHOLDER: "Search",
+  COUNCIL_FIND_PLACEHOLDER: "Find channels",
   FindDialog: ({ open }: { open: boolean }) =>
     open ? <div role="dialog" aria-label="Find" /> : null,
 }));
@@ -579,6 +580,36 @@ describe("DashboardShell", () => {
       expect(
         within(primary()).getByRole("link", { name: "Activity" }),
       ).toBeInTheDocument();
+    });
+
+    it("keeps a council's sidebar to what its routes serve (#5933)", () => {
+      mockChapter.value = {
+        name: "Westfield IFC",
+        kind: "council",
+        council_type: "ifc",
+        enabled_modules: {},
+      };
+      mockPermissions.value = ["*"];
+      setWindowWidth(1440);
+      shell();
+      const nav = primary();
+      expect(
+        within(nav).getByRole("link", { name: "New" }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("button", { name: "Search" }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("link", { name: /^Messages/ }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("link", { name: "Directory" }),
+      ).toBeInTheDocument();
+      for (const name of [/^Activity/, "Calendar", "Resources"]) {
+        expect(within(nav).queryByRole("link", { name })).toBeNull();
+      }
+      // Every row More holds is a chapter's, so a council has no More.
+      expect(within(nav).queryByRole("button", { name: "More" })).toBeNull();
     });
   });
 

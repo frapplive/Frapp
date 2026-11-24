@@ -53,13 +53,15 @@ describe('RbacController', () => {
   });
 
   describe('catalog', () => {
-    it('should return system permissions catalog', () => {
+    it('should return system permissions catalog', async () => {
       const expectedCatalog = [{ key: 'WILDCARD', permission: '*' }] as any;
-      rbacService.getPermissionsCatalog.mockReturnValue(expectedCatalog);
+      rbacService.getPermissionsCatalog.mockResolvedValue(expectedCatalog);
 
-      const result = controller.catalog();
+      const result = await controller.catalog('chapter-1');
 
-      expect(rbacService.getPermissionsCatalog).toHaveBeenCalled();
+      expect(rbacService.getPermissionsCatalog).toHaveBeenCalledWith(
+        'chapter-1',
+      );
       expect(result).toEqual(expectedCatalog);
     });
   });

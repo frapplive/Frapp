@@ -62,6 +62,7 @@ import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { chapterSettingsAccess } from "@/lib/more/chapter-settings";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * Chapter settings, on the phone (#4074): the chapter's side of settings, as
@@ -121,7 +122,12 @@ export default function ChapterSettingsScreen() {
   const chapterBackground = useChapterChatBackground();
   // Member names (#5801): the config PATCH's guard, as web's switch reads it.
   const canManageConfig = can("chapter-config:manage", permissions);
-  const orgConfig = useOrgConfig({ enabled: access.chapter });
+  // `/v1/chapters/:id/config` is a chapter route and refuses a council
+  // (#5933), so a council's settings go without the name switch for now.
+  const chapterFeatures = useServesChapterFeatures();
+  const orgConfig = useOrgConfig({
+    enabled: access.chapter && chapterFeatures,
+  });
   const patchConfig = usePatchOrgConfig();
   const [namesSaveFailed, setNamesSaveFailed] = useState(false);
   const membersCanRename = orgConfig.data?.members_can_change_name === true;

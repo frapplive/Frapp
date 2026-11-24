@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { ArrowUp } from "lucide-react";
 import {
   useActStatus,
@@ -46,6 +47,7 @@ import { NewButton } from "@/components/ui/new-button";
 import { INLINE_PANEL_ATTRIBUTE } from "@/components/shared/panel";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { JumpToLatestButton } from "@/components/chat/jump-to-latest-button";
 import { prefersReducedMotion } from "@/components/chat/use-rail-flip";
 import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
@@ -133,13 +135,29 @@ function offsetIn(view: HTMLElement, child: HTMLElement): number {
 }
 
 /**
+ * Fetched only in a council: it carries the Directory's invite panel, which
+ * would otherwise ride in this page's chunk for every chapter.
+ */
+const CouncilHome = dynamic(
+  () => import("@/components/councils/council-home").then((m) => m.CouncilHome),
+  { ssr: false },
+);
+
+/**
  * New's page (#5946): the conversation for a member with Frapp
  * Intelligence, its loading shape while that is read, and for anyone else
  * the greeting and what they can start, with no field.
+ *
+ * A council has neither the assistant nor a chapter's forms (their routes
+ * refuse it, #5933), so its New is its home: its identity and its first two
+ * steps, Invite delegates and Edit titles (`council-home.tsx`). That home sat
+ * in the shell's empty view until #5946 deleted the view.
  */
 export function AskPage() {
+  const isCouncil = useIsCouncil();
   const entry = useAskEntry();
   const pending = useAskPending();
+  if (isCouncil) return <CouncilHome />;
   if (entry) return <AskConversation />;
   // Not yet known (a reload of `/ask`, or a read being retried): the field's
   // place, so the page never stands empty under its title.

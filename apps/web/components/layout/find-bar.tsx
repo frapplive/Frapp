@@ -14,7 +14,12 @@ import { Search } from "lucide-react";
 import { useChannels } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
-import { FindDialog, FIND_PLACEHOLDER } from "@/components/layout/find-dialog";
+import {
+  COUNCIL_FIND_PLACEHOLDER,
+  FindDialog,
+  FIND_PLACEHOLDER,
+} from "@/components/layout/find-dialog";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 
 /**
  * Find: the centered Find dialog (`find-dialog.tsx`), the Cmd/Ctrl+F binding
@@ -185,7 +190,10 @@ export function FindProvider({ children }: { children: ReactNode }) {
  */
 export function FindField({ className }: { className?: string }) {
   const { open, query, openFind } = useFind();
-  const placeholder = FIND_PLACEHOLDER;
+  // A council's Find lists its channels alone (#5933).
+  const placeholder = useIsCouncil()
+    ? COUNCIL_FIND_PLACEHOLDER
+    : FIND_PLACEHOLDER;
   return (
     <button
       type="button"

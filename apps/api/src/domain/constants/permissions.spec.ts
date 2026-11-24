@@ -196,11 +196,19 @@ describe('SystemPermissions and PERMISSION_REGISTRY', () => {
     );
   });
 
-  it('files every permission under a module catalog key, or chapter', () => {
+  it('files every permission under a module catalog key, chapter, or a council group', () => {
     const moduleKeys = new Set(MODULE_CATALOG.map((module) => module.key));
+    // A council's groups (#5933) are no chapter module: only council keys
+    // sit in them, and only council keys are council-scoped.
+    const councilGroups = new Set(['council', 'council-recruitment']);
     for (const module of PERMISSION_MODULES) {
-      if (module.key === 'chapter') continue;
+      if (module.key === 'chapter' || councilGroups.has(module.key)) continue;
       expect(moduleKeys).toContain(module.key);
+    }
+    for (const entry of PERMISSION_REGISTRY) {
+      const isCouncilKey = entry.permission.startsWith('council:');
+      expect(entry.scope === 'council').toBe(isCouncilKey);
+      expect(councilGroups.has(entry.module)).toBe(isCouncilKey);
     }
   });
 });

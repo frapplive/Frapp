@@ -97,6 +97,7 @@ import {
 import { ReviewCard } from "@/components/activity/review-card";
 import { WeekRing, WeekRingSkeleton } from "@/components/activity/week-ring";
 import { NowCard } from "@/components/now-card";
+import { CouncilHome } from "@/components/council/council-home";
 import { DisclosureGlyph } from "@/components/control-glyphs";
 import { AskSheet } from "@/components/ask/ask-sheet";
 import { InlineNote } from "@/components/inline-note";
@@ -108,6 +109,7 @@ import { activityRowActionsAllowed } from "@/lib/activity/row-action";
 import { useActivityReread } from "@/lib/activity/use-activity-reread";
 import { useAiSurfaces } from "@/lib/ai/availability";
 import { useChapterBranding } from "@/lib/chapter-branding";
+import { useTenantKind } from "@/lib/tenant-kind";
 import { useRemindMessage } from "@/lib/chat/message-reminder";
 import { alertFailure } from "@/lib/failure-alert";
 import { pageSurfaces } from "@/lib/surfaces";
@@ -157,7 +159,39 @@ import type { ActivityCardKey } from "@repo/validation";
  * a write from a row's menu, and whenever the member comes back to this
  * screen (`useActivityReread`).
  */
-export default function ActivityScreen() {
+export default function ActivityTab() {
+  // A council reads none of Activity's routes (#5933): its home draws here.
+  // Until the open tenant's kind is known (a switch just landed, so its read
+  // is out), the tab holds on Activity's loading rows rather than sending a
+  // council's first reads to routes that refuse it.
+  const kind = useTenantKind();
+  if (kind === "council") return <CouncilHome />;
+  if (kind === null) return <ActivityHold />;
+  return <ActivityScreen />;
+}
+
+/** Activity's loading rows, under its title, while the kind is unknown. */
+function ActivityHold() {
+  const { tokens } = useFrappTheme();
+  const styles = createStyles(tokens);
+  return (
+    <ScreenShell title="Activity">
+      <SkeletonRegion label="Loading activity" flush>
+        <View style={styles.body}>
+          {Array.from({ length: 4 }, (_, index) => (
+            <ActivityRowSkeleton
+              key={index}
+              index={index}
+              isFirst={index === 0}
+            />
+          ))}
+        </View>
+      </SkeletonRegion>
+    </ScreenShell>
+  );
+}
+
+function ActivityScreen() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const activity = useActivity();

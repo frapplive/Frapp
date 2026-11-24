@@ -53,9 +53,14 @@ class FakeNotification {
   }
 }
 
-const bridge = { openExternal: vi.fn(), setBadgeCount: vi.fn(), showWindow: vi.fn() };
+const bridge = {
+  openExternal: vi.fn(),
+  setBadgeCount: vi.fn(),
+  showWindow: vi.fn(),
+};
 // Server times, deliberately nowhere near this machine's clock.
-const at = (minute: number) => `2031-03-01T10:${String(minute).padStart(2, "0")}:00Z`;
+const at = (minute: number) =>
+  `2031-03-01T10:${String(minute).padStart(2, "0")}:00Z`;
 const chatRow = (id: string, channelId = "c-1", minute = 5) => ({
   id,
   chapter_id: "ch-1",
@@ -115,7 +120,10 @@ describe("useDesktopRuntime", () => {
     rerender();
 
     expect(shown).toHaveLength(1);
-    expect(shown[0]).toMatchObject({ title: "Ryan in #general", options: { body: "tonight?", tag: "chat:c-1" } });
+    expect(shown[0]).toMatchObject({
+      title: "Ryan in #general",
+      options: { body: "tonight?", tag: "chat:c-1" },
+    });
 
     shown[0]!.onclick?.();
     expect(bridge.showWindow).toHaveBeenCalled();
@@ -145,7 +153,11 @@ describe("useDesktopRuntime", () => {
     state.notifications = [chatRow("n-1", "c-1", 5)];
     const { rerender } = renderHook(() => useDesktopRuntime());
     // An older row scrolling into the page is not news; a newer one is.
-    state.notifications = [chatRow("n-1", "c-1", 5), chatRow("n-0", "c-0", 2), chatRow("n-2", "c-2", 7)];
+    state.notifications = [
+      chatRow("n-1", "c-1", 5),
+      chatRow("n-0", "c-0", 2),
+      chatRow("n-2", "c-2", 7),
+    ];
     rerender();
     expect(shown.map((n) => n.options.tag)).toEqual(["chat:c-2"]);
   });
@@ -154,7 +166,10 @@ describe("useDesktopRuntime", () => {
     state.notifications = [];
     const { rerender } = renderHook(() => useDesktopRuntime());
     state.notifications = [
-      { ...chatRow("n-1"), data: { target: { screen: "events" }, priority: "SILENT" } },
+      {
+        ...chatRow("n-1"),
+        data: { target: { screen: "events" }, priority: "SILENT" },
+      },
     ];
     rerender();
     expect(shown[0]?.options.silent).toBe(true);
@@ -212,7 +227,9 @@ describe("useDesktopRuntime", () => {
       expect(state.invalidateLists).not.toHaveBeenCalled();
       vi.advanceTimersByTime(DESKTOP_REFRESH_MS);
       expect(state.invalidateLists).toHaveBeenCalledTimes(1);
-      expect(state.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["channels", "unread"] });
+      expect(state.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["channels", "unread"],
+      });
       unmount();
       vi.advanceTimersByTime(DESKTOP_REFRESH_MS);
       expect(state.invalidateLists).toHaveBeenCalledTimes(1);
@@ -224,7 +241,9 @@ describe("useDesktopRuntime", () => {
 
 describe("DesktopRuntime", () => {
   it("runs inside the desktop app", () => {
-    state.notifications = [{ ...chatRow("n-2"), data: { target: { screen: "events" } } }];
+    state.notifications = [
+      { ...chatRow("n-2"), data: { target: { screen: "events" } } },
+    ];
     render(<DesktopRuntime />);
     expect(bridge.setBadgeCount).toHaveBeenLastCalledWith(1);
   });

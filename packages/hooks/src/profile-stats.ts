@@ -11,6 +11,7 @@
  * events a member owed. Two true numbers beat three with one invented.
  */
 import { can } from "@repo/validation";
+import { useCurrentChapter } from "./use-chapters";
 import { useActiveChapterId } from "./use-frapp-client";
 import { useMyPoints } from "./use-points";
 import { useServiceEntries } from "./use-service-entries";
@@ -154,10 +155,19 @@ export function useMyProfileStats(): ProfileStats {
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
   const permissionsKnown = Array.isArray(permissions);
-  const canView = permissionsKnown && can("members:view", permissions);
-  const pointsQuery = useMyPoints(undefined, undefined, { enabled: canView });
+  // A council has no points or service hours (#5933): those routes refuse
+  // it. The reads wait for the tenant's kind, so a council never sends one;
+  // a failed tenant read leaves them to run, as before councils.
+  const current = useCurrentChapter();
+  const kind = current.data?.kind;
+  const isCouncil = kind === "council";
+  const kindSettled = current.data !== undefined || current.isError;
+  const canView =
+    permissionsKnown && can("members:view", permissions) && !isCouncil;
+  const canRead = canView && kindSettled;
+  const pointsQuery = useMyPoints(undefined, undefined, { enabled: canRead });
   const serviceQuery = useServiceEntries(viewerUserId ?? undefined, undefined, {
-    enabled: canView && !!viewerUserId,
+    enabled: canRead && !!viewerUserId,
   });
   const minutes = sumApprovedServiceMinutes(serviceQuery.data);
   return {
