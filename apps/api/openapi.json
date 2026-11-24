@@ -15119,6 +15119,347 @@
         ]
       }
     },
+    "/v1/rush/settings": {
+      "get": {
+        "operationId": "RushPipelineController_settings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveSettings_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the chapter's recruitment settings",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/contacts": {
+      "get": {
+        "operationId": "RushPipelineController_contacts_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushContactDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's logged contacts, newest first (notes only with `rush:read_notes`)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_logContact_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogRushContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushContactDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/owner": {
+      "put": {
+        "operationId": "RushPipelineController_setOwner_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushOwnerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushOwnerDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage`",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/follow-up": {
+      "put": {
+        "operationId": "RushPipelineController_setFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushFollowUpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_clearFollowUp_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushFollowUpDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clear the candidate's follow-up",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
     "/v1/geofences": {
       "get": {
         "operationId": "StudyGeofenceController_list_v1",
@@ -35087,6 +35428,52 @@
           },
           "viewer_has_voted": {
             "type": "boolean"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The member who is the prospect's main point of contact."
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_contact_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day of the newest logged contact."
+          },
+          "last_contact_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "last_contact_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "The day the open follow-up comes due."
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who the follow-up is for; they get the push."
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -35101,7 +35488,16 @@
           "created_at",
           "tag_ids",
           "viewer_rating",
-          "viewer_has_voted"
+          "viewer_has_voted",
+          "owner_id",
+          "owner_name",
+          "last_contact_on",
+          "last_contact_by",
+          "last_contact_by_name",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
         ]
       },
       "RushPipelineDto": {
@@ -35126,12 +35522,17 @@
             "items": {
               "$ref": "#/components/schemas/RushPipelineCandidateDto"
             }
+          },
+          "stale_days": {
+            "type": "number",
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
           }
         },
         "required": [
           "stages",
           "tags",
-          "candidates"
+          "candidates",
+          "stale_days"
         ]
       },
       "RushStageInputDto": {
@@ -35342,6 +35743,199 @@
         },
         "required": [
           "body"
+        ]
+      },
+      "RushSettingsDto": {
+        "type": "object",
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Days without a logged contact before an open prospect needs a follow-up."
+          }
+        },
+        "required": [
+          "stale_days"
+        ]
+      },
+      "RushContactDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_by_name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "description": "Absent without `rush:read_notes`, and on a prospect linked to the reader."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "logged_by",
+          "logged_by_name",
+          "kind",
+          "contacted_on",
+          "created_at"
+        ]
+      },
+      "LogRushContactDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "call",
+              "in_person",
+              "social_dm",
+              "email",
+              "event"
+            ]
+          },
+          "contacted_on": {
+            "type": "string",
+            "format": "date",
+            "description": "The day of the contact: today or earlier."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "Read only by roles that can read recruitment notes."
+          }
+        },
+        "required": [
+          "kind",
+          "contacted_on"
+        ]
+      },
+      "SetRushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`."
+          }
+        },
+        "required": [
+          "owner_id"
+        ]
+      },
+      "RushOwnerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "owner_name"
+        ]
+      },
+      "SetRushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "due_on": {
+            "type": "string",
+            "format": "date",
+            "description": "Today or later."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "What to do, such as \"invite to house dinner\"."
+          },
+          "for_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Who it is for. Defaults to the owner, else the caller."
+          }
+        },
+        "required": [
+          "due_on"
+        ]
+      },
+      "RushFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "follow_up_on": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "follow_up_note": {
+            "type": "string",
+            "nullable": true
+          },
+          "follow_up_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "follow_up_user_name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "follow_up_on",
+          "follow_up_note",
+          "follow_up_user_id",
+          "follow_up_user_name"
         ]
       },
       "GeofenceCircleDto": {

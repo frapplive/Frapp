@@ -17,7 +17,11 @@ import { RUSH_CANDIDATE_REPOSITORY } from '#domain/repositories/rush-candidate.r
 import type { IRushCandidateRepository } from '#domain/repositories/rush-candidate.repository.interface';
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
-import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
+import type {
+  RushCandidate,
+  RushCandidateRow,
+} from '#domain/entities/rush-candidate.entity';
+import { RbacService } from './rbac.service';
 import type {
   RushCandidateNote,
   RushStage,
@@ -84,6 +88,7 @@ describe('RushPipelineService', () => {
   let pipelineRepo: jest.Mocked<IRushPipelineRepository>;
   let candidateRepo: jest.Mocked<Pick<IRushCandidateRepository, 'findById'>>;
   let userRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
+  let rbac: jest.Mocked<Pick<RbacService, 'memberHasAnyPermission'>>;
 
   const baseCandidate: RushCandidate = {
     id: 'cand-1',
@@ -96,6 +101,17 @@ describe('RushPipelineService', () => {
     bid_status: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
+  };
+
+  /** The same candidate as the pipeline's own reads return it. */
+  const baseRow: RushCandidateRow = {
+    ...baseCandidate,
+    owner_id: null,
+    last_contact_on: null,
+    last_contact_by: null,
+    follow_up_on: null,
+    follow_up_note: null,
+    follow_up_user_id: null,
   };
 
   beforeEach(async () => {
@@ -132,7 +148,43 @@ describe('RushPipelineService', () => {
           Promise.resolve(note({ id, body })),
         ),
       deleteNote: jest.fn().mockResolvedValue(undefined),
+      findCandidate: jest.fn().mockResolvedValue(baseRow),
+      listContacts: jest.fn().mockResolvedValue([]),
+      createContact: jest.fn().mockImplementation((input) =>
+        Promise.resolve({
+          id: 'contact-1',
+          candidate_id: input.candidateId,
+          chapter_id: input.chapterId,
+          logged_by: input.loggedBy,
+          kind: input.kind,
+          contacted_on: input.contactedOn,
+          note: input.note,
+          created_at: '2026-11-24T15:00:00.000Z',
+        }),
+      ),
+      advanceLastContact: jest.fn().mockResolvedValue(undefined),
+      setOwner: jest
+        .fn()
+        .mockImplementation((id, _ch, owner_id) =>
+          Promise.resolve({ ...baseRow, id, owner_id }),
+        ),
+      setFollowUp: jest.fn().mockImplementation((id, _ch, followUp) =>
+        Promise.resolve({
+          ...baseRow,
+          id,
+          follow_up_on: followUp?.on ?? null,
+          follow_up_note: followUp?.note ?? null,
+          follow_up_user_id: followUp?.userId ?? null,
+        }),
+      ),
+      findSettings: jest.fn().mockResolvedValue(null),
+      saveSettings: jest
+        .fn()
+        .mockImplementation((chapter_id, stale_days) =>
+          Promise.resolve({ chapter_id, stale_days, updated_at: 'now' }),
+        ),
     };
+    rbac = { memberHasAnyPermission: jest.fn().mockResolvedValue(true) };
     candidateRepo = {
       findById: jest.fn().mockResolvedValue(baseCandidate),
     };
@@ -149,6 +201,7 @@ describe('RushPipelineService', () => {
         { provide: RUSH_PIPELINE_REPOSITORY, useValue: pipelineRepo },
         { provide: RUSH_CANDIDATE_REPOSITORY, useValue: candidateRepo },
         { provide: USER_REPOSITORY, useValue: userRepo },
+        { provide: RbacService, useValue: rbac },
       ],
     }).compile();
 
@@ -400,8 +453,8 @@ describe('RushPipelineService', () => {
 
     beforeEach(() => {
       pipelineRepo.listCandidates.mockResolvedValue([
-        baseCandidate,
-        { ...baseCandidate, id: 'cand-2', display_name: 'Sam Roe' },
+        baseRow,
+        { ...baseRow, id: 'cand-2', display_name: 'Sam Roe' },
       ]);
       pipelineRepo.listTags.mockResolvedValue([tag('t1', 'Legacy')]);
       pipelineRepo.listCandidateTags.mockResolvedValue([
@@ -837,6 +890,371 @@ describe('RushPipelineService', () => {
       await expect(
         service.deleteNote('note-1', 'cand-x', CHAPTER, VIEWER, true),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('contacts, owner, follow-ups and settings (#5934)', () => {
+    const NOW = new Date('2026-11-24T15:00:00Z');
+
+    it('reads the default stale days with no settings row, and saves a range', async () => {
+      await expect(service.getSettings(CHAPTER)).resolves.toEqual({
+        stale_days: 7,
+      });
+      await expect(service.saveSettings(CHAPTER, 10)).resolves.toEqual({
+        stale_days: 10,
+      });
+      await expect(service.saveSettings(CHAPTER, 0)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(service.saveSettings(CHAPTER, 61)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('puts the owner, last contact and follow-up on the pipeline, by name', async () => {
+      pipelineRepo.listCandidates.mockResolvedValue([
+        {
+          ...baseRow,
+          owner_id: 'author-1',
+          last_contact_on: '2026-11-22',
+          last_contact_by: 'user-1',
+          follow_up_on: '2026-11-26',
+          follow_up_note: 'Invite to house dinner',
+          follow_up_user_id: 'author-1',
+        },
+      ]);
+      pipelineRepo.findSettings.mockResolvedValue({
+        chapter_id: CHAPTER,
+        stale_days: 5,
+        updated_at: 'x',
+      });
+
+      const pipeline = await service.getPipeline(CHAPTER, {
+        id: VIEWER,
+        canViewResults: Promise.resolve(false),
+      });
+
+      expect(pipeline.stale_days).toBe(5);
+      expect(pipeline.candidates[0]).toMatchObject({
+        owner_id: 'author-1',
+        owner_name: 'Ana Author',
+        last_contact_on: '2026-11-22',
+        last_contact_by_name: 'Alice Member',
+        follow_up_on: '2026-11-26',
+        follow_up_note: 'Invite to house dinner',
+        follow_up_user_name: 'Ana Author',
+      });
+    });
+
+    describe('logContact', () => {
+      it('logs it, moves the last contact forward and clears the follow-up', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          stage: 'contacted',
+          last_contact_on: '2026-11-20',
+          follow_up_on: '2026-11-24',
+          follow_up_user_id: 'user-1',
+        });
+
+        const contact = await service.logContact(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { kind: 'text', contacted_on: '2026-11-24', note: '  ' },
+          NOW,
+        );
+
+        expect(contact).toMatchObject({
+          kind: 'text',
+          contacted_on: '2026-11-24',
+          note: null,
+          logged_by_name: 'Alice Member',
+        });
+        expect(pipelineRepo.advanceLastContact).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          '2026-11-24',
+          'user-1',
+        );
+        expect(pipelineRepo.setFollowUp).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          null,
+        );
+        // Not the first contact: no automatic move.
+        expect(pipelineRepo.setCandidateStage).not.toHaveBeenCalled();
+      });
+
+      it('moves a New prospect to the first visible Contacted stage on the first contact', async () => {
+        pipelineRepo.listStages.mockResolvedValue([
+          stageRow('new', 'New', 'new', 0),
+          stageRow('contacted', 'Contacted', 'contacted', 1, true),
+          stageRow('s_reached', 'Reached out', 'contacted', 2),
+          stageRow('closed', 'Closed', 'closed', 3),
+        ]);
+
+        await service.logContact(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { kind: 'call', contacted_on: '2026-11-23' },
+          NOW,
+        );
+
+        expect(pipelineRepo.setCandidateStage).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          's_reached',
+          null,
+        );
+      });
+
+      it('leaves a prospect past New where they are on the first contact', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          stage: 'met',
+        });
+        await service.logContact(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { kind: 'in_person', contacted_on: '2026-11-24' },
+          NOW,
+        );
+        expect(pipelineRepo.setCandidateStage).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['an unknown kind', { kind: 'pigeon', contacted_on: '2026-11-24' }],
+        ['a future day', { kind: 'text', contacted_on: '2026-11-26' }],
+        ['a day that does not exist', { kind: 'text', contacted_on: '2026-02-30' }],
+        ['a day long past', { kind: 'text', contacted_on: '2025-01-01' }],
+        [
+          'a long note',
+          { kind: 'text', contacted_on: '2026-11-24', note: 'x'.repeat(501) },
+        ],
+      ])('refuses %s', async (_label, input) => {
+        await expect(
+          service.logContact('cand-1', CHAPTER, 'user-1', input, NOW),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(pipelineRepo.createContact).not.toHaveBeenCalled();
+      });
+
+      it('refuses a contact with yourself', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          user_id: 'user-1',
+        });
+        await expect(
+          service.logContact(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { kind: 'text', contacted_on: '2026-11-24' },
+            NOW,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
+
+    describe('listContacts', () => {
+      beforeEach(() => {
+        pipelineRepo.listContacts.mockResolvedValue([
+          {
+            id: 'c1',
+            candidate_id: 'cand-1',
+            chapter_id: CHAPTER,
+            logged_by: 'user-1',
+            kind: 'text',
+            contacted_on: '2026-11-22',
+            note: 'Asked about the house',
+            created_at: 'x',
+          },
+        ]);
+      });
+
+      it('shows the note only to a reader of notes', async () => {
+        const [withNotes] = await service.listContacts('cand-1', CHAPTER, {
+          id: VIEWER,
+          canReadNotes: true,
+        });
+        expect(withNotes).toMatchObject({
+          logged_by_name: 'Alice Member',
+          note: 'Asked about the house',
+        });
+
+        const [without] = await service.listContacts('cand-1', CHAPTER, {
+          id: VIEWER,
+          canReadNotes: false,
+        });
+        expect(without).not.toHaveProperty('note');
+      });
+
+      it('never shows the note on a prospect linked to the reader', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          user_id: VIEWER,
+        });
+        const [row] = await service.listContacts('cand-1', CHAPTER, {
+          id: VIEWER,
+          canReadNotes: true,
+        });
+        expect(row).not.toHaveProperty('note');
+      });
+    });
+
+    describe('setOwner', () => {
+      it('lets a worker claim an unowned prospect, only while unowned', async () => {
+        const result = await service.setOwner(
+          'cand-1',
+          CHAPTER,
+          'author-1',
+          'author-1',
+          false,
+        );
+        expect(result).toEqual({
+          id: 'cand-1',
+          owner_id: 'author-1',
+          owner_name: 'Ana Author',
+        });
+        expect(pipelineRepo.setOwner).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          'author-1',
+          null,
+        );
+      });
+
+      it('409s when someone claimed it first', async () => {
+        pipelineRepo.setOwner.mockResolvedValue(null);
+        await expect(
+          service.setOwner('cand-1', CHAPTER, 'author-1', 'author-1', false),
+        ).rejects.toBeInstanceOf(ConflictException);
+      });
+
+      it('lets an owner let go, and refuses taking over without rush:manage', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'author-1',
+        });
+        await service.setOwner('cand-1', CHAPTER, 'author-1', null, false);
+        expect(pipelineRepo.setOwner).toHaveBeenLastCalledWith(
+          'cand-1',
+          CHAPTER,
+          null,
+          'author-1',
+        );
+
+        await expect(
+          service.setOwner('cand-1', CHAPTER, 'user-1', 'user-1', false),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(
+          service.setOwner('cand-1', CHAPTER, 'user-1', null, false),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+
+      it('lets rush:manage assign anyone who can work prospects', async () => {
+        await service.setOwner('cand-1', CHAPTER, 'chair', 'user-1', true);
+        expect(pipelineRepo.setOwner).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+        );
+
+        rbac.memberHasAnyPermission.mockResolvedValue(false);
+        await expect(
+          service.setOwner('cand-1', CHAPTER, 'chair', 'outsider', true),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(rbac.memberHasAnyPermission).toHaveBeenLastCalledWith(
+          CHAPTER,
+          'outsider',
+          ['rush:add'],
+        );
+      });
+    });
+
+    describe('setFollowUp', () => {
+      it('is for the owner by default', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'author-1',
+        });
+        const result = await service.setFollowUp(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { due_on: '2026-11-26', note: ' Invite to house dinner ' },
+          NOW,
+        );
+        expect(result).toEqual({
+          id: 'cand-1',
+          follow_up_on: '2026-11-26',
+          follow_up_note: 'Invite to house dinner',
+          follow_up_user_id: 'author-1',
+          follow_up_user_name: 'Ana Author',
+        });
+      });
+
+      it('is for the caller on an unowned prospect', async () => {
+        const result = await service.setFollowUp(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { due_on: '2026-11-24' },
+          NOW,
+        );
+        expect(result.follow_up_user_id).toBe('user-1');
+        expect(result.follow_up_note).toBeNull();
+      });
+
+      it.each([
+        ['a passed day', '2026-11-20'],
+        ['a day too far ahead', '2027-11-24'],
+        ['a malformed day', '11/26/2026'],
+      ])('refuses %s', async (_label, due_on) => {
+        await expect(
+          service.setFollowUp('cand-1', CHAPTER, 'user-1', { due_on }, NOW),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('refuses a closed prospect and a member who cannot work prospects', async () => {
+        pipelineRepo.findCandidate.mockResolvedValueOnce({
+          ...baseRow,
+          stage: 'closed',
+          closed_reason: 'no_response',
+        });
+        await expect(
+          service.setFollowUp(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { due_on: '2026-11-26' },
+            NOW,
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        rbac.memberHasAnyPermission.mockResolvedValue(false);
+        await expect(
+          service.setFollowUp(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { due_on: '2026-11-26', for_user_id: 'outsider' },
+            NOW,
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(pipelineRepo.setFollowUp).not.toHaveBeenCalled();
+      });
+
+      it('clears it', async () => {
+        const result = await service.clearFollowUp('cand-1', CHAPTER);
+        expect(result.follow_up_on).toBeNull();
+        expect(pipelineRepo.setFollowUp).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          null,
+        );
+      });
     });
   });
 });

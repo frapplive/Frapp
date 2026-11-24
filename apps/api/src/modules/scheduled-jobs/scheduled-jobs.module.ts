@@ -10,6 +10,7 @@ import { ReportRetentionModule } from '../report-retention/report-retention.modu
 import { PollModule } from '../poll/poll.module';
 import { ChatModule } from '../chat/chat.module';
 import { TaskModule } from '../task/task.module';
+import { RbacModule } from '../rbac/rbac.module';
 
 /**
  * Scheduled workers for spec-required, time-triggered behavior that no user
@@ -34,7 +35,9 @@ import { TaskModule } from '../task/task.module';
  * `ChatReportService`, whose evidence sweep releases what a resolved chat
  * report held when the release at resolve time did not finish (#2481).
  * `TaskModule` for `TaskService`, whose assignment push each new copy of a
- * repeating task sends (#5119).
+ * repeating task sends (#5119). `RbacModule` for `RbacService`, which checks
+ * that the member a recruitment follow-up or stale alert names can still work
+ * prospects (#5934).
  */
 @Module({
   imports: [
@@ -46,6 +49,7 @@ import { TaskModule } from '../task/task.module';
     PollModule,
     ChatModule,
     TaskModule,
+    RbacModule,
   ],
   providers: [
     ScheduledJobsService,

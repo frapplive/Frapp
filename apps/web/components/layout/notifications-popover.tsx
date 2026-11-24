@@ -108,6 +108,8 @@ type Notification = {
       /** "Suggested tasks to review" names what they were drawn from. */
       sourceType?: string;
       sourceId?: string;
+      /** A recruitment follow-up or stale alert names its prospect (#5934). */
+      candidateId?: string;
     };
     priority?: "URGENT" | "NORMAL" | "SILENT";
     senderId?: string;
@@ -198,6 +200,11 @@ export function deepLinkFor(notification: Notification): string {
     // Chat, which says nothing about a new member.
     case "members":
       return "/members";
+    // A recruitment follow-up or stale alert (#5934): the prospect's panel.
+    case "rush":
+      return target.candidateId
+        ? `/rush?prospect=${encodeURIComponent(target.candidateId)}`
+        : "/rush";
     // The officer report queue (#2257): the API's new-report notification
     // targets it with a bare screen, and the queue sits last on Chapter
     // settings' Chat page (#3837).

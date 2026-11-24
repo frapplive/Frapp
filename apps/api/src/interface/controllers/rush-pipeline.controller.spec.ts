@@ -32,6 +32,12 @@ describe('RushPipelineController permissions', () => {
     ['notes', SystemPermissions.RUSH_READ_NOTES],
     ['addNote', SystemPermissions.RUSH_NOTES],
     ['editNote', SystemPermissions.RUSH_NOTES],
+    ['settings', SystemPermissions.RUSH_VIEW],
+    ['saveSettings', SystemPermissions.RUSH_MANAGE],
+    ['contacts', SystemPermissions.RUSH_VIEW],
+    ['logContact', SystemPermissions.RUSH_ADD],
+    ['setFollowUp', SystemPermissions.RUSH_ADD],
+    ['clearFollowUp', SystemPermissions.RUSH_ADD],
   ] as const;
 
   it('floors every route at members:view behind the rush module', () => {
@@ -60,6 +66,19 @@ describe('RushPipelineController permissions', () => {
       Reflect.getMetadata(PERMISSIONS_KEY, controller.deleteNote),
     ).toBeUndefined();
   });
+});
+
+it('setOwner requires rush:add or rush:manage (#5934)', () => {
+  const controller = new RushPipelineController(
+    {} as RushPipelineService,
+    {} as RbacService,
+  );
+  expect(Reflect.getMetadata(PERMISSIONS_ANY_KEY, controller.setOwner)).toEqual(
+    [SystemPermissions.RUSH_ADD, SystemPermissions.RUSH_MANAGE],
+  );
+  expect(
+    Reflect.getMetadata(PERMISSIONS_KEY, controller.setOwner),
+  ).toBeUndefined();
 });
 
 describe('RushPipelineController permission reads', () => {

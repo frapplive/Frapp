@@ -185,3 +185,179 @@ export function formatRushRatingAverage(average: number): string {
   const rounded = Math.round(average * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
+
+// ── Contacts, owner, follow-ups and the stale alert (#5934) ─────────────────
+
+/** How a member reached a prospect, for a logged contact. */
+export const RUSH_CONTACT_KINDS = [
+  "text",
+  "call",
+  "in_person",
+  "social_dm",
+  "email",
+  "event",
+] as const;
+
+export type RushContactKind = (typeof RUSH_CONTACT_KINDS)[number];
+
+/** Each kind as a button reads: what the member did. */
+export const RUSH_CONTACT_KIND_LABELS: Record<RushContactKind, string> = {
+  text: "Text",
+  call: "Call",
+  in_person: "In person",
+  social_dm: "Social DM",
+  email: "Email",
+  event: "At an event",
+};
+
+/** Each kind as a history line reads: "Texted · Tue · by Chris". */
+export const RUSH_CONTACT_KIND_PAST: Record<RushContactKind, string> = {
+  text: "Texted",
+  call: "Called",
+  in_person: "Met in person",
+  social_dm: "Messaged on social",
+  email: "Emailed",
+  event: "Saw at an event",
+};
+
+export function isRushContactKind(value: unknown): value is RushContactKind {
+  return (
+    typeof value === "string" &&
+    (RUSH_CONTACT_KINDS as readonly string[]).includes(value)
+  );
+}
+
+export const RUSH_CONTACT_NOTE_MAX = 500;
+export const RUSH_FOLLOW_UP_NOTE_MAX = 120;
+/** How far back a contact may be dated. A season is shorter than this. */
+export const RUSH_CONTACT_LOOKBACK_DAYS = 120;
+/** How far ahead a follow-up may be set. */
+export const RUSH_FOLLOW_UP_AHEAD_DAYS = 180;
+export const RUSH_STALE_DAYS_DEFAULT = 7;
+export const RUSH_STALE_DAYS_MIN = 1;
+export const RUSH_STALE_DAYS_MAX = 60;
+
+/** `YYYY-MM-DD` of `date` on this device's own calendar. */
+export function rushLocalDayKey(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** A `YYYY-MM-DD` day moved by whole days. */
+export function shiftRushDayKey(day: string, days: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const at = new Date(Date.UTC(y!, m! - 1, d! + days));
+  return at.toISOString().slice(0, 10);
+}
+
+/** Whole days from `from` to `to`, both `YYYY-MM-DD`. */
+export function rushDaysBetween(from: string, to: string): number {
+  const ms = (day: string) => {
+    const [y, m, d] = day.split("-").map(Number);
+    return Date.UTC(y!, m! - 1, d!);
+  };
+  return Math.round((ms(to) - ms(from)) / 86_400_000);
+}
+
+interface RushWorkLike {
+  closed_reason: string | null;
+  created_at: string;
+  last_contact_on: string | null;
+  follow_up_on: string | null;
+}
+
+/**
+ * The day an open prospect goes stale: `staleDays` after their last logged
+ * contact, or after they were added when nobody has logged one. `null` for a
+ * closed prospect, which never goes stale. The API's morning sweep and both
+ * clients read this one rule.
+ */
+export function rushStaleOn(
+  candidate: Omit<RushWorkLike, "follow_up_on">,
+  staleDays: number,
+): string | null {
+  if (candidate.closed_reason != null) return null;
+  const base = candidate.last_contact_on ?? candidate.created_at.slice(0, 10);
+  return shiftRushDayKey(base, staleDays);
+}
+
+/** "Needs follow-up": open, and nobody has logged a contact for too long. */
+export function isRushCandidateStale(
+  candidate: Omit<RushWorkLike, "follow_up_on">,
+  staleDays: number,
+  today: string,
+): boolean {
+  const on = rushStaleOn(candidate, staleDays);
+  return on !== null && on <= today;
+}
+
+/** A follow-up due today or already past, on an open prospect. */
+export function isRushFollowUpDue(
+  candidate: Pick<RushWorkLike, "closed_reason" | "follow_up_on">,
+  today: string,
+): boolean {
+  return (
+    candidate.closed_reason == null &&
+    candidate.follow_up_on != null &&
+    candidate.follow_up_on <= today
+  );
+}
+
+/**
+ * Whether a prospect belongs under the phone list's **Follow up** chip for
+ * `viewerId`: a follow-up of theirs is due, or a prospect they own needs one.
+ */
+export function isRushFollowUpForViewer(
+  candidate: RushWorkLike & {
+    owner_id: string | null;
+    follow_up_user_id: string | null;
+  },
+  viewerId: string,
+  staleDays: number,
+  today: string,
+): boolean {
+  if (
+    candidate.follow_up_user_id === viewerId &&
+    isRushFollowUpDue(candidate, today)
+  ) {
+    return true;
+  }
+  return (
+    candidate.owner_id === viewerId &&
+    isRushCandidateStale(candidate, staleDays, today)
+  );
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/**
+ * A recruitment day as the screens say it, relative to `today`: "Today",
+ * "Yesterday", "Tomorrow", a weekday within the week either side ("Tue",
+ * "Thu"), else "Nov 3".
+ */
+export function formatRushDay(day: string, today: string): string {
+  const diff = rushDaysBetween(today, day);
+  if (diff === 0) return "Today";
+  if (diff === -1) return "Yesterday";
+  if (diff === 1) return "Tomorrow";
+  const [y, m, d] = day.split("-").map(Number);
+  const at = new Date(Date.UTC(y!, m! - 1, d!));
+  if (diff > -7 && diff < 7) return WEEKDAYS[at.getUTCDay()]!;
+  return `${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
+}

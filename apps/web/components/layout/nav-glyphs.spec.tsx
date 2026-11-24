@@ -20,6 +20,7 @@ import {
   EventsGlyph,
   PointsGlyph,
   PollsGlyph,
+  RecruitmentGlyph,
   ReportsGlyph,
   RolesGlyph,
   ServiceGlyph,
@@ -56,6 +57,7 @@ const SHAPES: ReadonlyArray<[string, DuotoneGlyphComponent, NavGlyphName]> = [
   ["Folder", FolderGlyph, "folder"],
   ["Schedule", ScheduleGlyph, "schedule"],
   ["Invite", InviteGlyph, "invite"],
+  ["Recruitment", RecruitmentGlyph, "recruitment"],
 ];
 
 function paths(Glyph: DuotoneGlyphComponent, active?: boolean) {
