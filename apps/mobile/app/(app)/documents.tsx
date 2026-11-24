@@ -103,7 +103,7 @@ import { DocumentsGlyph, MinutesGlyph } from "@/components/more/more-glyphs";
 import {
   DOCUMENTS_TYPE_PARAM,
   MINUTES_TYPE_PARAM_VALUE,
-} from "@/lib/more/document-links";
+} from "@repo/validation";
 import {
   MINUTES_SPOKEN_KIND,
   documentMeta,

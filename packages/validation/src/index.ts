@@ -85,6 +85,7 @@ export * from "./discord-export";
 export * from "./discord-import";
 // The " / " a Drive-synced folder's path is joined with (#5337).
 export * from "./document-folders";
+export * from "./document-links";
 export * from "./error-copy";
 // An event's agenda and attachments (#4934): their limits and shapes, which
 // the API enforces and both editors read.

@@ -22,7 +22,11 @@ import {
   useViewerUserId,
   type DocumentTypeRow,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import {
+  can,
+  DOCUMENTS_TYPE_PARAM,
+  MINUTES_TYPE_PARAM_VALUE,
+} from "@repo/validation";
 import { Can } from "@/components/shared/can";
 import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -46,10 +50,6 @@ import {
 } from "@repo/hooks/document-library";
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { DocumentsPageSkeleton } from "@/components/documents/documents-skeleton";
-import {
-  DOCUMENT_TYPE_PARAM,
-  MINUTES_TYPE_PARAM_VALUE,
-} from "@/components/documents/document-links";
 import { meetingHref } from "@/components/meetings/meeting-copy";
 import { DOCUMENT_LINK_PARAM } from "@/components/ask/ask-source-link";
 import {
@@ -97,7 +97,7 @@ export function DocumentsPage() {
 
 function DocumentsPageForLink() {
   const chapterId = useChapterStore((state) => state.activeChapterId);
-  const type = useSearchParams()?.get(DOCUMENT_TYPE_PARAM) ?? null;
+  const type = useSearchParams()?.get(DOCUMENTS_TYPE_PARAM) ?? null;
   return (
     <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />
   );
