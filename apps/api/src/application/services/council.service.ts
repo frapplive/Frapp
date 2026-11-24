@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import {
   COUNCIL_ARCHETYPE,
+  councilEnabledModules,
   COUNCIL_CUSTOM_TITLE_KEY,
   COUNCIL_NAME_MAX,
   COUNCIL_SCHOOL_UNVERIFIED_CODE,
@@ -22,6 +23,7 @@ import {
   type CouncilType,
   type RecruitmentModel,
 } from '@repo/validation';
+import { MODULE_CATALOG } from '@repo/org-archetypes';
 import {
   CHAPTER_REPOSITORY,
   type IChapterRepository,
@@ -179,6 +181,9 @@ export class CouncilService {
             council_school_id: school.id,
             recruitment_model: model,
             org_archetype: COUNCIL_ARCHETYPE,
+            enabled_modules: councilEnabledModules(
+              MODULE_CATALOG.map((entry) => entry.key),
+            ),
             legal_accepted_at: new Date().toISOString(),
             legal_policy_version: LEGAL_POLICY_VERSION,
             legal_accepted_by: userId,
@@ -272,7 +277,7 @@ export class CouncilService {
   private typeTaken(profile: CouncilProfile): ConflictException {
     return new ConflictException({
       code: COUNCIL_TYPE_TAKEN_CODE,
-      message: `Your school already has an ${profile.label} on Frapp. Ask its officers for an invite.`,
+      message: `Your school's ${profile.label} is already on Frapp. Ask its officers for an invite.`,
     });
   }
 }

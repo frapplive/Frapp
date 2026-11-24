@@ -90,6 +90,13 @@ describe('CouncilService.create', () => {
         recruitment_model: 'open_bidding',
         org_archetype: 'council',
         legal_accepted_by: USER,
+        enabled_modules: expect.objectContaining({
+          chat: true,
+          members: true,
+          events: false,
+          points: false,
+          rush: false,
+        }),
       },
     });
     expect(legal.requireOrAccept).toHaveBeenCalledWith(USER, true);

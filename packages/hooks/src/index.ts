@@ -99,6 +99,7 @@ export {
   useSidebarPreferences,
   useSidebarPreferencesRefetch,
 } from "./use-chat-sidebar";
+export * from "./use-councils";
 export * from "./use-custom-fields";
 export * from "./use-debounced-value";
 export * from "./use-discord-author-link";

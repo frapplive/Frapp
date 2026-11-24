@@ -298,6 +298,31 @@ export function keysForRecruitmentModel(
     : [...permissions];
 }
 
+/**
+ * The modules a council's space shows today (#5933, UI design v8 § 3:
+ * "chat, roles and settings now; Recruitment, Calendar and Chapters later").
+ * A council's `enabled_modules` lists every other module as `false`, so the
+ * module gates web and the phone already have hide chapter features in a
+ * council. It locks nothing (`isModuleEnabled` reads a missing key as on):
+ * the routes' tenant kinds do that (`school-layer.md` § 2.3).
+ */
+export const COUNCIL_MODULES_ON: ReadonlySet<string> = new Set([
+  "chat",
+  "members",
+  "announcements",
+  "audit-log",
+  "chapter-settings",
+]);
+
+/** A council's `enabled_modules`: every module key off but {@link COUNCIL_MODULES_ON}. */
+export function councilEnabledModules(
+  moduleKeys: readonly string[],
+): Record<string, boolean> {
+  return Object.fromEntries(
+    moduleKeys.map((key) => [key, COUNCIL_MODULES_ON.has(key)]),
+  );
+}
+
 /** The titles a founder picks theirs from, in the pack's order. */
 export function pickableCouncilTitles(
   type: CouncilType,
