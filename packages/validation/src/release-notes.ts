@@ -136,6 +136,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Recruitment has its own page, with your prospects on a board or in a list, stages your chapter can rename and reorder, tags, star ratings and notes only the chapter sees.",
       "Mine and All above a meeting's action items are now plain words instead of a boxed switch, and the small pickers inside forms, like Repeat and Proof, are a quiet gray instead of your chapter's color.",
       "After you join a chapter, you can add your school and verify your school email with a code, or skip it for now.",
+      "A link attached to an event or a task that won't open on a phone, like an address with no real website behind it, is now refused when you add it, and one already attached shows as text instead of opening a page that can't be found.",
+      "Recruitment now tracks who's talked to each prospect: log a text or call in two taps, give a prospect an owner, set a follow-up that reminds its owner the morning it's due, and see who has gone quiet too long.",
+      "If you've verified your school email, you can start your school's council (IFC, Panhellenic, NPHC, MGC or another), pick your own title, and rename every role.",
     ],
     web: [
       "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
