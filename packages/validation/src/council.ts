@@ -339,6 +339,8 @@ export const COUNCIL_CUSTOM_TITLE_KEY = "custom";
 export const COUNCIL_TYPE_TAKEN_CODE = "council.type_taken";
 /** `POST /v1/councils`: the founder holds no verified school email there (§ 5.3). */
 export const COUNCIL_SCHOOL_UNVERIFIED_CODE = "council.school_unverified";
+/** `POST /v1/councils`: the founder's own title is a seeded role's or a mention name. */
+export const COUNCIL_TITLE_TAKEN_CODE = "council.title_taken";
 
 export const COUNCIL_NAME_MAX = 80;
 export const COUNCIL_TITLE_MAX = 40;

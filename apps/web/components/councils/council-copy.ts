@@ -29,6 +29,10 @@ export const START_COUNCIL_COPY = {
   termsRequired: "Accept the Terms of Service and Privacy Policy to go on.",
   createFailed:
     "Couldn't start the council. Check your connection and try again.",
+  /** The council exists, but switching into it failed; Start retries the switch. */
+  openFailed: (name: string) =>
+    `${name} is set up, but it didn't open. Try again.`,
+  open: (name: string) => `Open ${name}`,
   inviteTitle: "Invite your delegates",
   finish: "Finish",
   skip: "Skip for now",

@@ -7259,6 +7259,11 @@ export interface components {
              * @enum {string|null}
              */
             council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
+            /**
+             * @description A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.
+             * @enum {string|null}
+             */
+            recruitment_model?: "open_bidding" | "formal" | "none" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };
@@ -7323,6 +7328,11 @@ export interface components {
              * @enum {string|null}
              */
             council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
+            /**
+             * @description A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.
+             * @enum {string|null}
+             */
+            recruitment_model?: "open_bidding" | "formal" | "none" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };
@@ -7385,6 +7395,11 @@ export interface components {
              * @enum {string|null}
              */
             council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
+            /**
+             * @description A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.
+             * @enum {string|null}
+             */
+            recruitment_model?: "open_bidding" | "formal" | "none" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };

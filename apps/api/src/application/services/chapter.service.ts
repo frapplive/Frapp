@@ -66,6 +66,7 @@ import {
 } from '#domain/repositories/chat.repository.interface';
 import type { ChatChannel } from '#domain/entities/chat.entity';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
+import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import { toReportableError } from '../../infrastructure/observability/reportable-error';
 
 /**
@@ -128,6 +129,8 @@ export interface TenantSeed {
     system_key: string | null;
     name: string;
   }) => boolean;
+  /** Delete the tenant row when seeding fails after it was inserted. */
+  deleteOnFailure?: boolean;
 }
 
 export const CHAPTER_SEED: TenantSeed = {
@@ -361,6 +364,35 @@ export class ChapterService {
         : {}),
     });
 
+    try {
+      await this.seedTenant(userId, chapter, seed);
+    } catch (error) {
+      // A council that failed half-way would hold its type at its school
+      // for good (`chapters_one_council_per_type`) with nobody in it, so its
+      // seed deletes the row, and the cascade everything seeded under it
+      // (#5933). A chapter keeps today's behaviour.
+      if (seed.deleteOnFailure) {
+        await this.chapterRepo.deleteById(chapter.id).catch((cleanup) =>
+          reportCaughtFailure(this.logger, {
+            level: 'error',
+            site: 'tenant-seed-cleanup',
+            message: `Failed to delete tenant ${chapter.id} after its seed failed`,
+            error: cleanup,
+          }),
+        );
+      }
+      throw error;
+    }
+
+    return chapter;
+  }
+
+  /** Seeds a new tenant's tiers, roles, founder membership and channels. */
+  private async seedTenant(
+    userId: string,
+    chapter: Chapter,
+    seed: TenantSeed,
+  ): Promise<void> {
     // The starting tiers are rows from here on: the chapter can rename,
     // reorder, add and delete them, so they are matched to the seeded roles by
     // the position they were just inserted with and never looked up by name.
@@ -502,8 +534,6 @@ export class ChapterService {
         cause: toReportableError(err),
       });
     }
-
-    return chapter;
   }
 
   async update(

@@ -17,6 +17,7 @@ import { useCurrentChapter } from "./use-chapters";
 function tenant(kind: "chapter" | "council") {
   vi.mocked(useCurrentChapter).mockReturnValue({
     data: { kind },
+    isError: false,
   } as unknown as ReturnType<typeof useCurrentChapter>);
 }
 

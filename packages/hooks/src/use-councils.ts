@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import {
   COUNCIL_SCHOOL_UNVERIFIED_CODE,
+  COUNCIL_TITLE_TAKEN_CODE,
   COUNCIL_TYPE_TAKEN_CODE,
 } from "@repo/validation";
 import { errorCopy } from "./error-copy";
@@ -70,7 +71,8 @@ export function councilStepErrorCopy(error: unknown, fallback: string): string {
     const { code, message } = error as { code?: unknown; message?: unknown };
     if (
       (code === COUNCIL_TYPE_TAKEN_CODE ||
-        code === COUNCIL_SCHOOL_UNVERIFIED_CODE) &&
+        code === COUNCIL_SCHOOL_UNVERIFIED_CODE ||
+        code === COUNCIL_TITLE_TAKEN_CODE) &&
       typeof message === "string" &&
       message.trim()
     ) {

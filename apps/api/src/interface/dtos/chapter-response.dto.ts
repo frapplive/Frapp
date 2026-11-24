@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   COUNCIL_TYPES,
+  RECRUITMENT_MODELS,
   SUBSCRIPTION_STATUSES,
   TENANT_KINDS,
   type CouncilType,
+  type RecruitmentModel,
   type SubscriptionStatus,
   type TenantKind,
 } from '@repo/validation';
@@ -81,6 +83,14 @@ export class CurrentChapterResponseDto {
     description: "A council's type; null on a chapter (#5933).",
   })
   council_type?: CouncilType | null;
+
+  @ApiPropertyOptional({
+    enum: RECRUITMENT_MODELS,
+    nullable: true,
+    description:
+      "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.",
+  })
+  recruitment_model?: RecruitmentModel | null;
 
   @ApiPropertyOptional({
     type: 'object',
@@ -262,6 +272,14 @@ export class UpdateChapterResponseDto {
     description: "A council's type; null on a chapter (#5933).",
   })
   council_type?: CouncilType | null;
+
+  @ApiPropertyOptional({
+    enum: RECRUITMENT_MODELS,
+    nullable: true,
+    description:
+      "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`.",
+  })
+  recruitment_model?: RecruitmentModel | null;
 
   @ApiPropertyOptional({
     type: 'object',

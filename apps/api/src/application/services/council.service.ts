@@ -13,6 +13,7 @@ import {
   COUNCIL_CUSTOM_TITLE_KEY,
   COUNCIL_NAME_MAX,
   COUNCIL_SCHOOL_UNVERIFIED_CODE,
+  COUNCIL_TITLE_TAKEN_CODE,
   COUNCIL_TYPE_TAKEN_CODE,
   COUNCIL_TITLE_MAX,
   councilProfile,
@@ -34,7 +35,7 @@ import {
 } from '#domain/repositories/school.repository.interface';
 import type { Chapter } from '#domain/entities/chapter.entity';
 import { LEGAL_POLICY_VERSION } from '#domain/constants/legal';
-import { PG_CHAPTER_START_LIMIT } from '#domain/constants/postgres-error-codes';
+import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import {
   ChapterService,
   type TenantSeed,
@@ -71,8 +72,6 @@ export interface CouncilProfileView {
   verified: boolean;
   school: { id: string; name: string; short_name: string } | null;
 }
-
-const UNIQUE_VIOLATION = '23505';
 
 /**
  * Who a council's seeded channels name: everyone sees and posts in
@@ -195,17 +194,15 @@ export class CouncilService {
       .catch(async (error: unknown) => {
         const code = (error as { code?: unknown })?.code;
         // Two founders of the same type at once: the unique index holds.
-        if (code === UNIQUE_VIOLATION) throw this.typeTaken(profile);
-        if (code === PG_CHAPTER_START_LIMIT) {
-          throw (
-            (await this.onboarding.chapterStartRefusal(userId)) ??
-            this.onboarding.startLimitException(
-              new Date(Date.now() + 60_000),
-              new Date(),
-            )
-          );
+        if (
+          code === PG_UNIQUE_VIOLATION &&
+          String((error as { message?: unknown })?.message ?? '').includes(
+            'chapters_one_council_per_type',
+          )
+        ) {
+          throw this.typeTaken(profile);
         }
-        throw error;
+        throw await this.onboarding.startLimitFromCreateError(error, userId);
       });
   }
 
@@ -267,7 +264,7 @@ export class CouncilService {
     if (same?.pickable) return { seededKey: same.key };
     if (same || reservedMentionName(title) !== null) {
       throw new ConflictException({
-        code: 'role.everyone_name',
+        code: COUNCIL_TITLE_TAKEN_CODE,
         message: `"${title}" is taken. Pick another title.`,
       });
     }
@@ -307,10 +304,12 @@ export function councilSeed(
     color: null,
     ...(role.systemKey === 'EVERYONE' ? { mentionable: false } : {}),
   }));
-  const founderName =
-    'customName' in founder
-      ? founder.customName
-      : profile.roles.find((role) => role.key === founder.seededKey)!.name;
+  // The founder's title: their own, or a seeded one, matched by its key when
+  // it has one (Delegate is `MEMBER`), else by its name.
+  const seeded =
+    'seededKey' in founder
+      ? profile.roles.find((role) => role.key === founder.seededKey)!
+      : null;
   if ('customName' in founder) {
     roles.push({
       name: founder.customName,
@@ -322,6 +321,14 @@ export function councilSeed(
       color: null,
     });
   }
+  const holdsTitle = (role: { system_key: string | null; name: string }) =>
+    seeded?.systemKey
+      ? role.system_key === seeded.systemKey
+      : role.system_key === null &&
+        role.name ===
+          (seeded
+            ? seeded.name
+            : (founder as { customName: string }).customName);
   return {
     tiers: profile.tiers.map((tier) => ({
       name: tier.name,
@@ -329,7 +336,7 @@ export function councilSeed(
     })),
     roles,
     channels: COUNCIL_CHANNELS,
-    founderAlsoHolds: (role) =>
-      role.system_key === null && role.name === founderName,
+    founderAlsoHolds: holdsTitle,
+    deleteOnFailure: true,
   };
 }

@@ -23779,6 +23779,16 @@
             "nullable": true,
             "description": "A council's type; null on a chapter (#5933)."
           },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23948,6 +23958,16 @@
             "nullable": true,
             "description": "A council's type; null on a chapter (#5933)."
           },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -24104,6 +24124,16 @@
             ],
             "nullable": true,
             "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
           },
           "enabled_modules": {
             "type": "object",

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { deriveSignetPalette } from '@repo/chapter-theme';
 import * as chapterTheme from '@repo/chapter-theme';
-import { ChapterService } from './chapter.service';
+import { CHAPTER_SEED, ChapterService } from './chapter.service';
 
 // Drives `CHAPTER_BILLING_BETA_OFF` per test, so the billing-on branch of
 // `create` runs too and turning billing back on stays a one-line change.
@@ -139,6 +139,7 @@ describe('ChapterService', () => {
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
       findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -822,6 +823,43 @@ describe('ChapterService', () => {
       chapter_id: chapter.id,
       role_ids: [presidentRole.id, 'role-actives'],
       has_completed_onboarding: true,
+    });
+  });
+
+  // #5933: a council's seed deletes its row when seeding fails, so a half-made
+  // council never holds its type at its school; a chapter's keeps the row.
+  describe('a seed that fails after the tenant row exists', () => {
+    const failingSeed = (deleteOnFailure: boolean) => ({
+      ...CHAPTER_SEED,
+      deleteOnFailure,
+    });
+    beforeEach(() => {
+      mockChapterRepo.create.mockResolvedValue(
+        chapterFixture({ id: 'council-1', subscription_status: 'active' }),
+      );
+      mockRoleTierRepo.createMany.mockRejectedValue(new Error('pool down'));
+    });
+
+    it('deletes the row and rethrows when the seed asks', async () => {
+      await expect(
+        service.create(
+          'user-1',
+          { name: 'RPI IFC', university: 'RPI', config: {} },
+          failingSeed(true),
+        ),
+      ).rejects.toThrow('pool down');
+      expect(mockChapterRepo.deleteById).toHaveBeenCalledWith('council-1');
+    });
+
+    it("keeps a chapter's row, as before", async () => {
+      await expect(
+        service.create(
+          'user-1',
+          { name: 'Alpha', university: 'State U', config: {} },
+          failingSeed(false),
+        ),
+      ).rejects.toThrow('pool down');
+      expect(mockChapterRepo.deleteById).not.toHaveBeenCalled();
     });
   });
 

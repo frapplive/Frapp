@@ -136,6 +136,13 @@ export function StartCouncil() {
   const [verifying, setVerifying] = useState(false);
   // The created council's type, which names the role its invites join as.
   const [created, setCreated] = useState<CouncilType | null>(null);
+  // A council that was made but not opened: Start retries the switch rather
+  // than making a second one (#5933).
+  const [unopened, setUnopened] = useState<{
+    id: string;
+    name: string;
+    type: CouncilType;
+  } | null>(null);
   const [invited, setInvited] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
@@ -255,9 +262,30 @@ export function StartCouncil() {
     setSubmitError(null);
   }
 
+  async function openCouncil(council: {
+    id: string;
+    name: string;
+    type: CouncilType;
+  }) {
+    // `useSelectChapter` answers false rather than throwing; moving on would
+    // leave the store, and every invite, on the previous tenant.
+    if (await selectChapter(council.id)) {
+      setUnopened(null);
+      setCreated(council.type);
+      return;
+    }
+    setUnopened(council);
+    setSubmitError(COPY.openFailed(council.name));
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+    if (unopened) {
+      setSubmitError(null);
+      await openCouncil(unopened);
+      return;
+    }
     const found = councilDraftProblem(effective, name);
     if (found) {
       setProblem(found);
@@ -276,8 +304,11 @@ export function StartCouncil() {
         accept_terms_privacy: true,
       });
       // The new council is the active tenant from here, as a new chapter is.
-      await selectChapter(council.id);
-      setCreated(effective.type!);
+      await openCouncil({
+        id: council.id,
+        name: council.name,
+        type: effective.type!,
+      });
     } catch (error) {
       setSubmitError(councilStepErrorCopy(error, COPY.createFailed));
     }
@@ -448,7 +479,7 @@ export function StartCouncil() {
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {COPY.submit}
+          {unopened ? COPY.open(unopened.name) : COPY.submit}
         </Button>
       </form>
       {confirmDropDialog}

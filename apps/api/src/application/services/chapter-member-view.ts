@@ -60,6 +60,7 @@ export const CHAPTER_MEMBER_VIEW_FIELDS = [
   // Which shell to draw (#5933): a council's reads `kind` and its type.
   'kind',
   'council_type',
+  'recruitment_model',
   'enabled_modules',
   'vocabulary',
   'branding',

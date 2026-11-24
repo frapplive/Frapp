@@ -190,13 +190,7 @@ export class ChapterOnboardingService {
         // Submits that arrive together all pass the count above; the database
         // counts again under a lock on the starter and refuses the one past
         // the ceiling (`20261117172019_daily_limits_counted_under_lock.sql`).
-        if ((error as { code?: unknown })?.code !== PG_CHAPTER_START_LIMIT) {
-          throw error;
-        }
-        throw (
-          (await this.chapterStartRefusal(userId)) ??
-          this.startLimitException(new Date(Date.now() + 60_000), new Date())
-        );
+        throw await this.startLimitFromCreateError(error, userId);
       });
 
     // Step 1 of the activation funnel (#267). Recorded here rather than in
@@ -285,6 +279,24 @@ export class ChapterOnboardingService {
    * lean on this one too. Nobody running one chapter, or helping a second one
    * start, meets it.
    */
+  /**
+   * What a failed tenant create throws: the daily ceiling's 429 when the
+   * database's lock refused it (`FR429`), else the error itself. Chapter
+   * onboarding and council creation (#5933) share the ceiling and this.
+   */
+  async startLimitFromCreateError(
+    error: unknown,
+    userId: string,
+  ): Promise<unknown> {
+    if ((error as { code?: unknown })?.code !== PG_CHAPTER_START_LIMIT) {
+      return error;
+    }
+    return (
+      (await this.chapterStartRefusal(userId)) ??
+      this.startLimitException(new Date(Date.now() + 60_000), new Date())
+    );
+  }
+
   async chapterStartRefusal(userId: string): Promise<HttpException | null> {
     const now = new Date();
     const started = await this.chapterRepo.findStartedAtByUserSince(
@@ -301,7 +313,7 @@ export class ChapterOnboardingService {
     return roomAt ? this.startLimitException(roomAt, now) : null;
   }
 
-  startLimitException(roomAt: Date, now: Date): HttpException {
+  private startLimitException(roomAt: Date, now: Date): HttpException {
     return new HttpException(
       {
         code: CHAPTER_START_LIMIT_CODE,

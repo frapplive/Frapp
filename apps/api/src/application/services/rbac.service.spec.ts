@@ -37,6 +37,12 @@ import type { Role, RoleTier } from '#domain/entities/role.entity';
 import type { Member } from '#domain/entities/member.entity';
 import type { Chapter } from '#domain/entities/chapter.entity';
 import {
+  CHAPTER_ID as TIERED_CHAPTER_ID,
+  USER as TIERED_USER,
+  ROLE as TIERED_ROLE,
+  tieredRankContext,
+} from '#test/helpers/tiered-chapter.fixture';
+import {
   chapterFixture,
   memberFixture,
   roleFixture,
@@ -104,6 +110,7 @@ describe('RbacService', () => {
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
       findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -1649,6 +1656,96 @@ describe('RbacService', () => {
 
   // `school-layer.md` § 4.2 rule 3 and § 4.3 test 4 (#5933).
   describe('reserved council keys', () => {
+    const asChapter = () =>
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: 'chapter-1', kind: 'chapter' }),
+      );
+    const expectReserved = (error: unknown) => {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: 'roles.permission.reserved',
+      });
+    };
+
+    // The reserved check runs before the held check, so an officer without
+    // `*` reads the reserved code too, not "you don't hold this".
+    it('refuses a reserved key to a Vice President as reserved, on create and update', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: TIERED_CHAPTER_ID, kind: 'chapter' }),
+      );
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: TIERED_ROLE.brother, chapter_id: TIERED_CHAPTER_ID }),
+      );
+      jest
+        .spyOn(service, 'getRankContext')
+        .mockResolvedValue(tieredRankContext(TIERED_USER.vicePresident));
+      expectReserved(
+        await service
+          .createAsMember(TIERED_CHAPTER_ID, TIERED_USER.vicePresident, {
+            name: 'Liaison',
+            permissions: ['council:recruitment_view'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .updateAsMember(
+            TIERED_ROLE.brother,
+            TIERED_CHAPTER_ID,
+            TIERED_USER.vicePresident,
+            {
+              permission_overrides: { 'council:announce': true },
+            },
+          )
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.create).not.toHaveBeenCalled();
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an update that lists a reserved key, or switches one on', async () => {
+      asChapter();
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: 'role-1', chapter_id: 'chapter-1', permissions: [] }),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permissions: ['council:announce'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permission_overrides: { 'council:recruitment_view': true },
+          })
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses recruitment keys in a council whose model is none, and keeps its other keys', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({
+          id: 'chapter-1',
+          kind: 'council',
+          council_type: 'nphc',
+          recruitment_model: 'none',
+        }),
+      );
+      expectReserved(
+        await service
+          .assertNoReservedPermissions('chapter-1', [
+            'council:recruitment_manage',
+          ])
+          .catch((e: unknown) => e),
+      );
+      await expect(
+        service.assertNoReservedPermissions('chapter-1', ['council:announce']),
+      ).resolves.toBeUndefined();
+    });
+
     beforeEach(() => {
       mockRoleRepo.findByChapterAndName.mockResolvedValue(null);
       mockRoleRepo.create.mockImplementation(async (role) =>

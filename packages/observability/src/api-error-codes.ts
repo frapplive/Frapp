@@ -88,6 +88,7 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // the founder hasn't verified a school email there.
   "council.type_taken",
   "council.school_unverified",
+  "council.title_taken",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",

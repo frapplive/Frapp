@@ -128,6 +128,11 @@ export interface IChapterRepository {
     patch: SubscriptionWebhookPatch,
   ): Promise<AppliedSubscriptionWebhook | null>;
   create(data: Partial<Chapter>): Promise<Chapter>;
+  /**
+   * Deletes a tenant row, and through the cascade everything keyed to it.
+   * Only for undoing a council whose seeding failed (#5933).
+   */
+  deleteById(id: string): Promise<void>;
   update(id: string, data: Partial<Chapter>): Promise<Chapter>;
   /**
    * Compare-and-set a derived theme palette onto the chapter: the write lands

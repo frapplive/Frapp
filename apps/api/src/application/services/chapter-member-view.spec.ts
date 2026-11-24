@@ -27,6 +27,7 @@ function fullChapterRow(): Chapter {
     org_archetype: 'fraternity',
     kind: 'chapter',
     council_type: null,
+    recruitment_model: null,
     enabled_modules: { chat: true, dues: false },
     vocabulary: { member: 'brother' },
     branding: { greek_letters: 'ΑΒ' },

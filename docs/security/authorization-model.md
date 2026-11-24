@@ -203,7 +203,7 @@ them at all. The API reaches them with the **service-role key, which bypasses RL
 
 Table counts are not kept in this section: they move with every migration, and the numbers it
 used to give had drifted by eight tables. The query below lists the API-only tables (all but the
-three `*`-marked ones in § "Enforcing layer per table"); the policy count
+four `*`-marked ones in § "Enforcing layer per table"); the policy count
 and its counting convention belong to § "The policies that do exist", which is reconciled against
 `pg_policies`. Do not substitute a grep over `supabase/migrations/` for either: it counts
 _history_, so a `drop policy` / `create policy` pair reads as two live policies.
@@ -227,8 +227,8 @@ select c.relname
  order by c.relname;
 ```
 
-Its rows are the "API only" tables in § "Enforcing layer per table" below, minus the three
-`*`-marked tables (`members`, `users`, `member_custom_field_values`), which carry non-widening
+Its rows are the "API only" tables in § "Enforcing layer per table" below, minus the four
+`*`-marked tables (`members`, `users`, `member_custom_field_values`, and since #5933 `chapters`), which carry non-widening
 policies and so drop out of the query, but are API only all the same.
 
 This doc deliberately keeps no count or list of these tables. It used to, and every migration that
@@ -256,7 +256,7 @@ that PR also grants the client role the privilege and adds it to the tier's `CLI
 
 | Enforcing layer                                                        | Tables                                                                                                                                                                                      | Count          |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **API only** (RLS on, no policy → default-deny; service-role bypasses) | Every table the query above returns, plus `members`\*, `users`\* and `member_custom_field_values`\*. Of those, `events`†, `event_attendance`† and `notifications`† also emit a change ping. | Query rows + 3 |
+| **API only** (RLS on, no policy → default-deny; service-role bypasses) | Every table the query above returns, plus `members`\*, `users`\*, `chapters`\* and `member_custom_field_values`\*. Of those, `events`†, `event_attendance`† and `notifications`† also emit a change ping. | Query rows + 4 |
 | **RLS enforces** (read directly by a user-JWT client)                  | `chat_message_actions`, `chat_messages`                                                                                                                                                     | 2              |
 | **RLS enforces** (policy present, defense-in-depth)                    | `chapter_audit_log`‡                                                                                                                                                                   | 1              |
 
@@ -274,7 +274,7 @@ enforcing layer out of the API. Topics are authorised by `realtime_messages_scop
 
 ### The policies that do exist (11 statements)
 
-**Counting convention.** `10` counts individual policy _statements_ — rows in `pg_policies` — not
+**Counting convention.** `11` counts individual policy _statements_ — rows in `pg_policies` — not
 rows in the table below, several of which name two policies each. That ambiguity is what let the
 number drift unnoticed before, so it is now stated rather than derived.
 
@@ -283,10 +283,10 @@ Reconciled against hosted `frapp-staging` on 2026-08-27
 **10 in `public` + 1 in `realtime` = 11** at that read. Migration `20260906203000` (#1552)
 adds a second `realtime` policy, so the expected hosted figure was **10 + 2 = 12**. Migration
 `20261112280000` (#724, #4513) drops `chat_message_actions_insert`, making it **9 + 2 = 11**, and
-`20261117174649` (#4839) drops `chat_notification_preferences_select_own`, so it is now **8 + 2 = 10**,
-the count the PGlite check carried until `20261124010605` (#5933) added `auth_admin_can_read_chapters`,
-making it **9 + 2 = 11**, the count the heading and the check carry now. The promotion log records that migration as
-applied; the hosted catalog has not been re-read since 2026-08-27 (unverified).
+`20261117174649` (#4839) drops `chat_notification_preferences_select_own`, so it was **8 + 2 = 10**.
+The promotion log records that migration as applied; the hosted catalog has not been re-read since
+2026-08-27 (unverified). `20261124010605` (#5933, not yet promoted) adds `auth_admin_can_read_chapters`,
+making it **9 + 2 = 11**, the count the heading and the PGlite check carry now.
 
 The PGlite CI substrate sees **9**, every `public` one. The two absences are schema-gated rather
 than drift: `realtime.messages` needs a `realtime` schema PGlite does not have.

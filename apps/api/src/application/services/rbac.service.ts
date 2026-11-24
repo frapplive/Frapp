@@ -268,6 +268,9 @@ export class RbacService {
     // none takes its tier's.
     const listed = data.permissions ?? [];
     const holds = listed.length > 0 ? listed : tierPermissions;
+    // Before the held check, so a reserved key reads as reserved, not as one
+    // the caller lacks (#5933).
+    await this.assertNoReservedPermissions(chapterId, listed);
     assertPermissionsHeld(context.reach, holds);
     if (data.self_assignable === true) {
       assertSafeToPick({
@@ -358,6 +361,13 @@ export class RbacService {
           : context.tiers.find((candidate) => candidate.id === tierId);
       after = effectivePermissions(tier?.permissions ?? [], overrides);
     }
+    // Before the held checks, so a reserved key reads as reserved (#5933).
+    await this.assertNoReservedPermissions(chapterId, [
+      ...(data.permissions ?? []),
+      ...Object.entries(data.permission_overrides ?? {})
+        .filter(([, on]) => on === true)
+        .map(([permission]) => permission),
+    ]);
     assertPermissionsHeld(context.reach, [
       ...addedPermissions(role.permissions, after),
       ...switchedOn,
@@ -608,7 +618,20 @@ export class RbacService {
     const reserved = [...permissions].filter(isCouncilPermission);
     if (reserved.length === 0) return;
     const chapter = await this.chapterRepo.findById(chapterId);
-    if (chapter?.kind === 'council') return;
+    if (chapter?.kind === 'council') {
+      // A council whose model is `none` holds no `council-recruitment` key
+      // (`council-types.md` § Default role titles), and its catalog offers
+      // none, so a write that adds one is refused the same way.
+      const model = chapter.recruitment_model ?? 'none';
+      const refused = reserved.filter(
+        (key) => keysForRecruitmentModel([key], model).length === 0,
+      );
+      if (refused.length === 0) return;
+      throw new BadRequestException({
+        code: 'roles.permission.reserved',
+        message: `This council doesn't run recruitment, so its roles can't hold ${refused.join(', ')}.`,
+      });
+    }
     throw new BadRequestException({
       code: 'roles.permission.reserved',
       message: `Only a council's roles can hold ${reserved.join(', ')}.`,

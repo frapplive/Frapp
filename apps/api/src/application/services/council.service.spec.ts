@@ -27,7 +27,7 @@ function setup() {
   };
   const onboarding = {
     chapterStartRefusal: jest.fn().mockResolvedValue(null),
-    startLimitException: jest.fn(),
+    startLimitFromCreateError: jest.fn(async (error: unknown) => error),
   };
   const legal = { requireOrAccept: jest.fn().mockResolvedValue(undefined) };
   const chapterRepo = {
@@ -131,6 +131,19 @@ describe('CouncilService.create', () => {
     ).toEqual(['council:recruitment_manage']);
   });
 
+  // Delegate carries `MEMBER`; it is matched by its key, not its name.
+  it('gives a founder who picks Delegate the Delegate role', async () => {
+    const { service, chapterService } = setup();
+
+    await service.create(USER, input({ title_key: 'delegate' }));
+
+    const seed = seedOf(chapterService.create);
+    expect(
+      seed.roles.filter((r) => seed.founderAlsoHolds(r)).map((r) => r.name),
+    ).toEqual(['Delegate']);
+    expect(seed.deleteOnFailure).toBe(true);
+  });
+
   it("adds the founder's own title to the Executive board", async () => {
     const { service, chapterService } = setup();
 
@@ -171,12 +184,13 @@ describe('CouncilService.create', () => {
   it('refuses a custom title that takes Council admin or Everyone', async () => {
     const { service } = setup();
     for (const title of ['Council admin', 'everyone']) {
-      await expect(
-        service.create(
-          USER,
-          input({ title_key: 'custom', custom_title: title }),
-        ),
-      ).rejects.toBeInstanceOf(ConflictException);
+      const error = await service
+        .create(USER, input({ title_key: 'custom', custom_title: title }))
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'council.title_taken',
+      });
     }
   });
 
@@ -244,7 +258,11 @@ describe('CouncilService.create', () => {
 
   it('answers a founder who lost the race with type_taken, from the unique index', async () => {
     const { service, chapterService } = setup();
-    chapterService.create.mockRejectedValue({ code: '23505' });
+    chapterService.create.mockRejectedValue({
+      code: '23505',
+      message:
+        'duplicate key value violates unique constraint "chapters_one_council_per_type"',
+    });
 
     const error = await service.create(USER, input()).catch((e) => e);
 

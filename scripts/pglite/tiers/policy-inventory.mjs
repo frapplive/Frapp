@@ -73,7 +73,7 @@ import { AUTH_ADMIN_ONLY } from "../rls-smoke.mjs";
   const removed = EXPECTED_PUBLIC_POLICIES.filter((p) => !got.includes(p));
 
   // A name, cmd and roles set still cannot see a policy REWRITTEN in place, and
-  // one of these eight has no other coverage anywhere in the repo
+  // one of these nine has no other coverage anywhere in the repo
   // (`member_custom_field_values_service_role`). Dropping and recreating one with
   // `using (true)` under the same name would keep the set identical and hand
   // every row to any authenticated PostgREST client. None of the six a client
@@ -93,7 +93,7 @@ import { AUTH_ADMIN_ONLY } from "../rls-smoke.mjs";
   //
   // This is a tripwire for the obvious rewrite, not a proof: it catches the
   // literal tautologies, and an adversarial `using (id = id)` would still pass.
-  // It exists because one of these eight has no other coverage anywhere in the
+  // It exists because one of these nine has no other coverage anywhere in the
   // repo (`member_custom_field_values_service_role`).
   const TAUTOLOGY = /^\s*\(*\s*(true|1\s*=\s*1)\s*\)*\s*$/i;
   const unconditional = res.rows

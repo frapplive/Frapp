@@ -284,7 +284,7 @@ describe('RoleTierService', () => {
   // `school-layer.md` § 4.2 rule 3 (#5933): every tier write passes its
   // list through the reserved-key check, which refuses a `council:` key in
   // a chapter.
-  it('checks a new tier and a re-permissioned tier for reserved keys', async () => {
+  it('checks a new tier for reserved keys', async () => {
     assertNoReservedPermissions.mockRejectedValue(
       new BadRequestException({ code: 'roles.permission.reserved' }),
     );
@@ -298,5 +298,17 @@ describe('RoleTierService', () => {
       'council:announce',
     ]);
     expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it('checks a re-permissioned tier for reserved keys', async () => {
+    assertNoReservedPermissions.mockRejectedValue(
+      new BadRequestException({ code: 'roles.permission.reserved' }),
+    );
+    await expect(
+      service.update(TIER.chairs, CHAPTER_ID, USER.president, {
+        permissions: ['council:announce'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.update).not.toHaveBeenCalled();
   });
 });
