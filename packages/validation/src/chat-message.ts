@@ -32,8 +32,7 @@ export const SYSTEM_SENDER_ID = "00000000-0000-0000-0000-000000000000";
  * "Member 000000" beside a "00" avatar (#3347). It is the product speaking, so
  * it takes the product's name. The row's own `display_name` ("Frapp System")
  * is not used: it names the account, not the voice, and the roster never
- * serves it anyway. `@repo/hooks`' `resolveAuthorName` and the API's activity
- * feed both read this.
+ * serves it anyway. `@repo/hooks`' `resolveAuthorName` reads this.
  */
 export const SYSTEM_AUTHOR_LABEL = "Frapp";
 
