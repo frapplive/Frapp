@@ -120,6 +120,18 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-24",
+    title: "New in this update",
+    changes: [
+      "After you join a chapter, a new About you step asks for your phone, major, graduation year and birthday when any are missing, and you can skip it.",
+      "Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.",
+      "Officers can attach files, minutes, events, chat messages and web links to a task or an event, each shows by its current name, and anything you can't open says so instead of showing its name.",
+    ],
+    phone: [
+      "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "New in this update",
     changes: [
