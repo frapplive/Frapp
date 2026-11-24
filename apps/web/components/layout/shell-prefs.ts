@@ -26,8 +26,8 @@ export function persistChatOpen(open: boolean): void {
 export const CHAT_WIDTH_COOKIE = "frapp_chat_width";
 
 /**
- * The side panel's width beside a tool, in pixels (#5575). The floor, so at
- * 1440px the tool page keeps the width it has alone at 820px.
+ * The docked conversation's width beside a page, in pixels (#5575). The
+ * floor, so the page keeps as much of the row as it can.
  */
 export const DEFAULT_CHAT_WIDTH = 375;
 
@@ -47,23 +47,4 @@ export function parseChatWidth(value: string | undefined): number {
 
 export function persistChatWidth(width: number): void {
   writePreferenceValue(CHAT_WIDTH_COOKIE, String(Math.round(width)));
-}
-
-/**
- * Which list the chat panel shows (#3774): the chapter's channels, or the
- * member's direct messages. The nav's Chat and Direct messages rows switch
- * one panel between them, so the shell remembers the last one for the next
- * page load, the way it remembers open or closed.
- */
-export const CHAT_VIEW_COOKIE = "frapp_chat_view";
-
-export type ChatView = "channels" | "direct";
-
-/** Channels unless the member last had direct messages open. */
-export function parseChatView(value: string | null | undefined): ChatView {
-  return value === "direct" ? "direct" : "channels";
-}
-
-export function persistChatView(view: ChatView): void {
-  writePreferenceValue(CHAT_VIEW_COOKIE, view);
 }

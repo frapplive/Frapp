@@ -203,3 +203,13 @@ export const EVENT_CREATE_PERMISSIONS = [
   "events:create",
   "members:view",
 ] as const;
+
+/**
+ * What `POST /v1/tasks` needs: `tasks:manage` under `members:view`. Here
+ * beside the event rule since New's shared list reads both (`sections.ts`,
+ * #5946); `@repo/chat-core/plus-menu` re-exports it for the chat + menu.
+ */
+export const TASK_CREATE_PERMISSIONS: readonly string[] = [
+  "tasks:manage",
+  "members:view",
+];

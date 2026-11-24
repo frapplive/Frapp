@@ -40,7 +40,9 @@ vi.mock("@/lib/tenant-kind", () => ({
   useServesChapterFeatures: () => !tenant.council,
 }));
 const activityReads = vi.hoisted(() => ({ options: [] as unknown[] }));
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  activityCountChip: (await importOriginal<typeof import("@repo/hooks")>())
+    .activityCountChip,
   useActivity: (options?: { enabled?: boolean }) => {
     activityReads.options.push(options);
     return { data: options?.enabled === false ? undefined : activity.data };

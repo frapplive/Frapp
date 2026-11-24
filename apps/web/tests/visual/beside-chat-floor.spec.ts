@@ -59,7 +59,8 @@ const DEMO_CHAPTER_ID = "c0ffee00-0000-4000-8000-000000000001";
  */
 const TOOL_ROUTES = [
   ...DASHBOARD_ROUTES.filter(
-    (route) => route !== "/chat" && route !== "/settings",
+    (route) =>
+      route !== "/chat" && route !== "/messages" && route !== "/settings",
   ),
   "/members?tab=alumni",
 ];

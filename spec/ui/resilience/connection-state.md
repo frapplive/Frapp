@@ -253,13 +253,16 @@ outbox's promise, which is true there and nowhere else.
 | ONLINE | live, or none | nothing | |
 
 Indicator behavior:
-- **Web: in the top bar**, first in its right cluster, before the notifications bell
+- **Web: in the sidebar's head from `lg` up, and the top bar below it** (#5946), the dot
+  alone before the notifications bell, its sentence a click away. Until #5946 it was
+  **in the top bar**, first in its right cluster, before the notifications bell
   (`apps/web/components/shared/connection-pill.tsx`). It floated just below the bar
   from #2244 until 2026-11-06, which kept it out of the layout but put it over the
   first row of every page, chat's channel header included. In the bar it covers
-  nothing. It draws its label from `xl`, where the right cell has room for it; below
-  `xl` it draws the dot alone, in a 28px slot the bar keeps whether or not there is
-  anything to say, so a state that flaps never resizes the find field or the title. A
+  nothing. It is the dot alone at every width (until #5946 the top bar drew its label
+  from `xl`). The top bar keeps it a 28px slot whether or not there is anything to
+  say, so a state that flaps never resizes the find field or the title; in the
+  sidebar's head the chapter's name gives way to it instead, and truncates. A
   click or tap opens the sentence in a popover at every width, which is how a touch
   screen with no hover title reads it. Routes with no bar (sign-in, onboarding)
   float the same pill at the top of the viewport, taking no pointer; that one hides

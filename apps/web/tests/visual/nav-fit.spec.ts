@@ -14,27 +14,29 @@ const test = base.extend({
 });
 
 /**
- * The sidebar fits a 1024×768 window, asserted rather than eyeballed (#2946).
+ * The channel list keeps room for at least eight rows at 1024×768 (#5946),
+ * asserted rather than eyeballed.
  *
- * `spec/ui/web-dashboard/README.md` § Responsive contract: at `lg` and up the
- * nav column fits a 1024×768 window for every seeded role without scrolling.
- * Before #2946 a President's 17 rows needed an 828px-tall window and scrolled
- * by 60px at 768. The fix folded the six-row Admin group into one row, Chapter
- * settings, which moved into the chapter menu atop the nav on 2026-11-19.
- * This test is what stops the list growing back past the budget one "just one
- * more row" at a time. Each row costs 36px.
+ * `spec/ui/web-dashboard/README.md` § Responsive contract: from `lg` up the
+ * sidebar holds the fixed rows (New, Search, the five homes, More), then the
+ * chapter's channels in whatever height is left, then the member at the
+ * foot. Paul asked for channels "always visible"; every fixed row added is
+ * 36px taken from the list, and this test is what stops the rows growing
+ * back into it one "just one more row" at a time. It replaced #2946's test
+ * that the twelve-row nav fit without scrolling.
  *
  * **Why this harness is the worst case.** It runs with no session (see
  * `responsive-floor.spec.ts`), seeds an active chapter, and answers the
  * permission read with the owner's `*`, so every permission-gated row shows.
  * The current-chapter read is held unanswered, so the module gate stays open
- * (`isNavItemVisible`) and every module row shows too, whatever a chapter has
- * switched off: more rows than any single seeded role sees, the President
- * included.
+ * (`isNavItemVisible`) and every module row shows too, More included: more
+ * rows than any single seeded role sees, the President included.
  *
- * It used to need no stubs, because both gates failed open while unresolved.
- * The permission gate fails closed since #3854, so a sessionless page draws no
- * gated row at all and would measure a short list.
+ * It measures the room the list is given rather than counting drawn rows:
+ * the list needs a signed-in chat, which this sessionless harness has none
+ * of. A row is 32px (`channel-list.tsx`) and a category heading about 28px,
+ * and the list keeps 12px of gutter above its first heading (the column's
+ * `pt-1` and the list's `p-2`), so eight rows under one heading need 296px.
  *
  * Deliberately NOT a screenshot: it compares two integers, so it cannot drift
  * with a Chromium revision.
@@ -42,8 +44,13 @@ const test = base.extend({
 
 const WIDTH = 1024;
 const HEIGHT = 768;
+const CHANNEL_ROW = 32;
+const CATEGORY_HEADING = 28;
+const MIN_ROWS = 8;
+/** The column's `pt-1` and the list's own `p-2` above its first heading. */
+const LIST_GUTTER = 12;
 
-test("the sidebar fits a 1024×768 window with every row showing", async ({
+test("the sidebar keeps eight channel rows in view at 1024×768 with every row showing", async ({
   page,
 }) => {
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
@@ -69,29 +76,23 @@ test("the sidebar fits a 1024×768 window with every row showing", async ({
 
   const nav = page.getByRole("navigation", { name: "Primary" });
   await expect(nav).toBeVisible();
-  // If either stub above ever stops reaching the nav, rows go missing and the
-  // test says so instead of passing on a shorter list. Directory, the last
-  // row, needs the permissions stub. Backwork needs both: its permission,
-  // and its module, which a failed chapter read would switch off with every
-  // other module row.
+  // If either stub above ever stops reaching the sidebar, rows go missing and
+  // the test says so instead of passing on a shorter list. Directory needs
+  // the permissions stub; More holds module rows, which a failed chapter
+  // read would switch off.
   await expect(nav.getByRole("link", { name: "Directory" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Backwork" })).toBeVisible();
+  await expect(nav.getByRole("button", { name: /More/ })).toBeVisible();
 
-  // This sessionless page has no Frapp Intelligence. A member with Ask gets the same
-  // nav region: the bar shares the collapse toggle's 34px row at the foot
-  // (#5560), so it costs no height. A second foot row would not fit here.
-  const measured = await nav.evaluate((el) => ({
-    scrollHeight: el.scrollHeight,
-    clientHeight: el.clientHeight,
-    rows: el.querySelectorAll("a").length,
-  }));
+  const room = await page
+    .locator("[data-sidebar-channels]")
+    .evaluate((el) => el.getBoundingClientRect().height);
+  const need = MIN_ROWS * CHANNEL_ROW + CATEGORY_HEADING + LIST_GUTTER;
 
   expect(
-    measured.scrollHeight,
-    `The sidebar's ${measured.rows} rows need ${measured.scrollHeight}px but ` +
-      `the nav region is ${measured.clientHeight}px at ${WIDTH}×${HEIGHT}, so it ` +
-      "scrolls. Each row costs 36px and a section heading about 37px. Find " +
-      "the new row a home inside an existing one (a tab, or Settings) rather " +
-      "than growing the list — spec/ui/web-dashboard/README.md § Navigation map.",
-  ).toBeLessThanOrEqual(measured.clientHeight);
+    room,
+    `The channel list gets ${Math.round(room)}px at ${WIDTH}×${HEIGHT}, under ` +
+      `the ${need}px eight rows need. Each fixed row costs 36px of the list. ` +
+      "Find the new row a home inside an existing one (a page, or the " +
+      "member's menu) — spec/ui/web-dashboard/README.md § Navigation map.",
+  ).toBeGreaterThanOrEqual(need);
 });

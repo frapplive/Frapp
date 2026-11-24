@@ -139,9 +139,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "A link attached to an event or a task that won't open on a phone, like an address with no real website behind it, is now refused when you add it, and one already attached shows as text instead of opening a page that can't be found.",
       "Recruitment now tracks who's talked to each prospect: log a text or call in two taps, give a prospect an owner, set a follow-up that reminds its owner the morning it's due, and see who has gone quiet too long.",
       "If you've verified your school email, you can start your school's council (IFC, Panhellenic, NPHC, MGC or another), pick your own title, and rename every role.",
+      "Channels always appear in your chapter's order now, so the channel filter no longer offers Recent or A to Z, and the views in form responses, the GIF picker, Catch me up and the picker for who gets a task are plain words instead of a boxed switch.",
+      "Recruitment now tracks bids: extend one, record an acceptance or a decline, and see a recorded acceptance wait until the prospect confirms it from an email or an officer does. A new Summary view beside the list shows the whole pipeline at a glance.",
+      "Role and group colors have a much bigger picker: thirty readable colors, the colors your chapter already uses, and any custom color by hex, now on your phone too.",
     ],
     web: [
       "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
+      "Tasks, the notifications list, the service leaderboard, event attendance and chat reports show their views as plain words beside the title instead of a switch or tabs.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",

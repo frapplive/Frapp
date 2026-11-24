@@ -7,8 +7,19 @@ import { DASHBOARD_NAV_ITEMS } from "./nav-config";
 describe("resolvePageTitle", () => {
   it("titles every nav row with the row's own label, and no parent", () => {
     for (const item of DASHBOARD_NAV_ITEMS) {
-      expect(resolvePageTitle(item.href)).toEqual({ title: item.label });
+      expect(resolvePageTitle(item.href)).toEqual({
+        title: item.title ?? item.label,
+      });
     }
+  });
+
+  it("titles Resources' page Documents until the two are one page (#5949)", () => {
+    expect(resolvePageTitle("/documents")).toEqual({ title: "Documents" });
+  });
+
+  it("titles the two chat pages (#5946)", () => {
+    expect(resolvePageTitle("/chat")).toEqual({ title: "Chat" });
+    expect(resolvePageTitle("/messages")).toEqual({ title: "Messages" });
   });
 
   it("titles no officer tool apart from Chapter settings (#3837)", () => {
@@ -25,7 +36,7 @@ describe("resolvePageTitle", () => {
   });
 
   it("titles a route's sub-paths as the route, but not a lookalike prefix", () => {
-    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Events" });
+    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Calendar" });
     expect(resolvePageTitle("/eventsx")).toBeNull();
   });
 

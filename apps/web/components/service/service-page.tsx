@@ -1,5 +1,6 @@
 "use client";
 
+import { useNewIntent } from "@/components/layout/new-intent";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { useMemo } from "react";
 import { CheckCircle2, Plus, XCircle } from "lucide-react";
@@ -136,6 +137,8 @@ export function ServiceHoursPage() {
   const logDialog = useGatedDialog(gate);
   const { data: permissionsPayload } = useMyPermissions();
   const canLog = can("service:log", permissionsPayload?.permissions ?? []);
+  // New's "Log hours" (`new-intent.ts`): the form this page's button opens.
+  useNewIntent(() => logDialog.setOpen(true), canLog && gate.allowed);
   // The rate Approve will apply, for each queue row's points preview (#3862).
   // Read from its own `service:approve` route, not the chapter config, which
   // needs `chapter-config:view` that no stock approver but the President holds.

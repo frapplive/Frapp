@@ -49,6 +49,7 @@ import {
   StartMinutesPanel,
 } from "@/components/meetings/start-minutes-panel";
 import { useKeptPanel } from "@repo/hooks/kept-drafts";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { MeetingRowsSkeleton } from "@/components/meetings/meetings-skeleton";
 import {
   meetingDayLabel,
@@ -88,6 +89,8 @@ function ChapterMeetingsPage() {
     "meetings:record",
     useMyPermissions().data?.permissions ?? [],
   );
+  // New's "New minutes" (`new-intent.ts`): the form this page's button opens.
+  useNewIntent(() => setStarting(true), canRecord);
   useKeptPanel({
     page: "meetings",
     form: MINUTES_DRAFT,

@@ -5,14 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 
 /**
- * The dashboard routes a council's space serves (#5933): chat, the
- * Directory, its Chapters (#5974), Council settings (Roles and groups is a tab of it, which
- * `/roles` redirects to), and the member's own Profile, Settings and What's
- * new. Every other page reads a chapter route that refuses a council
+ * The dashboard routes a council's space serves (#5933): chat and Messages,
+ * the Directory, its Chapters (#5974), Council settings (Roles and groups is a tab of it, which
+ * `/roles` redirects to), the member's own Profile, Settings and What's new,
+ * and New, which in a council opens the council's home (`ask-page.tsx`,
+ * #5946). Every other page reads a chapter route that refuses a council
  * (`chapter.context.invalid`).
  */
 export const COUNCIL_ROUTES = [
   "/chat",
+  "/messages",
+  "/ask",
   "/members",
   "/chapters",
   "/settings",

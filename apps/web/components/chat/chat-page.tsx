@@ -9,7 +9,8 @@ import { FormFillHost } from "./form-fill-dialog";
 import { FormResponsesHost } from "./form-responses-dialog";
 import { ChatRouteSkeleton } from "@/components/chat/chat-route-skeleton";
 import { CHAT_CHANNEL_PARAM, CHAT_MESSAGE_PARAM } from "@/lib/chat/chat-links";
-import type { ChatView } from "@/components/layout/shell-prefs";
+import type { ChatView } from "@/lib/chat/chat-links";
+import { NEW_INTENT_PARAM } from "@/components/layout/new-intent";
 
 /**
  * Reads `?channel=<id>&message=<id>` so a caller (the member directory's
@@ -30,12 +31,16 @@ function ChatPageContent({
   onClose,
   view,
   onViewChange,
+  onPick,
+  shown,
 }: {
   defaultMembersHidden: boolean;
   toolBeside: boolean;
   onClose?: () => void;
   view: ChatView;
   onViewChange?: (view: ChatView) => void;
+  onPick?: (kind: ChatView, channelId: string) => void;
+  shown: boolean;
 }) {
   const searchParams = useSearchParams();
   const onChatUrl = isChatRoute(usePathname());
@@ -69,6 +74,11 @@ function ChatPageContent({
             onClose={onClose}
             view={view}
             onViewChange={onViewChange}
+            onPick={onPick}
+            shown={shown}
+            newMessageAsked={
+              onChatUrl && searchParams.get(NEW_INTENT_PARAM) === "1"
+            }
           />
         </FormResponsesHost>
       </FormFillHost>
@@ -77,8 +87,10 @@ function ChatPageContent({
 }
 
 /**
- * The chat panel's contents, which the dashboard shell hosts beside the open
- * tool page or alone on `/chat` (`dashboard-shell.tsx`, #3779). Mounts the chat hot-path provider
+ * The chat panel's contents, which the dashboard shell hosts on every route
+ * (`dashboard-shell.tsx`, #3779): alone on `/chat`, as the Messages page,
+ * docked beside the open tool page, and out of sight where there is no room,
+ * since the sidebar's channel list is this panel's own (#5946). Mounts the chat hot-path provider
  * (outbox flush + persisted first chunk; the realtime manager is the
  * dashboard shell's, `use-chat-realtime-binding.ts`) and renders the chat
  * shell. The provider lives inside the dashboard tree so it sees the existing
@@ -90,6 +102,8 @@ export function ChatPage({
   onClose,
   view = "channels",
   onViewChange,
+  onPick,
+  shown = true,
 }: {
   /** The member list's remembered state, read by the layout on the server. */
   defaultMembersHidden?: boolean;
@@ -97,10 +111,14 @@ export function ChatPage({
   toolBeside?: boolean;
   /** Closes the chat panel (`ChatShell`'s prop of the same name). */
   onClose?: () => void;
-  /** Channels or direct messages (`ChatShell`'s prop of the same name). */
+  /** The conversation alone, or the Messages page (`ChatShell`'s prop). */
   view?: ChatView;
-  /** The panel moving to the other list (`ChatShell`'s prop). */
+  /** The open conversation is the other kind (`ChatShell`'s prop). */
   onViewChange?: (view: ChatView) => void;
+  /** A row was picked from a list (`ChatShell`'s prop of the same name). */
+  onPick?: (kind: ChatView, channelId: string) => void;
+  /** Whether the conversation is on screen (`ChatShell`'s prop). */
+  shown?: boolean;
 } = {}) {
   /*
     This boundary's fallback must never be what the server sends.
@@ -128,6 +146,8 @@ export function ChatPage({
         onClose={onClose}
         view={view}
         onViewChange={onViewChange}
+        onPick={onPick}
+        shown={shown}
       />
     </Suspense>
   );

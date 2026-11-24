@@ -583,7 +583,7 @@ function StagedFileChip({
        * `INDISTINGUISHABLE` (`apps/web/tests/signet-contrast.ts`, the one place
        * that bound is written), so the chip would read as no fill at all.
        * `--popover` on `--surface-1` is 1.1583:1. Same skip, for the same
-       * reason, as the chapter picker row in `layout/chapter-nav-header.tsx`.
+       * reason, as the chapter picker row in `layout/chapter-switcher.tsx`.
        */
       className={cn(
         "flex max-w-full items-center gap-1.5 rounded-md border border-border bg-popover py-1 pl-2 pr-1 text-caption transition-opacity",

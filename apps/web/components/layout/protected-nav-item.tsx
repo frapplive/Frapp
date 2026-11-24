@@ -10,9 +10,9 @@ import type { NavItem } from "@/components/layout/nav-config";
 type Props = {
   item: NavItem;
   /**
-   * `"page"` when this row's own route is open; `"true"` when the row stands
-   * for something open in place (the Chat row while the chat panel is open).
-   * Both paint the active fill; only the first claims to be the current page.
+   * `"page"` when this row's own route is open; `"true"` on a page under it
+   * (a meeting's minutes under Meetings). Both paint the active fill; only
+   * the first claims to be the current page.
    */
   current?: "page" | "true";
   permissions: readonly string[] | null | undefined;
@@ -38,9 +38,8 @@ type Props = {
   /** The active tenant's kind, from `useTenantKind` (see `isNavItemVisible`). */
   tenantKind?: TenantKind;
   /**
-   * Act in place instead of navigating (#3779): the desktop shell's Chat row
-   * opens and closes the chat panel, and the open tool's row closes it. It
-   * renders as a toggle button with the same geometry.
+   * Act in place instead of navigating (#3779): the open page's row closes
+   * the page. It renders as a toggle button with the same geometry.
    */
   onSelect?: () => void;
   /** With `onSelect`: whether the panel this row toggles is open. */
@@ -49,17 +48,20 @@ type Props = {
   selectLabel?: string;
   /**
    * Something new behind this row (#3824), named for a screen reader ("unread
-   * messages"). The row draws bright and semibold with a dot, and in the rail
+   * messages"): the drawer's Channels row. The row draws bright and semibold with a dot, and in the rail
    * the dot sits on the glyph.
    */
   highlight?: string;
   /**
-   * A number to show in mention red (#3774): the Direct messages row's count
-   * of conversations with anything unread, as the phone's Messages tab badges
-   * it. A direct message addresses the member, so it takes the fixed mention
-   * red and never the chapter accent (foundations.md §5).
+   * A number at the row's end. `mention` is the Messages row's count of
+   * conversations with anything unread (#3774), as the phone's Messages tab
+   * badges it: a direct message addresses the member, so it takes the fixed
+   * mention red and never the chapter accent (foundations.md §5). `plain` is
+   * Activity's count of what is waiting on the member, the phone's Activity
+   * tab chip: a quiet number, because a task due is not someone speaking to
+   * you. `text` is what is drawn ("3", "99+", "2+").
    */
-  count?: { value: number; label: string };
+  count?: { text: string; label: string; tone: "mention" | "plain" };
 };
 
 const CHAPTER_ONLY: readonly TenantKind[] = ["chapter"];
@@ -81,13 +83,11 @@ function isGranted(
 }
 
 /**
- * The single gate both a nav item and its enclosing section read.
+ * The single gate a nav item and the sidebar read.
  *
  * `ProtectedNavItem` returns `null` for a hidden item, which tells the parent
- * nothing — so a section whose every item was hidden used to render a bare
- * heading over empty space. Exported so `app-nav.tsx` can ask the same
- * question before it draws a section's heading: a heading is a promise that
- * something the viewer can open sits under it.
+ * nothing. Exported so `sidebar.tsx` can ask the same question of the rows
+ * More holds, and draw no More when none of them would open.
  *
  * The permission gate fails CLOSED while `permissions` is `undefined` (the
  * read in flight, or failed online): a row that declares `requirePermission`
@@ -95,9 +95,9 @@ function isGranted(
  * (#3854). It used to fail open, so on
  * every reload a member saw officer doors (Chapter settings, Billing before
  * #3827) appear, take a click, and vanish, which read as broken and as "I can
- * get in there". Gated rows all sit at the foot of the list, above the pinned
- * collapse toggle, so an officer's rows arriving a beat late move nothing
- * already drawn. Rows with no permission rule render at once. `null` is the
+ * get in there". The sidebar holds a gated row's place while the read is out
+ * (`sidebar.tsx`), so its arriving a beat late moves nothing already drawn.
+ * Rows with no permission rule render at once. `null` is the
  * other unknown: the read cannot run because the dashboard is offline with
  * nothing cached (`useNavPermissions`). That is not a denial, so gated rows
  * show and their pages state the outage.
@@ -155,6 +155,43 @@ export function isNavItemVisible(
 }
 
 /**
+ * A sidebar row's geometry and colours, shared by the rows that are not
+ * `NavItem`s (Search, More, the rail's Channels button; `sidebar.tsx`) so
+ * every row in the column is the same row.
+ */
+export function navRowClassName({
+  collapsed,
+  active,
+  lit = false,
+  focusClassName,
+}: {
+  collapsed: boolean;
+  active: boolean;
+  /** Something new behind the row: bright and semibold. */
+  lit?: boolean;
+  focusClassName: string;
+}): string {
+  return cn(
+    /*
+     * 34px is the board's POINTER geometry. The drawer that renders this
+     * below `lg` is touch-only, and `--touch-min` (44px) is binding on
+     * web as well as mobile (foundations §9) - so the row is 44px until
+     * the desktop breakpoint, then takes the board's density.
+     */
+    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-[34px] lg:min-h-0",
+    collapsed ? "w-[34px] justify-center" : "w-full gap-2.5 px-2.5",
+    focusClassName,
+    active
+      ? "bg-accent-subtle font-semibold text-accent-text"
+      : lit
+        ? // Something new (#3824): bright and semibold, the way an unread
+          // channel row draws, so it reads lit at a glance and stays lit.
+          "font-semibold text-foreground hover:bg-card"
+        : "text-muted-foreground hover:bg-card hover:text-foreground",
+  );
+}
+
+/**
  * Dashboard sidebar entry that hides itself when the caller lacks the
  * item's required permissions.
  *
@@ -209,24 +246,12 @@ export function ProtectedNavItem({
    * stock-text-on-branded-surface failures (#1150/#1164). Hover skips to
    * `--card`, the board's own hover step.
    */
-  const className = cn(
-    /*
-     * 34px is the board's POINTER geometry. The drawer that renders this
-     * below `lg` is touch-only, and `--touch-min` (44px) is binding on
-     * web as well as mobile (foundations §9) - so the row is 44px until
-     * the desktop breakpoint, then takes the board's density.
-     */
-    "relative flex min-h-touch items-center rounded-[10px] text-left text-sm transition lg:h-[34px] lg:min-h-0",
-    collapsed ? "w-[34px] justify-center" : "w-full gap-2.5 px-2.5",
+  const className = navRowClassName({
+    collapsed,
+    active: isActive,
+    lit: Boolean(highlight),
     focusClassName,
-    isActive
-      ? "bg-accent-subtle font-semibold text-accent-text"
-      : highlight
-        ? // Something new (#3824): bright and semibold, the way an unread
-          // channel row draws, so it reads lit at a glance and stays lit.
-          "font-semibold text-foreground hover:bg-card"
-        : "text-muted-foreground hover:bg-card hover:text-foreground",
-  );
+  });
   // The rail's `aria-label` replaces the row's content, the sr-only words
   // included, so it carries them itself.
   const spoken = count ? count.label : highlight;
@@ -242,9 +267,10 @@ export function ProtectedNavItem({
       )}
     />
   ) : null;
-  // The count's badge: the rail row's 18px pill on the glyph's corner, the
-  // channel list's 24px one at the end of a full row.
-  const badge = count ? (
+  // The count: red for direct address, the rail row's 18px pill on the
+  // glyph's corner and the channel list's 24px one at the end of a full row;
+  // a plain number otherwise, which the rail draws as the row's dot.
+  const badge = !count ? null : count.tone === "mention" ? (
     <Badge
       variant="mention"
       aria-hidden="true"
@@ -256,9 +282,26 @@ export function ProtectedNavItem({
           : "h-6 min-w-6 px-2",
       )}
     >
-      {count.value > 99 ? "99+" : count.value}
+      {count.text}
     </Badge>
-  ) : null;
+  ) : collapsed ? (
+    <span
+      aria-hidden="true"
+      data-nav-count=""
+      className="absolute right-1 top-1 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      data-nav-count=""
+      className={cn(
+        "pr-1 text-caption font-medium tabular-nums",
+        isActive ? "text-accent-text" : "text-muted-foreground",
+      )}
+    >
+      {count.text}
+    </span>
+  );
   const trailing = badge ?? dot;
   const content = (
     <>
