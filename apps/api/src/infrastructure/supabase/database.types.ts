@@ -825,7 +825,7 @@ export interface Database {
         Args: { p_older_than: string };
         Returns: number;
       };
-      /** `20261124193650` (#5973) — expires open bids past their day; returns the count. */
+      /** `20261124214736` (#5973) — expires open bids past their day; returns the count. */
       expire_rush_bids: {
         Args: { p_now: string };
         Returns: number;

@@ -1,4 +1,4 @@
-# 20261124193650_rush_bids_and_settings.sql
+# 20261124214736_rush_bids_and_settings.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
