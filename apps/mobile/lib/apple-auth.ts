@@ -91,7 +91,7 @@ export async function signInWithNativeApple(
     if (error) {
       // A build whose bundle ID is missing from the Apple provider's Client
       // IDs: the browser flow signs in with the Services ID instead.
-      if (isProviderConfigRejection(error)) {
+      if (isProviderConfigRejection("apple", error)) {
         onProviderRejected?.(error);
         return "unavailable";
       }

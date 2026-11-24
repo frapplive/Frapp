@@ -20,6 +20,12 @@ import { HealthPayloadDto, type DependencyStatus } from '../dtos/health.dto';
 // which is the whole point of it being a liveness check.
 const PROBE_TIMEOUT_MS = 3000;
 
+// The bound on readiness's confirming probe (see `probeConfirmingDegraded`).
+// With the first probe's 3 seconds it keeps a degraded answer under the
+// Sentry uptime monitor's 5-second timeout, so an outage still reads as a 503
+// naming the dependency rather than a monitor timeout.
+const CONFIRM_PROBE_TIMEOUT_MS = 1500;
+
 // How long `/health` reuses one probe result. Every open web or mobile client
 // calls it every 30 seconds (Render's health check also did, every 5, until
 // 2026-11-17), and no automated caller reads
@@ -38,7 +44,7 @@ export const LIVENESS_PROBE_TTL_MS = 60_000;
 // Supabase requests. Five seconds is shorter than any of its callers' own
 // intervals (the uptime monitor's minute, the deploy gate's poll), so each of
 // them still sees a probe taken for it, and an outage or a recovery shows
-// within five seconds.
+// within five seconds (plus the confirming probe's 1.5, for an outage).
 export const READINESS_PROBE_TTL_MS = 5_000;
 
 // How long `/health/ready` reuses the Stripe Price check, a call to Stripe's
@@ -176,10 +182,10 @@ export class HealthController {
     }
   }
 
-  private async probe(): Promise<DependencyProbes> {
+  private async probe(timeoutMs = PROBE_TIMEOUT_MS): Promise<DependencyProbes> {
     const [database, storage] = await Promise.all([
-      this.probeDatabase(),
-      this.probeStorage(),
+      this.probeDatabase(timeoutMs),
+      this.probeStorage(timeoutMs),
     ]);
     return { database, storage };
   }
@@ -191,10 +197,8 @@ export class HealthController {
   // outage fails both probes, so it still 503s, a few seconds later.
   private async probeConfirmingDegraded(): Promise<DependencyProbes> {
     const first = await this.probe();
-    if (first.database === 'connected' && first.storage === 'connected') {
-      return first;
-    }
-    return this.probe();
+    if (isHealthy(first)) return first;
+    return this.probe(CONFIRM_PROBE_TIMEOUT_MS);
   }
 
   private buildPayload({
@@ -202,8 +206,7 @@ export class HealthController {
     storage,
   }: DependencyProbes): HealthPayloadDto {
     const payload: HealthPayloadDto = {
-      status:
-        database === 'connected' && storage === 'connected' ? 'ok' : 'degraded',
+      status: isHealthy({ database, storage }) ? 'ok' : 'degraded',
       database,
       storage,
       uptime: Math.floor((Date.now() - this.startedAt) / 1000),
@@ -215,7 +218,7 @@ export class HealthController {
     return payload;
   }
 
-  private async probeDatabase(): Promise<DependencyStatus> {
+  private async probeDatabase(timeoutMs: number): Promise<DependencyStatus> {
     return withTimeout(
       (async () => {
         try {
@@ -228,10 +231,11 @@ export class HealthController {
           return 'error';
         }
       })(),
+      timeoutMs,
     );
   }
 
-  private async probeStorage(): Promise<DependencyStatus> {
+  private async probeStorage(timeoutMs: number): Promise<DependencyStatus> {
     return withTimeout(
       (async () => {
         try {
@@ -241,6 +245,7 @@ export class HealthController {
           return 'error';
         }
       })(),
+      timeoutMs,
     );
   }
 }
@@ -252,12 +257,17 @@ export class HealthController {
 // dangling 3-second handle behind it.
 function withTimeout(
   probe: Promise<DependencyStatus>,
+  timeoutMs: number,
 ): Promise<DependencyStatus> {
   return new Promise<DependencyStatus>((resolve) => {
-    const timer = setTimeout(() => resolve('error'), PROBE_TIMEOUT_MS);
+    const timer = setTimeout(() => resolve('error'), timeoutMs);
     void probe.then((result) => {
       clearTimeout(timer);
       resolve(result);
     });
   });
+}
+
+function isHealthy({ database, storage }: DependencyProbes): boolean {
+  return database === 'connected' && storage === 'connected';
 }

@@ -440,9 +440,9 @@ Why: the browser flow opens the Supabase authorize URL, so iOS asks `"Frapp" Wan
 3. **Supabase Client IDs.** On `frapp-staging` and `frapp-prod` → Authentication → Providers → Google → **Client IDs**: add the iOS client ID after the Web client ID, comma-separated, Web client first. iOS tokens carry the iOS client as their audience; Android tokens carry the Web client named in `app.json`'s `webClientId`. That is staging's Web client, which `frapp-prod` no longer lists (2026-11-17), so on prod Android needs `app.json`'s `webClientId` changed to the production Web client first ([#4148](https://github.com/frapplive/Frapp/issues/4148)). The staging variant already names staging's (`STAGING_GOOGLE_SIGN_IN`, 2026-11-21); `frapp-staging`'s Client IDs take the staging iOS client.
 4. **Skip nonce check: On**, same page, both projects. The free SDK can't hand Supabase a raw nonce, and Google's iOS SDK puts its own nonce in the token, which Supabase rejects with the check on. Supabase's Google guide says to enable it for iOS. The cost: Supabase then accepts any unexpired Google ID token (about an hour) whose audience is in Client IDs, with nothing tying it to the request, so a leaked token can be replayed, and a token whose audience both projects list (the iOS client from step 3) works on both. Step 3 widens the same door: the iOS client is a public client, so another app could run Google sign-in with it and trade the token for a Frapp session, which a nonce would not stop either. Native Apple sign-in keeps its own nonce either way.
 
-If step 3 or 4 is missing, Supabase refuses the token ("Unacceptable audience" / nonce), and the app falls back to the browser flow with a console warning rather than failing the sign-in. The same fallback covers `DEVELOPER_ERROR`, `SIGN_IN_FAILED` (12500), an iOS binary without the URL scheme, and missing Play services.
+If step 3 or 4 is missing, Supabase refuses the token ("Unacceptable audience" / nonce), and the app falls back to the browser flow rather than failing the sign-in, and reports it to Sentry as `oauth_start` with code `native_token_refused` at `error` ([observability spec](../../../spec/behavior/observability.md#error-tracking)). The same fallback covers `DEVELOPER_ERROR`, `SIGN_IN_FAILED` (12500), an iOS binary without the URL scheme, and missing Play services.
 
-5. **Smoke, on staging then prod, on both platforms.** Because every misconfiguration falls back silently, a sign-in that succeeds proves nothing on its own. Tap **Continue with Google** and check which path ran: iOS should ask for `"google.com"`, not the `supabase.co` host, and Android should show Google's account sheet, not a browser tab. Seeing the old prompt means a step above is missing on that project or platform.
+5. **Smoke, on staging then prod, on both platforms.** Because every misconfiguration falls back to the browser, a sign-in that succeeds proves nothing on its own (a refused token leaves a `native_token_refused` event in `frapp-mobile`; the other fallbacks leave nothing). Tap **Continue with Google** and check which path ran: iOS should ask for `"google.com"`, not the `supabase.co` host, and Android should show Google's account sheet, not a browser tab. Seeing the old prompt means a step above is missing on that project or platform.
 
 **Apple Sign in with Apple — what the console actually asks for**
 
@@ -498,12 +498,15 @@ machine that downloaded it.
    mistake and fails only at the first sign-in attempt.
 5. **Client IDs** — comma-separated, and the split is deliberate:
    - `frapp-prod`: `live.frapp.mobile.web,live.frapp.mobile`
-   - `frapp-staging`: the same, plus `host.exp.Exponent`
+   - `frapp-staging`: the same, plus `live.frapp.mobile.staging` (Frapp
+     Staging's bundle id) and `host.exp.Exponent`. Staging's list lacked
+     `live.frapp.mobile.staging` on 2026-11-20 (FRAPP-MOBILE-16)
 
    The Services ID covers web/browser OAuth; the **bundle id** covers native
    iOS, because [`apps/mobile/lib/apple-auth.ts`](../../../apps/mobile/lib/apple-auth.ts)
-   calls `signInWithIdToken` and that token's audience is the bundle id. Omit it
-   and web sign-in works while native iOS fails. `host.exp.Exponent` is the Expo
+   calls `signInWithIdToken` and that token's audience is the bundle id, one per
+   build. Omit one and that build's native sign-in is refused; the app falls back
+   to the browser sheet and reports `native_token_refused` to Sentry. `host.exp.Exponent` is the Expo
    Go app's **shared** bundle id, so it is **staging-only on purpose**: trusting
    it in production would accept identity tokens that were not issued to this
    app.

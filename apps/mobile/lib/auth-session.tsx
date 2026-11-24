@@ -554,7 +554,9 @@ export function AuthSessionProvider({
   const signInWithOAuthProvider = useCallback(
     async (provider: OAuthProvider) => {
       // Each failure below is reported once, here, as `oauth_start` with the
-      // error it came from (#3832). A return that reached the app but didn't
+      // error it came from (#3832). A native token Supabase refused for setup
+      // reasons is reported too, before the browser fallback, so one attempt
+      // can send two reports, or one for a sign-in that then worked. A return that reached the app but didn't
       // become a session was already reported by `createSessionFromUrl` as
       // `auth_callback`, so its rethrow is not reported again. A cancel is
       // not a failure.

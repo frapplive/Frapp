@@ -228,7 +228,7 @@ describe("buildAuthFailureReport", () => {
 });
 
 describe("native sign-in failures", () => {
-  it("keeps a native SDK's code and the provider, without changing the grouping", () => {
+  it("keeps a native SDK's code, and groups by provider", () => {
     const r = buildAuthFailureReport({
       flow: "oauth_start",
       screen: "/sign-in",
@@ -241,17 +241,31 @@ describe("native sign-in failures", () => {
     expect(r!.tags.auth_native_code).toBe("ERR_REQUEST_UNKNOWN");
     expect(r!.tags.auth_error_code).toBeUndefined();
     expect(r!.tags.auth_failure_kind).toBe("unknown");
-    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown"]);
+    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown", "apple"]);
   });
 
-  it("keeps Google's numeric status codes", () => {
+  it("keeps Google's numeric status code from the wrapper's cause, as the app reports it", () => {
+    // `signInWithNativeGoogle` rethrows a MemberFacingError with the SDK's error as `cause`.
     const r = buildAuthFailureReport({
       flow: "oauth_start",
       screen: "/sign-in",
       provider: "google",
-      error: { code: 12500 },
+      error: Object.assign(new Error("We couldn't finish signing you in."), {
+        cause: Object.assign(new Error("NETWORK_ERROR"), { code: 7 }),
+      }),
     });
-    expect(r!.tags.auth_native_code).toBe("12500");
+    expect(r!.tags.auth_native_code).toBe("7");
+    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown", "google"]);
+  });
+
+  it("counts a stale OAuth return as an expected refusal (FRAPP-WEB-K)", () => {
+    const r = buildAuthFailureReport({
+      flow: "auth_callback",
+      screen: "/auth/callback",
+      code: "bad_oauth_state",
+    });
+    expect(r!.level).toBe("info");
+    expect(r!.tags.auth_expected).toBe("true");
   });
 
   it("reports a native token the provider refused under the caller's code, at error", () => {

@@ -168,7 +168,8 @@ describe("native Apple auth", () => {
       }),
       AppleAuthenticationScope: { FULL_NAME: "FULL_NAME", EMAIL: "EMAIL" },
     }));
-    const refusal = { message: "Database error saving new user" };
+    // A nonce refusal is a bug in the app's own nonce pairing, not setup.
+    const refusal = { message: "Nonces mismatch" };
     const onProviderRejected = vi.fn();
 
     await expect(

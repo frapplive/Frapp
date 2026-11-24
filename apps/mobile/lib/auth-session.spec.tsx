@@ -1298,6 +1298,36 @@ describe("AuthSessionProvider — OAuth", () => {
     expect(mockState.signInWithOAuthCalls).toHaveLength(1);
   });
 
+  it("reports a native token Supabase refused for setup reasons, then goes on to the browser (Google)", async () => {
+    reportAuthFailure.mockClear();
+    const refusal = {
+      message: "Unacceptable audience in id_token: [ios-client.apps.googleusercontent.com]",
+    };
+    mockGoogleAuth.signInWithNativeGoogle.mockImplementationOnce((async (
+      _supabase: unknown,
+      onProviderRejected?: (error: unknown) => void,
+    ) => {
+      onProviderRejected?.(refusal);
+      return "unavailable";
+    }) as never);
+    const { result } = renderHook(() => useAuthSession(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+
+    await act(async () => {
+      await result.current
+        .signInWithOAuthProvider("google")
+        .catch(() => undefined);
+    });
+    expect(reportAuthFailure).toHaveBeenCalledWith({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "google",
+      code: "native_token_refused",
+      error: refusal,
+    });
+    expect(mockState.signInWithOAuthCalls).toHaveLength(1);
+  });
+
   it("reports a browser return that didn't become a session once, as auth_callback, not again as oauth_start", async () => {
     reportAuthFailure.mockClear();
     mockState.authSessionResult = {

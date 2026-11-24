@@ -411,18 +411,17 @@ export class FolderImport {
       const minted = this.mintBatch(
         chunk.map(({ file, submission }) => mintRequest(file, submission)),
       );
-      // Each file's upload awaits its own ticket; a failed batch fails them
-      // there (and a retry mints that file alone), never unhandled here.
-      minted.catch(() => undefined);
       chunk.forEach(({ file }, index) => {
         const ticket = minted.then((tickets) => {
           const entry = tickets[index];
           if (!entry) throw new Error("The server answered fewer links than asked.");
           return entry;
         });
-        // The ticket is a promise of its own: a failed batch rejects it before
-        // its upload gets to await it, which the browser reported as an
-        // unhandled rejection (FRAPP-WEB-Q). The upload still sees the failure.
+        // Each file's upload awaits its own ticket, so a failed batch fails it
+        // there (and a retry mints that file alone). Until then the ticket
+        // has no handler, and a batch that fails first left every queued
+        // file's ticket an unhandled rejection (FRAPP-WEB-Q); this catch is
+        // on a branch, so the upload still sees the failure.
         ticket.catch(() => undefined);
         this.progressOf(file).ticket = ticket;
       });

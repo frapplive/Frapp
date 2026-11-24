@@ -168,7 +168,7 @@ export async function signInWithNativeGoogle(
     token: idToken,
   });
   if (error) {
-    if (isProviderConfigRejection(error)) {
+    if (isProviderConfigRejection("google", error)) {
       onProviderRejected?.(error);
       return "unavailable";
     }

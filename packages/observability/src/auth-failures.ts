@@ -47,8 +47,9 @@ import { createKeyedRateLimiter } from "./rate-limit";
  * the project it lands in (`frapp-web`, `frapp-mobile`). No email, password,
  * token, OTP or URL is ever read from the input, so none can be sent.
  *
- * **Grouping.** `['signed-out-auth', <flow>, <code or kind>]`: one issue per
- * flow and failure, so a day's count of `email_not_confirmed` on password
+ * **Grouping.** `['signed-out-auth', <flow>, <code or kind>]`, plus the
+ * provider when there is one (Apple and Google fail for different reasons and
+ * are fixed in different consoles): one issue per flow and failure, so a day's count of `email_not_confirmed` on password
  * sign-in is that issue's event count for the day.
  *
  * **Rate limit.** One report per fingerprint per
@@ -248,6 +249,8 @@ export function buildAuthFailureReport(
   const flow = input.flow;
   const screen = screenOf(input.screen);
   const label = code ?? kind;
+  const provider =
+    input.provider === "apple" || input.provider === "google" ? input.provider : undefined;
   const tags: Record<string, string> = {
     auth_flow: flow,
     auth_screen: screen,
@@ -256,9 +259,7 @@ export function buildAuthFailureReport(
   };
   if (code) tags.auth_error_code = code;
   if (status !== undefined) tags["http.status_code"] = String(status);
-  if (input.provider === "apple" || input.provider === "google") {
-    tags.auth_provider = input.provider;
-  }
+  if (provider) tags.auth_provider = provider;
   const nativeCode = nativeCodeOf(input.error);
   if (nativeCode !== undefined) tags.auth_native_code = nativeCode;
   const error = new Error(
@@ -270,7 +271,9 @@ export function buildAuthFailureReport(
   return {
     error,
     level: expected ? "info" : "error",
-    fingerprint: ["signed-out-auth", flow, label],
+    fingerprint: provider
+      ? ["signed-out-auth", flow, label, provider]
+      : ["signed-out-auth", flow, label],
     tags,
   };
 }
@@ -308,12 +311,13 @@ function screenOf(screen: string): string {
 }
 
 /**
- * The error's own `code` when it is not GoTrue's snake_case but still a plain
+ * The error's own `code` (or its `cause`'s) when it is not GoTrue's snake_case but still a plain
  * identifier: what Expo's Apple module and Google Sign-In throw. Read only as
  * an identifier, so a sentence or a token can't pass.
  */
 function nativeCodeOf(error: unknown): string | undefined {
-  const raw = fieldOf(error, "code");
+  // Google's wrapper (`MemberFacingError`) carries the SDK's error as `cause`.
+  const raw = fieldOf(error, "code") ?? fieldOf(fieldOf(error, "cause"), "code");
   const value = typeof raw === "number" && Number.isInteger(raw) ? String(raw) : raw;
   return typeof value === "string" && NATIVE_CODE_RE.test(value) ? value : undefined;
 }
