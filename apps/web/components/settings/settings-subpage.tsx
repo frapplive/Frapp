@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
+import { SectionTitledByPage } from "@/components/profile/profile-section";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,9 @@ export function SettingsSubpage({
         <SettingsBackLink href={backHref} label={backLabel} />
         <h2 className="text-title text-foreground">{title}</h2>
       </header>
-      {children}
+      <SectionTitledByPage.Provider value={true}>
+        {children}
+      </SectionTitledByPage.Provider>
     </div>
   );
 }

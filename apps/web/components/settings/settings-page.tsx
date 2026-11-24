@@ -67,6 +67,8 @@ import {
 } from "@/components/settings/settings-tool-views";
 import {
   SETTINGS_SUBPAGE_PARAMS,
+  chapterSettingsHref,
+  isChapterSettingsPage,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
@@ -199,6 +201,8 @@ function SettingsPageContent() {
   */
   const channelParam = searchParams.get("channel");
   const toolParam = searchParams.get("tool");
+  const pageParam = searchParams.get("page");
+  const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
   // Switching rows starts the panel at its top, not wherever the last one
   // was scrolled to: the panel scrolls inside the shell's tool pane. The
   // address follows the row, without the params that opened a page inside
@@ -682,7 +686,10 @@ function SettingsPageContent() {
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
             // settings, Discord import) and goes back to the row's own page.
-            if (value === shownTab && (channelParam || toolParam)) {
+            if (
+              value === shownTab &&
+              (channelParam || toolParam || chapterPage)
+            ) {
               changeTab(value);
             }
           }}
@@ -704,6 +711,8 @@ function SettingsPageContent() {
                 }}
                 canManage={canManage}
                 canEditProfile={canEditProfile}
+                page={chapterPage}
+                pageHref={chapterSettingsHref}
                 onSaveProfile={saveProfile}
                 onPatchConfig={(diff) =>
                   patchConfig(diff, "Organization settings saved")
@@ -724,7 +733,7 @@ function SettingsPageContent() {
                 }
               />,
             )}
-            {config ? (
+            {config && !chapterPage ? (
               <div className="mt-10">
                 <SettingsBirthdayPosts
                   channelId={
@@ -745,7 +754,7 @@ function SettingsPageContent() {
                 />
               </div>
             ) : null}
-            {config ? (
+            {config && !chapterPage ? (
               <div className="mt-10">
                 <SettingsMemberNames
                   enabled={config.members_can_change_name === true}

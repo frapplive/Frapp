@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, type LucideIcon } from "lucide-react";
+import { SectionLabel } from "@/components/shared/section-label";
 import { Switch } from "@/components/ui/switch";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
@@ -24,24 +25,50 @@ import { cn } from "@/lib/utils";
  */
 export function SettingsGroup({
   label,
+  heading,
+  footnote,
   children,
   className,
 }: {
   /** Accessible name when the group has no visible heading above it. */
   label?: string;
+  /**
+   * The group's name, drawn above it as a section label and naming the list
+   * (Discord's channel settings, iOS Settings). Most groups need none.
+   */
+  heading?: string;
+  /**
+   * One muted line under the group, saying what its rows have in common or
+   * what changing them does (Discord's "Change privacy settings and customize
+   * how members can interact with this channel."; iOS Settings' group
+   * footers). Never a second copy of a row's own words.
+   */
+  footnote?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
-  return (
+  const headingId = useId();
+  const list = (
     <ul
-      aria-label={label}
+      aria-label={heading ? undefined : label}
+      aria-labelledby={heading ? headingId : undefined}
       className={cn(
         "divide-y divide-border rounded-[14px] border border-border bg-card",
-        className,
+        heading || footnote ? undefined : className,
       )}
     >
       {children}
     </ul>
+  );
+  if (!heading && !footnote) return list;
+  return (
+    <div className={cn("space-y-2", className)}>
+      {heading ? <SectionLabel id={headingId}>{heading}</SectionLabel> : null}
+      {list}
+      {footnote ? (
+        <p className="px-1 text-caption text-muted-foreground">{footnote}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -96,9 +123,15 @@ export function SettingsRow(
     nested?: boolean;
     /** Its label greys while the setting it waits on is off. */
     muted?: boolean;
+    /**
+     * A glyph before the label, for a row that opens a page of its own
+     * (Discord's channel settings, iOS Settings). A switch row goes without.
+     */
+    icon?: LucideIcon;
   } & Trailing,
 ) {
   const { label, description, nested = false, muted = false } = props;
+  const Icon = props.icon;
   const row = cn(ROW, nested && "pl-10");
   const labelId = useId();
   const descriptionId = useId();
@@ -107,6 +140,12 @@ export function SettingsRow(
   // A switch row's label is a real <label>, so clicking the words flips it.
   const LabelTag = isSwitch ? "label" : "span";
 
+  const glyph = Icon ? (
+    <Icon
+      className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+      aria-hidden
+    />
+  ) : null;
   const text = (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
       <LabelTag
@@ -134,6 +173,7 @@ export function SettingsRow(
           href={props.href}
           className={cn(row, "transition hover:bg-card-hover", FOCUS_RING)}
         >
+          {glyph}
           {text}
           {props.value ? (
             <span className="text-sm text-muted-foreground">{props.value}</span>
@@ -160,6 +200,7 @@ export function SettingsRow(
             FOCUS_RING,
           )}
         >
+          {glyph}
           {text}
           <span className="text-sm text-muted-foreground">{props.value}</span>
           <ChevronRight
@@ -175,6 +216,7 @@ export function SettingsRow(
     return (
       <li className="group">
         <div className={row}>
+          {glyph}
           {text}
           <Switch
             id={switchId}
@@ -192,6 +234,7 @@ export function SettingsRow(
   return (
     <li className="group">
       <div className={row}>
+        {glyph}
         {text}
         <div className="shrink-0">{props.control}</div>
       </div>

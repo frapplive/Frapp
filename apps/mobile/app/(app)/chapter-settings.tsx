@@ -33,6 +33,13 @@ import {
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
+import {
+  MapPinGlyph,
+  PaletteGlyph,
+  ScrollTextGlyph,
+  WallpaperGlyph,
+} from "@/components/settings-glyphs";
+import { CHAPTER_LOOK_FOOTNOTE } from "@repo/validation";
 import { AccentSheet } from "@/components/settings/accent-sheet";
 import { ChatBackgroundSheet } from "@/components/settings/chat-background-sheet";
 import {
@@ -96,6 +103,7 @@ export default function ChapterSettingsScreen() {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
   const styles = createStyles(tokens);
+  const glyphColor = tokens.color.text.mutedForeground;
   const accentSheetRef = useRef<BottomSheetModal>(null);
   const chatBackgroundSheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -170,10 +178,11 @@ export default function ChapterSettingsScreen() {
           <>
             {access.chapter ? (
               <>
-                <SectionHeader>Chapter</SectionHeader>
-                <ListSection>
+                <SectionHeader>Look</SectionHeader>
+                <ListSection footnote={CHAPTER_LOOK_FOOTNOTE}>
                   <SettingAnchor id="accent">
                     <ListRow
+                      leading={<PaletteGlyph color={glyphColor} />}
                       label="Chapter accent"
                       // An editor's row is the swatch and a chevron. Anyone else's
                       // can't open, so it says who can change it rather than leaving
@@ -199,6 +208,7 @@ export default function ChapterSettingsScreen() {
                   </SettingAnchor>
                   <SettingAnchor id="chat-background">
                     <ListRow
+                      leading={<WallpaperGlyph color={glyphColor} />}
                       label="Chat background"
                       value={
                         chapterBackground.data
@@ -220,6 +230,9 @@ export default function ChapterSettingsScreen() {
                       }
                     />
                   </SettingAnchor>
+                </ListSection>
+                <SectionHeader>Chapter</SectionHeader>
+                <ListSection>
                   {orgConfig.data ? (
                     <SettingAnchor id="member-names">
                       <ListRow
@@ -255,6 +268,7 @@ export default function ChapterSettingsScreen() {
                     // Read-only here (the phone has no zone editor), so it says
                     // where zones are changed: the dashboard's Study zones tool.
                     <ListRow
+                      leading={<MapPinGlyph color={glyphColor} />}
                       label="Study zones"
                       description="Managed on the web dashboard."
                       value={
@@ -268,6 +282,7 @@ export default function ChapterSettingsScreen() {
                     // Last in Chapter, as web's Logs row is (Paul,
                     // 2026-11-21): read when something needs looking into.
                     <ListRow
+                      leading={<ScrollTextGlyph color={glyphColor} />}
                       label={CHAPTER_LOGS_TITLE}
                       accessibilityHint="Opens who changed what in the chapter, and when."
                       onPress={() => router.push("/chapter-logs")}
