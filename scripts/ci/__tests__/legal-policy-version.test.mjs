@@ -77,8 +77,9 @@
 //   Intelligence, Frapp's AI features" in the Terms; "Frapp Intelligence is
 //   the name for Frapp's AI features" in Privacy section 4) and the chapter's
 //   Ask switch named "questions and requests", moved only the Terms and
-//   Privacy pins on the ADR-25 rename precedent (#2580), pending the owner's
-//   material-or-not ruling in its PR. Both pages also say the features were
+//   Privacy pins on the ADR-25 rename precedent (#2580). Paul ruled it
+//   non-material on 2026-11-24 (#5954): the version and the pages' dates
+//   stay, and nobody is asked to accept again. Both pages also say the features were
 //   "called Frapp AI in earlier versions of the app", because an installed
 //   build's consent screen still says Frapp AI and links the policy, and two
 //   Privacy sentences that named the two old names were reworded so they do
