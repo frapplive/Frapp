@@ -483,8 +483,10 @@ const STAGING_IDENTITY = Object.freeze({
  * The Web client is the one staging Supabase's Google provider lists
  * ("Frapp Web (staging)", in Google Cloud project "Frapp sign-in"). The iOS
  * client is "iOS Client (staging)" there, for bundle ID
- * `live.frapp.mobile.staging` (Paul, 2026-11-24); staging Supabase lists it
- * after the Web client, with Skip nonce check on. An empty ID keeps that
+ * `live.frapp.mobile.staging` (Paul, 2026-11-24). Staging Supabase has to list
+ * it after the Web client, with Skip nonce check on, or the app falls back to
+ * the browser flow (docs/ops/deployment/supabase.md, Native Google Sign-In,
+ * steps 3 and 4). An empty ID keeps that
  * platform on the browser flow, as in app.json; recording one is a native
  * change (see `withGoogleSignIn`).
  */
