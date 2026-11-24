@@ -147,6 +147,7 @@ export * from "./use-rush";
 export * from "./use-rush-pipeline";
 export * from "./rush-work";
 export * from "./use-scheduled-messages";
+export * from "./use-schools";
 export * from "./use-search";
 export * from "./use-self-assignable-roles";
 export * from "./use-semesters";

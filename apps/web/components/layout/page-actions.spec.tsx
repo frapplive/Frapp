@@ -72,4 +72,15 @@ describe("NewButton", () => {
   it("is always New and the thing it makes", () => {
     expect(newLabel("study zone")).toBe("New study zone");
   });
+
+  it("drops to its + sooner in a header that also holds the page's views, so the title keeps its word", () => {
+    render(<NewButton thing="task" />);
+    const button = screen.getByRole("button", { name: "New task" });
+    expect(button.className).toContain(
+      "group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:w-9",
+    );
+    expect(screen.getByText("New task").className).toContain(
+      "group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:sr-only",
+    );
+  });
 });

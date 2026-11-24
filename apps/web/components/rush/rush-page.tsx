@@ -19,7 +19,7 @@ import {
   isRushFollowUpForViewer,
   rushFollowUpsDueCount,
 } from "@repo/validation";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { SearchGlyph } from "@/components/layout/nav-glyphs";
 import {
   dashboardToolbarSearchClassName,
@@ -34,7 +34,7 @@ import {
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
 import { NewButton } from "@/components/ui/new-button";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
@@ -230,6 +230,24 @@ export function RushPage() {
 
   return (
     <div className="@container space-y-6">
+      {/* Board and List as plain words beside the title (#5947), none
+          until there is a prospect to lay out. */}
+      <PageViews>
+        {/* All / Follow up (#5934): which prospects, a view of the page
+            like Tasks' My tasks / Everyone's, for roles that work them. */}
+        <ViewLabels
+          label="Which prospects"
+          options={canSwitchView ? VIEW_OPTIONS : []}
+          value={pageView}
+          onChange={setViewPick}
+        />
+        <ViewLabels
+          label="Layout"
+          options={candidates.length > 0 ? LAYOUT_OPTIONS : []}
+          value={layout}
+          onChange={setLayout}
+        />
+      </PageViews>
       <PageActions>
         <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
           {rushListSubtitle(open, due)}
@@ -253,24 +271,6 @@ export function RushPage() {
               className={dashboardToolbarSearchClassName}
             />
           </div>
-        ) : null}
-        {canSwitchView ? (
-          <SegmentedChoice
-            label="Which prospects"
-            dense
-            options={VIEW_OPTIONS}
-            value={pageView}
-            onChange={setViewPick}
-          />
-        ) : null}
-        {candidates.length > 0 ? (
-          <SegmentedChoice
-            label="Layout"
-            dense
-            options={LAYOUT_OPTIONS}
-            value={layout}
-            onChange={setLayout}
-          />
         ) : null}
         {access.add ? (
           <NewButton

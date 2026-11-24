@@ -354,7 +354,7 @@ describe("the recruitment page", () => {
   it("shows the same prospects as a list", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("Jake Smith")).toBeInTheDocument();
     expect(
@@ -366,7 +366,7 @@ describe("the recruitment page", () => {
     permissions.current = MEMBER.filter((key) => key !== "rush:view_results");
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     expect(
       screen.queryByRole("columnheader", { name: /Rating/ }),
     ).not.toBeInTheDocument();
@@ -433,17 +433,17 @@ describe("follow-ups on the recruitment page (#5934)", () => {
       ],
     };
     renderPage();
-    expect(screen.getByRole("radio", { name: "Follow up" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "Follow up" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Jake Smith")).toBeInTheDocument();
     expect(screen.getByText("Owen Park")).toBeInTheDocument();
     expect(screen.queryByText("Leo Grant")).toBeNull();
-    await user.click(screen.getByRole("radio", { name: "All" }));
+    await user.click(screen.getByRole("tab", { name: "All" }));
     expect(screen.getByText("Leo Grant")).toBeInTheDocument();
   });
 
   it("opens on All when the viewer has nothing to follow up", () => {
     renderPage();
-    expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("says what Follow up holds once it is empty", () => {
@@ -471,7 +471,7 @@ describe("follow-ups on the recruitment page (#5934)", () => {
   it("gives no Follow up switch to a role that can't work prospects", () => {
     permissions.current = MEMBER.filter((key) => key !== "rush:add");
     renderPage();
-    expect(screen.queryByRole("radio", { name: "Follow up" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Follow up" })).toBeNull();
   });
 
   it("shows the owner and the follow-up on a card", () => {
@@ -529,7 +529,7 @@ describe("follow-ups on the recruitment page (#5934)", () => {
   it("finds a prospect by name on the list", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     await user.type(
       screen.getByRole("searchbox", { name: "Search prospects by name" }),
       "owe",
@@ -550,7 +550,7 @@ describe("follow-ups on the recruitment page (#5934)", () => {
   it("shows owner and follow-up columns on the list", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     const table = screen.getByRole("table");
     expect(
       within(table).getByRole("columnheader", { name: /Owner/ }),
