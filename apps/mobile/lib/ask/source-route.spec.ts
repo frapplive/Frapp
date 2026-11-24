@@ -60,12 +60,21 @@ describe("askSourceOpening", () => {
   it.each([
     ["members", "/directory"],
     ["events", "/events"],
-    ["points", "/tasks"],
+    ["points", "/points"],
     ["tasks", "/tasks"],
   ])("opens live %s data on its screen", (page, pathname) => {
     expect(askSourceOpening(source({ type: "page", page }))).toEqual({
       kind: "route",
       target: { pathname },
+    });
+  });
+
+  it("opens the standings in the Directory, not the asker's own points (#5950)", () => {
+    expect(
+      askSourceOpening(source({ type: "page", page: "standings" })),
+    ).toEqual({
+      kind: "route",
+      target: { pathname: "/directory", params: { sort: "points" } },
     });
   });
 

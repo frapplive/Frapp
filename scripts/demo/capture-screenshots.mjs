@@ -48,9 +48,14 @@ const ROUTES = [
   ["tasks", "/tasks", "Task board"],
   ["chat", "/chat", "Chapter chat"],
   ["billing", "/billing", "Dues & billing"],
-  ["points", "/points", "Points ledger"],
-  ["service", "/service", "Service hours"],
-  ["study", "/study", "Study hours"],
+  // Points, Service hours and Study hours are not pages (#5950): a member's
+  // own open from their Profile, standings are a Directory sort, and the
+  // chapter ledger is on Chapter settings' Points page.
+  ["points", "/profile?open=points", "Your points"],
+  ["service", "/profile?open=service", "Your service hours"],
+  ["study", "/profile?open=study", "Your study sessions"],
+  ["standings", "/members?sort=points", "Standings"],
+  ["points-ledger", "/settings?tab=points", "Points ledger"],
   ["documents", "/documents", "Document library"],
   ["reports", "/settings?tab=reports", "Reports"],
   ["geofences", "/settings?tab=geofences", "Study zones"],

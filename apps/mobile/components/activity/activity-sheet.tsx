@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
@@ -8,7 +9,14 @@ import {
 } from "@repo/chat-core/activity-cards";
 import { readEventPayload, readHoursPayload } from "@repo/chat-core/cards";
 import type { ChatMessage } from "@repo/chat-core/types";
-import { useReviewServiceEntry, type ActivityRow } from "@repo/hooks";
+import {
+  approvePointsPreview,
+  useGetServiceProofUrl,
+  useReviewServiceEntry,
+  useServiceEntry,
+  useServicePointsRate,
+  type ActivityRow,
+} from "@repo/hooks";
 import {
   MESSAGE_REMINDER_PRESETS,
   messageReminderPresetTime,
@@ -111,8 +119,9 @@ function frameFor(message: ChatMessage, viewerId: string): ChatCardFrameProps {
  * live state by id and its buttons call the same routes they call in chat.
  * Two things are added under them, because the cards do not carry them:
  * - a poll gets "Open in chat", which opens the channel the poll lives in;
- * - a pending service entry gets Approve and Reject. Chat's hours card is a
- *   read-only record, and the phone has no other screen that reviews hours.
+ * - a pending service entry gets Approve and Reject, with what Approve will
+ *   award and the member's proof. Chat's hours card is a read-only record,
+ *   and Activity is the one place hours are reviewed on both apps (#5950).
  *
  * A sign-up link has no chat card: its sheet is `LinkSheet` below, the link
  * and the screen's own actions for it (`LinkSheetActions`). A screen that
@@ -562,6 +571,33 @@ function HoursSheet({
   const message = useMemo(() => activityHoursMessage(row.entry), [row.entry]);
   const payload = readHoursPayload(message);
   const reviewEntry = useReviewServiceEntry();
+  // What an approver decides by (#5950, as web's review shows it): what
+  // Approve will award at the chapter's rate, and the member's proof. The
+  // rate has its own `service:approve` route; unknown leaves the line off
+  // rather than guessing. The proof's path is on the entry, not the row.
+  const pointsRate = useServicePointsRate();
+  const pointsPreview = approvePointsPreview(
+    row.entry.duration_minutes,
+    pointsRate.data?.minutes_per_point,
+  );
+  const liveEntry = useServiceEntry(row.entry.id).data as
+    { proof_path?: string | null } | undefined;
+  const getProofUrl = useGetServiceProofUrl();
+  const [proofFailure, setProofFailure] = useState<string | null>(null);
+  const openProof = async () => {
+    setProofFailure(null);
+    try {
+      const data = await getProofUrl.mutateAsync(row.entry.id);
+      const url =
+        data && typeof data === "object" && "url" in data
+          ? (data as { url?: string }).url
+          : null;
+      if (!url) throw new Error("no url");
+      await Linking.openURL(url);
+    } catch {
+      setProofFailure("Couldn't open the proof. Try again in a moment.");
+    }
+  };
   // A review has no outbox, so it is held while a write would be lost, as
   // the cards hold theirs.
   const { writeBlockedReason } = useConnection();
@@ -607,6 +643,20 @@ function HoursSheet({
       {payload ? (
         <HoursCard {...frameFor(message, viewerId)} payload={payload} />
       ) : null}
+      {pointsPreview && !shownReview ? <CardNote text={pointsPreview} /> : null}
+      {/* A read, so it stays open while writes are held. */}
+      {liveEntry?.proof_path ? (
+        <CardActions>
+          <CardButton
+            label="View proof"
+            variant="link"
+            disabled={getProofUrl.isPending}
+            accessibilityHint="Opens the photo or file the member attached."
+            onPress={() => void openProof()}
+          />
+        </CardActions>
+      ) : null}
+      {proofFailure ? <CardNote tone="error" text={proofFailure} /> : null}
       {shownReview ? (
         <CardNote tone="success" text={REVIEWED_NOTE[shownReview]} />
       ) : (

@@ -517,7 +517,7 @@ describe("DashboardShell", () => {
 
     it("lights More on a page it still holds (#5943 folds them later)", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/points";
+      mockPathname.value = "/tasks";
       shell();
       expect(
         within(primary()).getByRole("button", { name: /More/ }),
@@ -623,11 +623,11 @@ describe("DashboardShell", () => {
 
     it("titles a page in its own header from lg up, as the route's only h1", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/study";
+      mockPathname.value = "/meetings";
       const { container } = shell();
       const headings = screen.getAllByRole("heading", { level: 1 });
       expect(headings).toHaveLength(1);
-      expect(headings[0]).toHaveTextContent("Study hours");
+      expect(headings[0]).toHaveTextContent("Meetings");
       expect(
         container.querySelector("[data-tool-page-header]"),
       ).toContainElement(headings[0]!);
@@ -645,7 +645,7 @@ describe("DashboardShell", () => {
 
     it("titles the page in the top bar below lg, as its only h1", () => {
       setWindowWidth(800);
-      mockPathname.value = "/study";
+      mockPathname.value = "/meetings";
       const { container } = shell();
       const headings = screen.getAllByRole("heading", { level: 1 });
       expect(headings).toHaveLength(1);

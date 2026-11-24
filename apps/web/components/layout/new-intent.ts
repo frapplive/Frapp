@@ -24,9 +24,12 @@ import { useEffect, useRef } from "react";
  */
 export const NEW_INTENT_PARAM = "new";
 
-/** The address that opens `href`'s create form. */
+/**
+ * The address that opens `href`'s create form. `href` may carry a query of
+ * its own (`/profile?open=service`, a panel that holds the form, #5950).
+ */
 export function newIntentHref(href: string): string {
-  return `${href}?${NEW_INTENT_PARAM}=1`;
+  return `${href}${href.includes("?") ? "&" : "?"}${NEW_INTENT_PARAM}=1`;
 }
 
 function addressAsks(): boolean {

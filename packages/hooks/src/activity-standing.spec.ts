@@ -193,6 +193,31 @@ describe("activityStandingGauges (#4766)", () => {
     expect(gauges[0]).toMatchObject({ figure: "0m", progress: 0 });
   });
 
+  it("keeps a zero the screen names as a door (#5950)", () => {
+    const zero = standing({
+      points: { total: 0, rank: null, ranked: 23, goal: null },
+      required_events: { required: 0, attended: 0, excused: 0 },
+      service: { approved_minutes: 0, pending_minutes: 0, goal_minutes: null },
+      study: {
+        minutes: 0,
+        week_start: "2026-11-08T05:00:00.000Z",
+        goal_minutes: null,
+      },
+    });
+    expect(activityStandingGauges(zero)).toEqual([]);
+    expect(
+      activityStandingGauges(zero, [], ["points", "service"]).map(
+        (gauge) => gauge.id,
+      ),
+    ).toEqual(["points", "service"]);
+    // `omit` still wins: a number the screen shows elsewhere isn't repeated.
+    expect(
+      activityStandingGauges(zero, ["points"], ["points", "service"]).map(
+        (gauge) => gauge.id,
+      ),
+    ).toEqual(["service"]);
+  });
+
   it("keeps hours still pending, and a part that couldn't be read", () => {
     const gauges = activityStandingGauges(
       standing({

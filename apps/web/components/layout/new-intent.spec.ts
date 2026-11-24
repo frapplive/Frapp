@@ -11,6 +11,10 @@ describe("useNewIntent", () => {
 
   it("builds the address for a page's form", () => {
     expect(newIntentHref("/events")).toBe("/events?new=1");
+    // A page that is a panel carries its own query (#5950).
+    expect(newIntentHref("/profile?open=service")).toBe(
+      "/profile?open=service&new=1",
+    );
   });
 
   it("opens the form once the page is ready, once, and clears the mark", () => {

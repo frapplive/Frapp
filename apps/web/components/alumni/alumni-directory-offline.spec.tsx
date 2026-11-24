@@ -11,10 +11,9 @@ import { networkMock } from "@/tests/network";
  * The first test file this component has had. It exists mainly for the Retry
  * path, which on this surface does more than the bare `refetch()` most of the
  * `isOffline && anyReadUncached` gates pass — `members-directory.tsx` (clears
- * the search) and `points/page.tsx` (resets `window` and `semesterArchiveId`)
- * share that. (No count here, because a hand-kept one drifted twice. To list
- * them, search multiline: `study-page.tsx`'s gate is Prettier-wrapped across
- * four lines, so a one-line grep misses it.) `useAlumni`
+ * the search) shares that. (No count here, because a hand-kept one drifted
+ * twice. To list them, search multiline: a Prettier-wrapped gate spans
+ * several lines, so a one-line grep misses it.) `useAlumni`
  * sets `placeholderData: keepPreviousData`, so committing a filter offline
  * keys the query to something never fetched and hands back the *previous*
  * key's rows as placeholder data. The gate counts that as uncached and

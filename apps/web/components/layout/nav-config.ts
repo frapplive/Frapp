@@ -7,10 +7,7 @@ import {
   DocumentsGlyph,
   EventsGlyph,
   MeetingsGlyph,
-  PointsGlyph,
   RecruitmentGlyph,
-  ServiceGlyph,
-  StudyGlyph,
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
@@ -39,10 +36,10 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  * There are no section headings: five rows need none, and a heading over
  * each pair spent 37px the channel list wants.
  *
- * **`MORE_ROWS` is temporary.** Tasks, Points, Study hours, Service hours,
- * Meetings and Backwork each fold into one of the rows above in a later step
- * of #5943 (Tasks into Activity; Points and the hours onto the person;
- * Meetings and Backwork into Resources). Recruitment (#5924) landed after
+ * **`MORE_ROWS` is temporary.** Tasks, Meetings and Backwork each fold into
+ * one of the rows above in a later step of #5943 (Tasks into Activity;
+ * Meetings and Backwork into Resources). Points, Study hours and Service
+ * hours left with #5950, onto the person: Profile and the Directory. Recruitment (#5924) landed after
  * the series was planned and has no home in it yet. Until its step lands a page stays
  * reachable from the More row, a dropdown under its button, so no page is
  * orphaned mid-series. A step deletes its rows here and nothing else; when
@@ -86,10 +83,9 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  * - `hiddenUntilSetUp` — a feature that is on but that nobody has set up yet
  *   hides, since its page could only say so (`useHiddenUnsetFeatures` in
  *   `@repo/hooks`; `spec/product/modules.md` § Not-set-up features).
- *   Documents with nothing in it hides from a viewer who can't upload; Study
- *   hours with no active zone hides from everyone, because zones are made in
- *   the Study zones tool, not on its page. Nothing hides while permissions,
- *   modules or the list are still loading, or after the list's read fails.
+ *   Documents with nothing in it hides from a viewer who can't upload.
+ *   Nothing hides while permissions, modules or the list are still loading,
+ *   or after the list's read fails.
  *
  * Tenant-kind gating (#5933):
  * - `kinds` — the tenant kinds a row serves. Omitted, a row is a chapter's
@@ -255,31 +251,6 @@ export const MORE_ROWS: NavItem[] = [
     href: "/tasks",
     description: "Assign, track, and confirm chapter tasks.",
     module: "tasks",
-  },
-  {
-    id: "points",
-    label: "Points",
-    icon: PointsGlyph,
-    href: "/points",
-    description: "Leaderboard, transactions, anomaly audit.",
-    module: "points",
-  },
-  {
-    id: "study",
-    label: "Study hours",
-    icon: StudyGlyph,
-    href: "/study",
-    description: "Start a tracked study session inside a study zone.",
-    module: "hours",
-    hiddenUntilSetUp: "study",
-  },
-  {
-    id: "service",
-    label: "Service hours",
-    icon: ServiceGlyph,
-    href: "/service",
-    description: "Log service hours and approve entries for points.",
-    module: "hours",
   },
   {
     // The recruitment pipeline (#5924): a board and a list of prospects.

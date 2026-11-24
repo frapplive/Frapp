@@ -5,7 +5,8 @@ import {
 } from "@repo/validation";
 
 /**
- * The review queue's line saying what Approve will award (#3862), from the
+ * The review's line saying what Approve will award (#3862; in Activity on
+ * both apps since #5950), from the
  * same math the API's approve path uses (`servicePointsForDuration`).
  *
  * The rate is read when the officer clicks, not when the page loaded

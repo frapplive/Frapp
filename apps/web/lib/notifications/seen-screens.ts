@@ -25,8 +25,9 @@ const SCREENS_BY_ROUTE: readonly (readonly [string, readonly string[]])[] = [
   // waiting on the member, so a visit reads task rows too, and the weekly
   // recap push (#4985) opens here.
   ["/activity", ["tasks", "activity"]],
-  ["/points", ["points"]],
-  ["/service", ["service"]],
+  // A member's own points and service hours are read on their Profile, whose
+  // figures and panels show what those rows are about (#5950).
+  ["/profile", ["points", "service"]],
   ["/members", ["members"]],
   // Recruitment follow-ups and stale alerts (#5934) open on the pipeline.
   ["/rush", ["rush"]],

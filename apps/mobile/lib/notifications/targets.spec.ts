@@ -91,10 +91,9 @@ describe("resolveNotificationTarget", () => {
     ).toEqual({ pathname: "/tasks" });
   });
 
-  it("sends points to the task board, which absorbed it", () => {
-    // C3 folded points into s08; there is no points route to send anyone to.
+  it("sends points to the member's own points (#5950)", () => {
     expect(resolveNotificationTarget(payload({ screen: "points" }))).toEqual({
-      pathname: "/tasks",
+      pathname: "/points",
     });
   });
 

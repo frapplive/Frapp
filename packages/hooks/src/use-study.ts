@@ -36,7 +36,7 @@ export function useGeofences(options?: { enabled?: boolean }) {
   });
 }
 
-export function useStudySessions() {
+export function useStudySessions(options?: { enabled?: boolean }) {
   const client = useFrappClient();
   // Chapter-scoped despite taking no chapter argument, for the same reason
   // `useGeofences` above is: the route resolves the chapter from the request
@@ -64,6 +64,9 @@ export function useStudySessions() {
       return data;
     },
     staleTime: 30_000,
+    // A surface that shows study time only while Hours is on holds the read
+    // otherwise: the route is module-guarded and would answer 403.
+    enabled: options?.enabled ?? true,
   });
 }
 

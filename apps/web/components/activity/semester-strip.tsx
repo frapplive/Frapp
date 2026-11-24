@@ -11,14 +11,18 @@ import { Skeleton } from "@/components/shared/async-states";
 import { ProgressRing } from "@/components/shared/progress-ring";
 import { SectionLabel } from "@/components/shared/section-label";
 import { FOCUS_RING } from "@/components/ui/focus";
+import { standingHref } from "@/components/standing/standing-doors";
 import { cn } from "@/lib/utils";
 
-/** The page that owns each number. */
+/**
+ * What each number opens: the member's own panel for it on their Profile
+ * (#5950; a page each until then), and Events for attendance.
+ */
 const HREF: Record<StandingRow["id"], string> = {
-  points: "/points",
+  points: standingHref("points"),
   required_events: "/events",
-  service: "/service",
-  study: "/study",
+  service: standingHref("service"),
+  study: standingHref("study"),
 };
 
 /** A gauge's ring: the week ring's recipe, small enough to lead a line. */
@@ -54,7 +58,7 @@ const WIDE_COLUMNS = [
  * a ring with an invented end would read as a rule. Without one the number
  * stands alone. A number that is zero with nothing to aim at is left out,
  * which is the zero tile's fix (#4679), and with none left the strip isn't
- * drawn. Each gauge opens the page that owns its number. The ring is hidden
+ * drawn. Each gauge opens what is behind its number. The ring is hidden
  * from a screen reader, which hears the gauge's sentence instead.
  */
 export function SemesterStrip({
@@ -75,6 +79,7 @@ export function SemesterStrip({
           <li key={gauge.id} className={CELL}>
             <Link
               href={HREF[gauge.id]}
+              scroll={false}
               aria-label={gauge.spokenLabel}
               data-testid={`activity-standing-${gauge.id}`}
               className={cn(

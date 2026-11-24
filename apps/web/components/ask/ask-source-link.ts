@@ -1,5 +1,9 @@
 import { askSourceTarget, type AskSource } from "@repo/validation";
 import { chatDeepLink } from "@/lib/chat/chat-links";
+import {
+  POINTS_STANDINGS_HREF,
+  standingHref,
+} from "@/components/standing/standing-doors";
 
 /** `/documents?document=<id>` opens that file in the viewer (`documents-page.tsx`). */
 export const DOCUMENT_LINK_PARAM = "document";
@@ -8,7 +12,10 @@ export const DOCUMENT_LINK_PARAM = "document";
 const PAGE_ROUTES: Record<string, string | null> = {
   members: "/members",
   events: "/events",
-  points: "/points",
+  // "How many points do I have" cites the member's own points; "who leads"
+  // cites the standings, which live in the Directory (#5950).
+  points: standingHref("points"),
+  standings: POINTS_STANDINGS_HREF,
   dues: null,
   tasks: "/tasks",
 };

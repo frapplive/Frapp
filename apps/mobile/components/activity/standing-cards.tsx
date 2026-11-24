@@ -13,6 +13,9 @@ import {
   type StandingDestination,
 } from "./semester-strip";
 
+/** The gauges that are a screen's only door on You (#5950). */
+const ALWAYS_DOORS: readonly ActivityStandingSection[] = ["points", "service"];
+
 /**
  * Last week and This semester on the You tab, under Status (#5779, Paul's
  * direction A, 2026-11-20): they say how the member is standing, not what
@@ -24,9 +27,10 @@ import {
  *
  * - Last week (`RecapCard`): Sunday to Tuesday only, until dismissed (#4983).
  * - This semester (`SemesterStrip`): up to four gauges, each opening the
- *   screen that owns its number, less any number You already shows (`omit`:
- *   its points in the title row, its Study and Service rows), so the screen
- *   says each once.
+ *   screen that owns its number. The points and service gauges stay at zero
+ *   (`keep`): since You's Service hours row went (#5950) they are the only
+ *   doors to the member's own Points and Service hours screens, which New
+ *   doesn't open. Study's screen is also New's Study.
  *
  * A tab is never unmounted, so the standing is read again each time the
  * member comes back to You (a check-in elsewhere moves its numbers), as
@@ -34,8 +38,10 @@ import {
  */
 export function StandingCards({
   omit,
+  keep = ALWAYS_DOORS,
 }: {
   omit?: readonly ActivityStandingSection[];
+  keep?: readonly ActivityStandingSection[];
 } = {}) {
   const router = useRouter();
   const standing = useActivityStanding();
@@ -75,6 +81,7 @@ export function StandingCards({
           standing={standing.data}
           onOpen={openStanding}
           omit={omit}
+          keep={keep}
         />
       ) : null}
     </>

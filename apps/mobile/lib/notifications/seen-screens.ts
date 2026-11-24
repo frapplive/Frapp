@@ -13,8 +13,9 @@
 const SCREENS_BY_PATHNAME: Record<string, readonly string[]> = {
   "/events": ["events"],
   "/event-details": ["events"],
-  // Points were absorbed into the task board, as in `targets.ts`.
-  "/tasks": ["tasks", "points"],
+  "/tasks": ["tasks"],
+  // The member's own points, where a points notification opens (#5950).
+  "/points": ["points"],
   // A submitted task's review opens from here (`?review=`, which pushes the
   // task's screen over it), beside the tasks waiting on the member, so a
   // visit reads task rows too, and the weekly

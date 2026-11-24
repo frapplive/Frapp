@@ -23,19 +23,17 @@ export const DASHBOARD_ROUTES = [
   // `/roles` likewise redirects into Settings → Roles (Chunk 07b, #538). That
   // surface is covered by `/settings`, and so are `/geofences`, `/reports`,
   // `/discord-import` and `/chat-admin`, which redirect to their pages in
-  // Chapter settings (#3837).
+  // Chapter settings (#3837). `/points`, `/service` and `/study` redirect to
+  // the member's own panels on `/profile` (#5950), which is listed.
   "/activity",
   "/events",
   "/tasks",
-  "/service",
   "/rush",
   "/documents",
   "/backwork",
-  "/study",
   "/chat",
   // The Messages page (#5946): chat's panel with the conversation list.
   "/messages",
-  "/points",
   "/profile",
   "/preferences",
   "/settings",

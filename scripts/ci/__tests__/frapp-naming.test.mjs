@@ -366,14 +366,14 @@ export const COLLECTED = [
   {
     // The root layout's `title.template` appends " · Frapp" (#2147), so a
     // route title that names the product renders it twice. generateMetadata
-    // must be taught to the collector before it can hide a title. 18: the
-    // seventeen route titles plus (dashboard)/points/layout.tsx, which exists
-    // only to carry one for a Client Component page.
+    // must be taught to the collector before it can hide a title. 15: the
+    // route titles left once Points, Service hours and Study hours stopped
+    // being pages (#5950).
     what: "web metadata title",
     walk: "webApp",
     collect: (source) => webMetadataTitles(source).map((value) => ({ key: "title", value })),
     wrong: (value) => value === "__generateMetadata__" || /Frapp|Signet/.test(value),
-    min: 18,
+    min: 15,
   },
   {
     // Root + OG + Twitter on the layout, and one per route below the homepage.
@@ -925,7 +925,7 @@ test("every Settings recovery path names expo.name", () => {
 // replaces each held the same check on their own constants.
 test("the table keeps its floors and roots", () => {
   const floor = (what) => COLLECTED.find((row) => row.what === what).min;
-  assert.equal(floor("web metadata title"), 18);
+  assert.equal(floor("web metadata title"), 15);
   assert.equal(floor("landing metadata title"), 9);
   const pinned = (file) => PINS.filter((pin) => pin.file === file).flatMap((pin) => pin.has ?? []);
   assert.equal(pinned("apps/web/components/auth/auth-frame.tsx").length, 1);

@@ -9,6 +9,8 @@ import { isModuleSettingsTab } from "@/components/settings/settings-modules";
 import {
   CHAT_SETTINGS_PATH,
   DISCORD_IMPORT_SETTINGS_PATH,
+  HOURS_SETTINGS_PATH,
+  POINTS_SETTINGS_PATH,
   REPORTS_SETTINGS_PATH,
   STUDY_ZONES_SETTINGS_PATH,
 } from "@/components/settings/settings-paths";
@@ -47,12 +49,19 @@ export type SettingsTool = {
   page: string;
   /**
    * The tool is drawn on its module page itself (Study zones' zone list, the
-   * Reports form, Chat's channels and report queue), so `href` is that page
+   * Reports form, Chat's channels and report queue, the points ledger, the
+   * chapter's service history), so `href` is that page
    * and the page lists no row for it. A tool without it (Discord import) is a
    * row on its module page that opens it in place of the page, with a way
    * back, still inside Chapter settings.
    */
   embedded?: boolean;
+  /**
+   * The embedded body is a list that keeps growing (the points ledger, the
+   * service history), so it is drawn last on its page, under the rules and
+   * who-can, which stay a screen from the top however long it gets.
+   */
+  growsLong?: boolean;
 };
 
 export const SETTINGS_TOOLS: readonly SettingsTool[] = [
@@ -75,6 +84,34 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     href: DISCORD_IMPORT_SETTINGS_PATH,
     permission: "channels:manage",
     page: "chat",
+  },
+  {
+    // The chapter's points ledger, with Adjust points for a role that may
+    // (#5950). The Points page's Audit section and Adjust button until then.
+    id: "points-ledger",
+    label: "Points ledger",
+    description:
+      "Every points transaction in the chapter, flagged adjustments, and Adjust points.",
+    href: POINTS_SETTINGS_PATH,
+    permission: "points:view_all",
+    page: "points",
+    module: "points",
+    embedded: true,
+    growsLong: true,
+  },
+  {
+    // The chapter's reviewed service entries (#5950). The Service hours
+    // page's Chapter history until then; pending ones are reviewed in
+    // Activity.
+    id: "service-history",
+    label: "Service history",
+    description: "Every member's approved and rejected service entries.",
+    href: HOURS_SETTINGS_PATH,
+    permission: "service:approve",
+    page: "hours",
+    module: "hours",
+    embedded: true,
+    growsLong: true,
   },
   {
     id: "study-zones",
