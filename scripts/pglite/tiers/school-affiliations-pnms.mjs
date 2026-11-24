@@ -1,6 +1,6 @@
 import { db, miss } from "../harness.mjs";
 
-// ─── Functional: affiliations and PNMs (20261124205834, #5974) ──────────────
+// ─── Functional: affiliations and PNMs (20261124223705, #5974) ──────────────
 //
 // `spec/architecture/school-layer.md` § 2.4, § 2.5, § 3.5 and § 4.3's
 // function-level list, proven here:
@@ -29,7 +29,7 @@ import { db, miss } from "../harness.mjs";
 //     `anon` or `authenticated` (§ 4.1).
 //
 // The rows are deleted at the end.
-console.log("\n=== Functional: affiliations and PNMs (20261124205834) ===");
+console.log("\n=== Functional: affiliations and PNMs (20261124223705) ===");
 try {
   const P = "c5974000-0000-4000-8000-0000000000";
   const SCHOOL = `${P}a1`;

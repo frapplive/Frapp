@@ -1,6 +1,6 @@
 /**
  * A chapter's link to its school's council (`school-layer.md` § 2.4,
- * `20261124205834_school_layer_affiliations_and_pnms.sql`, #5974). Both
+ * `20261124223705_school_layer_affiliations_and_pnms.sql`, #5974). Both
  * sides agree; only `set_council_chapter_status` writes one.
  */
 
