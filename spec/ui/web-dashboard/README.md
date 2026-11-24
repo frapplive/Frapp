@@ -504,6 +504,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   A task says its state only when that is news (overdue, or sent back for changes): "To do" on every row of a list named To do is noise (P3), and a row under Overdue doesn't repeat the heading as a chip.
   An event the member has checked in to leaves the list.
   Due and waiting reminders are rows on their days (#5779), below.
+  Minutes waiting on the member are a **Minutes** run after Later ([#5949](https://github.com/frapplive/Frapp/issues/5949); what is listed: [`activity.md` § Minutes](../../behavior/activity.md#minutes)), each row leading with the Meetings glyph: a meeting to write minutes for opens the event, with **Write minutes** on the row (it starts the minutes and opens `/meetings/:id`) and **No minutes for this meeting** in its `⋯` and right-click menu, confirmed by a toast with Undo; a draft opens its minutes with where it stands as a chip; notes open `/meetings/:id/notes`, with Take notes as the ask until the member starts.
   Its header holds **Calendar ›**, a link to `/events`, the chapter's whole month, where the Calendar row was (#5310).
   With nothing at all it says "Nothing to do right now."
 - **Reminders** ([#4957](https://github.com/pdcarlson/Frapp/issues/4957), Shawn, 2026-11-13;

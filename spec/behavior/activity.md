@@ -130,8 +130,13 @@ member's own answer, not the event's default:
 **Reminders:** the reminders the caller set on chat messages, due ones first. See
 [Reminders](#reminders).
 
+**Minutes:** meetings the caller is to write minutes for, their own drafts, and the drafts they
+take notes on. See [Minutes](#minutes).
+
 **`needs_you_count`** is every "Needs you" row plus each event the member can check in to right
-now and hasn't, plus each due reminder, less what the member snoozed ([Snooze](#snooze)). It is counted before the list cap, so a badge built from it does not stop at 25; due reminders are counted from the up to 50 the read serves.
+now and hasn't, plus each due reminder, plus every meeting to write minutes for, every own draft
+and every draft they were added to take notes on and haven't started ([Minutes](#minutes)), less
+what the member snoozed ([Snooze](#snooze)). It is counted before the list cap, so a badge built from it does not stop at 25; due reminders are counted from the up to 50 the read serves.
 It is what the member can act on now, and so is not the week ring's "left", which also counts
 events still ahead ([Week](#week), settled 2026-11-13).
 
@@ -141,7 +146,7 @@ page on both clients. See [Week](#week).
 ## Rules
 
 - **A module that is off contributes nothing.** Each section checks its own module
-  (`tasks`, `hours`, `polls`, `events`) and does not read it while the
+  (`tasks`, `hours`, `polls`, `events`, `meetings`) and does not read it while the
   chapter has it off ([`../product/modules.md`](../product/modules.md)). Links, sign-ups and forms
   come from chat, which has no switch, so they are always read.
 - **Each list carries at most 25 rows**, except Made by you's polls (25 open and 25 closed) and
@@ -512,7 +517,9 @@ A member can snooze a row that waits on them until a time they pick, and it come
 Snooze and Slack's Later ("Remind me") work: the thing isn't done, it just isn't for now.
 
 - **Which rows.** The rows that can be unread ([§ Unread](#unread)): everything in Needs you,
-  Coming up and Links. Nothing in Made by you, which waits on others.
+  Coming up and Links. Nothing in Made by you, which waits on others, and no
+  [Minutes](#minutes) row, whose ids (an event, minutes) a snooze can't name apart from Coming
+  up's event.
 - **Gone until then.** `PUT /v1/activity/snoozes` (the item's kind and id, as a read names it, and
   `until`) takes it off the member's list. The read still serves the row, with `snoozed_until`,
   so a client lists it under Snoozed and brings it back on its own clock; it is not counted in
@@ -624,6 +631,44 @@ reminders beside what they saved. Since #5779 they are rows in To do on the day 
   (`PUT /v1/reminders/messages/:messageId`) and Done clears it (`DELETE`); a row whose channel the
   member lost offers only Done. A row carries no unread dot: the member set it themselves, and a due one is marked by
   its badge.
+
+## Minutes
+
+What the web's Meetings page and the phone's Minutes list asked of a member before they went
+([#5949](https://github.com/frapplive/Frapp/issues/5949); Paul, 2026-11-24: posted minutes are
+filed as documents, so the list pages are gone). Served as `minutes` on `GET /v1/activity`
+(`ActivityMinutesService`) while the chapter has Meetings on, and drawn on both clients as a
+**Minutes** run in To do, after the days and Later and before No deadline, three rows before
+"Show N more", from the same rows in `@repo/hooks` (`activityToDos`), in this order:
+
+- **To write** (`to_write`), only for a holder of `meetings:record`: each event the member can
+  see (the event read rule, as Coming up reads it) that ended in the last 30 days, whose name
+  reads as a meeting (`minutesToWrite`, [`meetings.md` § Meetings, tied to their
+  events](meetings.md#meetings-tied-to-their-events)), with no minutes by anyone, a draft the
+  member can't read included, and not marked "No minutes". Newest first. The row is the
+  meeting's name and its day, and opens the event; **Write minutes** on the row starts minutes on
+  that event with the type its name suggests and opens them, as the event's own Minutes row does
+  (another officer's minutes that started meanwhile answer "already started", and the row leaves
+  on the next read). Its menu (web's `⋯` and right-click, the phone's long press) offers **No
+  minutes for this meeting**, which settles it: web says so in a toast with Undo, the phone in a
+  line with Undo.
+- **Drafts** (`drafts`): the member's own unposted minutes they may still read
+  ([`meetings.md` § Who can read minutes](meetings.md#who-can-read-minutes)), newest meeting
+  first, with where each stands in the minutes' own words ("Drafting", "Not started", "Winston
+  Hewitt is recording"; `minutesDraftStateLabel`), and "No meeting" before the day while none is
+  linked. The row opens the minutes.
+- **Taking notes** (`taking_notes`): another officer's unposted minutes the member takes notes on,
+  added by the author or an editor, or joined by writing ([`meetings.md` § Several
+  note-takers](meetings.md#several-note-takers)), newest meeting first: the meeting, its day and
+  "Minutes by Olive Officer", then **Take notes** for one they were added to and haven't started,
+  else Taking notes. The row opens their notes (web's notes page, the phone's notes sheet). Empty
+  on a server with AI off, where note-taking's routes don't exist.
+
+Each list is at most 25. Every meeting to write, every draft, and each draft the member was added
+to and hasn't started counts in `needs_you_count`; notes they are already taking are their own,
+not an ask. The rows carry no unread dot and no Snooze ([§ Snooze](#snooze)), and narrowing To do
+to a kind by the week ring leaves them out, as it does reminders. A failed read is served empty
+and named `minutes` in `unavailable`. The next meeting coming is the Calendar's, not Activity's.
 
 ## Links
 
