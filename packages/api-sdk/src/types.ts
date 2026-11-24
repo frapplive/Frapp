@@ -4397,6 +4397,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rush/candidates/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every candidate a display name matches, with stage and day added, for a picker */
+        get: operations["RushController_matches_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rush/candidates/{id}": {
         parameters: {
             query?: never;
@@ -11656,13 +11673,6 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        RushSeveralMatchDto: {
-            /** @enum {string} */
-            code: "rush.several_match";
-            /** @example Several prospects match */
-            message: string;
-            candidates: components["schemas"]["RushNameMatchDto"][];
-        };
         CreateRushCandidateDto: {
             display_name: string;
             /** @description When the candidate is already a chapter member, the resolved user id. Omit for an external prospect. */
@@ -11807,6 +11817,8 @@ export interface components {
             /** @enum {string|null} */
             bid_answered_via: "member" | "pnm" | "system" | null;
             bid_rescind_reason: string | null;
+            /** @description On an accepted bid: whether the PNM’s invite to join went out. Null on any other. */
+            bid_invite_sent: boolean | null;
         };
         RushPipelineDto: {
             /** @description In board order: by category, then position. */
@@ -12027,6 +12039,8 @@ export interface components {
              */
             bid_answered_via: "member" | "pnm" | "system" | null;
             bid_rescind_reason: string | null;
+            /** @description On an accepted bid: whether the PNM’s invite to join went out. Null on any other. */
+            bid_invite_sent: boolean | null;
             /** @description On a confirmation: whether the accepted PNM’s invite went out to the email kept for it. */
             invite_sent?: boolean;
         };
@@ -12051,6 +12065,8 @@ export interface components {
              * @enum {string}
              */
             status: "waiting" | "confirmed" | "closed";
+            /** @description On the tap that confirmed it: whether the invite to join went out. */
+            invite_sent?: boolean;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -24545,14 +24561,12 @@ export interface operations {
                     "application/json": components["schemas"]["RushCandidateViewDto"];
                 };
             };
-            /** @description The name matches several prospects; pick one by id. Never a silent pick. */
+            /** @description `code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["RushSeveralMatchDto"];
-                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -24584,6 +24598,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateRushCandidateResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushController_matches_v1: {
+        parameters: {
+            query: {
+                /** @description Candidate display name (case-insensitive) */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNameMatchDto"][];
                 };
             };
             /** @description Error */

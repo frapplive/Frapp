@@ -54,6 +54,7 @@ function row(over: Partial<RushCandidateRow> = {}): RushCandidateRow {
     bid_answered_by: null,
     bid_answered_via: null,
     bid_rescind_reason: null,
+    bid_invite_sent: null,
     ...over,
   };
 }
@@ -103,9 +104,25 @@ class FakeBids implements IRushBidRepository {
       chapter_id: r.chapterId,
       email: r.email,
       token_hash: r.tokenHash,
+      emailed_at: null,
       created_at: NOW.toISOString(),
     };
     return Promise.resolve();
+  }
+
+  markConfirmationEmailed(_c: string, _ch: string, at: string): Promise<void> {
+    if (this.confirmation) this.confirmation.emailed_at = at;
+    return Promise.resolve();
+  }
+
+  setInviteSent(
+    _c: string,
+    _ch: string,
+    sent: boolean,
+  ): Promise<RushCandidateRow | null> {
+    if (this.candidate.bid_state !== 'accepted') return Promise.resolve(null);
+    this.candidate = { ...this.candidate, bid_invite_sent: sent };
+    return Promise.resolve(this.candidate);
   }
 
   findConfirmation(): Promise<RushBidConfirmation | null> {
@@ -127,7 +144,9 @@ class FakeBids implements IRushBidRepository {
 
   candidatesWithConfirmationEmail(): Promise<Set<string>> {
     return Promise.resolve(
-      new Set(this.confirmation?.email ? [this.confirmation.candidate_id] : []),
+      new Set(
+        this.confirmation?.emailed_at ? [this.confirmation.candidate_id] : [],
+      ),
     );
   }
 }
@@ -136,7 +155,7 @@ describe('RushBidService (#5973)', () => {
   let bids: FakeBids;
   let email: { sendBidConfirmEmail: jest.Mock };
   let invites: { createForAcceptedProspect: jest.Mock };
-  let settings: { get: jest.Mock; newMemberRoleId: jest.Mock };
+  let settings: { bidExpiryDays: jest.Mock; newMemberRoleId: jest.Mock };
   let service: RushBidService;
 
   beforeEach(() => {
@@ -144,7 +163,7 @@ describe('RushBidService (#5973)', () => {
     email = { sendBidConfirmEmail: jest.fn().mockResolvedValue(true) };
     invites = { createForAcceptedProspect: jest.fn().mockResolvedValue(true) };
     settings = {
-      get: jest.fn().mockResolvedValue({ bid_expiry_days: 7 }),
+      bidExpiryDays: jest.fn().mockResolvedValue(7),
       newMemberRoleId: jest.fn().mockResolvedValue('role-new-member'),
     };
     const pipelineRepo = {
@@ -152,7 +171,11 @@ describe('RushBidService (#5973)', () => {
     };
     const users = {
       findById: jest.fn((id: string) =>
-        Promise.resolve({ id, email: 'Linked@RPI.edu', display_name: id }),
+        Promise.resolve({
+          id,
+          email: id === MEMBER ? 'chris@rpi.edu' : 'Linked@RPI.edu',
+          display_name: id,
+        }),
       ),
       findByIds: jest.fn((ids: string[]) =>
         Promise.resolve(
@@ -187,7 +210,7 @@ describe('RushBidService (#5973)', () => {
 
   describe('extend', () => {
     it("opens a bid for the chapter's bid days, keeping bid_status in step", async () => {
-      settings.get.mockResolvedValue({ bid_expiry_days: 3 });
+      settings.bidExpiryDays.mockResolvedValue(3);
       const after = await service.extend('cand-1', CHAPTER, MEMBER, NOW);
       expect(after).toMatchObject({
         bid_state: 'extended',
@@ -288,20 +311,75 @@ describe('RushBidService (#5973)', () => {
         confirmUrl: string;
         chapterName: string;
         recorderName: string;
-        expiresOn: string;
+        expiresInDays: number;
       };
+      // Days, not a date: the PNM's time zone isn't known (finding: a UTC
+      // date read a day late in the Americas).
       expect(sent).toMatchObject({
         to: 'jake@rpi.edu',
         chapterName: 'FIJI',
         recorderName: 'Chris',
-        expiresOn: 'December 1',
+        expiresInDays: 5,
       });
       // The token rides in the fragment, and only its hash is stored.
       const url = new URL(sent.confirmUrl);
       expect(url.pathname).toBe('/recruitment/confirm');
       expect(url.search).toBe('');
       expect(bids.confirmation?.token_hash).toBe(hashToken(url.hash.slice(1)));
+      expect(bids.confirmation?.emailed_at).toBe(LATER.toISOString());
       expect(invites.createForAcceptedProspect).not.toHaveBeenCalled();
+    });
+
+    it('says not emailed, and keeps no sent mark, when the send fails', async () => {
+      email.sendBidConfirmEmail.mockResolvedValue(false);
+      await extended();
+      const view = await service.recordAcceptance(
+        'cand-1',
+        CHAPTER,
+        MEMBER,
+        'jake@rpi.edu',
+        LATER,
+      );
+      expect(view.bid_confirm_emailed).toBe(false);
+      expect(bids.confirmation?.emailed_at).toBeNull();
+      await expect(bids.candidatesWithConfirmationEmail()).resolves.toEqual(
+        new Set(),
+      );
+    });
+
+    it("refuses the recorder's own address, whose link would let them confirm alone", async () => {
+      await extended();
+      await expect(
+        service.recordAcceptance(
+          'cand-1',
+          CHAPTER,
+          MEMBER,
+          'Chris@RPI.edu',
+          LATER,
+        ),
+      ).rejects.toThrow("That's your own email");
+      expect(bids.candidate.bid_acceptance_recorded_at).toBeNull();
+    });
+
+    it('takes the email back off, and sends nothing, when the bid was answered meanwhile', async () => {
+      await extended();
+      const save = bids.saveConfirmation.bind(bids);
+      jest.spyOn(bids, 'saveConfirmation').mockImplementation(async (r) => {
+        // A decline lands between the recording and the save.
+        bids.candidate = { ...bids.candidate, bid_state: 'declined' };
+        await save(r);
+      });
+      await expect(
+        service.recordAcceptance(
+          'cand-1',
+          CHAPTER,
+          MEMBER,
+          'jake@rpi.edu',
+          LATER,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(bids.confirmation).toBeNull();
+      expect(email.sendBidConfirmEmail).not.toHaveBeenCalled();
     });
 
     it("uses a linked member's account email when none is typed", async () => {
@@ -364,15 +442,37 @@ describe('RushBidService (#5973)', () => {
         bid_answered_via: 'member',
         invite_sent: true,
       });
+      // Sent as from the confirmer first, then the recorder and extender:
+      // the first the invite rules let invite into the role.
       expect(invites.createForAcceptedProspect).toHaveBeenCalledWith({
         chapterId: CHAPTER,
-        createdBy: OFFICER,
+        senders: [OFFICER, MEMBER, MEMBER],
         roleId: 'role-new-member',
         email: 'jake@rpi.edu',
       });
-      // The email is gone once the bid is answered.
+      // The email is gone once the bid is answered, and the invite noted.
       expect(bids.confirmation).toBeNull();
-      expect(bids.candidate.bid_status).toBe('extended');
+      expect(bids.candidate).toMatchObject({
+        bid_status: 'extended',
+        bid_invite_sent: true,
+      });
+    });
+
+    it('accepts and deletes the email even when the invite step throws', async () => {
+      await extended();
+      await service.recordAcceptance(
+        'cand-1',
+        CHAPTER,
+        MEMBER,
+        'jake@rpi.edu',
+        LATER,
+      );
+      settings.newMemberRoleId.mockRejectedValue(new Error('read failed'));
+      await expect(
+        service.confirm('cand-1', CHAPTER, OFFICER, LATER),
+      ).resolves.toMatchObject({ bid_state: 'accepted', invite_sent: false });
+      expect(bids.confirmation).toBeNull();
+      expect(bids.candidate.bid_invite_sent).toBe(false);
     });
 
     it('with no email accepts, sending no invite', async () => {
@@ -424,16 +524,19 @@ describe('RushBidService (#5973)', () => {
       expect(bids.candidate.bid_state).toBe('extended');
 
       await expect(service.confirmByToken(token, LATER)).resolves.toMatchObject(
-        { status: 'confirmed' },
+        { status: 'confirmed', invite_sent: true },
       );
       expect(bids.candidate).toMatchObject({
         bid_state: 'accepted',
         bid_answered_by: null,
         bid_answered_via: 'pnm',
       });
-      // Sent as from whoever recorded it.
+      // No confirmer on the PNM's tap: the recorder, then the extender.
       expect(invites.createForAcceptedProspect).toHaveBeenCalledWith(
-        expect.objectContaining({ createdBy: MEMBER, email: 'jake@rpi.edu' }),
+        expect.objectContaining({
+          senders: [MEMBER, MEMBER],
+          email: 'jake@rpi.edu',
+        }),
       );
       // A second tap finds nothing.
       await expect(service.confirmByToken(token, LATER)).rejects.toBeInstanceOf(
@@ -495,6 +598,13 @@ describe('RushBidService (#5973)', () => {
         bid_acceptance_recorded_at: null,
       });
       expect(bids.confirmation).toBeNull();
+    });
+
+    it('refuses a bid whose day has passed, as every action does', async () => {
+      await extended();
+      await expect(
+        service.rescind('cand-1', CHAPTER, OFFICER, 'Too late', AFTER_EXPIRY),
+      ).rejects.toThrow(new ConflictException('This bid has expired'));
     });
 
     it('needs a reason', async () => {

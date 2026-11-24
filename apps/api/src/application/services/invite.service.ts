@@ -761,17 +761,17 @@ export class InviteService {
    * PNM, carrying the chapter's new-member role, through the same token,
    * email and daily ceilings as any emailed invite.
    *
-   * Unlike {@link createWithEmails} it doesn't check the role against
-   * `createdBy`'s rank: the role was picked on the Recruitment settings page
-   * by a `rush:manage` holder, or is the New members tier's first, never one
-   * that holds everything, and the PNM's own confirmation has no inviter
-   * whose rank could apply. `createdBy` is who the invite names as sending
-   * it. Best-effort, like every invite email: a refusal at the ceiling or a
-   * failed send answers `false`, and the acceptance stands either way.
+   * It is sent as from the first of `senders` (whoever confirmed it, then
+   * whoever recorded or extended the bid) who may invite someone into the
+   * role now: the redeem checks its sender the same way
+   * ({@link resolveRedeemRoles}), so an invite from anyone else would be
+   * refused when the PNM opens it. With none, nothing is sent. Best-effort,
+   * like every invite email: a refusal at the ceiling or a failed send
+   * answers `false`, and the acceptance stands either way.
    */
   async createForAcceptedProspect(input: {
     chapterId: string;
-    createdBy: string;
+    senders: readonly string[];
     roleId: string;
     email: string;
   }): Promise<boolean> {
@@ -781,20 +781,24 @@ export class InviteService {
         input.chapterId,
       );
       if (!role || role.permissions.includes('*')) return false;
+      const createdBy = await this.firstSenderFor(
+        input.chapterId,
+        input.senders,
+        role.id,
+      );
+      if (!createdBy) return false;
       const origin = resolveAppOrigin(this.config);
       assertHttpsJoinOrigin(new URL(origin));
       const data = this.prepareInviteData(
         input.chapterId,
-        input.createdBy,
+        createdBy,
         role.name,
         input.email.trim().toLowerCase(),
       );
       const [invites, chapter, inviter] = await Promise.all([
-        this.insertWithinDailyCeilings(input.chapterId, input.createdBy, [
-          data,
-        ]),
+        this.insertWithinDailyCeilings(input.chapterId, createdBy, [data]),
         this.chapterRepo.findById(input.chapterId).catch(() => null),
-        this.userRepo.findById(input.createdBy).catch(() => null),
+        this.userRepo.findById(createdBy).catch(() => null),
       ]);
       const invite = invites[0];
       if (!invite) return false;
@@ -823,6 +827,29 @@ export class InviteService {
       );
       return false;
     }
+  }
+
+  /**
+   * The first of `senders` who may invite someone into `roleId` now: holds
+   * `members:invite` (or everything) and reaches the role by rank, as the
+   * redeem requires of an invite's sender.
+   */
+  private async firstSenderFor(
+    chapterId: string,
+    senders: readonly string[],
+    roleId: string,
+  ): Promise<string | null> {
+    for (const sender of [...new Set(senders)]) {
+      const context = await this.rbac.getRankContext(chapterId, sender);
+      const role = context.roles.find((r) => r.id === roleId);
+      const mayInvite =
+        context.reach.wildcard ||
+        context.reach.permissions.has(SystemPermissions.MEMBERS_INVITE);
+      if (role && mayInvite && inviteRefusal(context, role) === null) {
+        return sender;
+      }
+    }
+    return null;
   }
 
   /**

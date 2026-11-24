@@ -66,6 +66,7 @@ function candidate(id: string, stageKey: string, day: number) {
     bid_answered_by_name: null,
     bid_answered_via: null,
     bid_rescind_reason: null,
+    bid_invite_sent: null,
   } as RushPipelineCandidate;
 }
 

@@ -99,7 +99,15 @@ export function useBidRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
-      // The pipeline shows the bid too (#5924).
+    },
+    // Refreshed after a refusal too: a 409 means someone else moved the bid,
+    // so the card and the pipeline (#5924) both read stale.
+    onSettled: (_view, error, id) => {
+      if (error) {
+        void queryClient.invalidateQueries({
+          queryKey: rushKeys.detail(chapterId, id),
+        });
+      }
       void queryClient.invalidateQueries({
         queryKey: rushPipelineKeys.pipeline(chapterId),
       });

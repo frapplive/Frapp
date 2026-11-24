@@ -2,8 +2,11 @@ import {
   formatRushRatingAverage,
   isRushCandidateStale,
   isRushFollowUpDue,
+  isRushWorkOpen,
+  RUSH_BID_WAITING_TO_CONFIRM,
   type RushStageCategory,
 } from "@repo/validation";
+import { rushBidWaiting } from "./rush-bids";
 import {
   rushBoardColumns,
   rushCandidatesByColumn,
@@ -99,9 +102,7 @@ export function rushDashboard(
   );
   // An accepted prospect folds into Closed on the board, so isn't open.
   const isOpen = (c: RushPipelineCandidate) =>
-    !closedKeys.has(c.stage) &&
-    c.closed_reason == null &&
-    c.bid_state !== "accepted";
+    !closedKeys.has(c.stage) && isRushWorkOpen(c);
   const inState = (state: RushPipelineCandidate["bid_state"]) =>
     candidates.filter((c) => c.bid_state === state).length;
   const open = candidates.filter(isOpen);
@@ -134,10 +135,7 @@ export function rushDashboard(
     bids: {
       extended: candidates.filter((c) => c.bid_state !== "none").length,
       out: inState("extended"),
-      waiting: candidates.filter(
-        (c) =>
-          c.bid_state === "extended" && c.bid_acceptance_recorded_at !== null,
-      ).length,
+      waiting: candidates.filter(rushBidWaiting).length,
       accepted: inState("accepted"),
       declined: inState("declined"),
       expired: inState("expired"),
@@ -232,7 +230,7 @@ export function rushDashboardBidRows(
   return [
     { key: "extended", label: "Extended", value: bids.extended },
     { key: "out", label: "Out", value: bids.out },
-    { key: "waiting", label: "Waiting to confirm", value: bids.waiting },
+    { key: "waiting", label: RUSH_BID_WAITING_TO_CONFIRM, value: bids.waiting },
     { key: "accepted", label: "Accepted", value: bids.accepted },
     { key: "declined", label: "Declined", value: bids.declined },
     { key: "expired", label: "Expired", value: bids.expired },

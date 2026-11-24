@@ -137,6 +137,7 @@ export class RushSettingsService {
         await this.requirePrivateEnoughChannel(
           chapterId,
           patch.card_channel_id,
+          actorId,
         );
       }
       write.card_channel_id = patch.card_channel_id;
@@ -152,8 +153,16 @@ export class RushSettingsService {
    * the settings page then asks the chapter to pick one.
    */
   async newMemberRoleId(chapterId: string): Promise<string | null> {
-    const settings = await this.get(chapterId);
-    return settings.new_member_role_id ?? settings.default_new_member_role_id;
+    const row = await this.pipelineRepo.findSettings(chapterId);
+    return (
+      row?.new_member_role_id ?? (await this.defaultNewMemberRoleId(chapterId))
+    );
+  }
+
+  /** How long a bid stays open, from the settings row alone. */
+  async bidExpiryDays(chapterId: string): Promise<number> {
+    const row = await this.pipelineRepo.findSettings(chapterId);
+    return row?.bid_expiry_days ?? RUSH_BID_EXPIRY_DAYS_DEFAULT;
   }
 
   private async view(
@@ -204,9 +213,10 @@ export class RushSettingsService {
   /**
    * The role is the chapter's, doesn't hold everything, and is one the person
    * picking it could invite someone into themself (the invite rank rules,
-   * #4546): the accepted PNM's invite is sent without checking a sender's
-   * rank (`InviteService.createForAcceptedProspect`), so it is checked here,
-   * where someone chooses it.
+   * #4546), so an officer can't set a role above their own reach. The
+   * invite itself is sent as from someone who may invite into it
+   * (`InviteService.createForAcceptedProspect`), which the redeem checks
+   * again.
    */
   private async requireNewMemberRole(
     chapterId: string,
@@ -239,15 +249,23 @@ export class RushSettingsService {
   private async requirePrivateEnoughChannel(
     chapterId: string,
     channelId: string,
+    actorId: string,
   ): Promise<void> {
     const channel = await this.channelRepo.findById(channelId, chapterId);
-    if (!channel || channel.archived_at !== null) {
+    // A channel the picker can't read answers as one that isn't there, so a
+    // save can't learn another channel's name or who reads it.
+    if (
+      !channel ||
+      channel.archived_at !== null ||
+      channel.type === 'DM' ||
+      channel.type === 'GROUP_DM'
+    ) {
       throw new NotFoundException('Channel not found');
     }
-    if (channel.type === 'DM' || channel.type === 'GROUP_DM') {
-      throw new BadRequestException('Pick a channel, not a direct message');
-    }
     const readers = await this.channelAccess.channelReaders(channel, chapterId);
+    if (!readers.some((reader) => reader.user_id === actorId)) {
+      throw new NotFoundException('Channel not found');
+    }
     const outside = readers.filter(
       (reader) => !canViewRush(reader.permissions),
     ).length;

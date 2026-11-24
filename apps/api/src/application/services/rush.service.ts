@@ -99,24 +99,42 @@ export class RushService {
       throw new NotFoundException('Candidate not found');
     }
     // Two prospects can share a name once candidates link to PNMs, so a
-    // lookup never picks one silently: it answers 409 with each match, and
-    // the slash command offers a picker (`ifc-recruitment.md` § Name lookup).
+    // lookup never picks one silently: it answers 409 `rush.several_match`,
+    // and the slash command reads `findNameMatches` for its picker
+    // (`ifc-recruitment.md` § Name lookup). The matches aren't on the 409
+    // itself: the API's error body carries a code and a message only.
     if (matches.length > 1) {
-      const stages = await this.pipelineService.listStages(chapterId);
-      const labelOf = new Map(stages.map((stage) => [stage.key, stage.label]));
       throw new ConflictException({
         code: RUSH_SEVERAL_MATCH_CODE,
         message: 'Several prospects match',
-        candidates: matches.map((match): RushNameMatch => ({
-          id: match.id,
-          display_name: match.display_name,
-          stage: match.stage,
-          stage_label: labelOf.get(match.stage) ?? match.stage,
-          created_at: match.created_at,
-        })),
       });
     }
     return this.toView(matches[0], viewer);
+  }
+
+  /**
+   * Every prospect a name matches, oldest first, each with what tells it
+   * apart: the slash command's picker after a `rush.several_match` 409.
+   */
+  async findNameMatches(
+    chapterId: string,
+    name: string,
+  ): Promise<RushNameMatch[]> {
+    const nameKey = lowerTrim(name ?? '');
+    if (!nameKey) {
+      throw new BadRequestException('Candidate name is required');
+    }
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) return [];
+    const stages = await this.pipelineService.listStages(chapterId);
+    const labelOf = new Map(stages.map((stage) => [stage.key, stage.label]));
+    return matches.map((match) => ({
+      id: match.id,
+      display_name: match.display_name,
+      stage: match.stage,
+      stage_label: labelOf.get(match.stage) ?? match.stage,
+      created_at: match.created_at,
+    }));
   }
 
   async create(

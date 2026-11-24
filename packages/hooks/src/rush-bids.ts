@@ -29,10 +29,11 @@ type BidCandidate = Pick<
   | "bid_answered_by_name"
   | "bid_answered_via"
   | "bid_rescind_reason"
+  | "bid_invite_sent"
 >;
 
 /** A recorded acceptance still waiting for the PNM or an officer. */
-function rushBidWaiting(
+export function rushBidWaiting(
   candidate: Pick<BidCandidate, "bid_state" | "bid_acceptance_recorded_at">,
 ): boolean {
   return (
@@ -89,7 +90,8 @@ function inSentence(day: string): string {
  * - "Recorded by Chris, waiting to be confirmed" / "Emailed them to confirm.
  *   It expires December 1." (or "No email, so someone who manages
  *   recruitment confirms it.")
- * - "Accepted, confirmed by them November 25" / "by Dana"
+ * - "Accepted, confirmed by them November 25" / "by Dana" (and "No invite
+ *   went out. Invite them from Members." when one was owed and wasn't sent)
  * - "Declined, recorded by Chris", "Rescinded by Dana: Grades came back",
  *   "Bid expired December 1"
  * `null` before a bid.
@@ -135,7 +137,12 @@ export function rushBidLines(
             : null;
       return {
         title: `Accepted${who ? `, confirmed ${who}` : ""}${answered ? ` ${answered}` : ""}`,
-        detail: null,
+        // False only when an invite was owed and none went out (no email, or
+        // nobody who confirmed could invite to the role); null needs none.
+        detail:
+          candidate.bid_invite_sent === false
+            ? "No invite went out. Invite them from Members."
+            : null,
       };
     }
     case "declined":

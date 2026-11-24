@@ -282,9 +282,13 @@ try {
     )) === 2 &&
       (await count(
         "rush_bid_confirmations",
-        `candidate_id in ('${BID.open}', '${BID.answered}')`,
-      )) === 2,
-    "expire_rush_bids leaves an open bid not yet due and an answered one alone (#5973)",
+        `candidate_id = '${BID.open}'`,
+      )) === 1 &&
+      (await count(
+        "rush_bid_confirmations",
+        `candidate_id = '${BID.answered}'`,
+      )) === 0,
+    "expire_rush_bids leaves an open bid not yet due and an answered one alone, and clears the answered one's leftover confirmation (#5973)",
   ]);
   checks.push([
     (

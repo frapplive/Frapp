@@ -14,6 +14,7 @@ const NONE = {
   bid_answered_by_name: null,
   bid_answered_via: null,
   bid_rescind_reason: null,
+  bid_invite_sent: null,
 };
 
 // Noon UTC, so the local day is the same day in every test runner's zone.
@@ -75,6 +76,17 @@ describe("rush bids in words (#5973)", () => {
         TODAY,
       )?.title,
     ).toBe("Accepted, confirmed by them today");
+    expect(
+      rushBidLines(
+        {
+          ...NONE,
+          bid_state: "accepted",
+          bid_answered_by_name: "Dana",
+          bid_invite_sent: false,
+        },
+        TODAY,
+      )?.detail,
+    ).toBe("No invite went out. Invite them from Members.");
     expect(
       rushBidLines(
         {

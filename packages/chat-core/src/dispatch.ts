@@ -1360,14 +1360,29 @@ type RushLookup =
 const RUSH_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** The matches a 409 `rush.several_match` body lists, or null for any other. */
-function rushSeveralMatches(error: unknown): RushNameMatch[] | null {
-  if (!error || typeof error !== "object") return null;
-  const body = error as { code?: unknown; candidates?: unknown };
-  if (body.code !== "rush.several_match" || !Array.isArray(body.candidates)) {
-    return null;
-  }
-  const matches = body.candidates.filter(
+/** Whether a lookup's error is the 409 that means "several match". */
+function isRushSeveralMatch(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "rush.several_match"
+  );
+}
+
+/**
+ * Every prospect a name matches, for the picker
+ * (`GET /v1/rush/candidates/matches`). The 409 only says there are several:
+ * the API's error body carries a code and a message, nothing more.
+ */
+async function rushNameMatches(
+  ctx: ChatActionContext,
+  name: string,
+): Promise<RushNameMatch[] | null> {
+  const result = await ctx.apiClient.GET("/v1/rush/candidates/matches", {
+    params: { query: { name } },
+  });
+  if (!responseStatus(result).ok || !Array.isArray(result.data)) return null;
+  const matches = (result.data as unknown[]).filter(
     (row): row is RushNameMatch =>
       !!row &&
       typeof row === "object" &&
@@ -1388,8 +1403,8 @@ async function resolveRushCandidate(
       params: { query: { name: token } },
     });
     const { status, ok } = responseStatus(result);
-    if (status === 409) {
-      const matches = rushSeveralMatches(result.error);
+    if (status === 409 && isRushSeveralMatch(result.error)) {
+      const matches = await rushNameMatches(ctx, token);
       if (matches) return { kind: "several", matches };
     }
     const id = (result.data as { id?: string } | undefined)?.id;

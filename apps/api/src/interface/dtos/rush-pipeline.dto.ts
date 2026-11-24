@@ -262,6 +262,14 @@ export class RushPipelineCandidateDto implements RushPipelineCandidate {
 
   @ApiProperty({ type: String, nullable: true })
   bid_rescind_reason: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description:
+      'On an accepted bid: whether the PNM’s invite to join went out. Null on any other.',
+  })
+  bid_invite_sent: boolean | null;
 }
 
 export class RushPipelineDto implements RushPipeline {
@@ -749,6 +757,14 @@ export class RushBidDto implements RushBidResult {
   @ApiProperty({ type: String, nullable: true })
   bid_rescind_reason: string | null;
 
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description:
+      'On an accepted bid: whether the PNM’s invite to join went out. Null on any other.',
+  })
+  bid_invite_sent: boolean | null;
+
   @ApiPropertyOptional({
     description:
       'On a confirmation: whether the accepted PNM’s invite went out to the email kept for it.',
@@ -802,4 +818,10 @@ export class RushBidConfirmationPreviewDto implements RushBidConfirmationPreview
       '`waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm.',
   })
   status: 'waiting' | 'confirmed' | 'closed';
+
+  @ApiPropertyOptional({
+    description:
+      'On the tap that confirmed it: whether the invite to join went out.',
+  })
+  invite_sent?: boolean;
 }

@@ -1136,7 +1136,6 @@ export class ScheduledJobsService {
     return { sent };
   }
 
-  /** The chapters' module switches and stale days, or null when unread. */
   /**
    * Recruitment bids past their day expire (#5973, `ifc-recruitment.md`
    * § Bids), a recorded acceptance nobody confirmed with them. One statement
@@ -1152,6 +1151,7 @@ export class ScheduledJobsService {
     return { expired };
   }
 
+  /** The chapters' module switches and stale days, or null when unread. */
   private async rushChapters(
     chapterIds: readonly string[],
     site: string,

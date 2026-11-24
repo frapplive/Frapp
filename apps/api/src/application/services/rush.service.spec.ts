@@ -129,53 +129,6 @@ describe('RushService', () => {
       expect('card_posted' in result).toBe(false);
     });
 
-    it('reads the one prospect a name matches', async () => {
-      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate]);
-      mockRushRepo.viewerHasVoted.mockResolvedValue(false);
-      await expect(
-        service.findViewByName('ch-1', sees('user-1'), '  JANE doe '),
-      ).resolves.toMatchObject({ id: baseCandidate.id });
-      expect(mockRushRepo.findByNameKey).toHaveBeenCalledWith(
-        'ch-1',
-        'jane doe',
-      );
-    });
-
-    it('409s with every match when a name matches several, never picking one', async () => {
-      const second = {
-        ...baseCandidate,
-        id: 'cand-2',
-        stage: 'met',
-        created_at: '2026-11-20T00:00:00Z',
-      };
-      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate, second]);
-      const refusal = await service
-        .findViewByName('ch-1', sees('user-1'), baseCandidate.display_name)
-        .catch((error: unknown) => error);
-      expect(refusal).toBeInstanceOf(ConflictException);
-      expect((refusal as ConflictException).getResponse()).toEqual({
-        code: 'rush.several_match',
-        message: 'Several prospects match',
-        candidates: [
-          {
-            id: baseCandidate.id,
-            display_name: baseCandidate.display_name,
-            stage: baseCandidate.stage,
-            stage_label: 'New',
-            created_at: baseCandidate.created_at,
-          },
-          {
-            id: 'cand-2',
-            display_name: baseCandidate.display_name,
-            stage: 'met',
-            stage_label: 'Met',
-            created_at: '2026-11-20T00:00:00Z',
-          },
-        ],
-      });
-      expect(mockRushRepo.viewerHasVoted).not.toHaveBeenCalled();
-    });
-
     it('rejects a blank name', async () => {
       await expect(
         service.create({
@@ -369,7 +322,7 @@ describe('RushService', () => {
       );
     });
 
-    it('409s with every match when a name matches several, never picking one', async () => {
+    it('409s, never picking one, when a name matches several; the matches are their own read', async () => {
       const second = {
         ...baseCandidate,
         id: 'cand-2',
@@ -384,24 +337,27 @@ describe('RushService', () => {
       expect((refusal as ConflictException).getResponse()).toEqual({
         code: 'rush.several_match',
         message: 'Several prospects match',
-        candidates: [
-          {
-            id: baseCandidate.id,
-            display_name: baseCandidate.display_name,
-            stage: baseCandidate.stage,
-            stage_label: 'New',
-            created_at: baseCandidate.created_at,
-          },
-          {
-            id: 'cand-2',
-            display_name: baseCandidate.display_name,
-            stage: 'met',
-            stage_label: 'Met',
-            created_at: '2026-11-20T00:00:00Z',
-          },
-        ],
       });
       expect(mockRushRepo.viewerHasVoted).not.toHaveBeenCalled();
+
+      await expect(
+        service.findNameMatches('ch-1', ` ${baseCandidate.display_name} `),
+      ).resolves.toEqual([
+        {
+          id: baseCandidate.id,
+          display_name: baseCandidate.display_name,
+          stage: baseCandidate.stage,
+          stage_label: 'New',
+          created_at: baseCandidate.created_at,
+        },
+        {
+          id: 'cand-2',
+          display_name: baseCandidate.display_name,
+          stage: 'met',
+          stage_label: 'Met',
+          created_at: '2026-11-20T00:00:00Z',
+        },
+      ]);
     });
 
     it('rejects a blank name', async () => {

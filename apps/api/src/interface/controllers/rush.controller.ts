@@ -38,8 +38,9 @@ import {
   CreateRushCandidateDto,
   CreateRushCandidateResponseDto,
   LookupRushCandidateQueryDto,
+  LookupRushNameMatchesQueryDto,
   RushCandidateViewDto,
-  RushSeveralMatchDto,
+  RushNameMatchDto,
 } from '../dtos/rush-candidate.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -85,9 +86,8 @@ export class RushController {
   @ApiOperation({ summary: 'Look up a candidate by display name' })
   @ApiOkResponse({ type: RushCandidateViewDto })
   @ApiConflictResponse({
-    type: RushSeveralMatchDto,
     description:
-      'The name matches several prospects; pick one by id. Never a silent pick.',
+      '`code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id.',
   })
   async lookup(
     @CurrentChapterId() chapterId: string,
@@ -99,6 +99,20 @@ export class RushController {
       this.viewer(chapterId, userId),
       query.name,
     );
+  }
+
+  @Get('matches')
+  @RequirePermissions(SystemPermissions.RUSH_VIEW)
+  @ApiOperation({
+    summary:
+      'Every candidate a display name matches, with stage and day added, for a picker',
+  })
+  @ApiOkResponse({ type: [RushNameMatchDto] })
+  async matches(
+    @CurrentChapterId() chapterId: string,
+    @Query() query: LookupRushNameMatchesQueryDto,
+  ) {
+    return this.rushService.findNameMatches(chapterId, query.name);
   }
 
   @Get(':id')

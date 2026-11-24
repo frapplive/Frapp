@@ -39,8 +39,12 @@ export interface SendBidConfirmEmailParams {
   chapterName: string;
   /** Who recorded the acceptance, by display name. Null drops it. */
   recorderName: string | null;
-  /** The day the bid expires if nobody confirms it, written out ("February 9"). */
-  expiresOn: string;
+  /**
+   * Whole days until the bid expires if nobody confirms it ("in 7 days"),
+   * not a date, which would need the PNM's time zone; null for a bid with no
+   * expiry, which drops the line.
+   */
+  expiresInDays: number | null;
 }
 
 /**

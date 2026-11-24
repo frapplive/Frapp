@@ -43,7 +43,7 @@ export function SlashChoicePicker({
               <button
                 type="button"
                 onClick={() => onPick(choice)}
-                className="flex min-h-11 w-full flex-col items-start rounded-md px-3 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-h-11 w-full flex-col items-start rounded-md px-3 py-2 text-left hover:bg-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="text-sm font-medium text-foreground">
                   {choice.label}

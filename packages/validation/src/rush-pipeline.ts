@@ -255,22 +255,35 @@ export function rushDaysBetween(from: string, to: string): number {
 
 interface RushWorkLike {
   closed_reason: string | null;
+  /** An accepted bid closes the work as a closing reason does (#5973). */
+  bid_state: string;
   created_at: string;
   last_contact_on: string | null;
   follow_up_on: string | null;
 }
 
 /**
+ * Whether the work on a prospect is still open: not closed, and no bid
+ * accepted. An accepted PNM sits in the board's folded Closed column
+ * (Winston, 2026-11-24), so nothing asks anyone to follow them up.
+ */
+export function isRushWorkOpen(
+  candidate: Pick<RushWorkLike, "closed_reason" | "bid_state">,
+): boolean {
+  return candidate.closed_reason == null && candidate.bid_state !== "accepted";
+}
+
+/**
  * The day an open prospect goes stale: `staleDays` after their last logged
  * contact, or after they were added when nobody has logged one. `null` for a
- * closed prospect, which never goes stale. The API's morning sweep and both
+ * closed or accepted prospect, which never goes stale. The API's morning sweep and both
  * clients read this one rule.
  */
 export function rushStaleOn(
   candidate: Omit<RushWorkLike, "follow_up_on">,
   staleDays: number,
 ): string | null {
-  if (candidate.closed_reason != null) return null;
+  if (!isRushWorkOpen(candidate)) return null;
   const base = candidate.last_contact_on ?? candidate.created_at.slice(0, 10);
   return shiftRushDayKey(base, staleDays);
 }
@@ -287,11 +300,11 @@ export function isRushCandidateStale(
 
 /** A follow-up due today or already past, on an open prospect. */
 export function isRushFollowUpDue(
-  candidate: Pick<RushWorkLike, "closed_reason" | "follow_up_on">,
+  candidate: Pick<RushWorkLike, "closed_reason" | "bid_state" | "follow_up_on">,
   today: string,
 ): boolean {
   return (
-    candidate.closed_reason == null &&
+    isRushWorkOpen(candidate) &&
     candidate.follow_up_on != null &&
     candidate.follow_up_on <= today
   );
@@ -374,7 +387,7 @@ export function formatRushDay(day: string, today: string): string {
 export function rushFollowUpsDueCount(
   candidates: readonly Pick<
     RushWorkLike & { follow_up_user_id: string | null },
-    "closed_reason" | "follow_up_on" | "follow_up_user_id"
+    "closed_reason" | "bid_state" | "follow_up_on" | "follow_up_user_id"
   >[],
   viewerId: string,
   today: string,

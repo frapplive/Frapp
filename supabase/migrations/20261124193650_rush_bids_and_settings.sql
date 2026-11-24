@@ -80,11 +80,15 @@ alter table public.rush_candidates
     check (bid_answered_via is null or bid_answered_via in ('member', 'pnm', 'system')),
   add column if not exists bid_rescind_reason text
     constraint rush_candidates_bid_rescind_reason_len
-    check (bid_rescind_reason is null or char_length(btrim(bid_rescind_reason)) between 1 and 200);
+    check (bid_rescind_reason is null or char_length(btrim(bid_rescind_reason)) between 1 and 200),
+  -- On an accepted bid: whether the PNM's invite went out. Null otherwise.
+  add column if not exists bid_invite_sent boolean;
 
--- Every bid out today is `extended`.
+-- Every bid out today is `extended`, and expires like any other a week from
+-- now, so no recorded acceptance on one waits forever.
 update public.rush_candidates
-   set bid_state = 'extended'
+   set bid_state = 'extended',
+       bid_expires_at = now() + interval '7 days'
  where bid_status = 'extended' and bid_state = 'none';
 
 -- The expiry sweep reads every open bid past its day.
@@ -109,6 +113,8 @@ create table if not exists public.rush_bid_confirmations (
   chapter_id uuid not null,
   email text check (email is null or char_length(email) between 3 and 320),
   token_hash text unique,
+  -- When the one-tap email actually went out; null while unsent or failed.
+  emailed_at timestamptz,
   created_at timestamptz not null default now(),
   foreign key (candidate_id, chapter_id)
     references public.rush_candidates (id, chapter_id) on delete cascade
@@ -124,7 +130,10 @@ comment on table public.rush_bid_confirmations is
 
 -- Expires every open bid past its day, in one statement, so two API instances
 -- running the sweep at once expire each bid once. A recorded acceptance nobody
--- confirmed expires with it, and its confirmation (with the email) goes.
+-- confirmed expires with it, and its confirmation (with the email) goes. It
+-- also deletes any confirmation left on a bid no longer open (two members
+-- answering at once, or a write that failed half way), so a PNM's email never
+-- outlives its bid by more than an hour.
 create or replace function public.expire_rush_bids(p_now timestamptz default now())
 returns integer
 language plpgsql
@@ -153,6 +162,11 @@ begin
      where c.candidate_id = e.id
   )
   select count(*) into v_count from expired;
+  delete from rush_bid_confirmations c
+   using rush_candidates r
+   where r.id = c.candidate_id
+     and r.chapter_id = c.chapter_id
+     and r.bid_state <> 'extended';
   return v_count;
 end;
 $$;

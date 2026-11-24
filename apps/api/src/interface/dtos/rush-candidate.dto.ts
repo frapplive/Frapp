@@ -218,18 +218,5 @@ export class RushNameMatchDto implements RushNameMatch {
   created_at: string;
 }
 
-/**
- * The 409 a name lookup answers when the name matches several prospects
- * (`spec/behavior/ifc-recruitment.md` § Name lookup). The slash command shows
- * a picker of `candidates` and runs again with the chosen id.
- */
-export class RushSeveralMatchDto {
-  @ApiProperty({ enum: ['rush.several_match'] })
-  code: 'rush.several_match';
-
-  @ApiProperty({ example: 'Several prospects match' })
-  message: string;
-
-  @ApiProperty({ type: [RushNameMatchDto] })
-  candidates: RushNameMatchDto[];
-}
+/** `GET /v1/rush/candidates/matches?name=`: the matches, for a picker. */
+export class LookupRushNameMatchesQueryDto extends LookupRushCandidateQueryDto {}

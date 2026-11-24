@@ -71,7 +71,7 @@ export function RushSummary({
               </span>
               <span
                 aria-hidden="true"
-                className="h-2 overflow-hidden rounded-full bg-muted"
+                className="h-2 overflow-hidden rounded-full bg-card-hover"
               >
                 <span
                   className="block h-full rounded-full bg-foreground/40"
@@ -159,7 +159,7 @@ function RankedList({
                 type="button"
                 onClick={() => onOpen(row.id)}
                 className={cn(
-                  "flex min-h-10 w-full items-center gap-3 px-4 py-2 text-left hover:bg-accent",
+                  "flex min-h-10 w-full items-center gap-3 px-4 py-2 text-left hover:bg-card-hover",
                   FOCUS_RING,
                 )}
               >

@@ -318,7 +318,7 @@ The text sits above the submit button, never behind a link. **It's a draft.** Le
 
 ## The chapter Rush module
 
-Today recruitment runs through chat only: the slash commands and the candidate card ([`rush.md`](rush.md)). This adds:
+Before #5924, recruitment ran through chat only: the slash commands and the candidate card ([`rush.md`](rush.md)). This adds (the pipeline, candidate page and dashboard are built as of #5973, 2026-11-24):
 - a **pipeline** (a board and a list);
 - a candidate page;
 - a dashboard.
@@ -430,7 +430,7 @@ Chat keeps working, and the card links to the candidate's page.
 
 #### Compatibility with shipped clients
 
-Today:
+Before #5973 (built as below in #5973, 2026-11-24):
 - `bid_status` allows `none` and `extended`.
 - The response DTOs declare that enum.
 - `RushService.bid` overwrites any state that isn't `extended`.
@@ -447,16 +447,16 @@ A shipped card then shows a sensible state, and its Extend button can't change a
 
 **Built in #5973:** the lookup's 409 and web's picker ([`rush.md` § Voting and Bids](rush.md#voting-and-bids)). The unique index changes to unlinked candidates only with the slice that adds `pnm_id`, since until then every candidate is unlinked and the rule is already the one below.
 
-Today `GET /v1/rush/candidates?name=` and `/rush vote|bid <name>` rely on names being unique in a chapter (`rush_candidates_chapter_name_key`, and `findByNameKey`'s single-row read). Form submissions can bring in two different "Jake Smith"s, so:
+Before #5973, `GET /v1/rush/candidates?name=` and `/rush vote|bid <name>` relied on names being unique in a chapter (`rush_candidates_chapter_name_key`, and `findByNameKey`'s single-row read). Form submissions can bring in two different "Jake Smith"s, so:
 
 - **The unique name rule applies only among unlinked candidates.** A manual add still gets today's 409 when an unlinked candidate already has the name.
-- **When a name matches several candidates,** the lookup returns 409, "Several prospects match", with their ids. The slash command then shows a picker. It never returns a 500 or picks one silently.
+- **When a name matches several candidates,** the lookup returns 409, "Several prospects match", and `GET /v1/rush/candidates/matches?name=` lists them with their ids (corrected 2026-11-24: the API's error body carries a code and a message only, so the matches can't ride on the 409). The slash command then shows a picker. It never returns a 500 or picks one silently.
 
 ### Dashboard
 
 **Built in #5973:** the counts by stage, open, mine, needs follow-up, follow-ups due, the bids by state, and the gated ratings and votes ([`rush.md` § Funnel](rush.md#funnel)). The rest joins with the slices that record it.
 
-The funnel that [`rush.md` § Funnel](rush.md#funnel) describes but was never built. It shows:
+The funnel [`rush.md` § Funnel](rush.md#funnel) describes. It shows:
 - counts by stage, in the chapter's order;
 - bids: extended, outstanding, accepted, declined, expired;
 - eligibility counts;

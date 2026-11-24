@@ -61,6 +61,7 @@ export class SupabaseRushBidRepository implements IRushBidRepository {
         chapter_id: row.chapterId,
         email: row.email,
         token_hash: row.tokenHash,
+        emailed_at: null,
         created_at: new Date().toISOString(),
       },
       { onConflict: 'candidate_id' },
@@ -113,8 +114,38 @@ export class SupabaseRushBidRepository implements IRushBidRepository {
       .from('rush_bid_confirmations')
       .select('candidate_id')
       .eq('chapter_id', chapterId)
-      .not('email', 'is', null);
+      .not('emailed_at', 'is', null);
     if (error) throw new SupabaseQueryError(error);
     return new Set((data ?? []).map((row) => row.candidate_id));
+  }
+
+  async markConfirmationEmailed(
+    candidateId: string,
+    chapterId: string,
+    at: string,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('rush_bid_confirmations')
+      .update({ emailed_at: at })
+      .eq('candidate_id', candidateId)
+      .eq('chapter_id', chapterId);
+    if (error) throw new SupabaseQueryError(error);
+  }
+
+  async setInviteSent(
+    candidateId: string,
+    chapterId: string,
+    sent: boolean,
+  ): Promise<RushCandidateRow | null> {
+    const { data, error } = await this.supabase
+      .from('rush_candidates')
+      .update({ bid_invite_sent: sent })
+      .eq('id', candidateId)
+      .eq('chapter_id', chapterId)
+      .eq('bid_state', 'accepted')
+      .select('*')
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
   }
 }

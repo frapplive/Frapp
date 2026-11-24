@@ -116,13 +116,15 @@ describe('RushSettingsService', () => {
         Promise.resolve(
           channel.id === 'open'
             ? [
-                { user_id: 'a', permissions: new Set(['rush:view']) },
+                { user_id: ACTOR, permissions: new Set(['rush:view']) },
                 { user_id: 'b', permissions: new Set(['members:view']) },
               ]
-            : [
-                { user_id: 'a', permissions: new Set(['rush:view']) },
-                { user_id: 'p', permissions: new Set(['*']) },
-              ],
+            : channel.id === 'hidden'
+              ? [{ user_id: 'p', permissions: new Set(['*']) }]
+              : [
+                  { user_id: ACTOR, permissions: new Set(['rush:view']) },
+                  { user_id: 'p', permissions: new Set(['*']) },
+                ],
         ),
       ),
     };
@@ -252,12 +254,19 @@ describe('RushSettingsService', () => {
     await expect(
       service.save(CHAPTER, { card_channel_id: 'open' }, ACTOR),
     ).rejects.toThrow("1 person who can read #open can't open recruitment");
-    await expect(
-      service.save(CHAPTER, { card_channel_id: 'dm' }, ACTOR),
-    ).rejects.toThrow(BadRequestException);
-    await expect(
-      service.save(CHAPTER, { card_channel_id: 'missing' }, ACTOR),
-    ).rejects.toThrow(NotFoundException);
+    for (const id of ['dm', 'missing']) {
+      await expect(
+        service.save(CHAPTER, { card_channel_id: id }, ACTOR),
+      ).rejects.toThrow(NotFoundException);
+    }
+  });
+
+  it("answers a channel the picker can't read as missing, naming nothing", async () => {
+    const refusal = await service
+      .save(CHAPTER, { card_channel_id: 'hidden' }, ACTOR)
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(NotFoundException);
+    expect((refusal as Error).message).toBe('Channel not found');
   });
 
   it('clears a pick with null', async () => {

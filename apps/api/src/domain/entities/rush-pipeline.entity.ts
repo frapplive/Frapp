@@ -180,6 +180,8 @@ export interface RushPipelineCandidate {
   bid_answered_by_name: string | null;
   bid_answered_via: RushBidAnsweredVia | null;
   bid_rescind_reason: string | null;
+  /** On an accepted bid: whether the PNM's invite went out; else null. */
+  bid_invite_sent: boolean | null;
 }
 
 export interface RushPipeline {

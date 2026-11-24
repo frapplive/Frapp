@@ -56,6 +56,8 @@ export interface RushBidView {
   bid_answered_by_name: string | null;
   bid_answered_via: RushBidAnsweredVia | null;
   bid_rescind_reason: string | null;
+  /** On an accepted bid: whether the PNM's invite went out; else null. */
+  bid_invite_sent: boolean | null;
 }
 
 /** A write's answer: the bid after, and what it sent. */
@@ -74,6 +76,8 @@ export interface RushBidConfirmationPreview {
    * the bid expired, was declined or was rescinded, so there is nothing to do.
    */
   status: 'waiting' | 'confirmed' | 'closed';
+  /** On the tap that confirmed it: whether the invite to join went out. */
+  invite_sent?: boolean;
 }
 
 const NOT_FOUND = 'Candidate not found';
@@ -136,7 +140,7 @@ export class RushBidService {
       throw new ConflictException(alreadyAnswered(candidate.bid_state));
     }
     this.checkEligibility(candidate);
-    const { bid_expiry_days: days } = await this.settings.get(chapterId);
+    const days = await this.settings.bidExpiryDays(chapterId);
     const at = now.toISOString();
     const row = await this.apply(candidateId, chapterId, {
       from: ['none', 'expired'],
@@ -154,6 +158,7 @@ export class RushBidService {
         bid_answered_by: null,
         bid_answered_via: null,
         bid_rescind_reason: null,
+        bid_invite_sent: null,
       },
     });
     this.pushUp('extended', row);
@@ -204,7 +209,7 @@ export class RushBidService {
   ): Promise<RushBidResult> {
     const candidate = await this.requireRow(candidateId, chapterId);
     this.refuseSelf(candidate, actorId);
-    const email = await this.emailFor(candidate, typedEmail);
+    const email = await this.emailFor(candidate, typedEmail, actorId);
     const at = now.toISOString();
     const row = await this.apply(candidateId, chapterId, {
       from: ['extended'],
@@ -233,7 +238,28 @@ export class RushBidService {
       email,
       tokenHash: hashToken(token),
     });
-    const emailed = await this.sendConfirmEmail(row, chapterId, email, token);
+    // A decline or rescind that landed between the recording and the save
+    // deleted nothing; take the email back off rather than send a link for
+    // an answered bid (the hourly sweep clears any that still slip by).
+    const after = await this.requireRow(candidateId, chapterId);
+    if (
+      after.bid_state !== 'extended' ||
+      after.bid_acceptance_recorded_by !== actorId ||
+      after.bid_acceptance_recorded_at === null ||
+      new Date(after.bid_acceptance_recorded_at).getTime() !== now.getTime()
+    ) {
+      await this.bidRepo.deleteConfirmation(candidateId, chapterId);
+      throw new ConflictException(alreadyAnswered(after.bid_state));
+    }
+    const emailed = await this.sendConfirmEmail(
+      row,
+      chapterId,
+      email,
+      token,
+      now,
+    );
+    if (emailed)
+      await this.bidRepo.markConfirmationEmailed(candidateId, chapterId, at);
     return this.view(row, emailed);
   }
 
@@ -254,6 +280,37 @@ export class RushBidService {
     token: string,
     now: Date = new Date(),
   ): Promise<RushBidConfirmationPreview> {
+    return (await this.readToken(token, now)).preview;
+  }
+
+  /**
+   * The PNM's one tap from the emailed link. The token is the credential:
+   * only the PNM's inbox has it. A confirmed bid's row is gone, so a second
+   * tap reads as `LINK_GONE`, and the page keeps its own first answer.
+   */
+  async confirmByToken(
+    token: string,
+    now: Date = new Date(),
+  ): Promise<RushBidConfirmationPreview> {
+    const { preview, candidate, chapterId } = await this.readToken(token, now);
+    if (preview.status !== 'waiting') return preview;
+    const result = await this.accept(candidate, chapterId, null, 'pnm', now);
+    return {
+      ...preview,
+      status: 'confirmed',
+      invite_sent: result.invite_sent === true,
+    };
+  }
+
+  /** The token's confirmation, its candidate and what the page shows. */
+  private async readToken(
+    token: string,
+    now: Date,
+  ): Promise<{
+    preview: RushBidConfirmationPreview;
+    candidate: RushCandidateRow;
+    chapterId: string;
+  }> {
     const confirmation = await this.bidRepo.findConfirmationByTokenHash(
       hashToken(token),
     );
@@ -272,36 +329,15 @@ export class RushBidService {
       candidate.bid_acceptance_recorded_at !== null &&
       !expired(candidate, now);
     return {
-      chapter_name: chapter?.name ?? 'The chapter',
-      recorded_by_name: nameOf(names, candidate.bid_acceptance_recorded_by),
-      expires_at: candidate.bid_expires_at,
-      status: open ? 'waiting' : 'closed',
+      candidate,
+      chapterId: confirmation.chapter_id,
+      preview: {
+        chapter_name: chapter?.name ?? 'The chapter',
+        recorded_by_name: nameOf(names, candidate.bid_acceptance_recorded_by),
+        expires_at: candidate.bid_expires_at,
+        status: open ? 'waiting' : 'closed',
+      },
     };
-  }
-
-  /**
-   * The PNM's one tap from the emailed link. The token is the credential:
-   * only the PNM's inbox has it. A confirmed bid's row is gone, so a second
-   * tap reads as `LINK_GONE`, and the page says it was already confirmed
-   * from its own first answer.
-   */
-  async confirmByToken(
-    token: string,
-    now: Date = new Date(),
-  ): Promise<RushBidConfirmationPreview> {
-    const confirmation = await this.bidRepo.findConfirmationByTokenHash(
-      hashToken(token),
-    );
-    if (!confirmation) throw new NotFoundException(LINK_GONE);
-    const candidate = await this.pipelineRepo.findCandidate(
-      confirmation.candidate_id,
-      confirmation.chapter_id,
-    );
-    if (!candidate) throw new NotFoundException(LINK_GONE);
-    const preview = await this.previewByToken(token, now);
-    if (preview.status !== 'waiting') return preview;
-    await this.accept(candidate, confirmation.chapter_id, null, 'pnm', now);
-    return { ...preview, status: 'confirmed' };
   }
 
   /** A `rush:manage` holder takes back an open bid, with a reason. */
@@ -326,6 +362,7 @@ export class RushBidService {
     const at = now.toISOString();
     const row = await this.apply(candidateId, chapterId, {
       from: ['extended'],
+      open: true,
       now: at,
       set: {
         bid_state: 'rescinded',
@@ -372,22 +409,42 @@ export class RushBidService {
       },
     });
     let inviteSent = false;
-    // Sent as from whoever confirmed it, else whoever recorded it.
-    const sender = actorId ?? row.bid_acceptance_recorded_by;
-    if (confirmation?.email && sender) {
-      const roleId = await this.settings.newMemberRoleId(chapterId);
-      if (roleId) {
-        inviteSent = await this.inviteService.createForAcceptedProspect({
-          chapterId,
-          createdBy: sender,
-          roleId,
-          email: confirmation.email,
-        });
+    try {
+      // The invite goes out as from someone who may invite into the role
+      // (the redeem checks its sender again): whoever confirmed it, else
+      // whoever recorded or extended the bid. With none, nobody is invited
+      // and the panel says to invite them from Members.
+      if (confirmation?.email) {
+        const roleId = await this.settings.newMemberRoleId(chapterId);
+        if (roleId) {
+          inviteSent = await this.inviteService.createForAcceptedProspect({
+            chapterId,
+            senders: [
+              actorId,
+              row.bid_acceptance_recorded_by,
+              row.bid_extended_by,
+            ].filter((id): id is string => id !== null),
+            roleId,
+            email: confirmation.email,
+          });
+        }
       }
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Accepted prospect's invite failed (candidate ${row.id})`,
+        error,
+      );
+    } finally {
+      // The PNM's email goes once the bid is answered, whatever the invite did.
+      await this.bidRepo.deleteConfirmation(candidate.id, chapterId);
     }
-    await this.bidRepo.deleteConfirmation(candidate.id, chapterId);
-    this.pushUp('accepted', row);
-    return { ...(await this.view(row, false)), invite_sent: inviteSent };
+    const saved =
+      (await this.bidRepo.setInviteSent(candidate.id, chapterId, inviteSent)) ??
+      row;
+    this.pushUp('accepted', saved);
+    return { ...(await this.view(saved, false)), invite_sent: inviteSent };
   }
 
   /** Runs a transition, answering 409 in plain words when it lost. */
@@ -420,15 +477,26 @@ export class RushBidService {
     throw new ConflictException(alreadyAnswered(now.bid_state));
   }
 
-  /** The typed email, else a linked member's account email, else none. */
+  /**
+   * The typed email, else a linked member's account email, else none. The
+   * recorder's own address is refused: the link it carries confirms the
+   * acceptance, which the recorder alone may not do (#4218).
+   */
   private async emailFor(
     candidate: RushCandidateRow,
     typed: string | null | undefined,
+    recorderId: string,
   ): Promise<string | null> {
     const clean = typed?.trim().toLowerCase();
     if (clean) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean) || clean.length > 320) {
         throw new BadRequestException("That email doesn't look right");
+      }
+      const recorder = await this.userRepo.findById(recorderId);
+      if (recorder?.email?.trim().toLowerCase() === clean) {
+        throw new BadRequestException(
+          "That's your own email. Type the prospect's, or leave it empty.",
+        );
       }
       return clean;
     }
@@ -442,6 +510,7 @@ export class RushBidService {
     chapterId: string,
     email: string,
     token: string,
+    now: Date,
   ): Promise<boolean> {
     try {
       const origin = resolveAppOrigin(this.config);
@@ -456,13 +525,15 @@ export class RushBidService {
         confirmUrl: url.toString(),
         chapterName: chapter?.name ?? 'Your chapter',
         recorderName: nameOf(names, row.bid_acceptance_recorded_by),
-        expiresOn: row.bid_expires_at
-          ? new Date(row.bid_expires_at).toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'UTC',
-            })
-          : 'soon',
+        expiresInDays: row.bid_expires_at
+          ? Math.max(
+              1,
+              Math.ceil(
+                (new Date(row.bid_expires_at).getTime() - now.getTime()) /
+                  (24 * 60 * 60 * 1000),
+              ),
+            )
+          : null,
       });
     } catch (error) {
       logThrowable(
@@ -554,6 +625,7 @@ export function rushBidView(
     bid_answered_by_name: nameOf(names, row.bid_answered_by),
     bid_answered_via: row.bid_answered_via,
     bid_rescind_reason: row.bid_rescind_reason,
+    bid_invite_sent: row.bid_invite_sent,
   };
 }
 

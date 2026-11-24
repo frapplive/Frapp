@@ -112,7 +112,9 @@ function BidCard({
       <AuthScreen title={title}>
         <p className="text-sm text-foreground">Accepted · confirmed by you</p>
         <p className="text-sm text-muted-foreground">
-          {`${bid.chapter_name} will email you an invite to join.`}
+          {bid.invite_sent
+            ? `${bid.chapter_name} emailed you an invite to join.`
+            : `${bid.chapter_name} will be in touch about joining.`}
         </p>
       </AuthScreen>
     );
@@ -151,9 +153,7 @@ const LINK_GONE_LINE =
 function LinkGone() {
   return (
     <AuthScreen title="This link doesn't work any more">
-      <p className="text-sm text-muted-foreground">
-        {LINK_GONE_LINE}
-      </p>
+      <p className="text-sm text-muted-foreground">{LINK_GONE_LINE}</p>
     </AuthScreen>
   );
 }

@@ -137,7 +137,9 @@ function bidConfirmLine(params: SendBidConfirmEmailParams): string {
 }
 
 function bidConfirmFootnote(params: SendBidConfirmEmailParams): string {
-  return `The bid expires ${params.expiresOn} if it isn't confirmed.`;
+  const days = params.expiresInDays;
+  if (days === null) return "If you didn't accept, you can ignore this email.";
+  return `The bid expires in ${days === 1 ? '1 day' : `${days} days`} if it isn't confirmed.`;
 }
 
 function bidConfirmEmailHtml(params: SendBidConfirmEmailParams): string {

@@ -78,6 +78,7 @@ export interface SweepRushOwnedRow {
   display_name: string;
   owner_id: string;
   closed_reason: string | null;
+  bid_state: string;
   last_contact_on: string | null;
   created_at: string;
 }

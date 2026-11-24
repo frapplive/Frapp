@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RushContact } from "./use-rush-pipeline";
+import type { RushContact, RushPipelineCandidate } from "./use-rush-pipeline";
 import {
   rushAddProspectProblem,
   rushContactLine,
@@ -24,6 +24,7 @@ const TODAY = "2026-11-24";
 
 const OPEN = {
   closed_reason: null,
+  bid_state: "none" as RushPipelineCandidate["bid_state"],
   created_at: "2026-11-22T18:00:00.000Z",
   last_contact_on: null,
   last_contact_by_name: null,
@@ -62,6 +63,21 @@ describe("a row's follow-up mark", () => {
     ).toEqual({ label: "Needs follow-up", tone: "stale" });
     expect(
       rushRowMark({ ...OPEN, last_contact_on: "2026-11-23" }, 7, TODAY),
+    ).toBeNull();
+  });
+
+  it("marks nothing on an accepted prospect, whose work is done", () => {
+    expect(
+      rushRowMark(
+        {
+          ...OPEN,
+          bid_state: "accepted" as const,
+          follow_up_on: TODAY,
+          last_contact_on: "2026-10-01",
+        },
+        7,
+        TODAY,
+      ),
     ).toBeNull();
   });
 

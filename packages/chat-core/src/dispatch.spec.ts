@@ -1432,30 +1432,37 @@ describe("dispatchRush — vote and bid", () => {
   it("offers a picker, and runs nothing, when a name matches several prospects", async () => {
     const first = "11111111-1111-4111-8111-111111111111";
     const second = "22222222-2222-4222-8222-222222222222";
-    const get = vi.fn().mockResolvedValue({
-      data: undefined,
-      error: {
-        code: "rush.several_match",
-        message: "Several prospects match",
-        candidates: [
-          {
-            id: first,
-            display_name: "Jake Smith",
-            stage: "new",
-            stage_label: "New",
-            created_at: "2026-11-02T12:00:00Z",
+    const get = vi.fn().mockImplementation(async (path: string) =>
+      path === "/v1/rush/candidates/matches"
+        ? {
+            data: [
+              {
+                id: first,
+                display_name: "Jake Smith",
+                stage: "new",
+                stage_label: "New",
+                created_at: "2026-11-02T12:00:00Z",
+              },
+              {
+                id: second,
+                display_name: "Jake Smith",
+                stage: "met",
+                stage_label: "Met",
+                created_at: "2026-11-20T12:00:00Z",
+              },
+            ],
+            error: null,
+            response: { status: 200 },
+          }
+        : {
+            data: undefined,
+            error: {
+              code: "rush.several_match",
+              message: "Several prospects match",
+            },
+            response: { status: 409 },
           },
-          {
-            id: second,
-            display_name: "Jake Smith",
-            stage: "met",
-            stage_label: "Met",
-            created_at: "2026-11-20T12:00:00Z",
-          },
-        ],
-      },
-      response: { status: 409 },
-    });
+    );
     const post = vi.fn();
     const ctx: ChatActionContext = {
       ...buildCtx(post),
@@ -1485,7 +1492,12 @@ describe("dispatchRush — vote and bid", () => {
     });
     expect(post).not.toHaveBeenCalled();
 
-    // The pick runs the same command by id, with no second lookup.
+    expect(get).toHaveBeenCalledWith(
+      "/v1/rush/candidates/matches",
+      expect.objectContaining({ params: { query: { name: "Jake Smith" } } }),
+    );
+
+    // The pick runs the same command by id, with no further lookup.
     post.mockResolvedValue({
       data: {},
       error: null,
@@ -1494,7 +1506,7 @@ describe("dispatchRush — vote and bid", () => {
     await expect(
       dispatchRushVoteCmd(ctx, result.choices!.options[1]!.args),
     ).resolves.toEqual({ ok: true });
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(2);
     expect(post).toHaveBeenCalledWith(
       "/v1/rush/candidates/{id}/vote",
       expect.objectContaining({ params: { path: { id: second } } }),

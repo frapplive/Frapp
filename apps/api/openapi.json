@@ -14738,14 +14738,7 @@
             }
           },
           "409": {
-            "description": "The name matches several prospects; pick one by id. Never a silent pick.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RushSeveralMatchDto"
-                }
-              }
-            }
+            "description": "`code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id."
           },
           "default": {
             "description": "Error",
@@ -14809,6 +14802,56 @@
           }
         ],
         "summary": "Add a recruitment candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/matches": {
+      "get": {
+        "operationId": "RushController_matches_v1",
+        "parameters": [
+          {
+            "name": "name",
+            "required": true,
+            "in": "query",
+            "description": "Candidate display name (case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushNameMatchDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every candidate a display name matches, with stage and day added, for a picker",
         "tags": [
           "Rush"
         ]
@@ -36609,32 +36652,6 @@
           "created_at"
         ]
       },
-      "RushSeveralMatchDto": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "rush.several_match"
-            ]
-          },
-          "message": {
-            "type": "string",
-            "example": "Several prospects match"
-          },
-          "candidates": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RushNameMatchDto"
-            }
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "candidates"
-        ]
-      },
       "CreateRushCandidateDto": {
         "type": "object",
         "properties": {
@@ -37013,6 +37030,11 @@
           "bid_rescind_reason": {
             "type": "string",
             "nullable": true
+          },
+          "bid_invite_sent": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "On an accepted bid: whether the PNM’s invite to join went out. Null on any other."
           }
         },
         "required": [
@@ -37047,7 +37069,8 @@
           "bid_answered_at",
           "bid_answered_by_name",
           "bid_answered_via",
-          "bid_rescind_reason"
+          "bid_rescind_reason",
+          "bid_invite_sent"
         ]
       },
       "RushPipelineDto": {
@@ -37650,6 +37673,11 @@
             "type": "string",
             "nullable": true
           },
+          "bid_invite_sent": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "On an accepted bid: whether the PNM’s invite to join went out. Null on any other."
+          },
           "invite_sent": {
             "type": "boolean",
             "description": "On a confirmation: whether the accepted PNM’s invite went out to the email kept for it."
@@ -37667,7 +37695,8 @@
           "bid_answered_at",
           "bid_answered_by_name",
           "bid_answered_via",
-          "bid_rescind_reason"
+          "bid_rescind_reason",
+          "bid_invite_sent"
         ]
       },
       "RecordRushAcceptanceDto": {
@@ -37728,6 +37757,10 @@
               "closed"
             ],
             "description": "`waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm."
+          },
+          "invite_sent": {
+            "type": "boolean",
+            "description": "On the tap that confirmed it: whether the invite to join went out."
           }
         },
         "required": [

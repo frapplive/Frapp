@@ -13,6 +13,8 @@ export interface RushBidConfirmation {
   /** The PNM's address. Never returned to a member. */
   email: string | null;
   token_hash: string | null;
+  /** When the one-tap email went out; null while unsent or failed. */
+  emailed_at: string | null;
   created_at: string;
 }
 
@@ -39,6 +41,7 @@ export interface RushBidTransition {
     bid_answered_by?: string | null;
     bid_answered_via?: RushBidAnsweredVia | null;
     bid_rescind_reason?: string | null;
+    bid_invite_sent?: boolean | null;
   };
 }
 
@@ -68,6 +71,18 @@ export interface IRushBidRepository {
     tokenHash: string,
   ): Promise<RushBidConfirmation | null>;
   deleteConfirmation(candidateId: string, chapterId: string): Promise<void>;
-  /** The chapter's candidates with a confirmation email out. */
+  /** Marks the confirmation's email sent, so the panel can say it was. */
+  markConfirmationEmailed(
+    candidateId: string,
+    chapterId: string,
+    at: string,
+  ): Promise<void>;
+  /** Records whether an accepted bid's invite went out; the row after. */
+  setInviteSent(
+    candidateId: string,
+    chapterId: string,
+    sent: boolean,
+  ): Promise<RushCandidateRow | null>;
+  /** The chapter's candidates whose confirmation email went out. */
   candidatesWithConfirmationEmail(chapterId: string): Promise<Set<string>>;
 }

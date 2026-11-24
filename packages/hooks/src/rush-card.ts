@@ -1,4 +1,5 @@
 import { serverMessageOf, statusOf } from "@repo/api-sdk";
+import { rushBidBadge } from "./rush-bids";
 import {
   RUSH_BID_STATES,
   can,
@@ -155,20 +156,14 @@ export function rushCardControls(input: {
 
 /** What a rush card's badge says: where the bid stands, or Open. */
 export function rushCardBadgeLabel(live: LiveRushCandidate): string {
-  switch (live.bid_state) {
-    case "extended":
-      return "Bid extended";
-    case "accepted":
-      return "Accepted";
-    case "declined":
-      return "Declined";
-    case "expired":
-      return "Bid expired";
-    case "rescinded":
-      return "Rescinded";
-    default:
-      return "Open";
-  }
+  // The card has no recorded-acceptance time, so a waiting bid reads as an
+  // extended one there; the pipeline's badge tells the two apart.
+  return (
+    rushBidBadge({
+      bid_state: live.bid_state,
+      bid_acceptance_recorded_at: null,
+    })?.label ?? "Open"
+  );
 }
 
 /**

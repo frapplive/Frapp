@@ -53,6 +53,8 @@ export interface RushCandidateWork {
   /** `member`, the PNM by the emailed link, or the expiry sweep. */
   bid_answered_via: RushBidAnsweredVia | null;
   bid_rescind_reason: string | null;
+  /** On an accepted bid: whether the PNM's invite went out. */
+  bid_invite_sent: boolean | null;
 }
 
 export type RushBidAnsweredVia = 'member' | 'pnm' | 'system';
