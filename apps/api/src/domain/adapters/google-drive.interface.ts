@@ -48,7 +48,7 @@ export interface GoogleDriveItem {
    * folder. Only `getItemAs` asks; absent when Google doesn't say.
    */
   canShare?: boolean;
-  /** The shared drive that holds it, or null in someone's My Drive. Only `getItemAs` asks. */
+  /** The shared drive that holds it; absent in someone's My Drive. Only `getItemAs` asks. */
   driveId?: string | null;
   /** In the owner's trash. Only `getItem` asks; a listing leaves trash out. */
   trashed?: boolean;

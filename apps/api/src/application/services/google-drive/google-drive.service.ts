@@ -288,6 +288,9 @@ export class GoogleDriveService {
     });
     if (seen) return null;
     if (folder.canShare === false) {
+      // Recorded too: whether `canShare` read through a `drive.file` sign-in
+      // matches what Google then allows isn't proved on live Drive yet.
+      this.reportRefusedShare('canShare_false', null, folder);
       throw new ForbiddenException(
         folder.driveId
           ? `In that shared drive, your role can’t share folders. Ask one of the drive’s Managers to connect it, or to share it with ${email} as a Viewer.`
@@ -321,7 +324,7 @@ export class GoogleDriveService {
         // this one is Google's setting, not ours: record Google's reason so
         // the next refusal names it (2026-11-24, a staging connect refused
         // with no record of why).
-        this.reportRefusedShare(error, folder);
+        this.reportRefusedShare(error.reason, error.status, folder);
         throw new ForbiddenException(
           `Google didn’t let you share that folder. Ask its owner to connect it, or to share it with ${email} as a Viewer.`,
           { cause: toReportableError(error) },
@@ -334,22 +337,27 @@ export class GoogleDriveService {
     }
   }
 
+  /**
+   * Google's reason for not sharing a picked folder, or `canShare_false`
+   * when Google said so before Frapp asked. Never a token, an email or an id.
+   */
   private reportRefusedShare(
-    error: GoogleDriveApiError,
+    reason: string,
+    status: number | null,
     folder: GoogleDriveItem,
   ): void {
     const where = folder.driveId ? 'shared_drive' : 'my_drive';
     this.logger.warn(
-      `Google refused to share a picked folder: ${error.status ?? 'no status'} ${error.reason} (${where})`,
+      `Google refused to share a picked folder: ${status ?? 'no status'} ${reason} (${where})`,
     );
     reportSwallowed(this.logger, 'a refused Drive share', () => ({
       message: 'Google Drive refused to share a picked folder',
-      fingerprint: ['google-drive-picked-share-refused', error.reason],
+      fingerprint: ['google-drive-picked-share-refused', reason],
       level: 'warning',
       tags: {
         feature: 'google-drive-picker',
-        google_reason: error.reason,
-        google_status: String(error.status ?? 'none'),
+        google_reason: reason,
+        google_status: String(status ?? 'none'),
         drive_location: where,
       },
     }));

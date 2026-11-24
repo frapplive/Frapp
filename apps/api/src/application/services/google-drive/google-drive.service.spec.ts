@@ -16,6 +16,18 @@ import type { IChapterDriveRepository } from '#domain/repositories/chapter-drive
 import type { ChapterDriveConnection } from '#domain/entities/chapter-drive-connection.entity';
 import { GoogleDriveService, parseDriveFolderId } from './google-drive.service';
 import type { ChapterDocumentService } from '../chapter-document.service';
+import { reportSwallowed } from '../../../infrastructure/observability/report-swallowed';
+
+jest.mock('../../../infrastructure/observability/report-swallowed', () => ({
+  reportSwallowed: jest.fn(),
+}));
+
+/** What the last refused-share report sent to Sentry. */
+function lastShareReport(): Record<string, unknown> {
+  const calls = jest.mocked(reportSwallowed).mock.calls;
+  const build = calls[calls.length - 1]?.[2] as () => Record<string, unknown>;
+  return build();
+}
 
 const FOLDER_ID = '1AbCdEfGhIjKlMnOp';
 const EMAIL = 'frapp-docs@signet-frapp.iam.gserviceaccount.com';
@@ -478,6 +490,38 @@ describe('GoogleDriveService', () => {
         service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN),
       ).rejects.toThrow(/Only the folder’s owner can share it/);
       expect(drive.shareWithServiceAccount).not.toHaveBeenCalled();
+      // Recorded, since canShare under drive.file isn't proved on live Drive.
+      expect(lastShareReport()).toMatchObject({
+        level: 'warning',
+        tags: { google_reason: 'canShare_false', drive_location: 'my_drive' },
+      });
+    });
+
+    it('records Google’s reason for a 403, and that the folder is in a shared drive', async () => {
+      jest.mocked(reportSwallowed).mockClear();
+      drive.getItemAs.mockResolvedValueOnce(
+        picked({ driveId: 'shared-drive-1' }),
+      );
+      drive.shareWithServiceAccount.mockRejectedValueOnce(
+        new GoogleDriveApiError(
+          'forbidden',
+          403,
+          'insufficientFilePermissions',
+        ),
+      );
+      await expect(
+        service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN),
+      ).rejects.toThrow(EMAIL);
+      expect(reportSwallowed).toHaveBeenCalledTimes(1);
+      expect(lastShareReport()).toMatchObject({
+        message: 'Google Drive refused to share a picked folder',
+        level: 'warning',
+        tags: {
+          google_reason: 'insufficientFilePermissions',
+          google_status: '403',
+          drive_location: 'shared_drive',
+        },
+      });
     });
 
     it('connects a folder Frapp already sees, even where the officer can’t share', async () => {

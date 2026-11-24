@@ -135,6 +135,24 @@ describe('GoogleDriveApiClient', () => {
       expect(init.headers.Authorization).toBe('Bearer member-token');
     });
 
+    // Google not saying isn't a no: the share is still tried.
+    it('leaves canShare and driveId unset when Google doesn’t send them', async () => {
+      const client = new GoogleDriveApiClient(ACCOUNT);
+      fetchMock.mockResolvedValueOnce(
+        json(200, {
+          id: 'f',
+          name: 'Folder',
+          mimeType: 'application/vnd.google-apps.folder',
+          capabilities: { canEdit: true },
+        }),
+      );
+
+      const item = await client.getItemAs('member-token', 'f');
+
+      expect(item).not.toHaveProperty('canShare');
+      expect(item).not.toHaveProperty('driveId');
+    });
+
     it('shares with the service account as a Viewer, with no email from Google', async () => {
       const client = new GoogleDriveApiClient(ACCOUNT);
       fetchMock.mockResolvedValueOnce(json(200, { id: 'perm-9' }));
