@@ -242,11 +242,12 @@ describe("AskProposal", () => {
     expect(
       await screen.findByText("Gave 5 points to 2 members."),
     ).toBeDefined();
+    // A role that can't read the ledger is sent to the standings (#5950).
     expect(
       screen
-        .getByRole("link", { name: ACT_COPY.open_points })
+        .getByRole("link", { name: ACT_COPY.open_standings })
         .getAttribute("href"),
-    ).toBe("/points");
+    ).toBe("/members?sort=points");
   });
 
   it("sends the members as the officer left them when one is taken off", async () => {

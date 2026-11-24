@@ -180,10 +180,7 @@ describe("AppNav", () => {
       const rows = Array.from(document.querySelectorAll("nav a")).map(
         (el) => el.textContent,
       );
-      expect(rows).not.toContain("Study hours");
       expect(rows).not.toContain("Documents");
-      // Service hours shares Study's module, and members log their own.
-      expect(rows).toContain("Service hours");
       // Members upload backwork themselves, so it has no setup gate.
       expect(rows).toContain("Backwork");
     } finally {

@@ -1,10 +1,11 @@
+import * as React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatDayTime, formatTimestampFull } from "@repo/formatting";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { cardFilledContainers } from "@/tests/card-surfaces";
-import { AUDIT_PAGE_SIZE, olderAuditCursor } from "./points-audit-card";
+import { AUDIT_PAGE_SIZE, olderAuditCursor } from "./points-ledger";
 
 const MICROSECOND_CURSOR = "2026-03-14T09:08:07.123456+00:00";
 
@@ -25,8 +26,11 @@ const fixtures = vi.hoisted(() => ({
     | undefined,
 }));
 
+const perms = vi.hoisted(() => ({ list: ["points:view_all"] as string[] }));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  usePermissionList: () => perms.list,
   useMemberDisplayNames: () => ({
     byId: { "user-1": "Alex" },
     nameFor: (id: string) => (id === "user-1" ? "Alex" : null),
@@ -52,19 +56,26 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   },
 }));
 
-const gate = vi.hoisted(() => ({ denied: false }));
-
-vi.mock("@/components/shared/can", () => ({
-  Can: ({
-    children,
-    deniedFallback,
-  }: {
-    children: React.ReactNode;
-    deniedFallback?: React.ReactNode;
-  }) => <>{gate.denied ? deniedFallback : children}</>,
+// The ledger's own writes and dialogs are out of scope here: the adjustment
+// form has its own spec.
+vi.mock("@/components/points/points-adjustment-dialog", () => ({
+  PointsAdjustmentDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Adjust points" /> : null,
+}));
+vi.mock("@/components/shared/subscription-gate", () => ({
+  SubscriptionNotice: () => null,
+  useSubscriptionGate: () => ({
+    allowed: true,
+    state: { allowed: true },
+    controlProps: () => ({}),
+  }),
+  useGatedDialog: () => {
+    const [open, setOpen] = React.useState(false);
+    return { open, setOpen, contentProps: {} };
+  },
 }));
 
-const { PointsAuditCard } = await import("./points-audit-card");
+const { PointsLedger } = await import("./points-ledger");
 
 function page(
   count: number,
@@ -86,6 +97,18 @@ function page(
         ? oldestCreatedAt
         : `2026-03-14T10:00:00.${String(i).padStart(6, "0")}Z`,
   }));
+}
+
+/** Pick `option` under `group` in the ledger's Filter menu. */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  group: string,
+  option: string,
+) {
+  await user.click(screen.getByRole("button", { name: /^Filter the ledger/ }));
+  screen.getByRole("menuitem", { name: new RegExp(`^${group}`) }).focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(await screen.findByRole("menuitemradio", { name: option }));
 }
 
 describe("olderAuditCursor", () => {
@@ -110,7 +133,7 @@ describe("olderAuditCursor", () => {
   });
 });
 
-describe("PointsAuditCard pagination", () => {
+describe("PointsLedger pagination", () => {
   beforeEach(() => {
     fixtures.data = [];
     fixtures.isPending = false;
@@ -122,7 +145,7 @@ describe("PointsAuditCard pagination", () => {
 
   it("loads the first page with limit 100 and no before cursor", () => {
     fixtures.data = page(AUDIT_PAGE_SIZE);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     expect(fixtures.lastOptions).toMatchObject({
       limit: AUDIT_PAGE_SIZE,
@@ -139,7 +162,7 @@ describe("PointsAuditCard pagination", () => {
   it("sends the oldest created_at verbatim as before when paging older", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
@@ -154,7 +177,7 @@ describe("PointsAuditCard pagination", () => {
   it("returns to the first page without a cursor via Newer transactions", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    const view = render(<PointsAuditCard />);
+    const view = render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
@@ -162,7 +185,7 @@ describe("PointsAuditCard pagination", () => {
     expect(fixtures.lastOptions?.before).toBe(MICROSECOND_CURSOR);
 
     fixtures.data = page(40);
-    view.rerender(<PointsAuditCard />);
+    view.rerender(<PointsLedger />);
     expect(
       screen.getByRole("button", { name: "Older transactions" }),
     ).toBeDisabled();
@@ -176,7 +199,7 @@ describe("PointsAuditCard pagination", () => {
   it("keeps Newer available when an older page fails to load", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    const view = render(<PointsAuditCard />);
+    const view = render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
@@ -184,9 +207,9 @@ describe("PointsAuditCard pagination", () => {
 
     fixtures.isError = true;
     fixtures.data = [];
-    view.rerender(<PointsAuditCard />);
+    view.rerender(<PointsLedger />);
 
-    expect(screen.getByText("Audit unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Ledger unavailable")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Newer transactions" }),
     );
@@ -196,7 +219,7 @@ describe("PointsAuditCard pagination", () => {
 
   it("does not offer Older transactions on a short first page", () => {
     fixtures.data = page(3);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     expect(
       screen.queryByRole("button", { name: "Older transactions" }),
@@ -207,17 +230,17 @@ describe("PointsAuditCard pagination", () => {
   it("resets the cursor when the flagged filter changes", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
     );
     expect(fixtures.lastOptions?.before).toBe(MICROSECOND_CURSOR);
 
-    const flaggedToggle = screen.getByRole("button", { name: "Flagged only" });
-    expect(flaggedToggle).toHaveAttribute("aria-pressed", "false");
-    await user.click(flaggedToggle);
-    expect(flaggedToggle).toHaveAttribute("aria-pressed", "true");
+    await pick(user, "Show", "Flagged only");
+    expect(
+      screen.getByRole("button", { name: "Filter the ledger, 1 on" }),
+    ).toBeInTheDocument();
     expect(fixtures.lastOptions).toMatchObject({
       before: undefined,
       flagged: true,
@@ -227,17 +250,14 @@ describe("PointsAuditCard pagination", () => {
   it("resets the cursor when the category filter changes", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
     );
     expect(fixtures.lastOptions?.before).toBe(MICROSECOND_CURSOR);
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Filter audit by category" }),
-    );
-    await user.click(screen.getByRole("option", { name: "Fine" }));
+    await pick(user, "Category", "Fine");
 
     expect(fixtures.lastOptions).toMatchObject({
       before: undefined,
@@ -248,17 +268,14 @@ describe("PointsAuditCard pagination", () => {
   it("resets the cursor when the member filter changes", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     await user.click(
       screen.getByRole("button", { name: "Older transactions" }),
     );
     expect(fixtures.lastOptions?.before).toBe(MICROSECOND_CURSOR);
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Filter audit by member" }),
-    );
-    await user.click(screen.getByRole("option", { name: "Alex" }));
+    await pick(user, "Member", "Alex");
 
     expect(fixtures.lastOptions).toMatchObject({
       before: undefined,
@@ -267,20 +284,20 @@ describe("PointsAuditCard pagination", () => {
   });
 });
 
-describe("PointsAuditCard on the page surface", () => {
+describe("PointsLedger on Chapter settings' Points page", () => {
   beforeEach(() => {
     fixtures.data = [];
     fixtures.isPending = false;
     fixtures.isError = false;
     fixtures.isFetching = false;
-    gate.denied = false;
+    perms.list = ["points:view_all"];
   });
 
-  it("is a flush Audit section with the chapter's limits as one state line", () => {
+  it("is a flush Ledger section with the chapter's limits as one state line", () => {
     fixtures.data = page(2);
-    const { container } = render(<PointsAuditCard />);
+    const { container } = render(<PointsLedger />);
 
-    expect(screen.getByRole("region", { name: "Audit" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Ledger" })).toBeInTheDocument();
     expect(
       screen.getByText(
         "Flags at ±100 points · 50 adjustments per admin per hour",
@@ -313,7 +330,7 @@ describe("PointsAuditCard on the page surface", () => {
         created_at: at,
       },
     ];
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     const row = screen.getByRole("listitem");
     expect(row).toHaveTextContent("Fine");
@@ -329,7 +346,7 @@ describe("PointsAuditCard on the page surface", () => {
 
   it("draws no category, and no UNKNOWN, for a row without one", () => {
     fixtures.data = [{ id: "tx-1", user_id: "user-1", amount: 3 }];
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
     expect(screen.queryByText("UNKNOWN")).not.toBeInTheDocument();
     expect(screen.getByRole("listitem")).toHaveTextContent("Alex");
@@ -337,24 +354,43 @@ describe("PointsAuditCard on the page surface", () => {
 
   it("offers every ledger category in the filter, Academic included", async () => {
     const user = userEvent.setup();
-    render(<PointsAuditCard />);
+    render(<PointsLedger />);
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Filter audit by category" }),
-    );
+    await user.click(screen.getByRole("button", { name: /^Filter the ledger/ }));
+    screen.getByRole("menuitem", { name: /^Category/ }).focus();
+    await user.keyboard("{ArrowRight}");
     expect(
-      screen.getByRole("option", { name: "Academic" }),
+      await screen.findByRole("menuitemradio", { name: "Academic" }),
     ).toBeInTheDocument();
   });
 
-  it("says why the list is missing in one caption under the label when denied", () => {
-    gate.denied = true;
-    const { container } = render(<PointsAuditCard />);
-
-    expect(screen.getByRole("region", { name: "Audit" })).toBeInTheDocument();
+  it("opens on one member when a card's Ledger link sent it", () => {
+    render(<PointsLedger initialMember="user-1" />);
+    expect(fixtures.lastOptions).toMatchObject({ userId: "user-1" });
     expect(
-      screen.getByText("Your role can't see every transaction."),
+      screen.getByRole("button", { name: "Filter the ledger, 1 on" }),
     ).toBeInTheDocument();
-    expect(cardFilledContainers(container)).toEqual([]);
+  });
+
+  it("offers Adjust points in its header only to a role that may adjust", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<PointsLedger />);
+    expect(
+      screen.queryByRole("button", { name: "Adjust points" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    perms.list = ["points:view_all", "points:adjust"];
+    render(<PointsLedger />);
+    await user.click(screen.getByRole("button", { name: "Adjust points" }));
+    expect(
+      screen.getByRole("dialog", { name: "Adjust points" }),
+    ).toBeInTheDocument();
+  });
+
+  it("exports the rows it shows", () => {
+    fixtures.data = page(2);
+    render(<PointsLedger />);
+    expect(screen.getByRole("button", { name: /^Export/ })).toBeEnabled();
   });
 });

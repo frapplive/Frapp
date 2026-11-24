@@ -355,7 +355,7 @@ describe("DashboardShell", () => {
     // 2026-11-05: the title moved from each page's toolbar row into the top
     // bar, derived from the route so every path (loading, offline, error) has
     // it. The words are the nav row's label.
-    mockPathname.value = "/study";
+    mockPathname.value = "/documents";
     render(
       <DashboardShell>
         <p>route content</p>
@@ -365,7 +365,7 @@ describe("DashboardShell", () => {
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
     expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Study hours",
+      "Documents",
     );
     // A top-level route has no parent link: no chapter-name prefix.
     expect(
@@ -454,7 +454,7 @@ describe("DashboardShell", () => {
     // in the tree on a phone, where `hidden` (display: none) would drop the
     // route's only level-1 heading. It sits on the wrapper so `not-sr-only`
     // cannot undo the h1's own `truncate`.
-    mockPathname.value = "/study";
+    mockPathname.value = "/documents";
     render(
       <DashboardShell>
         <p>route content</p>

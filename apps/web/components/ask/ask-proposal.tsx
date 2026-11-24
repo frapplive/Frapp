@@ -35,7 +35,6 @@ import {
   useDismissAiSuggestion,
   useMembers,
   useMyPermissions,
-  usePermissionList,
   settleProposedEvent,
   type ActResponse,
   type AiSuggestion,
@@ -332,9 +331,10 @@ function FinishedCard({
   headline: string | null;
   resolution: AskProposalResolution;
 }) {
+  const permissions = useMyPermissions().data?.permissions;
   const link = resultLink(
     resolution,
-    can("points:view_all", usePermissionList()),
+    !!permissions && can("points:view_all", permissions),
   );
   const shown = resolution.shown ?? null;
   const Icon: LucideIcon =

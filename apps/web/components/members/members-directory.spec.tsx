@@ -139,6 +139,33 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useRoleTiers: () => tiersRead,
     useGroups: () => groupsRead,
     useLeaderboard: () => leaderboardRead,
+    DEFAULT_STANDINGS_WINDOW: "semester",
+    // The standings model has its own spec (`standings.spec.ts`); here it
+    // answers from the period's board the test sets.
+    useStandings: (metric: string | null, window: string) => {
+      standings.asked.push([metric, window]);
+      const board = metric ? (standings.boards[metric] ?? {}) : {};
+      const totals = Object.values(board);
+      const unranked = totals.filter((total) => total > 0).length + 1;
+      return {
+        windowOptions: [
+          { value: "semester", label: "This semester" },
+          { value: "month", label: "This month" },
+          { value: "all", label: "All time" },
+        ],
+        window,
+        totalOf: (id: string) => board[id] ?? 0,
+        rankOf: (id: string) =>
+          (board[id] ?? 0) > 0
+            ? totals.filter((total) => total > (board[id] ?? 0)).length + 1
+            : unranked,
+        figure: (total: number) =>
+          metric === "service" ? `${total / 60} hours` : `${total} points`,
+        isLoading: false,
+        isError: standings.isError,
+        refetch: standings.refetch,
+      };
+    },
     useMemberPhoneReach: () => ({ reach: phoneReachRead.value }),
     // The member view, which every member can read. The config read refuses
     // every seeded role below President (#2957), so the directory must not
@@ -158,6 +185,24 @@ vi.mock("@repo/hooks", async (importOriginal) => {
 });
 
 vi.mock("@/lib/providers/network-provider", () => networkMock(mockOffline));
+
+const standings = vi.hoisted(() => ({
+  boards: {} as Record<string, Record<string, number>>,
+  asked: [] as [string | null, string][],
+  isError: false,
+  refetch: vi.fn(),
+}));
+const modules = vi.hoisted(() => ({ off: new Set<string>() }));
+const search = vi.hoisted(() => ({ value: "" }));
+vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
+  useChapterModuleGateState: () => ({
+    status: "ready",
+    isModuleEnabled: (key: string) => !modules.off.has(key),
+  }),
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(search.value),
+}));
 
 const customLines = vi.hoisted(() => ({ value: {} as Record<string, string> }));
 vi.mock("@/lib/providers/chapter-presence-provider", () => ({
@@ -249,6 +294,12 @@ beforeEach(() => {
     read([{ id: "r-1", name: "Treasurer", is_system: false, permissions: [] }]),
   );
   Object.assign(leaderboardRead, read([{ user_id: "u-1", total: 42 }]));
+  standings.boards = {};
+  standings.asked = [];
+  standings.isError = false;
+  standings.refetch.mockClear();
+  modules.off = new Set();
+  search.value = "";
   phoneReachRead.value = null;
   permissionsRead.data = { permissions: [] };
   Object.assign(tiersRead, { data: [], isError: false });
@@ -877,9 +928,10 @@ describe("Directory on the greenfield shell", () => {
     const user = userEvent.setup();
     render(<MembersDirectory />);
     await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
-    // Name, role and points in both directions. The join-date pair went with
+    // Name and role in both directions, then the standings (#5950): most and
+    // fewest points, most service hours. The join-date pair went with
     // #3939; the fraternal-order sort joins only a chapter that keeps one.
-    expect(await screen.findAllByRole("menuitem")).toHaveLength(6);
+    expect(await screen.findAllByRole("menuitem")).toHaveLength(7);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("button", { name: /sort by name/i })).toBeNull();
   });
@@ -1329,5 +1381,78 @@ describe("Actives on a chapter with alumni", () => {
     expect(screen.getByTestId("detail-sheet")).toHaveTextContent(
       "Ada Lovelace",
     );
+  });
+});
+
+describe("MembersDirectory standings (#5950)", () => {
+  it("ranks the chapter by points this semester, leading each row with its place", async () => {
+    const user = userEvent.setup();
+    standings.boards.points = { "u-2": 30, "u-1": 12 };
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Most points");
+
+    expect(standings.asked.at(-1)).toEqual(["points", "semester"]);
+    expect(
+      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
+    ).toBeInTheDocument();
+    const rows = screen.getAllByRole("button", { name: /^ranked / });
+    expect(rows[0]).toHaveAccessibleName(/^ranked 1, Grace Hopper/);
+    expect(rows[0]).toHaveTextContent("#1");
+    expect(rows[0]).toHaveTextContent("30 points");
+    expect(rows[1]).toHaveAccessibleName(/^ranked 2, Ada Lovelace/);
+  });
+
+  it("changes the period from the same menu", async () => {
+    const user = userEvent.setup();
+    standings.boards.points = { "u-1": 5 };
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Most points");
+    await pick(user, /^Sort:/, "All time");
+    expect(standings.asked.at(-1)).toEqual(["points", "all"]);
+  });
+
+  it("ranks by approved service hours too", async () => {
+    const user = userEvent.setup();
+    standings.boards.service = { "u-1": 150 };
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Most service hours");
+    const rows = screen.getAllByRole("button", { name: /^ranked / });
+    expect(rows[0]).toHaveAccessibleName(/^ranked 1, Ada Lovelace/);
+    expect(rows[0]).toHaveTextContent("2.5 hours");
+  });
+
+  it("opens on the standing a link names", () => {
+    search.value = "sort=points";
+    render(<MembersDirectory />);
+    expect(
+      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no standing, and no points on rows, while its module is off", async () => {
+    const user = userEvent.setup();
+    modules.off = new Set(["points", "hours"]);
+    search.value = "sort=points";
+    render(<MembersDirectory />);
+    // A link to a standing whose module is off opens on the name instead.
+    await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
+    const items = (await screen.findAllByRole("menuitem")).map(
+      (item) => item.textContent,
+    );
+    expect(items).not.toContain("Most points");
+    expect(items).not.toContain("Most service hours");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText(/42 points/)).toBeNull();
+  });
+
+  it("says the standings didn't load rather than ranking everyone at 0", async () => {
+    const user = userEvent.setup();
+    standings.isError = true;
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Most points");
+    expect(
+      screen.getByText("Couldn't load the standings"),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /^ranked / })).toHaveLength(0);
   });
 });
