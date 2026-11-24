@@ -2,6 +2,7 @@ import { dayDelta, formatDayHeading } from "@repo/formatting";
 import { joinNames, roleColor, type RoleColorHex } from "@repo/validation";
 import {
   ACTIVITY_LIST_LIMIT,
+  ACTIVITY_MINUTES_LABEL,
   ACTIVITY_SECTION_NAMES,
   activityCardIsOpen,
   activityPollIsOpen,
@@ -208,9 +209,15 @@ export function activityWeekSummary(
 
 /** A day of the To do list, or one of its runs outside the calendar. */
 export interface ActivityAgendaDay {
-  /** `overdue`, `now`, `later`, `anytime`, or `day:<n>` (days from today). */
+  /**
+   * `overdue`, `now`, `later`, `minutes`, `anytime`, or `day:<n>` (days from
+   * today).
+   */
   id: string;
-  /** "Overdue", "Now", "Today", "Tomorrow", "Sunday", "Later", "No deadline". */
+  /**
+   * "Overdue", "Now", "Today", "Tomorrow", "Sunday", "Later", "Minutes",
+   * "No deadline".
+   */
   label: string;
   /** `warning` for Overdue, `accent` for Now; a day is plain. */
   tone: "warning" | "accent" | "plain";
@@ -294,7 +301,7 @@ export function activityCouldNotLoad(sections: ActivitySection[]): string {
 }
 
 const FILTER_SECTIONS: Record<ActivityAgendaFilter, ActivitySection[]> = {
-  all: ["coming_up", "tasks", "polls", "cards", "reminders"],
+  all: ["coming_up", "tasks", "polls", "cards", "reminders", "minutes"],
   events: ["coming_up"],
   tasks: ["tasks"],
   answers: ["polls", "cards"],
@@ -344,12 +351,17 @@ export function activityAgenda(
               ? "Now"
               : id === "later"
                 ? "Later"
-                : id === "anytime"
-                  ? "No deadline"
-                  : dayLabel(Number(id.slice("day:".length)), now),
+                : id === "minutes"
+                  ? ACTIVITY_MINUTES_LABEL
+                  : id === "anytime"
+                    ? "No deadline"
+                    : dayLabel(Number(id.slice("day:".length)), now),
         tone: id === "overdue" ? "warning" : id === "now" ? "accent" : "plain",
         rows: [],
-        limit: isDay && filter === "all" ? AGENDA_DAY_LIMIT : null,
+        limit:
+          (isDay || id === "minutes") && filter === "all"
+            ? AGENDA_DAY_LIMIT
+            : null,
       };
       days.push(day);
     }
@@ -381,6 +393,10 @@ function agendaBucket(
 ): { id: string; order: number } {
   if (todo.now) return { id: "now", order: -1 };
   if (todo.overdue) return { id: "overdue", order: -2 };
+  // Minutes (#5949) after the days and Later, before what has no deadline.
+  if (todo.run === "minutes") {
+    return { id: "minutes", order: AGENDA_DAY_HORIZON + 0.5 };
+  }
   if (!todo.at) return { id: "anytime", order: AGENDA_DAY_HORIZON + 1 };
   // Earlier today, or a poll closing in the next minute: still today.
   const days = Math.max(0, dayDelta(now, todo.at));
