@@ -1,4 +1,4 @@
-# 20261124061638_minutes_filed_as_documents.sql
+# 20261124222254_minutes_filed_as_documents.sql
 
 <!-- One page per migration: its promotion entry and its rollback recipe.
      check:migration-safety reads the two headings below. Shared procedure
@@ -23,7 +23,7 @@ Files each meeting's posted minutes as a row in `chapter_documents` (#5949, step
   - `select count(*) from corpus_sources s join chapter_documents d on d.id = s.source_id where s.source_type = 'chapter_document' and d.meeting_id is not null;` returns 0.
   - `select chapter_id, count(*) from chapter_document_folders where minutes_series_key = 'root' group by chapter_id having count(*) > 1;` returns no rows.
   - `select has_function_privilege('authenticated', 'public.file_minutes_document(uuid, uuid)', 'execute');` returns false.
-- **Promoter notes**: The migration writes no rows. It builds a unique index on `meetings (id, chapter_id)` and validates two constraints on `chapter_documents`; both tables are small (a chapter's meetings and files). Either deploy order is safe: the API before #5949 reads neither new column, and the API from #5949 needs both, so this goes first, as Deploy production does. The backfill is the API's: once the API from #5949 is live, its sweep (`MinutesDocumentSweepService`, at start and every ten minutes) calls `file_unfiled_minutes`, which writes one `chapter_documents` row per posted meeting and, per chapter that has any, one Minutes folder (or its existing open "Minutes" or "Meeting Minutes" folder marked as it), a folder per repeating series, and a "Minutes" document type where the chapter has none. It is done this way because the API before #5949 would list a filed row, by its meeting's name and folder (never the minutes' text), to every member who can open Documents. For the same reason an API rollback past #5949 runs the first line of the rollback below at once.
+- **Promoter notes**: The migration writes no rows. It builds a unique index on `meetings (id, chapter_id)` and validates two constraints on `chapter_documents`; both tables are small (a chapter's meetings and files). Either deploy order is safe: the API before #5949 reads neither new column, and the API from #5949 needs both, so this goes first, as Deploy production does. The backfill is the API's: once the API from #5949 is live, its sweep (`MinutesDocumentSweepService`, every five minutes) calls `file_unfiled_minutes`, which writes one `chapter_documents` row per posted meeting and, per chapter that has any, one Minutes folder (or its existing open "Minutes" or "Meeting Minutes" folder marked as it), a folder per repeating series, and a "Minutes" document type where the chapter has none. It is done this way because the API before #5949 would list a filed row, by its meeting's name and folder (never the minutes' text), to every member who can open Documents. For the same reason an API rollback past #5949 runs the first line of the rollback below at once.
 
 ## Rollback
 
