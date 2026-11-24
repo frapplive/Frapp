@@ -22,7 +22,7 @@ import {
   POINT_CATEGORIES,
   pointCategoryLabel,
   type PointCategory,
-} from "@/components/points/point-category";
+} from "@repo/validation";
 import { PointsAdjustmentDialog } from "@/components/points/points-adjustment-dialog";
 import { ExportMenu } from "@/components/shared/export-menu";
 import {

@@ -33,7 +33,7 @@ import { amountToneClassName } from "@/components/points/amount-tone";
 import {
   POINT_CATEGORIES,
   pointCategoryLabel,
-} from "@/components/points/point-category";
+} from "@repo/validation";
 import { SearchGlyph } from "@/components/points/points-glyphs";
 import { stateMicrocopy } from "@/lib/state-microcopy";
 import { asArray, cn } from "@/lib/utils";

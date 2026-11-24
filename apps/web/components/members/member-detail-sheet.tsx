@@ -34,7 +34,7 @@ import { ActionMenuButton } from "@/components/shared/row-menu";
 import { useSubscriptionGate } from "@/components/shared/subscription-gate";
 import { PointsAdjustmentDialog } from "@/components/points/points-adjustment-dialog";
 import { AdjustGlyph } from "@/components/points/points-glyphs";
-import { ADJUST_POINTS_LABEL } from "@/components/points/point-category";
+import { ADJUST_POINTS_LABEL } from "@repo/validation";
 import { pointsLedgerPath } from "@/components/settings/settings-paths";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";

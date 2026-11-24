@@ -217,6 +217,9 @@ export * from "./permission-registry";
 export * from "./permissions";
 export * from "./phone";
 export * from "./phone-reach";
+// What each points category is called, and the officer action's one name,
+// on web and phone (#5950).
+export * from "./point-category";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";

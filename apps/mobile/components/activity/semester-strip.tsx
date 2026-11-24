@@ -14,21 +14,22 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 import { ProgressRing } from "./progress-ring";
 
 /**
- * Where each gauge goes: the screen that owns the number. Points and rank
- * live at the top of Tasks (s08); attendance is on Events.
+ * Where each gauge goes: the screen behind the number. Points, Service hours
+ * and Study are the member's own screens (#5950; the gauges are their one
+ * door on You besides New); attendance is on Events.
  */
 export type StandingDestination =
-  "/tasks" | "/events" | "/service-hours" | "/study";
+  "/points" | "/events" | "/service-hours" | "/study";
 
 const DESTINATION: Record<StandingRow["id"], StandingDestination> = {
-  points: "/tasks",
+  points: "/points",
   required_events: "/events",
   service: "/service-hours",
   study: "/study",
 };
 
 const HINT: Record<StandingRow["id"], string> = {
-  points: "Tasks, where your points and rank are",
+  points: "your points",
   required_events: "Events",
   service: "Service hours",
   study: "Study hours",

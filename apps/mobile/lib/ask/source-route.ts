@@ -32,7 +32,7 @@ export type AskSourceOpening =
 const PAGES: Record<string, NotificationTarget> = {
   members: { pathname: "/directory" },
   events: { pathname: "/events" },
-  points: { pathname: "/tasks" },
+  points: { pathname: "/points" },
   dues: { pathname: "/dues" },
   tasks: { pathname: "/tasks" },
 };
