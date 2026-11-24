@@ -102,6 +102,11 @@ vi.mock("@/components/chat/chat-page", () => ({
   ),
 }));
 
+// Desktop-only, with its own spec; here it would only add reads of its own.
+vi.mock("@/components/layout/use-desktop-runtime", () => ({
+  useDesktopRuntime: () => {},
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {

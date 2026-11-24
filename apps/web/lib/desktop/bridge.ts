@@ -14,6 +14,10 @@ export type DesktopBridge = {
    * sign-in returning to this app.
    */
   openExternal(url: string): Promise<boolean>;
+  /** The unread count on the dock or taskbar icon; 0 clears it. */
+  setBadgeCount?(count: number): void;
+  /** Bring the window forward, from the tray if it is hidden there. */
+  showWindow?(): void;
 };
 
 /** The shell's bridge, or `null` in a browser and on the server. */

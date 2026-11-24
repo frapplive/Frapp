@@ -250,6 +250,7 @@ function inAppRow(
   userId: string,
   chapterId: string,
   payload: NotifyPayload,
+  effectivePriority: NonNullable<NotifyPayload['priority']>,
 ): Pick<
   Notification,
   'chapter_id' | 'user_id' | 'title' | 'body' | 'data' | 'chat_message_id'
@@ -259,7 +260,11 @@ function inAppRow(
     user_id: userId,
     title: payload.title,
     body: payload.body,
-    data: payload.data ?? {},
+    // The priority the push went out at, quiet hours and Do Not Disturb
+    // applied (`SILENT`). A client that raises its own banner from the row,
+    // as the desktop app does (#4842), reads it here, so the quiet rules stay
+    // in this service.
+    data: { ...(payload.data ?? {}), priority: effectivePriority },
     ...(payload.chatMessageId
       ? { chat_message_id: payload.chatMessageId }
       : {}),
@@ -350,7 +355,7 @@ export class NotificationService {
     payload = payloadFor(payload, userId, settings);
 
     const notification = await this.notificationRepo.create(
-      inAppRow(userId, chapterId, payload),
+      inAppRow(userId, chapterId, payload, effectivePriority),
     );
     // The message this row quotes was deleted while it was being sent (#4418):
     // the database dropped the row, and the push would carry the same words.
@@ -572,8 +577,13 @@ export class NotificationService {
     const insertResults = await Promise.allSettled(
       recipientChunks.map((chunk) =>
         this.notificationRepo.createMany(
-          chunk.map(({ userId }) =>
-            inAppRow(userId, chapterId, payloadByUser.get(userId) ?? payload),
+          chunk.map(({ userId, effectivePriority }) =>
+            inAppRow(
+              userId,
+              chapterId,
+              payloadByUser.get(userId) ?? payload,
+              effectivePriority ?? 'NORMAL',
+            ),
           ),
         ),
       ),

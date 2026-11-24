@@ -13,8 +13,9 @@ has no web manifest and no service worker.
 > permission rules, the `window.frappDesktop` bridge, and an unsigned `Desktop build` workflow
 > ([`../README.md` §3.4a](../README.md#34a-desktop-appsdesktop)). Decisions 5 to 8 are not.
 >
-> **Updated 2026-11-24 ([#4841](https://github.com/pdcarlson/Frapp/issues/4841)).** Decision 5 is
-> built, with the change noted under it. Decisions 6 to 8 are not.
+> **Updated 2026-11-24 ([#4841](https://github.com/pdcarlson/Frapp/issues/4841),
+> [#4842](https://github.com/pdcarlson/Frapp/issues/4842)).** Decisions 5 and 6 are built, each
+> with a dated note under it. Decisions 7 and 8 are not.
 
 **Decision.**
 
@@ -62,6 +63,11 @@ has no web manifest and no service worker.
    existing settings and mutes, and keeps running in the tray or dock when its window is closed.
    This is how Discord and Slack behave. Whether an open desktop app holds back the phone push
    under ADR-04's presence rules is decided and recorded with that step ([#4842](https://github.com/pdcarlson/Frapp/issues/4842)).
+   *Decided 2026-11-24 ([#4842](https://github.com/pdcarlson/Frapp/issues/4842)):* it holds one
+   back exactly as an open browser tab does. A member is present in a channel only while the
+   window is showing it, so an app hidden in the tray never silences the phone. The notification
+   is raised from the member's own notification rows, which is what carries their settings and
+   mutes ([`notifications.md` § The desktop app](../../behavior/notifications.md#the-desktop-app)).
 7. **Signed builds only.** macOS with an Apple Developer ID certificate and notarization (the
    Apple program is already paid for iOS). Windows with Azure Artifact Signing (about $9.99 a
    month), whose identity validation Paul started on 2026-11-13.

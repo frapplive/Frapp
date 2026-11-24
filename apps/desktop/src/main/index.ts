@@ -6,10 +6,11 @@
  * can notify like Discord and Slack do. Everything a member sees is the web
  * app; this file owns only the window, the menus and what may leave it.
  */
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from "electron";
 import path from "node:path";
 import { resolveAppOrigin } from "../shared/app-url";
 import { AUTH_LINK_SCHEME, createAuthLinkGate, findAuthLink } from "../shared/auth-link";
+import { badgeDescription, badgeDotPng } from "../shared/badge-overlay";
 import { IPC, parseBadgeCount, parseExternalUrl } from "../shared/bridge";
 import { decideNavigation, isPermissionAllowed } from "../shared/navigation";
 import { offlinePageHtml, WINDOW_BACKGROUND } from "../shared/offline-page";
@@ -83,6 +84,9 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(() => {
+    // Windows files a notification under this id; it must match the
+    // installer's (`appId` in electron-builder.yml) or toasts show no app name.
+    if (process.platform === "win32") app.setAppUserModelId("live.frapp.desktop");
     registerAuthLinkScheme();
     installPermissionHandlers();
     installBridge();
@@ -161,6 +165,7 @@ function ignoreLoadFailure(): void {}
 function showWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = createWindow();
+    setUnreadBadge(unreadBadge);
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
@@ -196,8 +201,12 @@ function installBridge(): void {
   ipcMain.on(IPC.setBadgeCount, (event, value: unknown) => {
     const count = parseBadgeCount(value);
     if (!fromApp(event) || count === null) return;
-    // macOS and Linux draw this on the icon; the Windows overlay comes with #4842.
-    app.setBadgeCount(count);
+    setUnreadBadge(count);
+  });
+  // A click on one of the page's notifications: the page can't raise a window
+  // hidden in the tray itself. Only the app's own page can ask.
+  ipcMain.on(IPC.showWindow, (event) => {
+    if (fromApp(event)) showWindow();
   });
   // Answers whether the browser was opened, so the page can say when it wasn't.
   ipcMain.handle(IPC.openExternal, async (event, value: unknown): Promise<boolean> => {
@@ -213,6 +222,28 @@ function installBridge(): void {
       return false;
     }
   });
+}
+
+/** The last count shown, so a window made later (reopened from the tray) gets its dot. */
+let unreadBadge = 0;
+
+/**
+ * The unread count on the icon. macOS and Linux draw the number themselves.
+ * Windows has no number: the window's taskbar button gets a red dot, with the
+ * count in its description (`shared/badge-overlay.ts`).
+ */
+function setUnreadBadge(count: number): void {
+  unreadBadge = count;
+  if (process.platform !== "win32") {
+    app.setBadgeCount(count);
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const description = badgeDescription(count);
+  mainWindow.setOverlayIcon(
+    description === null ? null : nativeImage.createFromBuffer(badgeDotPng()),
+    description ?? "",
+  );
 }
 
 /**

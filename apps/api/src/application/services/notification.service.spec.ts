@@ -527,7 +527,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'New Announcement',
         body: 'Chapter meeting moved to 6pm',
-        data: {},
+        data: { priority: 'URGENT' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -621,7 +621,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'Test',
         body: 'Body',
-        data: {},
+        data: { priority: 'NORMAL' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -652,9 +652,16 @@ describe('NotificationService', () => {
         title: 'Test',
         body: 'Body',
         priority: 'NORMAL',
+        data: { target: { screen: 'events' } },
       });
 
       expectSilentPush();
+      // The row says so too, for a client that raises its own banner (#4842).
+      expect(mockNotificationRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { target: { screen: 'events' }, priority: 'SILENT' },
+        }),
+      );
 
       jest.useRealTimers();
     });
@@ -1302,6 +1309,9 @@ describe('NotificationService', () => {
       });
 
       expectSilentPush();
+      expect(mockNotificationRepo.createMany).toHaveBeenCalledWith([
+        expect.objectContaining({ data: { priority: 'SILENT' } }),
+      ]);
 
       jest.useRealTimers();
     });
