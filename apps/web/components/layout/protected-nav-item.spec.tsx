@@ -197,43 +197,50 @@ describe("isNavItemVisible", () => {
   });
 });
 
-// The restructure's whole point is that a member sees a short list of things
-// they can actually open. These pin the shape rather than the wording.
-describe("DASHBOARD_NAV structure", () => {
-  it("has no officer-only section, and no Chapter settings row: it opens from the chapter menu", async () => {
-    const { DASHBOARD_NAV } = await import("./nav-config");
+// The sidebar's whole point is that every member sees the same short list of
+// homes (#5946). These pin the shape rather than the wording.
+describe("the sidebar's rows (#5946)", () => {
+  it("are the five homes, in order, after New and Search", async () => {
+    const { SIDEBAR_ROWS } = await import("./nav-config");
+    expect(SIDEBAR_ROWS.map((item) => item.label)).toEqual([
+      "Activity",
+      "Messages",
+      "Calendar",
+      "Resources",
+      "Directory",
+    ]);
+  });
+
+  it("show a member every one of them but Directory's permission and Resources' setup gate", async () => {
+    const { SIDEBAR_ROWS } = await import("./nav-config");
     const { isNavItemVisible } = await import("./protected-nav-item");
+    const memberRows = SIDEBAR_ROWS.filter((item) =>
+      isNavItemVisible(item, ["members:view"], () => true),
+    );
+    expect(memberRows.map((item) => item.id)).toEqual(
+      SIDEBAR_ROWS.map((item) => item.id),
+    );
+  });
+
+  it("hold no Chapter settings row and no officer tool: those open from the member's menu", async () => {
+    const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
     const { SETTINGS_TOOLS } =
       await import("@/components/settings/settings-access");
-
-    // The six-row Admin group is what pushed a President's nav past a 768px
-    // window (#2946). A section whose every row is officer-gated is that group
-    // coming back.
-    for (const section of DASHBOARD_NAV) {
-      const memberRows = section.items.filter((item) =>
-        isNavItemVisible(item, ["members:view"]),
-      );
-      expect(memberRows.length, section.id).toBeGreaterThan(0);
-    }
-
-    const items = DASHBOARD_NAV.flatMap((section) => section.items);
-    // One door into Chapter settings, the chapter menu (Paul, 2026-11-19).
+    const items = DASHBOARD_NAV_ITEMS;
+    // One door into Chapter settings (Paul, 2026-11-19), at the sidebar's foot.
     expect(items.some((item) => item.href.startsWith("/settings"))).toBe(false);
-    // Every officer tool opens inside Chapter settings (#3837), and none of
-    // them is a row of its own.
+    // Every officer tool opens inside Chapter settings (#3837).
     for (const tool of SETTINGS_TOOLS) {
       expect(tool.href.startsWith("/settings?"), tool.id).toBe(true);
       expect(items.some((item) => item.href === tool.href)).toBe(false);
     }
   });
 
-  it("leads with Chat, then Direct messages, as an anchor that renders no heading (#3774)", async () => {
-    const { DASHBOARD_NAV } = await import("./nav-config");
-    expect(DASHBOARD_NAV[0]?.anchor).toBe(true);
-    expect(DASHBOARD_NAV[0]?.items.map((i) => i.href)).toEqual([
-      "/chat",
-      "/chat?view=direct",
-    ]);
+  it("hold no row for chat: the channels are the sidebar's list (#5946)", async () => {
+    const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
+    expect(
+      DASHBOARD_NAV_ITEMS.some((item) => item.href.startsWith("/chat")),
+    ).toBe(false);
   });
 
   it("keeps Profile out of the chapter nav — it lives in the account menu", async () => {

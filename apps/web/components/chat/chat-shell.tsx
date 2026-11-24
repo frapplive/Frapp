@@ -525,6 +525,7 @@ export function ChatShell({
   onViewChange,
   onPick,
   shown = true,
+  newMessageAsked = false,
 }: {
   initialChannelId?: string | null;
   initialMessageId?: string | null;
@@ -576,6 +577,12 @@ export function ChatShell({
    * conversation nobody can see must not be stamped read.
    */
   shown?: boolean;
+  /**
+   * The address carries New's "New message" (`new-intent.ts`): open the
+   * Messages page's people search. A prop because this panel stays mounted
+   * across routes, so it can't read the address once at mount as a page does.
+   */
+  newMessageAsked?: boolean;
 } = {}) {
   const activeChapterId = useChapterStore((state) => state.activeChapterId);
   /*
@@ -3311,7 +3318,7 @@ export function ChatShell({
   if (dmSearchOpen && !dmSearchShown) setDmSearchOpen(false);
   // New's "New message" (`new-intent.ts`): the Messages page's people search,
   // the one its pencil opens.
-  useNewIntent(() => setDmSearchOpen(true), dmSearchShown);
+  useNewIntent(() => setDmSearchOpen(true), dmSearchShown, newMessageAsked);
   // Direct messages with none to open: the member has never had one, or has
   // hidden every one. The thread column says how to start one instead of
   // drawing a timeline for no conversation.

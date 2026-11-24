@@ -242,26 +242,11 @@ describe("the way in", () => {
     expect(screen.getByRole("textbox", { name: "field" })).toHaveFocus();
   });
 
-  it("takes a member who loses Ask on the Ask page to chat", () => {
+  it("leaves a member who loses the assistant on New, where the forms are (#5946)", () => {
     nav.pathname = "/ask";
     const view = render(host());
-    expect(nav.replace).not.toHaveBeenCalled();
     who.previewing = true;
     view.rerender(host());
-    expect(nav.replace).toHaveBeenCalledWith("/chat");
-  });
-
-  it("waits on the Ask page while whether the member has Ask is still being read", () => {
-    nav.pathname = "/ask";
-    who.permissions = undefined;
-    render(host());
-    expect(nav.replace).not.toHaveBeenCalled();
-  });
-
-  it("leaves every other page alone when the member has no Ask", () => {
-    nav.pathname = "/events";
-    who.previewing = true;
-    render(host());
     expect(nav.replace).not.toHaveBeenCalled();
   });
 

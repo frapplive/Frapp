@@ -10,6 +10,7 @@ import { FormResponsesHost } from "./form-responses-dialog";
 import { ChatRouteSkeleton } from "@/components/chat/chat-route-skeleton";
 import { CHAT_CHANNEL_PARAM, CHAT_MESSAGE_PARAM } from "@/lib/chat/chat-links";
 import type { ChatView } from "@/lib/chat/chat-links";
+import { NEW_INTENT_PARAM } from "@/components/layout/new-intent";
 
 /**
  * Reads `?channel=<id>&message=<id>` so a caller (the member directory's
@@ -75,6 +76,9 @@ function ChatPageContent({
             onViewChange={onViewChange}
             onPick={onPick}
             shown={shown}
+            newMessageAsked={
+              onChatUrl && searchParams.get(NEW_INTENT_PARAM) === "1"
+            }
           />
         </FormResponsesHost>
       </FormFillHost>

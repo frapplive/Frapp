@@ -57,8 +57,10 @@ export function AskOpening({
   useEffect(() => {
     if (starter) onStarterShown();
   }, [starter, canAct, onStarterShown]);
-  // Nothing while the record is read, so the greeting never flashes first.
-  if (mode === "deciding") return <div className="min-h-full" />;
+  // While the record is read the greeting holds its place unseen, so it
+  // never flashes the wrong words first; the field under it is there at
+  // once, because New is where a member starts typing.
+  const deciding = mode === "deciding";
   return (
     <div className="flex min-h-full flex-col gap-6">
       <div
@@ -67,7 +69,9 @@ export function AskOpening({
           // Room above the crest for its glow, which the scroll area would
           // cut; the greeting lands about a third of the way down the page.
           starter ? "pt-12" : "pb-2 pt-[max(3.5rem,14vh)]",
+          deciding && "invisible",
         )}
+        aria-hidden={deciding || undefined}
       >
         <span
           className="relative flex items-center justify-center"

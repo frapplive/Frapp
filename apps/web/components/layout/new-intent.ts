@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * How New's actions open a page's own form (#5946).
@@ -17,6 +16,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
  * member may do it right now (the same checks the button is drawn behind).
  * The form opens once those are known to pass, and the mark is then taken
  * off the address, so a reload or Back does not open the form again.
+ *
+ * It reads the address once, when the page mounts: New is its own page, so
+ * following one of its links always mounts the page it names. The chat
+ * panel is the exception, mounted on every route, so it passes what its own
+ * search-params read says (`asked`).
  */
 export const NEW_INTENT_PARAM = "new";
 
@@ -25,25 +29,42 @@ export function newIntentHref(href: string): string {
   return `${href}?${NEW_INTENT_PARAM}=1`;
 }
 
-export function useNewIntent(open: () => void, ready: boolean): void {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
-  const asked = searchParams?.get(NEW_INTENT_PARAM) === "1";
+function addressAsks(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    new URLSearchParams(window.location.search).get(NEW_INTENT_PARAM) === "1"
+  );
+}
+
+/**
+ * Takes the mark off the address in place. Next keeps its search params in
+ * step with the History API, so no navigation runs and nothing remounts.
+ */
+function clearAddress(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(NEW_INTENT_PARAM);
+  window.history.replaceState(window.history.state, "", url);
+}
+
+export function useNewIntent(
+  open: () => void,
+  ready: boolean,
+  asked?: boolean,
+): void {
+  const [askedAtMount] = useState(addressAsks);
+  const wanted = asked ?? askedAtMount;
   // The latest `open`, read when the intent fires: pages pass a fresh
   // closure each render, and the effect must not re-run for that.
   const openRef = useRef(open);
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+  const done = useRef(false);
   useEffect(() => {
-    if (!asked || !ready) return;
-    const rest = new URLSearchParams(searchParams?.toString() ?? "");
-    rest.delete(NEW_INTENT_PARAM);
-    const query = rest.toString();
-    router.replace(query ? `${pathname}?${query}` : (pathname ?? "/"));
+    if (asked !== undefined && !asked) done.current = false;
+    if (!wanted || !ready || done.current) return;
+    done.current = true;
+    clearAddress();
     openRef.current();
-    // The address changing is what ends this; `searchParams` is read once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asked, ready]);
+  }, [wanted, ready, asked]);
 }

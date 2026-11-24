@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ASK_COPY } from "@repo/validation";
 
 /**
- * The real host, the Ask bar and the Ask page together (the bar since
- * #5476, the page since Paul's pick of 2026-11-22). `ask-host.spec.tsx` and
- * `ask-page.spec.tsx` each stand the other in, so neither sees what passes
- * between them: the bar opening the page, focus landing in its field, and
- * what the page does when Ask itself comes and goes under it.
+ * The real host and New's page together (the page since Paul's pick of
+ * 2026-11-22, opened by the sidebar's New row since #5946).
+ * `ask-host.spec.tsx` and `ask-page.spec.tsx` each stand the other in, so
+ * neither sees what passes between them: the draft kept across a visit, and
+ * what the page does when the assistant itself comes and goes under it.
  */
 
 const who = vi.hoisted(() => ({
@@ -30,6 +30,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
   useViewerUserId: () => null,
   useViewerDisplayName: () => null,
+  // New's actions read the member view of the chapter for its modules.
+  useCurrentChapter: () => ({ data: undefined }),
   useAsk: () => ({
     exchanges: [],
     working: false,
@@ -89,17 +91,17 @@ vi.mock("@/components/ai/meet-frapp-ai", () => ({
 
 const { AskHost } = await import("./ask-host");
 const { isAskRoute } = await import("@/components/layout/shell-layout");
-const { AskBar } = await import("./ask-bar");
 const { AskPage } = await import("./ask-page");
 const { usePathname } = await import("next/navigation");
 
-/** The shell, cut down: the bar, and the route's page. */
+/** The shell, cut down: the New row, and the route's page. */
 function Shell() {
   const pathname = usePathname();
   return (
     <>
-      <AskBar />
-      <input aria-label="Message" />
+      <button type="button" onClick={() => nav.go("/ask")}>
+        New
+      </button>
       {isAskRoute(pathname) ? <AskPage /> : null}
     </>
   );
@@ -113,7 +115,7 @@ function Page() {
   );
 }
 
-const entry = () => screen.getByRole("button", { name: ASK_COPY.placeholder });
+const newRow = () => screen.getByRole("button", { name: "New" });
 const field = () =>
   screen.queryByRole("textbox", { name: ASK_COPY.placeholder });
 
@@ -123,73 +125,55 @@ beforeEach(() => {
   nav.go("/events");
 });
 
-describe("the entry and the Ask page together", () => {
-  it("draws the bar as the field it opens: the crest, the words and the arrow", () => {
-    render(<Page />);
-    expect(entry()).toHaveTextContent(ASK_COPY.placeholder);
-    expect(entry()).not.toHaveAttribute("aria-current");
-    expect(entry()).not.toHaveAttribute("aria-haspopup");
-    expect(entry().querySelectorAll("svg")).toHaveLength(2);
-  });
-
-  it("opens the Ask page from the bar with the cursor in its field, and marks the bar as the page on screen", async () => {
+describe("New and Frapp Intelligence together", () => {
+  it("opens the assistant's field on New, as a page and not a dialog", async () => {
     const user = userEvent.setup();
     render(<Page />);
     expect(field()).toBeNull();
-    await user.click(entry());
+    await user.click(newRow());
     expect(nav.pathname).toBe("/ask");
-    expect(field()).toHaveFocus();
-    expect(entry()).toHaveAttribute("aria-current", "page");
-    // No dialog: the page, and the app around it, stay usable.
+    expect(field()).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("puts the cursor back in the field when the bar is used on the Ask page", async () => {
-    const user = userEvent.setup();
-    render(<Page />);
-    await user.click(entry());
-    await user.click(screen.getByRole("textbox", { name: "Message" }));
-    await user.click(entry());
-    expect(nav.pathname).toBe("/ask");
-    expect(field()).toHaveFocus();
-  });
-
-  it("takes a member who loses Ask on the Ask page to chat, and does not bring them back when Ask returns", async () => {
+  it("keeps a member who loses the assistant on New, without the field (#5946)", async () => {
     const user = userEvent.setup();
     const view = render(<Page />);
-    await user.click(entry());
+    await user.click(newRow());
     expect(field()).toBeInTheDocument();
     // An officer starts viewing the chapter as a role.
     who.previewing = true;
     view.rerender(<Page />);
-    await waitFor(() => expect(nav.pathname).toBe("/chat"));
-    expect(field()).toBeNull();
+    await waitFor(() => expect(field()).toBeNull());
+    expect(nav.pathname).toBe("/ask");
+    // The page still greets them, where the forms they can start sit.
     expect(
-      screen.queryByRole("button", { name: ASK_COPY.placeholder }),
-    ).toBeNull();
+      screen.getByText(/^Good (morning|afternoon|evening)/),
+    ).toBeInTheDocument();
     who.previewing = false;
     view.rerender(<Page />);
-    expect(entry()).toBeInTheDocument();
-    expect(nav.pathname).toBe("/chat");
+    expect(field()).toBeInTheDocument();
   });
 
   it("keeps what the member had typed when they leave the page and come back", async () => {
     const user = userEvent.setup();
     render(<Page />);
-    await user.click(entry());
+    await user.click(newRow());
     await user.type(field()!, "Who is driving");
     nav.go("/events");
     await waitFor(() => expect(field()).toBeNull());
-    await user.click(entry());
+    await user.click(newRow());
     expect(field()).toHaveValue("Who is driving");
   });
 
-  it("holds the page in its loading shape while whether the member has Ask is read", () => {
+  it("holds the page in its loading shape while whether the member has the assistant is read", () => {
     who.permissions = undefined;
     nav.go("/ask");
     render(<Page />);
     expect(field()).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent("Loading Frapp Intelligence");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading Frapp Intelligence",
+    );
     expect(nav.pathname).toBe("/ask");
   });
 });

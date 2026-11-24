@@ -28,6 +28,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useViewerUserId: () => "me",
   useViewerDisplayName: () => "Marcus Ellison",
+  // New's actions read the member view of the chapter for its modules.
+  useCurrentChapter: () => ({ data: undefined }),
   useAsk: () => ({
     exchanges: state.exchanges,
     working: state.exchanges.some(
@@ -211,13 +213,19 @@ describe("AskConversation", () => {
       expect(screen.queryByText(ASK_STARTER.answer)).toBeNull();
     });
 
-    it("draws nothing of the opening while this browser's record is read, so the greeting never flashes first", () => {
+    it("shows no greeting while this browser's record is read, so the wrong one never flashes, and the field at once (#5946)", () => {
       window.localStorage.removeItem(STARTER_SEEN);
       open();
+      // Held in place unseen, and out of the accessibility tree.
       expect(
-        screen.queryByText(/^Good (morning|afternoon|evening)/),
-      ).toBeNull();
+        screen.queryByText(/^Good (morning|afternoon|evening)/)?.closest(
+          "[aria-hidden='true']",
+        ) ?? null,
+      ).not.toBeNull();
       expect(screen.queryByText("Hey Marcus, I'm Frapp.")).toBeNull();
+      expect(
+        screen.getByRole("textbox", { name: ASK_COPY.placeholder }),
+      ).toBeInTheDocument();
     });
 
     it("sends a tapped question as a suggestion, never as words the member typed", async () => {
