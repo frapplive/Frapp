@@ -256,12 +256,53 @@ export function readMigrationFiles(dir = MIGRATIONS_DIR, { readDir = readdirSync
 
 // ── Phases ──────────────────────────────────────────────────────────────────
 
-function dryRun({ target, supabase, log }) {
+/** Waits before each retry of a `link` Supabase's API answered with a 5xx. */
+export const LINK_RETRY_WAITS_MS = [30_000, 60_000];
+
+/**
+ * A gateway or timeout answer from Supabase's Management API, as `supabase
+ * link` prints it. Deploy production run 45321010194 (2026-11-24) stopped on
+ * one: Cloudflare's 502 for `api.supabase.com`, which the CLI reports as
+ * "Authorization failed for the access token and project ref pair" followed
+ * by the 502 body. The body, not that sentence, is what this reads, so a real
+ * authorization failure is not retried.
+ */
+const TRANSIENT_LINK_FAILURE =
+  /"status":\s*5\d\d\b|\bError 5\d\d\b|bad gateway|gateway time-?out|service unavailable|ECONNRESET|ETIMEDOUT|"retryable":\s*true/i;
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * `supabase link` with up to two retries on a transient API failure. Linking
+ * only records the project ref locally and reads its settings, so running it
+ * again is safe; nothing is applied before it succeeds.
+ */
+export function linkProject({ target, supabase, log, sleep = sleepSync }) {
+  const args = ["link", "--project-ref", target.projectRef];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const output = supabase(args, { capture: true });
+      if (output) log(output);
+      return;
+    } catch (thrown) {
+      const text = [thrown.stdout, thrown.stderr, thrown.message].filter(Boolean).join("\n");
+      if (thrown.stdout || thrown.stderr) log([thrown.stdout, thrown.stderr].filter(Boolean).join("\n"));
+      const wait = LINK_RETRY_WAITS_MS[attempt];
+      if (wait === undefined || !TRANSIENT_LINK_FAILURE.test(text)) throw thrown;
+      log(`  Supabase's API answered with a transient error; retrying link in ${wait / 1000}s (attempt ${attempt + 2} of ${LINK_RETRY_WAITS_MS.length + 1}).`);
+      sleep(wait);
+    }
+  }
+}
+
+function dryRun({ target, supabase, log, sleep }) {
   log("\n── Dry Run ──────────────────────────────────────────────");
   log("  Checking what migrations would be applied...\n");
 
   log("  Linking to Supabase project...");
-  supabase(["link", "--project-ref", target.projectRef]);
+  linkProject({ target, supabase, log, sleep });
 
   log("  Listing migration status...");
   const output = supabase(["migration", "list"], { capture: true });
@@ -273,11 +314,11 @@ function dryRun({ target, supabase, log }) {
   log("\n  Dry run complete — no changes were applied.");
 }
 
-function applyMigrations({ target, supabase, log }) {
+function applyMigrations({ target, supabase, log, sleep }) {
   log("\n── Applying Migrations ──────────────────────────────────");
 
   log("\n  Linking to Supabase project...");
-  supabase(["link", "--project-ref", target.projectRef]);
+  linkProject({ target, supabase, log, sleep });
 
   log("\n  Pushing migrations...");
   supabase(["db", "push", ...(target.includeAll ? ["--include-all"] : [])]);
@@ -300,6 +341,7 @@ export function runMigrationCli({
   lookupEnvironment = getEnvironment,
   log = console.log,
   error = console.error,
+  sleep,
 } = {}) {
   const args = parseArgs(argv);
   const validated = validateInvocation({ args, env, lookupEnvironment });
@@ -349,9 +391,9 @@ export function runMigrationCli({
 
   try {
     if (target.dryRun) {
-      dryRun({ target, supabase: runner, log });
+      dryRun({ target, supabase: runner, log, sleep });
     } else {
-      applyMigrations({ target, supabase: runner, log });
+      applyMigrations({ target, supabase: runner, log, sleep });
     }
   } catch (thrown) {
     error("\n  ❌ Migration failed!");

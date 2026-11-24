@@ -42,6 +42,8 @@ export * from "./member-avatar-color";
 export * from "./member-phone-reach";
 export * from "./member-threads";
 export * from "./open-chat-transport";
+// Your own custom-field values (#581).
+export * from "./own-custom-fields";
 export * from "./pay-errors";
 export * from "./permission-preview";
 export * from "./profile-stats";
