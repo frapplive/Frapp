@@ -38,9 +38,7 @@ import type { DuotoneGlyphProps } from "@/components/ui/duotone";
 import { NavGlyph } from "@/components/layout/nav-glyphs";
 
 export {
-  DirectoryGlyph,
   EventsGlyph,
-  PointsGlyph,
   RolesGlyph,
   SearchGlyph,
   StudyZonesGlyph,

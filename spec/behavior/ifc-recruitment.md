@@ -1,6 +1,6 @@
 # IFC recruitment: master list, interest forms, chapter pipeline, eligibility
 
-> **Status: Proposed. Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul). Nothing here is built, and no build date is set.**
+> **Status: Proposed and parked (not on the roadmap for the beta). Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul). Nothing here is built, and no build date is set.**
 >
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
 > GitHub hides that account's issues and PRs (#4192, epic #4226 and its sub-issues) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).

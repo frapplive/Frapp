@@ -235,7 +235,7 @@ Supabase):
    cache so no earlier flag value is inlined: `npx expo start --web --port 3002 --clear`. Wait for
    `http://localhost:3002` to answer 200.
 4. From the repo root: `node scripts/demo/capture-mobile.mjs --store`
-   (sandbox Chromium: prefix `CHROMIUM_PATH=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`).
+   (sandbox Chromium: prefix `CHROMIUM_PATH=/opt/pw-browsers/chromium`).
    It signs in as the demo president — Host check-in needs an officer — captures the seven screens
    to `screenshots/store-raw/`, and frames them into `screenshots/app-store/` and
    `screenshots/google-play/`, `01-chat-home.png` … `07-directory.png` in each.

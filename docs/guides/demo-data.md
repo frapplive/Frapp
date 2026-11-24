@@ -324,10 +324,11 @@ Two API-side values matter for the check-in screens:
 
 The cloud sandbox ships a pinned Chromium that may not match the revision the
 repo's Playwright expects. Point at it instead of downloading another (never run
-`playwright install` here):
+`playwright install` here). `/opt/pw-browsers/chromium` is a link to the binary
+of whichever revision the image carries, so it survives a revision bump:
 
 ```bash
-CHROMIUM_PATH=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome \
+CHROMIUM_PATH=/opt/pw-browsers/chromium \
   node scripts/demo/capture-screenshots.mjs
 ```
 

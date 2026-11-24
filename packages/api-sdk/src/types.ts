@@ -5150,26 +5150,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/activity-feed": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get the chapter activity feed
-         * @description Normalized, newest-first rows aggregated from events, the caller’s own point changes, backwork uploads (only when the caller can view Backwork), new members, and the announcements channel. Read-only aggregation — no separate feed table (`spec/behavior/activity-feed.md`).
-         */
-        get: operations["ActivityFeedController_getFeed_v1"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/activity": {
         parameters: {
             query?: never;
@@ -11642,29 +11622,6 @@ export interface components {
             /** @description End date (YYYY-MM-DD) */
             end_date?: string;
         };
-        ActivityFeedActorDto: {
-            /** Format: uuid */
-            user_id: string;
-            /** @description Empty when the actor could not be resolved against the current roster (e.g. a member who has since left the chapter) — the server does not invent a placeholder name. */
-            display_name: string;
-            avatar_url: string | null;
-        };
-        ActivityFeedItemDto: {
-            /** @description Stable within one response; not a database primary key. */
-            id: string;
-            /** @enum {string} */
-            type: "event_created" | "event_upcoming" | "points_change" | "backwork_upload" | "member_joined" | "announcement";
-            /**
-             * Format: date-time
-             * @description Feed ordering key — newest first.
-             */
-            timestamp: string;
-            title: string;
-            body: string | null;
-            actor: components["schemas"]["ActivityFeedActorDto"] | null;
-            /** @description The underlying record id (event, point transaction, backwork resource, joining member’s user id, or announcement channel id) for client-side navigation. */
-            target_id: string;
-        };
         ActivityTaskDto: {
             /** Format: uuid */
             id: string;
@@ -12052,15 +12009,6 @@ export interface components {
             /** @description Whether `remind_at` has passed. A due reminder waits on the caller and is counted in `needs_you_count` until they clear it. */
             due: boolean;
         };
-        ActivityFileDto: {
-            /** Format: uuid */
-            id: string;
-            /** @enum {string} */
-            source: "document" | "backwork";
-            title: string;
-            /** Format: date-time */
-            created_at: string;
-        };
         ActivityMadeByYouDto: {
             /** @description Poll cards the caller posted, newest first: up to 25 open and the 25 most recently posted closed ones, so closed polls never push an open one out of the read. A current client lists the open ones and finds the closed in `GET /v1/activity/archive` (#5127); the closed ones are served for phone builds from before it, which draw them as Archived polls (#4258). */
             polls: components["schemas"]["ActivityPollDto"][];
@@ -12068,11 +12016,6 @@ export interface components {
             tasks: components["schemas"]["ActivityTaskDto"][];
             /** @description What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`. */
             task_items: (components["schemas"]["ActivityTaskItemTaskDto"] | components["schemas"]["ActivityTaskItemGroupDto"])[];
-            /**
-             * @deprecated
-             * @description Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.
-             */
-            files: components["schemas"]["ActivityFileDto"][];
             /** @description Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here. */
             events: components["schemas"]["ActivityEventDto"][];
         };
@@ -25421,37 +25364,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponseDto"];
-                };
-            };
-        };
-    };
-    ActivityFeedController_getFeed_v1: {
-        parameters: {
-            query?: {
-                /** @description Max feed rows to return across all domains combined. Clamped to 1–50 inclusive; omitted defaults to 20. */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityFeedItemDto"][];
-                };
             };
             /** @description Error */
             default: {

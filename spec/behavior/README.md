@@ -29,7 +29,6 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Polls and voting                                     | [`polls.md`](polls.md)                     |
 | Predictions (stake points on chapter questions)      | [`predictions.md`](predictions.md)         |
 | Member directory and profiles                        | [`members.md`](members.md)                 |
-| Activity feed                                        | [`activity-feed.md`](activity-feed.md)     |
 | Activity page (what needs you, what you made)        | [`activity.md`](activity.md)               |
 | Global search                                        | [`search.md`](search.md)                   |
 | Observability                                        | [`observability.md`](observability.md)     |
@@ -47,7 +46,7 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Settings shell, customization, audit                 | [`settings/`](settings/README.md)          |
 | Ops integrations                                     | [`integrations.md`](integrations.md)       |
 | Meetings (AI-drafted minutes, suggested tasks)       | [`meetings.md`](meetings.md)               |
-| Vault (encrypted private storage)                    | [`vault.md`](vault.md)                     |
+| Vault (encrypted private storage; parked, not built) | [`vault.md`](vault.md)                     |
 | AI features (corpus scope, citations, non-goals)     | [`ai.md`](ai.md)                           |
 | Chapter config endpoints                             | [`chapter-config.md`](chapter-config.md)   |
 | Council types: IFC, Panhellenic, NPHC, MGC (proposed) | [`council-types.md`](council-types.md)     |

@@ -137,3 +137,18 @@ GET /v1/rush/candidates the response property 'vote_count' became optional for t
 GET /v1/rush/candidates/{id} the response property 'vote_count' became optional for the status '200'
 POST /v1/rush/candidates/{id}/vote the response property 'vote_count' became optional for the status '201'
 POST /v1/rush/candidates/{id}/bid the response property 'vote_count' became optional for the status '201'
+
+# #5951 deletes the chapter activity feed, which no screen ever rendered (the web home it was written
+# for went in the chat-first redesign; the phone never had one). Checked 2026-11-24 at every SHA in
+# shipped-builds.json (ea9bc12c, cca52dec, 5e43a27b, 55922eab, 108b7ac7, 728fb69e, b61c20c3, c91ec8d8,
+# 547c1364, 68a47019, e83a0109, dcdfde42, 218b178c, 5615e8b2, c85e2c3a, 5f0bd6c9, 6928a014, 0426149e):
+# `git grep 'useActivityFeed\|activity-feed' <sha> -- apps/mobile` finds no caller, so no binary
+# requests the route (the hook they bundle from packages/hooks defines it, unused).
+GET /v1/activity-feed api path removed without deprecation
+
+# #5951 removes `made_by_you.files` from the Activity read: always empty and deprecated since #4291.
+# At the same 18 SHAs, `git grep -w files <sha> -- apps/mobile packages/hooks/src packages/chat-core/src
+# packages/formatting/src | grep -i 'activ\|made'` finds one line, a comment in
+# apps/mobile/lib/auth-gate.ts, and `git grep '\.files\b' <sha> -- apps/mobile` finds nothing, so a
+# binary whose contract lists the field never reads it.
+GET /v1/activity removed the required property 'made_by_you/files' from the response with the '200' status
