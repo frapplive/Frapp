@@ -234,6 +234,7 @@ describe('InviteService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),

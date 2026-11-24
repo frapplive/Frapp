@@ -429,6 +429,7 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
       (from, to) =>
         this.supabase
           .from('chapters')
+          // Every kind (#5933): a council's shell reads its palette too.
           .select('id, seed:branding->colors->>accent')
           .or(stalePaletteFilter(engineVersion))
           .order('id', { ascending: true })

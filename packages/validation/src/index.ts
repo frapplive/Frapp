@@ -76,6 +76,8 @@ export * from "./coming-up-tracking";
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// Councils (#5933): profiles, role packs and recruitment models.
+export * from "./council";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
 // this used to be two copies of the same scanner.

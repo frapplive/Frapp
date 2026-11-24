@@ -36,8 +36,12 @@ try {
       ('${A}', 'Slug Tier', 'Tier U', now() - interval '2 days'),
       ('${B}', 'Slug Tier', 'Tier U', now() - interval '1 day'),
       ('${C}', 'Council', '', now());
-    insert into chapters (id, name, university, kind) values
-      ('${D}', 'Tier Council', 'Tier U', 'council');
+    -- A council carries its own fields since 20261124010605 (#5933).
+    insert into schools (id, name, short_name) values
+      ('${D}', 'Slug Tier School', 'STS');
+    insert into chapters (id, name, university, kind, council_type,
+                          recruitment_model, council_school_id, org_archetype) values
+      ('${D}', 'Tier Council', 'Tier U', 'council', 'other', 'none', '${D}', 'council');
   `);
 
   const one = async (sql, params = []) => (await db.query(sql, params)).rows[0];
@@ -122,6 +126,7 @@ try {
   // A deleted tenant's slug stays, with no owner.
   const slugD = await current(D);
   await db.exec(`delete from chapters where id = '${D}'`);
+  await db.exec(`delete from schools where id = '${D}'`);
   const orphan = await one(
     `select chapter_id from tenant_slugs where slug = $1`,
     [slugD[0]],

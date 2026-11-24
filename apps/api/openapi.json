@@ -887,6 +887,92 @@
         ]
       }
     },
+    "/v1/councils": {
+      "post": {
+        "description": "Creates a council of the chosen type at a school where the caller holds a verified school email, seeded with its type's role pack. The caller holds Council admin and the title they picked. 403 `council.school_unverified` without a verified school email there; 409 `council.type_taken` when the school already has a council of that type (`other` aside); 429 `chapter.start_daily_limit` past the daily ceiling chapters share.",
+        "operationId": "CouncilsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCouncilDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCouncilDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council": {
+      "get": {
+        "description": "Its type, recruitment model, whether staff verified it, and its school. Serves the council tenant kind only.",
+        "operationId": "CouncilController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilProfileDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The active council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
     "/v1/chapters/{id}/config": {
       "get": {
         "operationId": "ChapterConfigController_getConfig_v1",
@@ -23673,6 +23759,26 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23822,6 +23928,26 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -23959,6 +24085,26 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -24051,6 +24197,152 @@
         },
         "required": [
           "storage_path"
+        ]
+      },
+      "CreateCouncilDto": {
+        "type": "object",
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The school the council is at. The caller must hold a verified school email there."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "example": "RPI IFC",
+            "maxLength": 80
+          },
+          "title_key": {
+            "type": "string",
+            "description": "The founder's title: a seeded title's key from the type's role pack (`pickableCouncilTitles` in `@repo/validation`), or `custom` with `custom_title`.",
+            "example": "vp_recruitment",
+            "maxLength": 40
+          },
+          "custom_title": {
+            "type": "string",
+            "description": "With `title_key: 'custom'`: the founder's own title, a new role in the Executive board.",
+            "example": "Recruitment Chair",
+            "maxLength": 40
+          },
+          "accept_terms_privacy": {
+            "type": "boolean",
+            "description": "The founder accepted the Terms of Service and Privacy Policy, for the council and for themselves. Must be true, as chapter onboarding requires (spec/behavior/legal.md)."
+          }
+        },
+        "required": [
+          "school_id",
+          "council_type",
+          "name",
+          "title_key",
+          "accept_terms_privacy"
+        ]
+      },
+      "CreatedCouncilDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "example": "council"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ]
+      },
+      "CouncilSchoolDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name"
+        ]
+      },
+      "CouncilProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ]
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether Frapp staff verified the council (`council_verified_at`). Every council starts unverified."
+          },
+          "school": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CouncilSchoolDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "council_type",
+          "recruitment_model",
+          "verified",
+          "school"
         ]
       },
       "BetaConfigDto": {
@@ -24683,7 +24975,9 @@
               "documents",
               "geofences",
               "reports",
-              "billing"
+              "billing",
+              "council",
+              "council-recruitment"
             ],
             "description": "The module the permission belongs to: a module catalog key, or `chapter` for a chapter-level permission."
           },

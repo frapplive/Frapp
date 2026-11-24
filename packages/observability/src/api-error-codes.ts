@@ -38,6 +38,10 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // these is a client sending what its own validation should have stopped,
   // or contract drift between a shipped build and the API.
   "request.validation_failed",
+  // A chapter's role or tier write holding a `council:` key (#5933,
+  // `school-layer.md` § 4.2 rule 3). A chapter's catalog never offers one,
+  // so only a client sending a string it typed itself meets it.
+  "roles.permission.reserved",
   // A reason sent with a thumbs up on an Ask answer (#4902), which the
   // shared schema (`AskFeedbackRequestSchema`) refuses before it is sent.
   "ai.ask.feedback.reason_needs_down",
@@ -80,6 +84,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // A tenant slug the caller can't open (ADR-27, #5918): unknown, or another
   // tenant's, as an old link to a chapter they left would be.
   "tenant.not_found",
+  // Starting a council (#5933): the school already has one of that type, or
+  // the founder hasn't verified a school email there.
+  "council.type_taken",
+  "council.school_unverified",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",

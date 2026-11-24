@@ -304,6 +304,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/councils": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a council
+         * @description Creates a council of the chosen type at a school where the caller holds a verified school email, seeded with its type's role pack. The caller holds Council admin and the title they picked. 403 `council.school_unverified` without a verified school email there; 409 `council.type_taken` when the school already has a council of that type (`other` aside); 429 `chapter.start_daily_limit` past the daily ceiling chapters share.
+         */
+        post: operations["CouncilsController_create_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The active council
+         * @description Its type, recruitment model, whether staff verified it, and its school. Serves the council tenant kind only.
+         */
+        get: operations["CouncilController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chapters/{id}/config": {
         parameters: {
             query?: never;
@@ -7209,6 +7249,16 @@ export interface components {
             created_at: string;
             updated_at: string;
             org_archetype?: string;
+            /**
+             * @description The tenant kind (ADR-27): `council` draws the council shell (#5933).
+             * @enum {string}
+             */
+            kind?: "chapter" | "council";
+            /**
+             * @description A council's type; null on a chapter (#5933).
+             * @enum {string|null}
+             */
+            council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };
@@ -7263,6 +7313,16 @@ export interface components {
             created_at: string;
             updated_at: string;
             org_archetype?: string;
+            /**
+             * @description The tenant kind (ADR-27): `council` draws the council shell (#5933).
+             * @enum {string}
+             */
+            kind?: "chapter" | "council";
+            /**
+             * @description A council's type; null on a chapter (#5933).
+             * @enum {string|null}
+             */
+            council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };
@@ -7315,6 +7375,16 @@ export interface components {
             created_at: string;
             updated_at: string;
             org_archetype?: string;
+            /**
+             * @description The tenant kind (ADR-27): `council` draws the council shell (#5933).
+             * @enum {string}
+             */
+            kind?: "chapter" | "council";
+            /**
+             * @description A council's type; null on a chapter (#5933).
+             * @enum {string|null}
+             */
+            council_type?: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
             enabled_modules?: {
                 [key: string]: boolean;
             };
@@ -7349,6 +7419,59 @@ export interface components {
         ConfirmLogoDto: {
             /** @description Storage path returned from logo-url */
             storage_path: string;
+        };
+        CreateCouncilDto: {
+            /**
+             * Format: uuid
+             * @description The school the council is at. The caller must hold a verified school email there.
+             */
+            school_id: string;
+            /** @enum {string} */
+            council_type: "ifc" | "panhellenic" | "nphc" | "mgc" | "other";
+            /** @example RPI IFC */
+            name: string;
+            /**
+             * @description The founder's title: a seeded title's key from the type's role pack (`pickableCouncilTitles` in `@repo/validation`), or `custom` with `custom_title`.
+             * @example vp_recruitment
+             */
+            title_key: string;
+            /**
+             * @description With `title_key: 'custom'`: the founder's own title, a new role in the Executive board.
+             * @example Recruitment Chair
+             */
+            custom_title?: string;
+            /** @description The founder accepted the Terms of Service and Privacy Policy, for the council and for themselves. Must be true, as chapter onboarding requires (spec/behavior/legal.md). */
+            accept_terms_privacy: boolean;
+        };
+        CreatedCouncilDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * @example council
+             * @enum {string}
+             */
+            kind: "chapter" | "council";
+        };
+        CouncilSchoolDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Rensselaer Polytechnic Institute */
+            name: string;
+            /** @example RPI */
+            short_name: string;
+        };
+        CouncilProfileDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            council_type: "ifc" | "panhellenic" | "nphc" | "mgc" | "other";
+            /** @enum {string} */
+            recruitment_model: "open_bidding" | "formal" | "none";
+            /** @description Whether Frapp staff verified the council (`council_verified_at`). Every council starts unverified. */
+            verified: boolean;
+            school: components["schemas"]["CouncilSchoolDto"] | null;
         };
         BetaConfigDto: {
             enabled?: boolean;
@@ -7582,7 +7705,7 @@ export interface components {
              * @description The module the permission belongs to: a module catalog key, or `chapter` for a chapter-level permission.
              * @enum {string}
              */
-            module: "chapter" | "members" | "chat" | "announcements" | "events" | "tasks" | "meetings" | "points" | "hours" | "polls" | "rush" | "backwork" | "documents" | "geofences" | "reports" | "billing";
+            module: "chapter" | "members" | "chat" | "announcements" | "events" | "tasks" | "meetings" | "points" | "hours" | "polls" | "rush" | "backwork" | "documents" | "geofences" | "reports" | "billing" | "council" | "council-recruitment";
             /** @description The module's display name. */
             module_label: string;
             /** @description What the permission lets a role do. */
@@ -14423,6 +14546,66 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilsController_create_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCouncilDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedCouncilDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilController_get_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilProfileDto"];
+                };
             };
             /** @description Error */
             default: {

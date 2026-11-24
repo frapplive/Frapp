@@ -285,9 +285,7 @@ export class ChapterOnboardingService {
    * lean on this one too. Nobody running one chapter, or helping a second one
    * start, meets it.
    */
-  private async chapterStartRefusal(
-    userId: string,
-  ): Promise<HttpException | null> {
+  async chapterStartRefusal(userId: string): Promise<HttpException | null> {
     const now = new Date();
     const started = await this.chapterRepo.findStartedAtByUserSince(
       userId,
@@ -303,7 +301,7 @@ export class ChapterOnboardingService {
     return roomAt ? this.startLimitException(roomAt, now) : null;
   }
 
-  private startLimitException(roomAt: Date, now: Date): HttpException {
+  startLimitException(roomAt: Date, now: Date): HttpException {
     return new HttpException(
       {
         code: CHAPTER_START_LIMIT_CODE,

@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
+  COUNCIL_TYPES,
   SUBSCRIPTION_STATUSES,
   TENANT_KINDS,
+  type CouncilType,
   type SubscriptionStatus,
   type TenantKind,
 } from '@repo/validation';
@@ -65,6 +67,20 @@ export class CurrentChapterResponseDto {
 
   @ApiPropertyOptional()
   org_archetype?: string;
+
+  @ApiPropertyOptional({
+    enum: TENANT_KINDS,
+    description:
+      'The tenant kind (ADR-27): `council` draws the council shell (#5933).',
+  })
+  kind?: TenantKind;
+
+  @ApiPropertyOptional({
+    enum: COUNCIL_TYPES,
+    nullable: true,
+    description: "A council's type; null on a chapter (#5933).",
+  })
+  council_type?: CouncilType | null;
 
   @ApiPropertyOptional({
     type: 'object',
@@ -232,6 +248,20 @@ export class UpdateChapterResponseDto {
 
   @ApiPropertyOptional()
   org_archetype?: string;
+
+  @ApiPropertyOptional({
+    enum: TENANT_KINDS,
+    description:
+      'The tenant kind (ADR-27): `council` draws the council shell (#5933).',
+  })
+  kind?: TenantKind;
+
+  @ApiPropertyOptional({
+    enum: COUNCIL_TYPES,
+    nullable: true,
+    description: "A council's type; null on a chapter (#5933).",
+  })
+  council_type?: CouncilType | null;
 
   @ApiPropertyOptional({
     type: 'object',

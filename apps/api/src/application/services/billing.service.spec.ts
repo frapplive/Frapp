@@ -260,6 +260,7 @@ describe('BillingService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
       applySubscriptionWebhook: jest
         .fn()
         .mockImplementation(

@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -70,6 +71,7 @@ export class InviteController {
 
   @Post()
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @GraceBlocked()
   @ApiOperation({ summary: 'Generate an invite token' })
@@ -85,6 +87,7 @@ export class InviteController {
 
   @Get('chapter-link')
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @ApiOperation({
     summary:
@@ -104,6 +107,7 @@ export class InviteController {
 
   @Post('chapter-link')
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @GraceBlocked()
   @ApiOperation({
@@ -130,6 +134,7 @@ export class InviteController {
   @Post('batch')
   @ThrottleExpensiveWrite()
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @GraceBlocked()
   @ApiOperation({ summary: 'Generate multiple invite tokens' })
@@ -156,6 +161,7 @@ export class InviteController {
   @Post('email')
   @ThrottleExpensiveWrite()
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @GraceBlocked()
   @ApiOperation({
@@ -262,6 +268,7 @@ export class InviteController {
 
   @Get('roles')
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @ApiOperation({
     summary: 'The roles the caller may invite someone into',
@@ -283,6 +290,7 @@ export class InviteController {
 
   @Get()
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @ApiOperation({
     summary: 'List chapter invites, newest first',
@@ -299,6 +307,7 @@ export class InviteController {
 
   @Delete(':id')
   @UseGuards(ChapterGuard, PermissionsGuard)
+  @TenantKinds('chapter', 'council')
   @RequirePermissions(SystemPermissions.MEMBERS_INVITE)
   @ApiOperation({
     summary: 'Revoke an invite',

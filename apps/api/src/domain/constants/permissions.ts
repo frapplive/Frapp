@@ -111,6 +111,22 @@ export const SystemPermissions = {
   // until #3722; chat reads the channel's lists now (`isAlumniPostableChannel`).
   // `ALUMNI_CHANNEL_PERMISSION` in `@repo/validation` owns the value.
   ALUMNI_POST: ALUMNI_CHANNEL_PERMISSION,
+
+  // Council keys (#5933, `school-layer.md` § 5.1). Held only by a council's
+  // roles: a chapter's role writes refuse them (`roles.permission.reserved`,
+  // `assertNoReservedPermissions`), and a route requiring one serves the
+  // council kind alone (`council-route-kinds.spec.ts`). Seeded by the council
+  // role packs in `@repo/validation`.
+  COUNCIL_CHAPTERS_MANAGE: 'council:chapters_manage',
+  COUNCIL_ANNOUNCE: 'council:announce',
+  COUNCIL_CALENDAR_MANAGE: 'council:calendar_manage',
+  COUNCIL_CAMPUS_POST: 'council:campus_post',
+  COUNCIL_CAMPUS_MODERATE: 'council:campus_moderate',
+  COUNCIL_RECRUITMENT_VIEW: 'council:recruitment_view',
+  COUNCIL_RECRUITMENT_MANAGE: 'council:recruitment_manage',
+  COUNCIL_RECRUITMENT_REPORTS: 'council:recruitment_reports',
+  COUNCIL_COUNSELORS_MANAGE: 'council:counselors_manage',
+  COUNCIL_PNM_GROUP_VIEW: 'council:pnm_group_view',
 } as const;
 
 /** Shown in the catalog only on a server with `AI_ENABLED` on. */

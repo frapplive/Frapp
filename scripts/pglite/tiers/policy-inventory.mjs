@@ -19,8 +19,9 @@ import { AUTH_ADMIN_ONLY } from "../rls-smoke.mjs";
 // (`users.auth_admin_can_read_users` and `members.auth_admin_can_read_members`
 // were a third and fourth absence until #1557 created `supabase_auth_admin`,
 // whose `if exists` guard in 20260802120000_active_chapter_jwt_claim.sql:137
-// they sit behind.) So: 8 in `public` here; 10 hosted (8 in `public` + 2 in
-// `realtime`). The printed hosted figure is derived from this list + those 2,
+// they sit behind; `chapters.auth_admin_can_read_chapters` joined them in
+// 20261124010605, #5933.) So: 9 in `public` here; 11 hosted (9 in `public` +
+// 2 in `realtime`). The printed hosted figure is derived from this list + those 2,
 // so it cannot silently contradict itself the way a second hardcoded literal
 // would.
 //
@@ -32,6 +33,8 @@ import { AUTH_ADMIN_ONLY } from "../rls-smoke.mjs";
   const HOSTED_ONLY_POLICIES = 2;
   const EXPECTED_PUBLIC_POLICIES = [
     "chapter_audit_log.audit_log_no_delete [DELETE] to {public}",
+    // The token hook reads `chapters.kind` since 20261124010605 (#5933).
+    "chapters.auth_admin_can_read_chapters [SELECT] to {supabase_auth_admin}",
     "chapter_audit_log.audit_log_no_update [UPDATE] to {public}",
     "chat_message_actions.chat_message_actions_delete [DELETE] to {authenticated}",
     "chat_message_actions.chat_message_actions_select [SELECT] to {authenticated}",

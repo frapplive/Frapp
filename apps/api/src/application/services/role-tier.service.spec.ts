@@ -22,6 +22,7 @@ import {
 
 /** The rank rules on the tier routes (#4071), over a real chapter's shape. */
 describe('RoleTierService', () => {
+  let assertNoReservedPermissions: jest.Mock;
   let tiers: RoleTier[];
   let repo: jest.Mocked<IRoleTierRepository>;
   let audit: AuditLogServiceMock;
@@ -54,10 +55,12 @@ describe('RoleTierService', () => {
       delete: jest.fn().mockResolvedValue('deleted'),
     };
     audit = createAuditLogServiceMock();
+    assertNoReservedPermissions = jest.fn().mockResolvedValue(undefined);
     const rbac = {
       getRankContext: jest.fn(async (_chapterId: string, userId: string) =>
         tieredRankContext(userId, tiers),
       ),
+      assertNoReservedPermissions,
     } as unknown as RbacService;
     service = new RoleTierService(repo, rbac, audit as never);
   });
@@ -276,5 +279,24 @@ describe('RoleTierService', () => {
         name: 'Brothers',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  // `school-layer.md` § 4.2 rule 3 (#5933): every tier write passes its
+  // list through the reserved-key check, which refuses a `council:` key in
+  // a chapter.
+  it('checks a new tier and a re-permissioned tier for reserved keys', async () => {
+    assertNoReservedPermissions.mockRejectedValue(
+      new BadRequestException({ code: 'roles.permission.reserved' }),
+    );
+    await expect(
+      service.create(CHAPTER_ID, USER.president, {
+        name: 'Council liaisons',
+        permissions: ['council:announce'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(assertNoReservedPermissions).toHaveBeenCalledWith(CHAPTER_ID, [
+      'council:announce',
+    ]);
+    expect(repo.create).not.toHaveBeenCalled();
   });
 });
