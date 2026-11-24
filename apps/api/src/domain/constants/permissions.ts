@@ -73,9 +73,10 @@ export const SystemPermissions = {
   MEETINGS_EDIT: 'meetings:edit',
   MEETINGS_DELETE: 'meetings:delete',
 
-  // Recruitment (#4070). `RUSH_NOTES`, `RUSH_VIEW_RESULTS` and `RUSH_MANAGE`
-  // gate no route yet: notes, delete and export are not built, and the vote
-  // count still travels with the prospect (#4084).
+  // Recruitment (#4070). `RUSH_VIEW_RESULTS` gates no route: it decides
+  // whether a candidate read carries `vote_count` (`RushController`).
+  // `RUSH_NOTES` and `RUSH_MANAGE` gate nothing until the IFC recruitment
+  // work builds notes, delete and export (#5833, `ifc-recruitment.md`).
   RUSH_VIEW: 'rush:view',
   RUSH_ADD: 'rush:add',
   RUSH_NOTES: 'rush:notes',

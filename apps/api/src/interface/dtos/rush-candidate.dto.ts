@@ -123,8 +123,11 @@ export class RushCandidateViewDto implements RushCandidateView {
   @ApiProperty({ format: 'date-time' })
   created_at: string;
 
-  @ApiProperty({ description: 'Ballot count. Voter names are never returned.' })
-  vote_count: number;
+  @ApiPropertyOptional({
+    description:
+      'Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0.',
+  })
+  vote_count?: number;
 
   @ApiProperty({
     description: 'Whether the authenticated caller has already voted.',

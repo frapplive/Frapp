@@ -16,6 +16,9 @@
  * dispatch + parsers below.
  */
 
+import { canAll } from "@repo/validation";
+import { listOr } from "../list-words";
+
 export * from "./parsers";
 export * from "./payloads";
 
@@ -51,6 +54,67 @@ export interface SlashCommand {
    * toast rather than executing.
    */
   implemented: boolean;
+}
+
+/**
+ * `/rush`'s subcommands, what each one does, and every key its dispatch
+ * needs (#4070). Every rush route sits under `members:view`; `add` posts
+ * with `rush:add`; `vote` and `bid` take a name, which dispatch resolves
+ * through `GET /v1/rush/candidates` (`rush:view`) before it posts with
+ * `rush:vote` or `rush:bid`. The palette offers only the subcommands a role
+ * holds all of (#4084, `rushSubcommandsFor`), and this table is the one
+ * source of the `/rush` row's usage and description.
+ */
+export const RUSH_SUBCOMMANDS = [
+  {
+    name: "add",
+    phrase: "add a candidate",
+    usage: "add @candidate",
+    permissions: ["members:view", "rush:add"],
+  },
+  {
+    name: "vote",
+    phrase: "vote on a candidate",
+    usage: "vote <candidate-id>",
+    permissions: ["members:view", "rush:view", "rush:vote"],
+  },
+  {
+    name: "bid",
+    phrase: "extend a bid",
+    usage: "bid @candidate",
+    permissions: ["members:view", "rush:view", "rush:bid"],
+  },
+] as const;
+export type RushSubcommand = (typeof RUSH_SUBCOMMANDS)[number]["name"];
+
+const ALL_RUSH_SUBCOMMANDS: readonly RushSubcommand[] = RUSH_SUBCOMMANDS.map(
+  (sub) => sub.name,
+);
+
+/**
+ * The `/rush` subcommands `permissions` allows, in catalog order. `undefined`
+ * (not read yet, or the read failed) allows all three, as `canAnnounce`'s
+ * absence does: the server refuses what the role can't do anyway.
+ */
+export function rushSubcommandsFor(
+  permissions: readonly string[] | undefined,
+): RushSubcommand[] {
+  return RUSH_SUBCOMMANDS.filter(
+    (sub) => permissions === undefined || canAll(sub.permissions, permissions),
+  ).map((sub) => sub.name);
+}
+
+/** The `/rush` row's description and usage for `allowed` subcommands. */
+function rushRowText(allowed: readonly RushSubcommand[]): {
+  description: string;
+  usage: string;
+} {
+  const subs = RUSH_SUBCOMMANDS.filter((sub) => allowed.includes(sub.name));
+  const description = listOr(subs.map((sub) => sub.phrase));
+  return {
+    description: description.charAt(0).toUpperCase() + description.slice(1),
+    usage: subs.map((sub) => sub.usage).join(" | "),
+  };
 }
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
@@ -98,8 +162,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   },
   {
     name: "rush",
-    description: "Add a candidate, vote, or extend a bid",
-    usage: "add @candidate | vote <candidate-id> | bid @candidate",
+    ...rushRowText(ALL_RUSH_SUBCOMMANDS),
     requiredModule: "rush",
     implemented: true,
   },
@@ -183,44 +246,82 @@ export function getSlashCommand(
  * can't post in the announcements channel; the server refuses their
  * announcement anyway (#3414), so offering it would only lead to a refusal.
  * Absent reads as allowed.
+ *
+ * Pass `options.permissions`, the member's permission list, so the rush row
+ * offers only the subcommands their role holds the key for, and is left out
+ * when it holds none (#4084). Absent (not read yet) offers all three.
  */
 export function filterSlashCommands(
   query: string,
   isModuleEnabled: (moduleKey: string) => boolean,
-  options?: { recruitment?: string; canAnnounce?: boolean },
+  options?: {
+    recruitment?: string;
+    canAnnounce?: boolean;
+    permissions?: readonly string[];
+  },
 ): SlashCommand[] {
   const needle = query.trim().toLowerCase();
   const displayName = recruitmentCommandSlug(options?.recruitment);
-  return SLASH_COMMANDS.filter((command) => {
-    if (command.requiredModule && !isModuleEnabled(command.requiredModule)) {
-      return false;
-    }
-    if (command.name === "announce" && options?.canAnnounce === false) {
-      return false;
-    }
-    if (needle.length === 0) return true;
-    // A command word with details after it (`event Chapter Dinner`): the
-    // palette's search box is where a member types a whole command (#3773).
-    if (paletteCommandArgs(query, command, options) !== null) return true;
-    if (command.name === "rush") {
+  const rushAllowed = rushSubcommandsFor(options?.permissions);
+  // The rush row is narrowed to the role's subcommands before the search, so
+  // a search for one it can't use doesn't match the full catalog text.
+  const rows = SLASH_COMMANDS.flatMap((command) => {
+    if (command.name !== "rush") return [command];
+    if (rushAllowed.length === 0) return [];
+    return [{ ...command, ...rushRowText(rushAllowed) }];
+  });
+  return rows
+    .filter((command) => {
+      if (command.requiredModule && !isModuleEnabled(command.requiredModule)) {
+        return false;
+      }
+      if (command.name === "announce" && options?.canAnnounce === false) {
+        return false;
+      }
+      if (needle.length === 0) return true;
+      // A command word with details after it (`event Chapter Dinner`): the
+      // palette's search box is where a member types a whole command (#3773).
+      // For rush, not a subcommand the role can't use (`rush bid Sam`).
+      const args = paletteCommandArgs(query, command, options);
+      if (args !== null) {
+        return command.name !== "rush" || rushArgsAllowed(args, rushAllowed);
+      }
+      if (command.name === "rush") {
+        return (
+          command.name.includes(needle) ||
+          displayName.includes(needle) ||
+          (RUSH_COMMAND_ALIASES as readonly string[]).some((alias) =>
+            alias.includes(needle),
+          ) ||
+          command.description.toLowerCase().includes(needle)
+        );
+      }
       return (
         command.name.includes(needle) ||
-        displayName.includes(needle) ||
-        (RUSH_COMMAND_ALIASES as readonly string[]).some((alias) =>
-          alias.includes(needle),
-        ) ||
         command.description.toLowerCase().includes(needle)
       );
-    }
-    return (
-      command.name.includes(needle) ||
-      command.description.toLowerCase().includes(needle)
+    })
+    .map((command) =>
+      command.name === "rush" && displayName !== "rush"
+        ? { ...command, displayName }
+        : command,
     );
-  }).map((command) =>
-    command.name === "rush" && displayName !== "rush"
-      ? { ...command, displayName }
-      : command,
+}
+
+/**
+ * Whether typed `/rush` details may run for a role allowed `allowed`: not
+ * when they open with a subcommand it can't use. Anything else (a typo, no
+ * subcommand) goes through, and dispatch answers with the usage.
+ */
+function rushArgsAllowed(
+  args: string,
+  allowed: readonly RushSubcommand[],
+): boolean {
+  const word = args.split(/\s+/, 1)[0]!.toLowerCase();
+  const isSubcommand = (ALL_RUSH_SUBCOMMANDS as readonly string[]).includes(
+    word,
   );
+  return !isSubcommand || (allowed as readonly string[]).includes(word);
 }
 
 /**

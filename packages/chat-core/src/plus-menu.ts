@@ -5,6 +5,7 @@ import {
   TASK_CREATE_PERMISSIONS,
 } from "@repo/validation";
 import { getSlashCommand } from "./integrations";
+import { listOr } from "./list-words";
 
 /**
  * The composer's **+** (#3865): one menu for what a message can carry besides
@@ -168,11 +169,6 @@ export interface PlusMenuModel {
   footer: string[];
 }
 
-function listNouns(nouns: string[]): string {
-  if (nouns.length <= 1) return nouns.join("");
-  return `${nouns.slice(0, -1).join(", ")} or ${nouns[nouns.length - 1]}`;
-}
-
 function listLabels(labels: string[]): string {
   if (labels.length <= 1) return labels.join("");
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
@@ -234,11 +230,11 @@ export function plusMenuModel(ctx: PlusMenuContext): PlusMenuModel {
   }
   const footer: string[] = [];
   if (roleHidden.length > 0) {
-    footer.push(`Your role can't create ${listNouns(roleHidden)}.`);
+    footer.push(`Your role can't create ${listOr(roleHidden)}.`);
   }
   if (roleUnknown.length > 0) {
     footer.push(
-      `Couldn't check whether your role can create ${listNouns(roleUnknown)}. ${ctx.roleRetryHint}`,
+      `Couldn't check whether your role can create ${listOr(roleUnknown)}. ${ctx.roleRetryHint}`,
     );
   }
   if (switchedOff.length > 0) {

@@ -4556,6 +4556,7 @@ export function ChatShell({
             isModuleEnabled={isModuleEnabled}
             recruitmentVocab={recruitmentVocab}
             canAnnounce={canAnnounce}
+            permissions={permissionsPayload?.permissions}
             slashCommandsStatus={slashCommandsStatus}
             onRetrySlashCommands={onRetrySlashCommands}
             // Never `disabled` while offline: the send path enqueues to the
