@@ -22,7 +22,7 @@ import { screenText } from "@/test/screen-text";
 
 const state = vi.hoisted(() => ({
   /** `undefined`: the permissions read hasn't answered (loading, or failed). */
-  permissions: ["members:view"] as string[] | undefined,
+  permissions: [] as string[] | undefined,
   votePending: false,
   bidPending: false,
   live: undefined as unknown,
@@ -184,8 +184,12 @@ const SUBSCRIPTION_REFUSED = {
     "Chapter subscription is not active; complete checkout to use this feature.",
 };
 
+/** What the seeded Member role holds for recruitment (`RUSH_MEMBER_PERMISSIONS`). */
+const MEMBER_KEYS = ["members:view", "rush:view", "rush:add", "rush:vote", "rush:bid", "rush:view_results"];
+const without = (key: string) => MEMBER_KEYS.filter((held) => held !== key);
+
 beforeEach(() => {
-  state.permissions = ["members:view"];
+  state.permissions = [...MEMBER_KEYS];
   state.votePending = false;
   state.bidPending = false;
   state.live = liveCandidate();
@@ -240,6 +244,37 @@ describe("RushCard — the snapshot", () => {
     expect(state.candidateIds.every((id) => id === undefined)).toBe(true);
     expect(screenText(tree)).not.toContain("votes");
     expect(actions(tree)).toEqual([]);
+  });
+
+  it("doesn't ask for a candidate without rush:view", () => {
+    state.permissions = without("rush:view");
+    render();
+    expect(state.candidateIds.every((id) => id === undefined)).toBe(true);
+  });
+
+  // #4084: the card offers only what the role holds, and never draws a
+  // hidden count as 0.
+  it("leaves Vote out for a role without rush:vote", () => {
+    state.permissions = without("rush:vote");
+    expect(actions(render())).toEqual(["Extend bid"]);
+  });
+
+  it("leaves Extend bid out for a role without rush:bid", () => {
+    state.permissions = without("rush:bid");
+    expect(actions(render())).toEqual(["Vote"]);
+  });
+
+  it("shows no count when the server leaves it out, only the viewer's own vote", () => {
+    const hidden: Record<string, unknown> = liveCandidate({
+      viewer_has_voted: true,
+    });
+    delete hidden.vote_count;
+    state.live = hidden;
+    state.permissions = without("rush:view_results");
+    const text = screenText(render());
+    expect(text).toContain("You voted");
+    expect(text).not.toContain("votes");
+    expect(text).toContain("Open");
   });
 
   it("asks for the candidate while the permissions read hasn't answered", () => {
