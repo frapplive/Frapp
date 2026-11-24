@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { PageTitleText } from "@/components/layout/top-bar";
 import type { PageTitle } from "@/components/layout/page-title";
+import { VIEW_LABELS_FLUSH_NARROW } from "@/components/shared/view-labels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,14 +74,16 @@ export function ToolPageHeader({
           The page's views, as plain words after a hairline. The rule is the
           slot's own, so it shows only with views and only beside a title:
           below the side-by-side width the title is in the top bar and the
-          views lead the row. The negative margin there lines the first
-          word's text up with the page's gutter (a label pads 6px and a 1px
-          border for its focus edge).
+          views lead the row, and `VIEW_LABELS_FLUSH_NARROW` lines the first
+          word's text up with the page's gutter.
         */}
         <div
           ref={viewSlotRef}
           data-tool-page-views=""
-          className="flex shrink-0 items-center empty:hidden max-[1055px]:-ml-[7px] min-[1056px]:before:mr-1.5 min-[1056px]:before:h-4 min-[1056px]:before:w-px min-[1056px]:before:bg-border min-[1056px]:before:content-['']"
+          className={cn(
+            "flex shrink-0 items-center empty:hidden min-[1056px]:before:mr-1.5 min-[1056px]:before:h-4 min-[1056px]:before:w-px min-[1056px]:before:bg-border min-[1056px]:before:content-['']",
+            VIEW_LABELS_FLUSH_NARROW,
+          )}
         />
       </div>
       <div

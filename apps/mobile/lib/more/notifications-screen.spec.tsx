@@ -74,7 +74,11 @@ const NOTIFICATIONS = [
 ];
 
 /** What the inbox query returns; a spec sets `data` for an inbox of its own. */
-const inbox = vi.hoisted(() => ({ data: null as unknown[] | null }));
+const inbox = vi.hoisted(() => ({
+  data: null as unknown[] | null,
+  /** The query's state, for a spec that loads or fails the inbox. */
+  state: "ready" as "ready" | "pending" | "error",
+}));
 
 /** The read receipt the screen sends; stable so a spec can assert on a tap. */
 const markRead = vi.hoisted(() => ({ mutate: vi.fn(), mutateAsync: vi.fn() }));
@@ -91,13 +95,23 @@ const refetchInbox = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useActiveChapterId: () => "chapter-1",
-  useNotifications: () => ({
-    isPending: false,
-    isError: false,
-    isFetching: false,
-    data: inbox.data ?? NOTIFICATIONS,
-    refetch: refetchInbox,
-  }),
+  useNotifications: () =>
+    inbox.state === "ready"
+      ? {
+          isPending: false,
+          isError: false,
+          isFetching: false,
+          data: inbox.data ?? NOTIFICATIONS,
+          refetch: refetchInbox,
+        }
+      : {
+          isPending: inbox.state === "pending",
+          isError: inbox.state === "error",
+          isFetching: false,
+          error: new Error("offline"),
+          data: undefined,
+          refetch: refetchInbox,
+        },
   useMarkNotificationRead: () => markRead,
   useMarkNotificationsRead: () => markAll,
   useClearNotifications: () => clearRows,
@@ -756,6 +770,34 @@ describe("Notifications: Unread / All (#3948)", () => {
     act(() => row.props.onPress());
     expect(markAll.mutate).toHaveBeenCalledWith({ ids: ["new", "old"] });
     expect(markRead.mutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the views off the title while the inbox loads or has failed, even on Unread", () => {
+    const tree = render();
+    const views = () => tree.root.findByType(ScreenShell).props.views;
+    const unread = tree.root.find(
+      (node) =>
+        node.props.accessibilityRole === "tab" &&
+        node.props.accessibilityLabel === "Unread" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => unread.props.onPress());
+    expect(views()).toMatchObject({ value: "unread" });
+    try {
+      for (const state of ["pending", "error"] as const) {
+        inbox.state = state;
+        act(() =>
+          tree.update(
+            <FrappThemeProvider>
+              <NotificationsScreen />
+            </FrappThemeProvider>,
+          ),
+        );
+        expect(views()).toBeUndefined();
+      }
+    } finally {
+      inbox.state = "ready";
+    }
   });
 
   it("draws no views on an empty inbox", () => {

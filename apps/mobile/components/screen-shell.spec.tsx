@@ -149,6 +149,56 @@ describe("ScreenShell views (#5947)", () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith("unread");
   });
 
+  it("keeps a title mark spaced and centred beside the views, outside the baseline line", () => {
+    const tree = render(
+      <ScreenShell
+        title="Tau Nu"
+        titleMark={<View testID="mark" />}
+        views={{
+          accessibilityLabel: "Show",
+          options: VIEWS,
+          value: "all",
+          onChange: () => {},
+        }}
+      >
+        <View />
+      </ScreenShell>,
+    );
+    const line = tree.root.findByType(ViewLabels).parent!;
+    expect(line.findAllByProps({ testID: "mark" })).toHaveLength(0);
+    // The mark sits in the title row, which centres and spaces its children.
+    const row = line.parent!;
+    expect(row.findAllByProps({ testID: "mark" }).length).toBeGreaterThan(0);
+    expect(row.props.style).toMatchObject({ alignItems: "center" });
+    expect(row.props.style.gap).toBeGreaterThan(0);
+  });
+
+  it("draws the views beside a title menu too, never dropping them", () => {
+    const tree = render(
+      <ScreenShell
+        title="Tau Nu"
+        titleMenu={{
+          open: false,
+          accessibilityLabel: "Chapter menu",
+          onOpen: () => {},
+          onClose: () => {},
+        }}
+        views={{
+          accessibilityLabel: "Show",
+          options: VIEWS,
+          value: "all",
+          onChange: () => {},
+        }}
+      >
+        <View />
+      </ScreenShell>,
+    );
+    expect(tree.root.findAllByType(ViewLabels)).toHaveLength(1);
+    expect(
+      tree.root.findAllByProps({ accessibilityLabel: "Chapter menu" }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("draws the title as it always has for a member with one view", () => {
     const tree = render(
       <ScreenShell

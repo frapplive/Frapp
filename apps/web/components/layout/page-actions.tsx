@@ -60,9 +60,9 @@ const PageHeaderSlotContext = React.createContext<
  * The header's view slot, beside the title (`PageViews`). `undefined` outside
  * the shell; `null` inside it until the slot has mounted.
  */
-const PageViewSlotContext = React.createContext<
-  HTMLElement | null | undefined
->(undefined);
+const PageViewSlotContext = React.createContext<HTMLElement | null | undefined>(
+  undefined,
+);
 
 export function PageHeaderSlotProvider({
   slot,
@@ -83,55 +83,69 @@ export function PageHeaderSlotProvider({
 }
 
 /**
- * A page's views (`shared/view-labels.tsx` `ViewLabels`: My tasks and
- * Everyone's, Documents and Backwork), seated beside the page's title after a
- * hairline, where Paul picked them on 2026-11-24 in place of the boxed switch
- * among the actions. The page writes them once, inline, beside the state they
- * set, as it writes `PageActions`; this portals them into the header's view
- * slot (`tool-page-header.tsx`), which draws the hairline and hides while it
- * is empty, so a member with one view (`ViewLabels` draws nothing) gets no
- * stray rule.
+ * Where a page's header content renders, read from one of the two slot
+ * contexts: nothing while the slot is mounting (`null`), into the slot once
+ * it has, and inline outside the shell (`undefined`). `PageActions` and
+ * `PageViews` share it so the two can't disagree about the first paint.
+ */
+function useHeaderSlot(
+  context: React.Context<HTMLElement | null | undefined>,
+): (
+  content: React.ReactNode,
+  inline: () => React.ReactNode,
+) => React.ReactNode {
+  const slot = React.useContext(context);
+  return (content, inline) => {
+    if (slot === null) return null;
+    if (slot) return createPortal(content, slot);
+    return inline();
+  };
+}
+
+/**
+ * A page's views (`shared/view-labels.tsx` `ViewLabels`, such as Mine and
+ * Everyone's), seated beside the page's title after a hairline, where Paul
+ * picked them on 2026-11-24 in place of the boxed switch among the actions.
+ * The page writes them once, inline, beside the state they set, as it writes
+ * `PageActions`; this portals them into the header's view slot
+ * (`tool-page-header.tsx`), which draws the hairline and hides while it is
+ * empty, so a member with one view (`ViewLabels` draws nothing) gets no stray
+ * rule. The first pages on it arrive with #5947's sweep and #5949.
  *
  * On the server, and for the one commit before the slot mounts, it renders
  * nothing, as `PageActions` does. Outside the shell it renders inline.
  */
 export function PageViews({ children }: { children: React.ReactNode }) {
-  const slot = React.useContext(PageViewSlotContext);
-  if (slot === null) return null;
-  if (slot) return createPortal(children, slot);
-  return <>{children}</>;
+  const render = useHeaderSlot(PageViewSlotContext);
+  return render(children, () => children);
 }
 
 export function PageActions({ children, className }: PageActionsProps) {
-  const slot = React.useContext(PageHeaderSlotContext);
-  if (slot === null) return null;
-  if (slot) {
-    return createPortal(
-      // One row, never wrapping: the header is 48px. Buttons that can say
-      // less there do (`NewButton` drops to its +) so the title keeps room.
-      <div
-        data-page-actions="header"
-        className="flex min-w-0 items-center justify-end gap-2 empty:hidden"
-      >
-        {children}
-      </div>,
-      slot,
-    );
-  }
-  return (
-    /*
+  const render = useHeaderSlot(PageHeaderSlotContext);
+  return render(
+    // One row, never wrapping: the header is 48px. Buttons that can say
+    // less there do (`NewButton` drops to its +) so the title keeps room.
+    <div
+      data-page-actions="header"
+      className="flex min-w-0 items-center justify-end gap-2 empty:hidden"
+    >
+      {children}
+    </div>,
+    () => (
+      /*
       `flex-wrap` is what holds the 375px floor: a segmented control plus a
       button wraps onto a second line inside the row instead of running past
       the screen edge (Points at 390px, 2026-11-05).
     */
-    <div
-      data-page-actions="body"
-      className={cn(
-        "flex min-h-[34px] max-w-full flex-wrap items-center justify-end gap-2 empty:hidden",
-        className,
-      )}
-    >
-      {children}
-    </div>
+      <div
+        data-page-actions="body"
+        className={cn(
+          "flex min-h-[34px] max-w-full flex-wrap items-center justify-end gap-2 empty:hidden",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    ),
   );
 }

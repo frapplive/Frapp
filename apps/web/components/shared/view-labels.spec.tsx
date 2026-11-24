@@ -68,6 +68,12 @@ describe("ViewLabels", () => {
     }
   });
 
+  it("puts 16px between words: 6 of padding and 1 of border either side of a 2px gap", () => {
+    render(<Views />);
+    expect(screen.getByRole("tablist").className).toContain("gap-0.5");
+    expect(tab("My tasks").className).toContain("px-1.5");
+  });
+
   it("holds each word's semibold width, so picking one moves nothing", () => {
     render(<Views />);
     for (const name of ["My tasks", "Everyone's"]) {
@@ -130,6 +136,16 @@ describe("ViewLabels", () => {
     fireEvent.keyDown(tab("My tasks"), { key: "ArrowRight", metaKey: true });
     expect(onChange).not.toHaveBeenCalled();
     expect(tab("My tasks")).toHaveFocus();
+  });
+
+  it("keeps the tab stop on the held view under manual activation, as the ARIA tabs pattern does", () => {
+    render(<Views activation="manual" />);
+    tab("My tasks").focus();
+    fireEvent.keyDown(tab("My tasks"), { key: "ArrowRight" });
+    expect(tab("Everyone's")).toHaveFocus();
+    // Tabbing out and back in lands on the held view.
+    expect(tab("My tasks")).toHaveAttribute("tabindex", "0");
+    expect(tab("Everyone's")).toHaveAttribute("tabindex", "-1");
   });
 
   it("with manual activation, arrows move focus and the press picks", () => {

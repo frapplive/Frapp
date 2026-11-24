@@ -228,6 +228,7 @@ export function ScreenShell<V extends string = string>({
   // title block, which scrolls away.
   const body = flattenChildren(children);
   const barScroll = useBarScroll();
+  const hasViews = views !== undefined && views.options.length > 1;
   const stickyHeaderIndices = body.flatMap((child, index) =>
     child.type === StickyHeader ? [index + 1] : [],
   );
@@ -274,24 +275,32 @@ export function ScreenShell<V extends string = string>({
                         menu={titleMenu}
                         tokens={tokens}
                       />
+                      {hasViews ? (
+                        <>
+                          <View style={styles.viewsRuleCentred} />
+                          <ViewLabels {...views!} />
+                        </>
+                      ) : null}
                       {/* The row's slack, outside the button. */}
                       <View style={styles.titleSlack} />
                     </>
-                  ) : views && views.options.length > 1 ? (
-                    // One line on the title's baseline: the title gives way
-                    // (it truncates), the views never wrap.
-                    <View style={styles.titleAndViews}>
+                  ) : hasViews ? (
+                    <>
                       {titleMark}
-                      <Text
-                        accessibilityRole="header"
-                        numberOfLines={1}
-                        style={styles.titleBesideViews}
-                      >
-                        {title}
-                      </Text>
-                      <View style={styles.viewsRule} />
-                      <ViewLabels {...views} />
-                    </View>
+                      {/* One line on the title's baseline: the title gives
+                          way (it truncates), the views never wrap. */}
+                      <View style={styles.titleAndViews}>
+                        <Text
+                          accessibilityRole="header"
+                          numberOfLines={1}
+                          style={styles.titleBesideViews}
+                        >
+                          {title}
+                        </Text>
+                        <View style={styles.viewsRule} />
+                        <ViewLabels {...views!} />
+                      </View>
+                    </>
                   ) : (
                     <>
                       {titleMark}
@@ -524,6 +533,13 @@ function createStyles(tokens: SignetTokens) {
       height: 18,
       marginLeft: tokens.spacing.md,
       marginRight: tokens.spacing.xs,
+      backgroundColor: tokens.color.border.hairline,
+    },
+    // Beside a title menu, whose row centres: the same rule, centred on it.
+    viewsRuleCentred: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      marginRight: -tokens.spacing.xs,
       backgroundColor: tokens.color.border.hairline,
     },
     // The button hugs its title, so the space after the chevron is not a tap

@@ -32,6 +32,15 @@ import { FOCUS_RING } from "@/components/ui/focus";
  * In a page header it goes inside `PageViews` (`layout/page-actions.tsx`),
  * which seats it beside the title after a hairline.
  */
+/**
+ * The first word's inset from its line's edge: a label's 6px of padding and
+ * its 1px border, which `flush` takes back. Exported for the page header,
+ * which lines its views up with the page gutter below 1056px. Spelled out
+ * whole, so Tailwind finds each class in this file.
+ */
+export const VIEW_LABELS_FLUSH = "-ml-[7px]";
+export const VIEW_LABELS_FLUSH_NARROW = "max-[1055px]:-ml-[7px]";
+
 export type ViewOption<T extends string> = {
   value: T;
   label: string;
@@ -65,8 +74,10 @@ export function ViewLabels<T extends string>({
   const tabs = React.useRef(new Map<T, HTMLButtonElement>());
   if (options.length < 2) return null;
 
-  // The held view takes the one tab stop. A value that matches no option
-  // (a view the member lost) leaves the first one reachable.
+  // One tab stop, on the held view, which is where the WAI-ARIA tabs pattern
+  // puts focus when it enters the list, under manual activation too. A value
+  // that matches no option (a view the member lost) leaves the first one
+  // reachable.
   const stop = options.some((option) => option.value === value)
     ? value
     : options[0]!.value;
@@ -104,9 +115,10 @@ export function ViewLabels<T extends string>({
       role="tablist"
       aria-label={label}
       className={cn(
-        "flex shrink-0 items-center gap-1",
-        // A label's 6px of padding and its 1px border.
-        flush && "-ml-[7px]",
+        // 2px between labels, so 16px between words: 6 of padding and 1 of
+        // border on either side of the gap.
+        "flex shrink-0 items-center gap-0.5",
+        flush && VIEW_LABELS_FLUSH,
         className,
       )}
     >

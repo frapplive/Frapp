@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { NewButton } from "@/components/ui/new-button";
 import { hydrateRoot } from "react-dom/client";
 
@@ -680,6 +681,52 @@ describe("DashboardShell", () => {
       // actions: the CSS rule that does it.
       expect(header.className).toContain(
         "has-[[data-page-actions]:not(:empty)]:flex",
+      );
+      unmount();
+    }
+  });
+
+  it("seats a page's views beside its title in the header, never in the body (Paul, 2026-11-24)", () => {
+    mockPathname.value = "/events";
+    for (const width of [1440, 800]) {
+      setWindowWidth(width);
+      const { container, unmount } = render(
+        <DashboardShell>
+          <PageViews>
+            <ViewLabels
+              label="Whose events"
+              options={[
+                { value: "mine", label: "Mine" },
+                { value: "all", label: "Everyone's" },
+              ]}
+              value="mine"
+              onChange={() => {}}
+            />
+          </PageViews>
+          <p>list</p>
+        </DashboardShell>,
+      );
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      const views = header.querySelector(
+        "[data-tool-page-views]",
+      ) as HTMLElement;
+      const page = container.querySelector("[data-tool-page]") as HTMLElement;
+      expect(
+        within(views).getByRole("tablist", { name: "Whose events" }),
+      ).toBeInTheDocument();
+      expect(within(page).queryByRole("tablist")).toBeNull();
+      // Before the actions slot, so the words sit beside the title.
+      const actions = header.querySelector("[data-tool-page-actions]")!;
+      expect(
+        views.compareDocumentPosition(actions) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Below the side-by-side width the header shows while it holds views,
+      // even with no actions.
+      expect(header.className).toContain(
+        "has-[[data-tool-page-views]:not(:empty)]:flex",
       );
       unmount();
     }
