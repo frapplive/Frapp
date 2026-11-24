@@ -116,9 +116,8 @@ const PRIVATE_TLDS = new Set([
 
 /**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
- * when it isn't one. Never fetched; shown as its domain. An agenda's link
- * attachment shares this rule; a task's proof link must also pass
- * `proofLinkOpens`.
+ * when it isn't one. Never fetched; shown as its domain. A new proof link
+ * or Frapp web link (`frappWebLinkOpens`) must also pass `proofLinkOpens`.
  */
 export function normalizeProofLink(value: string): string | null {
   const trimmed = value.trim();
@@ -158,6 +157,15 @@ export function proofLinkOpens(link: string): boolean {
     return false;
   }
 }
+
+/**
+ * What a stored link that fails `proofLinkOpens` says beside its address,
+ * on a task's proof chip and a Frapp web link's row (#5882, #5883).
+ */
+export const LINK_NOT_WORKING_CAPTION = "not a working link";
+
+/** The same, as a screen reader hears it ahead of the address. */
+export const LINK_NOT_WORKING_LABEL = "not a working web address";
 
 /** The domain a proof link chip shows ("docs.google.com"). */
 export function proofLinkDomain(link: string): string {

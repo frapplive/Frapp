@@ -6,8 +6,10 @@ import {
 } from "./message-link";
 import { appLinkParams } from "./native-app";
 import {
+  LINK_NOT_WORKING_CAPTION,
   normalizeProofLink,
   proofLinkDomain,
+  proofLinkOpens,
   TASK_PROOF_LINK_MAX,
 } from "./task-proof";
 
@@ -129,11 +131,31 @@ function text(entry: Record<string, unknown>, key: string): string | null {
 
 /**
  * A web link's address as Frapp keeps it: trimmed, http or https only, or
- * `null` when it isn't one (`normalizeProofLink`).
+ * `null` when it isn't one (`normalizeProofLink`). It is the read's rule too,
+ * which keeps a `javascript:` or `data:` address from ever being drawn. A
+ * newly attached address must also pass {@link frappWebLinkOpens} (#5883).
  */
 export function normalizeFrappLinkUrl(value: string): string | null {
   return normalizeProofLink(value);
 }
+
+/**
+ * Whether a web link names a public site a member's phone can open: a task
+ * proof link's `proofLinkOpens` (#5882, #5883). `https://test`, `localhost`,
+ * an IP address or a `.local` name is refused when it is attached; one
+ * stored before the rule is kept, and its row is drawn as text, not a link
+ * that opens "server can't be found".
+ */
+export function frappWebLinkOpens(url: string): boolean {
+  return proofLinkOpens(url);
+}
+
+/**
+ * Why a web address is refused although it is one (#5883): the API's 400 and
+ * both apps' words for an address failing {@link frappWebLinkOpens}.
+ */
+export const FRAPP_LINK_NOT_PUBLIC_MESSAGE =
+  "That address won't open on members' phones. Use a public web link, like https://docs.google.com/…";
 
 /**
  * A web link's title as the API takes it: whitespace collapsed and cut to
@@ -153,7 +175,7 @@ export function frappWebLinkTitle(title: string, url: string): string {
 
 /**
  * Why a pasted address can't be attached, or `null` when it can: the form's
- * words for `normalizeFrappLinkUrl`'s two refusals.
+ * words for `normalizeFrappLinkUrl`'s refusals and `frappWebLinkOpens`'s.
  */
 export function frappLinkUrlProblem(value: string): string | null {
   const trimmed = value.trim();
@@ -161,9 +183,9 @@ export function frappLinkUrlProblem(value: string): string | null {
   if (trimmed.length > TASK_PROOF_LINK_MAX) {
     return `That link is too long to attach (over ${TASK_PROOF_LINK_MAX} characters).`;
   }
-  return normalizeFrappLinkUrl(trimmed)
-    ? null
-    : "Paste a web address starting with http:// or https://.";
+  const url = normalizeFrappLinkUrl(trimmed);
+  if (!url) return "Paste a web address starting with http:// or https://.";
+  return frappWebLinkOpens(url) ? null : FRAPP_LINK_NOT_PUBLIC_MESSAGE;
 }
 
 function withTitle<T extends FrappLink>(
@@ -514,7 +536,10 @@ function shortDate(iso: string, now: Date): string {
 export interface FrappLinkRow {
   name: string;
   detail: string | null;
-  /** False for a removed or hidden record: the row is drawn, never opened. */
+  /**
+   * False for a removed or hidden record, or a web link no phone can open
+   * (#5883): the row is drawn, never opened.
+   */
   opens: boolean;
   /** True while the record's name is still being read. */
   pending: boolean;
@@ -533,10 +558,15 @@ export function frappLinkRow(
   now: Date = new Date(),
 ): FrappLinkRow {
   if (link.kind === "link") {
+    // A web link stored before #5883's rule is kept, and drawn as text that
+    // says so, so it never opens "server can't be found".
+    const opens = frappWebLinkOpens(link.url);
     return {
       name: link.title,
-      detail: proofLinkDomain(link.url),
-      opens: true,
+      detail: opens
+        ? proofLinkDomain(link.url)
+        : `${proofLinkDomain(link.url)} · ${LINK_NOT_WORKING_CAPTION}`,
+      opens,
       pending: false,
     };
   }

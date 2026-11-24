@@ -109,7 +109,7 @@ export class EventService {
     chapterId: string,
     stored: readonly EventAttachment[] = [],
   ): Promise<EventAttachment[] | undefined> {
-    const attachments = normalizeFrappLinks(input, 'event');
+    const attachments = normalizeFrappLinks(input, 'event', stored);
     if (!attachments) return attachments;
     return this.links.checked(chapterId, attachments, stored);
   }

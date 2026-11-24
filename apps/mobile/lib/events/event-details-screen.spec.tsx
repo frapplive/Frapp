@@ -1683,6 +1683,22 @@ describe("Event details agenda and attachments (#4934)", () => {
     );
   });
 
+  it("draws a stored link no phone can open as text that never opens (#5883)", () => {
+    event = {
+      ...EVENT,
+      attachments: [
+        { id: "t9", kind: "link", url: "https://test", title: "Old notes" },
+      ],
+    };
+    const tree = render();
+    const row = attachmentRow(tree, "Old notes,");
+    expect(row.props.accessibilityLabel).toBe(
+      "Old notes, test · not a working link",
+    );
+    expect(row.props.accessibilityRole).toBe("text");
+    expect(row.props.disabled).toBe(true);
+  });
+
   it("says when a link won't open", async () => {
     event = WITH_LISTS;
     vi.mocked(WebBrowser.openBrowserAsync).mockRejectedValueOnce(

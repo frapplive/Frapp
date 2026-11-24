@@ -9088,7 +9088,7 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "link" | "document" | "minutes" | "event" | "message";
-            /** @description A `link`'s address: http or https only. Never fetched. */
+            /** @description A `link`'s address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the list already holds that address). Never fetched. */
             url?: string;
             /**
              * Format: uuid
@@ -11168,7 +11168,7 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "link" | "document" | "minutes" | "event" | "message";
-            /** @description A `link`'s address: http or https only. Never fetched. */
+            /** @description A `link`'s address: http or https on a public site's name (not `localhost`, an IP address or a dotless name, #5883; 400 otherwise, unless the list already holds that address). Never fetched. */
             url?: string;
             /**
              * Format: uuid
