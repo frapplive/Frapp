@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -73,6 +74,8 @@ export class DiscordAuthorLinkController {
     description:
       'Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the member to Settings with a one-time token that `POST /v1/discord/author-link/confirm` spends: the web page by default, or with `client: mobile` the phone app at `return_url`, which must be the app’s own Settings address.',
   })
+  // Optional: the web, and every client before #5414, starts with no body.
+  @ApiBody({ type: BeginDiscordAuthorLinkDto, required: false })
   @ApiCreatedResponse({ type: BeginDiscordAuthorLinkResponseDto })
   begin(
     @CurrentChapterId() chapterId: string,

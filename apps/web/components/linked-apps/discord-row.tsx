@@ -22,7 +22,10 @@ import { LinkedAppRow } from "@/components/linked-apps/linked-app-row";
 import { DiscordMark } from "@/components/linked-apps/brand-marks";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
-import { refreshTimelinesForDiscordAuthor } from "@repo/chat-core/discord-author-reads";
+import {
+  discordAuthorsMovedByLink,
+  refreshTimelinesForDiscordAuthor,
+} from "@repo/chat-core/discord-author-reads";
 
 /**
  * Discord's row on Settings → Linked apps (`/preferences?section=apps`,
@@ -102,17 +105,11 @@ export function DiscordRow() {
     handshake.current = null;
     confirmLink({ handshake: token })
       .then((result) => {
-        const linked = result?.discord_user_id ?? null;
-        const before = linkedRef.current;
-        // Unknown if either account is: then every open thread holding an
-        // imported row is refreshed.
         refreshThreads(
-          linked === null || before === undefined
-            ? null
-            : [
-                linked,
-                ...(before.discord_user_id ? [before.discord_user_id] : []),
-              ],
+          discordAuthorsMovedByLink(
+            result?.discord_user_id ?? null,
+            linkedRef.current,
+          ),
         );
         toast({
           description: discordLinkedMessage(result?.messages_linked ?? 0),

@@ -72,3 +72,18 @@ export async function refreshTimelinesForDiscordAuthor(
     },
   });
 }
+
+/**
+ * The accounts whose imported rows a link moved, for
+ * `refreshTimelinesForDiscordAuthor`: the account just linked, and the one it
+ * replaced, whose rows go back to their Discord name. `null`, meaning every
+ * open thread holding an imported row, when either is unknown (the link
+ * status not read yet, or an API older than #4543 that names no account).
+ */
+export function discordAuthorsMovedByLink(
+  linked: string | null,
+  before: { discord_user_id?: string | null } | undefined,
+): string[] | null {
+  if (linked === null || before === undefined) return null;
+  return [linked, ...(before.discord_user_id ? [before.discord_user_id] : [])];
+}

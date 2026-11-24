@@ -1528,6 +1528,7 @@ describe('DiscordOAuthService — a member linking from the phone (#5414)', () =
     ['a path past Settings', 'frapp://preferences/../chat'],
     ['an empty address', ''],
     ['a fragment', 'frapp://preferences#x'],
+    ['a fragment after a query', 'frapp://preferences?a=1#x'],
     ['a newline', 'frapp://preferences\n'],
     ['a public Expo Go server', 'exp://203.0.113.9:8081/--/preferences'],
   ])('refuses %s before minting anything', async (_label, returnUrl) => {
@@ -1538,16 +1539,11 @@ describe('DiscordOAuthService — a member linking from the phone (#5414)', () =
     expect(repo.createState).not.toHaveBeenCalled();
   });
 
-  it('takes the staging app and local Expo Go outside production only', async () => {
+  it('takes the staging app outside production only', async () => {
     const dev = await build();
-    for (const returnUrl of [
-      'frapp-staging://preferences',
-      'exp://192.168.1.5:8081/--/preferences',
-    ]) {
-      await expect(
-        dev.beginAuthorLink(CHAPTER, USER, returnUrl),
-      ).resolves.toBeDefined();
-    }
+    await expect(
+      dev.beginAuthorLink(CHAPTER, USER, 'frapp-staging://preferences'),
+    ).resolves.toBeDefined();
 
     const prod = await build({ SUPABASE_URL: PROD_SUPABASE });
     await expect(
@@ -1556,6 +1552,20 @@ describe('DiscordOAuthService — a member linking from the phone (#5414)', () =
     await expect(
       prod.beginAuthorLink(CHAPTER, USER, APP_RETURN),
     ).resolves.toBeDefined();
+  });
+
+  it('never takes Expo Go, even on a local network', async () => {
+    // A member can send the authorize link to someone else to approve; on a
+    // shared network their own Expo Go server would catch the token.
+    const dev = await build();
+    await expect(
+      dev.beginAuthorLink(
+        CHAPTER,
+        USER,
+        'exp://192.168.1.5:8081/--/preferences',
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(repo.createState).not.toHaveBeenCalled();
   });
 
   it('hands the parked account back to the app with the confirm token', async () => {

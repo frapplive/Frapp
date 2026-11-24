@@ -3,7 +3,10 @@ import { Alert } from "react-native";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useQueryClient } from "@tanstack/react-query";
-import { refreshTimelinesForDiscordAuthor } from "@repo/chat-core/discord-author-reads";
+import {
+  discordAuthorsMovedByLink,
+  refreshTimelinesForDiscordAuthor,
+} from "@repo/chat-core/discord-author-reads";
 import {
   DISCORD_LINK_RETURN_COPY,
   discordLinkedMessage,
@@ -25,7 +28,12 @@ import { confirmAlert } from "@/lib/minutes/meetings-on";
  * report a failure over a link that worked.
  */
 const spentHandshakes = new Set<string>();
-/** Return addresses already reported, so a cancel isn't said twice either. */
+/**
+ * Return addresses already handled since the last tap on Link, so one answer
+ * that arrives by both paths is said once. Cleared on every tap: a failure's
+ * address carries nothing per attempt (`?discord=failed` each time), so a
+ * set kept for the process would swallow the second failure of a kind.
+ */
 const reportedReturns = new Set<string>();
 
 /** Server-written refusals ("already linked to another member") read as said. */
@@ -37,8 +45,8 @@ const SERVER_WRITES = { serverWritesForMembers: true } as const;
  * opens Discord's sign-in in the system auth sheet; Discord comes back to
  * `returnPath` (Settings' own address) with a one-time token, which is spent
  * here from the member's own session, exactly once. Only the member who
- * started the link can spend it (the API checks), so a token another app
- * caught on the way back links nothing.
+ * started the link can spend it (the API checks); the custom scheme's own
+ * limit is in `DiscordOAuthService.beginAuthorLink`.
  *
  * Linking and unlinking change on the server who an imported message's sender
  * is, so afterwards the chat threads holding that account's messages are read
@@ -84,16 +92,12 @@ export function useDiscordLinkConnection({
     void confirm
       .mutateAsync({ handshake: outcome.handshake })
       .then((result) => {
-        const linked = result?.discord_user_id ?? null;
-        const before = linkedRef.current;
         void refreshTimelinesForDiscordAuthor(
           queryClient,
-          linked === null || before === undefined
-            ? null
-            : [
-                linked,
-                ...(before.discord_user_id ? [before.discord_user_id] : []),
-              ],
+          discordAuthorsMovedByLink(
+            result?.discord_user_id ?? null,
+            linkedRef.current,
+          ),
         );
         Alert.alert(
           "Discord linked",
@@ -115,6 +119,7 @@ export function useDiscordLinkConnection({
   }, [returnUrl]);
 
   async function connect() {
+    reportedReturns.clear();
     const back = Linking.createURL(returnPath);
     try {
       const result = await begin.mutateAsync({

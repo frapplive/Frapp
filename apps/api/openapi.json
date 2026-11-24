@@ -19832,7 +19832,7 @@
         "operationId": "DiscordAuthorLinkController_begin_v1",
         "parameters": [],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -38502,7 +38502,7 @@
           },
           "return_url": {
             "type": "string",
-            "description": "For `mobile`: the app’s Settings address, in its own `frapp://` scheme. Any other address is refused.",
+            "description": "For `mobile`: the app’s Settings address, `frapp://preferences` (outside production, the staging app’s `frapp-staging://preferences` too). Any other address is refused, Expo Go’s included.",
             "example": "frapp://preferences"
           }
         }

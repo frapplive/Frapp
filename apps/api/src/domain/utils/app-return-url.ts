@@ -1,38 +1,67 @@
+import { isProductionSupabaseUrl } from '@repo/validation';
+
+/**
+ * Whether the app builds that exist only outside production (the staging app,
+ * Expo Go) may receive a sign-in's answer: every server but the production
+ * one. A staging app must not finish a production member's sign-in.
+ */
+export function devAppsAllowed(supabaseUrl: string | undefined): boolean {
+  return !(supabaseUrl && isProductionSupabaseUrl(supabaseUrl));
+}
+
 /**
  * Whether a sign-in may send its answer back to this address in the phone app
  * (#3322 Google Calendar, #5414 Discord link).
  *
- * The app's own `frapp://` scheme always. Outside production, also the
- * staging variant's `frapp-staging://` (Frapp Staging,
- * `apps/mobile/app.config.js`) and Expo Go's `exp://` on this computer or the
- * local network. Production takes neither: a staging app must not finish a
- * production member's sign-in, and Expo Go runs whatever server an `exp://`
- * address names, so a public one would hand the answer to a page the member's
- * own app doesn't control.
+ * The app's own `frapp://` scheme always. With `allowDevApps` (outside
+ * production, `devAppsAllowed`), also the staging variant's
+ * `frapp-staging://` (Frapp Staging, `apps/mobile/app.config.js`) and, unless
+ * `allowExpoGo` is false, Expo Go's `exp://` on this computer or the local
+ * network. Expo Go runs whatever server an `exp://` address names, so a
+ * public one would hand the answer to a page the member's own app doesn't
+ * control; a flow that a caller can point at someone else (Discord's link,
+ * which a member can send to another person to approve) refuses Expo Go
+ * outright, since a local network is shared too.
  *
  * `routes`, when given, is the closed list of app screens the address may
  * name (`preferences` for Settings), compared without the scheme, Expo Go's
  * host and `/--/` prefix, slashes or a query. A sign-in that only one screen
  * starts names that screen, so the return can't be pointed anywhere else in
- * the app either. A fragment is refused, because the caller appends its own
- * query to the address.
+ * the app either.
  *
- * Whitespace and control characters are refused outright: a URL parser can
- * delete them mid-parse, so the address followed would not be the one checked.
+ * Refused outright: a fragment, because the caller appends its own query to
+ * the address and a query after `#` is part of the fragment; and whitespace
+ * and control characters, which a URL parser can delete mid-parse, so the
+ * address followed would not be the one checked.
+ *
+ * A custom scheme is not verified: another app on the phone can claim
+ * `frapp://` too, so whatever rides this address must be useless to anyone
+ * but the member who started the sign-in, from their own session.
  */
 export function isAppReturnUrl(
   url: string,
-  opts: { allowDevApps: boolean; routes?: readonly string[] },
+  opts: {
+    allowDevApps: boolean;
+    allowExpoGo?: boolean;
+    routes?: readonly string[];
+  },
 ): boolean {
-  // eslint-disable-next-line no-control-regex
-  if (url.length > 512 || /[\u0000-\u001F\u007F\s]/.test(url)) return false;
-  const expoGo = isLocalExpoGoUrl(url);
+  if (
+    url.length > 512 ||
+    url.includes('#') ||
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u001F\u007F\s]/.test(url)
+  ) {
+    return false;
+  }
+  const expoGo =
+    opts.allowDevApps && (opts.allowExpoGo ?? true) && isLocalExpoGoUrl(url);
   const allowedScheme =
     url.startsWith('frapp://') ||
-    (opts.allowDevApps && (url.startsWith('frapp-staging://') || expoGo));
+    (opts.allowDevApps && url.startsWith('frapp-staging://')) ||
+    expoGo;
   if (!allowedScheme) return false;
   if (!opts.routes) return true;
-  if (url.includes('#')) return false;
   const route = appRoute(url, expoGo);
   return route !== null && opts.routes.includes(route);
 }

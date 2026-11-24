@@ -46,7 +46,7 @@ export class BeginDiscordAuthorLinkDto {
 
   @ApiPropertyOptional({
     description:
-      'For `mobile`: the app’s Settings address, in its own `frapp://` scheme. Any other address is refused.',
+      'For `mobile`: the app’s Settings address, `frapp://preferences` (outside production, the staging app’s `frapp-staging://preferences` too). Any other address is refused, Expo Go’s included.',
     example: 'frapp://preferences',
   })
   @IsOptional()

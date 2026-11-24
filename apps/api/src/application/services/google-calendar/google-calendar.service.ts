@@ -8,10 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
-import {
-  GOOGLE_CALENDAR_SIGN_IN_COPY,
-  isProductionSupabaseUrl,
-} from '@repo/validation';
+import { GOOGLE_CALENDAR_SIGN_IN_COPY } from '@repo/validation';
 import {
   GOOGLE_CALENDAR_API,
   GOOGLE_CALENDAR_SCOPE,
@@ -23,7 +20,11 @@ import {
 } from '#domain/repositories/google-calendar.repository.interface';
 import type { GoogleCalendarConnection } from '#domain/entities/google-calendar-connection.entity';
 import type { AiTextKeyRing } from '#domain/utils/ai-text-cipher';
-import { isAppReturnUrl, withQueryParams } from '#domain/utils/app-return-url';
+import {
+  devAppsAllowed,
+  isAppReturnUrl,
+  withQueryParams,
+} from '#domain/utils/app-return-url';
 import { googleCalendarTokenKeyRing } from '../../../config/google-calendar-config';
 import { resolveAppOrigin } from '../../../infrastructure/email/invite-link.util';
 import { toReportableError } from '../../../infrastructure/observability/reportable-error';
@@ -81,7 +82,11 @@ export interface GoogleCalendarStatus {
  * therefore gets nothing: the member's browser lands in the member's own
  * session, which is refused. The sign-in also holds a PKCE verifier that
  * Google demands when the code is traded, so a code that leaks on its way
- * back (another app claiming `frapp://`, a browser history) is useless.
+ * back (another app claiming `frapp://`, a browser history) is useless to
+ * anyone but the member who started the sign-in. Not to that member: one who
+ * sends their sign-in link to someone else, with an app on that person's
+ * phone claiming `frapp://`, could connect that person's Google account to
+ * their own Frapp account (the custom scheme's limit, `isAppReturnUrl`).
  */
 @Injectable()
 export class GoogleCalendarService {
@@ -89,7 +94,7 @@ export class GoogleCalendarService {
   private readonly apiBase: string | null;
   private readonly appOrigin: string;
   private readonly keyRing: AiTextKeyRing | null;
-  private readonly allowExpoGo: boolean;
+  private readonly allowDevApps: boolean;
 
   constructor(
     @Inject(GOOGLE_CALENDAR_REPOSITORY)
@@ -106,10 +111,9 @@ export class GoogleCalendarService {
         'GOOGLE_CALENDAR_TOKEN_KEY',
       ),
     });
-    // Expo Go's `exp://` return address exists only on a developer's
-    // machine. Production accepts the app's own scheme alone.
-    const supabaseUrl = config.get<string>('SUPABASE_URL');
-    this.allowExpoGo = !(supabaseUrl && isProductionSupabaseUrl(supabaseUrl));
+    // The staging app and Expo Go exist only off production. Production
+    // accepts the app's own scheme alone.
+    this.allowDevApps = devAppsAllowed(config.get<string>('SUPABASE_URL'));
   }
 
   isAvailable(): boolean {
@@ -331,7 +335,7 @@ export class GoogleCalendarService {
    */
   private appReturnUrl(value: string | null): string {
     const url = value ?? '';
-    if (!isAppReturnUrl(url, { allowDevApps: this.allowExpoGo })) {
+    if (!isAppReturnUrl(url, { allowDevApps: this.allowDevApps })) {
       throw new BadRequestException(
         'return_url must be the app’s own address.',
       );

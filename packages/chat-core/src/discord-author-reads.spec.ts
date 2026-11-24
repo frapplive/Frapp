@@ -6,7 +6,10 @@ import {
   type ChannelCache,
   type RawChatMessage,
 } from "./types";
-import { refreshTimelinesForDiscordAuthor } from "./discord-author-reads";
+import {
+  discordAuthorsMovedByLink,
+  refreshTimelinesForDiscordAuthor,
+} from "./discord-author-reads";
 
 /*
  * #4543: after a Discord link or unlink, an open timeline (staleTime
@@ -170,5 +173,21 @@ describe("refreshTimelinesForDiscordAuthor", () => {
 
     expect(archive).toHaveBeenCalledTimes(1);
     expect(live).not.toHaveBeenCalled();
+  });
+});
+
+describe("discordAuthorsMovedByLink", () => {
+  it("names the linked account and the one it replaced", () => {
+    expect(
+      discordAuthorsMovedByLink(ME, { discord_user_id: SOMEONE_ELSE }),
+    ).toEqual([ME, SOMEONE_ELSE]);
+    expect(discordAuthorsMovedByLink(ME, { discord_user_id: null })).toEqual([
+      ME,
+    ]);
+  });
+
+  it("can't name them when either is unknown", () => {
+    expect(discordAuthorsMovedByLink(null, { discord_user_id: ME })).toBeNull();
+    expect(discordAuthorsMovedByLink(ME, undefined)).toBeNull();
   });
 });

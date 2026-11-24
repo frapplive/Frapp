@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { isProductionSupabaseUrl } from '@repo/validation';
 import { logSafe } from '../../infrastructure/observability/log-safe';
 import {
   DISCORD_BOT_GATEWAY,
@@ -23,7 +22,11 @@ import {
   type IDiscordConnectionRepository,
 } from '#domain/repositories/discord-connection.repository.interface';
 import type { DiscordOAuthState } from '#domain/entities/discord-connection.entity';
-import { isAppReturnUrl, withQueryParams } from '#domain/utils/app-return-url';
+import {
+  devAppsAllowed,
+  isAppReturnUrl,
+  withQueryParams,
+} from '#domain/utils/app-return-url';
 import { toReportableError } from '../../infrastructure/observability/reportable-error';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportSwallowed } from '../../infrastructure/observability/report-swallowed';
@@ -94,9 +97,12 @@ export const AUTHOR_LINK_RETURN_PATH = '/preferences?section=apps';
 /**
  * The phone screens a member's link handshake may return to (#5414): Settings,
  * where Linked apps' Discord row starts it. The phone names its own address
- * (`frapp://preferences`, or Expo Go's in development), because only the app
- * knows it; the server accepts it only as one of these screens in one of the
- * app's schemes (`isAppReturnUrl`), never an address the request makes up.
+ * (`frapp://preferences`), and the server accepts it only as one of these
+ * screens in the app's own scheme, or the staging app's outside production
+ * (`isAppReturnUrl`), never an address the request makes up. Never Expo Go:
+ * a member can send their authorize link to someone else to approve, and an
+ * `exp://` address on a shared network would hand the token to whichever
+ * server answers there, run by the member who started it.
  */
 export const AUTHOR_LINK_APP_ROUTES = ['preferences'] as const;
 
@@ -211,7 +217,7 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DiscordOAuthService.name);
   private readonly apiUrl: string | null;
   private readonly appUrl: string | null;
-  /** Whether the staging app and Expo Go may receive a link handshake's return. */
+  /** Whether the staging app may receive a link handshake's return. */
   private readonly allowDevApps: boolean;
   private applicationCheckResult: {
     check: DiscordApplicationCheck;
@@ -232,8 +238,7 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
     const rawApiUrl = config.get<string>('API_URL');
     this.apiUrl = apiBaseUrl(rawApiUrl);
     this.appUrl = normaliseOrigin(config.get<string>('APP_URL'));
-    const supabaseUrl = config.get<string>('SUPABASE_URL');
-    this.allowDevApps = !(supabaseUrl && isProductionSupabaseUrl(supabaseUrl));
+    this.allowDevApps = devAppsAllowed(config.get<string>('SUPABASE_URL'));
     if (this.apiUrl !== null && this.apiUrl !== normaliseOrigin(rawApiUrl)) {
       // Harmless now, and said once per boot so the drift stays visible: the
       // documented value is the bare origin (ENV_REFERENCE.md), and a stray
@@ -510,10 +515,17 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
    * `appReturnUrl` is the phone's Settings address (#5414); without it the
    * handshake returns to the web's Settings → Linked apps. It is checked here,
    * at write time, for the same reason `safeReturnPath` is: the callback has
-   * no session, so whatever is stored is where the confirm token goes. The
-   * token is still only half of a link: another app that claimed the scheme
-   * and caught it could spend it only from the session of the member who
-   * started the handshake, in this chapter (`DiscordAuthorLinkService.confirm`).
+   * no session, so whatever is stored is where the confirm token goes.
+   *
+   * Known limit: `frapp://` is a custom scheme, which another app on the
+   * phone can also claim. The token can be spent only from the session of the
+   * member who started the handshake (`DiscordAuthorLinkService.confirm`), so
+   * a caught token is useless to anyone else, but not to that member: one who
+   * sends their authorize link to somebody else, and has an app on that
+   * person's phone catch the return, could link that person's Discord account
+   * to themselves. A verified https return (an App Link / Universal Link)
+   * closes it (#5941); until then the web flow, whose token only ever reaches the
+   * approving person's own browser, has no such gap.
    */
   async beginAuthorLink(
     chapterId: string,
@@ -1008,19 +1020,21 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
     return connection.guild_id;
   }
 
+  /** A member's link handshake returning to the phone's Settings (#5414). */
+  private isAuthorLinkAppReturn(url: string): boolean {
+    return isAppReturnUrl(url, {
+      allowDevApps: this.allowDevApps,
+      allowExpoGo: false,
+      routes: AUTHOR_LINK_APP_ROUTES,
+    });
+  }
+
   /**
    * Where an unconsumed handshake was headed, for a callback that could not
    * consume it. Best-effort and never an oracle: the outcome code is the same
    * whether or not a row answers, and the path is one this server stored,
    * sanitised again by `buildReturnUrl`.
    */
-  private isAuthorLinkAppReturn(url: string): boolean {
-    return isAppReturnUrl(url, {
-      allowDevApps: this.allowDevApps,
-      routes: AUTHOR_LINK_APP_ROUTES,
-    });
-  }
-
   private storedReturnPath(stateId: string): Promise<string | null> {
     return this.connectionRepo.findStateReturnPath(stateId).catch(() => null);
   }

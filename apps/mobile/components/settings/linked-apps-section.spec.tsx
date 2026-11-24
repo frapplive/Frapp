@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { Alert } from "react-native";
 import { create, type ReactTestRenderer } from "react-test-renderer";
+import * as Linking from "expo-linking";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -294,5 +295,47 @@ describe("Phone Settings → Linked apps (#5407)", () => {
       "Discord unlinked",
       "Discord account unlinked. 1 imported message shows under the Discord name again.",
     );
+  });
+
+  it("spends a link token once when it arrives by both the sheet and the app link", async () => {
+    const url =
+      "frapp://preferences?discord=pending&handshake=22222222-2222-4222-8222-222222222222";
+    state.authSession.mockResolvedValue({ type: "success", url });
+    state.discordConfirm.mockResolvedValue({
+      linked: true,
+      discord_user_id: "1100000000000000001",
+      messages_linked: 0,
+    });
+    const tree = await render();
+    await act(async () => {
+      row(tree, "Discord").props.onPress();
+    });
+    // The system hands the same address to the app, as Android does.
+    vi.mocked(Linking.useURL).mockReturnValue(url);
+    await act(async () => {
+      tree.update(
+        <QueryClientProvider client={new QueryClient()}>
+          <FrappThemeProvider>
+            <LinkedAppsSection />
+          </FrappThemeProvider>
+        </QueryClientProvider>,
+      );
+    });
+    vi.mocked(Linking.useURL).mockReturnValue(null);
+    expect(state.discordConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a second failure of the same kind too", async () => {
+    state.authSession.mockResolvedValue({
+      type: "success",
+      url: "frapp://preferences?discord=failed",
+    });
+    const tree = await render();
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        row(tree, "Discord").props.onPress();
+      });
+    }
+    expect(Alert.alert).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,18 @@
-import { isAppReturnUrl, withQueryParams } from './app-return-url';
+import {
+  devAppsAllowed,
+  isAppReturnUrl,
+  withQueryParams,
+} from './app-return-url';
+
+describe('devAppsAllowed', () => {
+  it('is every server but production', () => {
+    expect(devAppsAllowed('https://unttyvyfezddlyafcydh.supabase.co')).toBe(
+      false,
+    );
+    expect(devAppsAllowed('http://localhost:54321')).toBe(true);
+    expect(devAppsAllowed(undefined)).toBe(true);
+  });
+});
 
 describe('isAppReturnUrl', () => {
   const dev = { allowDevApps: true };
@@ -34,6 +48,20 @@ describe('isAppReturnUrl', () => {
     }
   });
 
+  it('refuses a fragment, even with no screens listed', () => {
+    // The caller's query would land inside it.
+    expect(isAppReturnUrl('frapp://google-calendar#x', dev)).toBe(false);
+    expect(isAppReturnUrl('frapp://google-calendar?a=1#x', dev)).toBe(false);
+  });
+
+  it('can refuse Expo Go while taking the staging app', () => {
+    const noExpo = { allowDevApps: true, allowExpoGo: false };
+    expect(isAppReturnUrl('frapp-staging://preferences', noExpo)).toBe(true);
+    expect(
+      isAppReturnUrl('exp://192.168.1.5:8081/--/preferences', noExpo),
+    ).toBe(false);
+  });
+
   describe('with a closed list of screens', () => {
     const routes = ['preferences'] as const;
 
@@ -52,6 +80,7 @@ describe('isAppReturnUrl', () => {
       'frapp://preferences/../chat',
       'frapp://preferences@evil',
       'frapp://preferences#top',
+      'frapp://preferences?a=1#top',
       'exp://192.168.1.5:8081/preferences',
     ])('refuses %s', (url) => {
       expect(isAppReturnUrl(url, { ...dev, routes })).toBe(false);
