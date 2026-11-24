@@ -38,9 +38,6 @@ import { DASHBOARD_ROUTES } from "./routes";
  * baselines carried, documented in `README.md`. That is not a hole for the defect
  * this gate was built for: the shell is identical on every route, and it was the
  * shell (one missing `min-w-0`) that caused six of the seven breaches in #1142.
- * `/points`, the one route whose fix is inside `<main>`, does render its real
- * content here — `useMyPoints` is gated on `chapterId`, so it settles instead of
- * retrying — and reverting the `max-sm:` classes does turn this test red.
  * A route whose *populated* table overflows while its empty state does not
  * would still slip through; signed-in coverage is a separate piece of work.
  */
@@ -69,7 +66,7 @@ test.describe("dashboard routes hold the 375px floor", () => {
       const measured = await page.evaluate((floor) => {
         const main = document.querySelector("main");
         // Deliberately NOT `main.clientWidth`. When the overflow is bad enough
-        // `<main>` is itself stretched — it measured 523px on `/points` — and
+        // `<main>` is itself stretched — it measured 523px on the Points page that #5950 removed — and
         // comparing children against that inflated number finds no offender at
         // all. The budget is what `<main>` is *supposed* to get: the floor, less
         // its own horizontal padding.

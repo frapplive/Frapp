@@ -133,9 +133,7 @@ a fresh context with empty `localStorage`, so the persisted
 `frapp-active-chapter` key is missing and `useChapterStore.activeChapterId` is
 `null` (`apps/web/lib/stores/chapter-store.ts`). Several routes therefore render
 an empty state or a "Select an active chapter" card rather than their populated
-content — `/backwork` early-returns before its real surface mounts, and `/points`
-is the one route whose fix for #1142 lives inside `<main>` and does render for
-real.
+content — `/backwork` early-returns before its real surface mounts.
 
 `/chat` stopped being one of them in [#2145](https://github.com/pdcarlson/Frapp/issues/2145):
 its whole-route early return was folded into a `no-chapter` state the frame
