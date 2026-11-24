@@ -363,6 +363,7 @@ It is off unless the server has `AI_ENABLED` on and the chapter's president has 
   Each cited sentence carries a numbered marker, and each source is a chip under the answer with the same number and its name;
   its kind, place and full date are the chip's tooltip on web and its spoken name on both (changed in #4699 by pdcarlson, 2026-11-13: they were rows that spelled the kind and date out, which made a thread of several answers long).
   A document opens in the viewer, minutes open the meeting, a channel message opens in its channel, and live data opens its page.
+  The asker's own points open their points: the Points panel on their web Profile, the Points screen on the phone (#5950; the Points page on web and the task board on the phone until then).
   Live data has no date; it says "Read just now".
 - **Left-out messages are counted, never named.**
   When the channels an answer drew on hold messages from members who have not agreed, the answer says how many were not included.
@@ -831,7 +832,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   Two things differ, both because of the size of the screen.
   A member is added to a points change from the chapter's roster in a tall sheet with a search field, which is how the phone picks a member everywhere else.
   A task's who and when are changed in the ordinary New task form opened on the proposal, where web changes them on the card; Confirm on a task missing either opens that form.
-  A finished task links to Tasks and a finished event to that event; a finished points change links nowhere, because the phone has no points page.
+  A finished task links to Tasks and a finished event to that event; a finished points change links nowhere on the phone, where web's links to the chapter ledger ("Open the ledger") for a `points:view_all` holder and to the Directory's points standing ("See standings") for anyone else (#5950).
 - **Every card has Edit beside Cancel and Confirm** (Paul, 2026-11-15, #5117).
   _(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is now Dismiss in the card's ··· menu, and Confirm is named for the action; see How a card reads below.)_
   An event's Edit opens the ordinary New event form filled in from the card, every row showing what it holds (who's coming by role, the end, notes, the repeat; More options until #5561), and Create in that form is the confirm: the event is made through the event route and the proposal records it, without making a second.
@@ -926,7 +927,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   It is not in the Suggested list, sends no push, and is gone after one day.
   Asking for something else in the conversation leaves it waiting (changed in #4699 by pdcarlson, 2026-11-13: it used to be replaced, as it still is for a request sent to `POST /v1/ai/act` by an app build from before the conversation).
 - **Confirm makes the change the ordinary way.**
-  It checks the action's permission again at that moment, then goes through the same service the Points, Tasks and Events pages use, as that officer.
+  It checks the action's permission again at that moment, then goes through the same service Adjust points, the Tasks page and the Events page use, as that officer.
   A points change is one ledger entry per member under the officer's name, in the Manual category, with the usual push to each member.
   A task and an event are created by that officer, and the usual pushes go out.
   No chat card is posted.
@@ -948,7 +949,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
 
 > **Added 2026-11-12 (#718, the building session's, Paul's to change).**
 > None of this section was stated before.
-> The choices in it: three actions, and no fines (a formal fine stays a thing an officer does on the Points page);
+> The choices in it: three actions, and no fines (a formal fine stays a thing an officer does on the Points page; since #5950, 2026-11-24, with Adjust points on a member's card or the points ledger in Chapter settings);
 > Ask's chapter switch governs Do, with no separate switch;
 > the waiting card is a saved suggestion with a one-day life, which overrides the older note on #1308 that a proposal would not be saved (ADR-28 decision 11 says proposals are suggestions, and there is one suggestions table);
 > the hourly points limit is kept and a larger change is refused whole;

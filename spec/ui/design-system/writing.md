@@ -296,7 +296,7 @@ No results = neutral tile, names the query"*, under a section eyebrow that budge
 
 - **Empty and no-results were one row doing two jobs.**
   `No members match this view` / `Try a broader search or invite your first members to populate this directory.` had to cover a chapter with no roster *and* a search that matched nothing, so it asserted neither and instructed the reader in both.
-  The split is the one the Points table below already makes between an empty leaderboard and a search that matched nothing, for the same reason: a filtered view that matches nothing is not a claim about the data.
+  The split is the one the Points table below makes between an empty history and filters that matched nothing, for the same reason: a filtered view that matches nothing is not a claim about the data.
 - **The descriptions state a fact instead of giving an instruction**, except in the no-results hint slot, where the board's own drawn hint is an instruction (`Check the spelling`).
 - **`actives`, not `members`,** in the two titles about the list itself: it is the word the tab and the section label above the list already use, and the shipped mobile Directory's empty title is the same `No actives yet` (`apps/mobile/app/(app)/directory.tsx`).
   Mobile draws that title alone, without this row's description, under §4 as amended 2026-11-05 *(corrected 2026-11-05: this said mobile renders the same state, which stopped being true of the description)*.
@@ -389,30 +389,31 @@ Otherwise a day with nothing on it says `Nothing on this day.` (2026-11-09). The
 
 ### Points (dashboard)
 
-| State | Title | Description |
-|---|---|---|
-| Loading | — | `Loading points ledger...` |
-| Everyone at 0 | — | `Everyone is tied at 0. The first points earned take the lead.` (one line under the board) |
-| Empty leaderboard | — | `Nobody has points in this period.` (one line) |
-| Leaderboard search matched nothing | — | `No members match that search.` then a **Clear search** link (one line) |
-| Empty transactions | — | `No points in this period yet.` (one line) |
-| Transaction filters matched nothing | — | `No transactions match these filters.` then a **Clear filters** link (one line) |
-| Error | `Couldn't load the points ledger` | `Standings and transactions are unavailable, so none are shown. ` + the load-failure line (§ copy rules) |
-| Offline | `Points ledger unavailable offline` | `Reconnect to refresh leaderboard standings and transaction history.` |
-
-The board lists the whole roster, at 0 until a member earns points ([`points.md` § Leaderboard](../../behavior/points.md#leaderboard)), so a new chapter sees its members tied for first with the one line above rather than a card.
-The empty and no-match states are single lines (`InlineNote`, `apps/web/components/shared/inline-note.tsx`) where the rows would be, not cards; error and offline keep theirs (2026-11-06).
-
-### Points — Audit tab (dashboard)
+A member's own points, the Points panel on their Profile (#5950; the Points page until then, whose leaderboard lines went with it), and the Directory's standings.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading audit transactions...` |
-| Empty (flagged only) | — | `Nothing flagged in this window.`, then `Single adjustments of \|amount\| ≥ {threshold} are flagged here automatically.` when the chapter's threshold is known (one line) |
+| Loading | — | skeleton rows; `Loading your points` to a screen reader |
+| Empty transactions | — | `No points in this period yet.` (one line; the phone's Points screen says the same) |
+| Transaction filters matched nothing | — | `No transactions match these filters.` then a **Clear filters** link, which clears the search, the category and the amount (one line) |
+| Error | `Couldn't load your points` | the load-failure line (§ copy rules); the phone's Points screen says the same |
+| Standings didn't load (Directory, both apps) | `Couldn't load the standings` | `The totals for this period didn't load, so nobody is ranked. Try again, or pick another sort.` |
+
+The empty and no-match states are single lines (`InlineNote`, `apps/web/components/shared/inline-note.tsx`) where the rows would be, not cards; the error keeps its block (2026-11-06).
+
+### Points ledger (dashboard)
+
+The chapter points ledger on Chapter settings' Points page (#5950; the Points page's Audit section until then).
+It is drawn only for `points:view_all`, so it has no denied or permission-check state.
+
+| State | Title | Description |
+|---|---|---|
+| Loading | — | `Loading the ledger...` |
+| Limits line | — | `Flags at ±{threshold} points · {rate} adjustments per admin per hour`, then `Each flag keeps the threshold it was raised under.`; left out when the chapter's config can't be read |
+| Empty | — | `No points have been recorded yet.` (one line) |
+| Empty (flagged only) | — | `Nothing flagged in this window.`, then `Single adjustments of \|amount\| ≥ {threshold} land here.` when the chapter's threshold is known (one line) |
 | Empty (filtered) | — | `No transactions match these filters.` then a **Clear filters** link, which resets the category and the member (one line) |
-| Error | `Audit unavailable` | `Couldn't load chapter transactions. ` + the load-failure line (§ copy rules) |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can view the chapter's transaction log.` |
-| Permission denied | `Audit` (the section label) | `Your role can't see every transaction.` |
+| Error | `Ledger unavailable` | `Couldn't load chapter transactions. ` + the load-failure line (§ copy rules) |
 
 ### Roles & Permissions (dashboard)
 
@@ -489,24 +490,16 @@ It replaced the `You're all clear` card.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading service entries...` |
-| Empty queue | — | `Nothing waiting for review.` (one line) |
-| Queue row, points preview | — | `Approving awards {N} service point(s), at the chapter's current rate of 1 per {rate}.`; under the rate, `Approving awards no points: {duration} is under the chapter's current rate of 1 point per {rate}.` `{rate}` reads `hour` at the default 60 minutes, otherwise a duration (`30m`, `1h 30m`). No line when the rate can't be read (#3862) |
+| Loading | — | skeleton rows; `Loading your service log` to a screen reader (the phone's screen: `Loading service entries`) |
+| Review row (Activity, both apps), points preview | — | `Approving awards {N} service point(s), at the chapter's current rate of 1 per {rate}.`; under the rate, `Approving awards no points: {duration} is under the chapter's current rate of 1 point per {rate}.` `{rate}` reads `hour` at the default 60 minutes, otherwise a duration (`30m`, `1h 30m`). No line when the rate can't be read (#3862) |
 | History row, points | — | On an approved entry, the points its approval recorded: `{N} points` / `1 point`, or `No points` for a sub-rate approval; `Points awarded` only when the entry carries no number. Web shows it as an outline badge beside the status, mobile ends the row's meta line with it (`3h · August 12 · 3 points`). Never recomputed from the current rate (#3868) |
 | Your service hours, stats | — | `This semester`, `All time` (each `{N} h` `approved`) and `Pending` (`{N} h` `{n} entry`/`entries`). A stat whose part isn't known yet reads `–`; This semester reads `–` `Couldn't load` when the semester's start didn't load (#4669) |
 | Empty log (Your log) | — | `You haven't logged any service yet.` then, for a viewer with `service:log`, a **Log your first hours** link that opens Log service (one line) |
 | Your log, error | `Couldn't load your service hours` | the load-failure line (§ copy rules) |
 | Your log, no account id | — | `Confirming your account…` while it loads, then `We couldn't confirm your account, so withdrawing is unavailable. Reload to try again.` A member who can't approve keeps their log beneath it, read-only; an approver gets the sentence alone, with `your hours and withdrawing are unavailable` in place of `withdrawing is unavailable` |
-| Empty chapter history (approvers) | — | `Nothing reviewed yet.` (one line) |
-| Leaderboard, empty | — | `No approved hours this semester yet.`, or under All time `No approved hours yet.` (one line) |
-| Leaderboard, viewer not on it | — | `You're not on the board yet this semester. Approved hours put you on it.` (under All time, without `this semester`) |
-| Leaderboard, error | `Couldn't load the leaderboard` | the load-failure line (§ copy rules) |
-| Leaderboard, semester unknown | `Couldn't find this semester` | `The semester's start date didn't load, so this board can't be counted yet. All time still works.` |
-| Leaderboard, offline | `Leaderboard unavailable offline` | `Reconnect to see the chapter's service hours.` |
+| Empty reviewed entries (Chapter settings, approvers) | — | `Nothing reviewed yet.` (one line) |
+| Reviewed entries, error | `Couldn't load the chapter's service entries` | the load-failure line (§ copy rules) |
 | Empty history, mobile | — | `No service logged yet.`; for a viewer with `service:log`, `No service logged yet. Tap + to log your first hours.`, the screen's own + (one line) |
-| Error | `Couldn't load service entries` | the load-failure line (§ copy rules) |
-| Offline | `Service hours unavailable offline` | `Reconnect to log hours and review the approval queue.` |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can review submitted hours.` |
 
 ### Chapter Documents (dashboard)
 

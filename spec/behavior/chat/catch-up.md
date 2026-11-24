@@ -240,7 +240,7 @@ into paid ops modules" this artifact exists to create:
 | --- | --- | --- |
 | Events this week | View schedule | `/events` |
 | Overdue tasks | Open tasks | `/tasks` |
-| Awaiting approval | Review queue | `/service` |
+| Awaiting approval | Review queue | `/activity` (the one place hours are reviewed; `/service` until #5950 made it a redirect to the member's own log) |
 | Overdue dues | Review invoices | `/billing` |
 | New members | View directory | `/members` |
 

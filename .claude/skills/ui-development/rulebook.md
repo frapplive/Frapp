@@ -63,11 +63,12 @@ These cause most of the iterations, so they come first.
 - **Page actions live in the page's header, never on a row of their own.** Search, filters, view
   switches, export and the create button sit in the header beside the title, the way Linear, Notion and
   Slack put them. A row of controls under the header is the defect Paul called out on Events, Meetings,
-  Service hours, Documents, Points and Directory. On web a page renders its actions inside `PageActions`
+  Service hours, Documents, Points and Directory (the Service hours and Points pages are gone since
+  #5950). On web a page renders its actions inside `PageActions`
   (`components/layout/page-actions.tsx`); with #5686 it portals them into the page header between the
   title and the close at every width. Until #5686 merges, `PageActions` still draws its own row, so a
-  page built before then is checked again after. Only a control that needs the page's width (Points'
-  window switch) stays in the body. (11-19, P8.1)
+  page built before then is checked again after. Only a control that needs the page's width stays in
+  the body. (11-19, P8.1)
 - **A list opens on the viewer's own items, and nothing sits between the header and the first item at
   rest.** Whose items is the header's view switch and the filters are § Filtering a list's one Filter
   button, so nothing waits under the header until a filter is on; a create row appears only after New
@@ -85,7 +86,7 @@ These cause most of the iterations, so they come first.
   the same icon, style and wording pattern ("New event", "New minutes", "New task"), on web and phone.
   A filled pill on one page and an outlined button on the next is a defect. On web it is
   `<NewButton thing="event" />` (`components/ui/new-button.tsx`, outlined accent, Paul's pick 11-19), and
-  a page's main action that isn't "New" (Log service, Upload, Adjust points) is
+  a page's main action that isn't "New" (Log hours, Upload, Adjust points) is
   `<Button variant="action">`; both land with #5686, which also adds the lint rule against a
   hand-rolled `<Button>New …</Button>`. On the phone's pushed
   screens it is the floating glass "+" (`ScreenShell`'s `createAction`); on the four tabs that spot is the
