@@ -143,14 +143,10 @@ vi.mock("./channel-links-panel", () => ({
 
 // The narrow header's Threads row (Paul, 2026-11-24): the list is
 // `all-threads-popover.spec.tsx`'s; here only the count and the hand-off.
-const threadsState = vi.hoisted(() => ({
-  data: [] as { unread_count: number }[],
-}));
-vi.mock("@repo/hooks", async () => ({
-  ...(await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks")),
-  useMemberThreads: () => ({ data: threadsState.data }),
-}));
-vi.mock("./all-threads-popover", () => ({
+vi.mock("./all-threads-popover", async () => ({
+  ...(await vi.importActual<typeof import("./all-threads-popover")>(
+    "./all-threads-popover",
+  )),
   AllThreadsPanel: ({
     onOpenThread,
   }: {
@@ -696,7 +692,8 @@ describe("ChannelMenu Always formal (#3787)", () => {
 });
 
 describe("ChannelMenu Threads row (narrow header, 2026-11-24)", () => {
-  const threads = () => ({
+  const threads = (unread = 0) => ({
+    unread,
     channelNameFor: () => "general",
     nameFor: () => "Someone",
     viewerId: "u1",
@@ -705,7 +702,6 @@ describe("ChannelMenu Threads row (narrow header, 2026-11-24)", () => {
 
   it("draws no Threads row while the header has its own button", async () => {
     const user = userEvent.setup();
-    threadsState.data = [{ unread_count: 2 }];
     renderMenu();
     await openMenu(user);
     expect(
@@ -715,17 +711,18 @@ describe("ChannelMenu Threads row (narrow header, 2026-11-24)", () => {
 
   it("leads with Threads and its unread count, and opens a thread from it", async () => {
     const user = userEvent.setup();
-    threadsState.data = [{ unread_count: 2 }, { unread_count: 0 }];
-    const props = threads();
-    renderMenu({ threads: props });
+    const props = threads(1);
+    renderMenu({ threads: props, catchUp: { onStart: vi.fn() } });
     // The header's dot moves onto the menu button with the row.
     await user.click(
       screen.getByRole("button", {
-        name: "Channel menu, 1 threads with new replies",
+        name: "Channel menu, 1 thread with new replies",
       }),
     );
     const rows = screen.getAllByRole("listitem");
+    // Ahead of Catch up too: it stands in for a header button.
     expect(rows[0]).toHaveTextContent("Threads");
+    expect(rows[1]).toHaveTextContent("Catch");
     await user.click(screen.getByRole("button", { name: "Threads, 1" }));
     await user.click(screen.getByTestId("threads-panel"));
     expect(props.onOpenThread).toHaveBeenCalledWith("chan-2", "root-9");

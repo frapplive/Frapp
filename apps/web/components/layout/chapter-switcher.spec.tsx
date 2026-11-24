@@ -154,4 +154,13 @@ describe("the chapter label and switching (#5946)", () => {
     render(<Label />);
     expect(screen.getByText("Chapter unavailable")).toBeInTheDocument();
   });
+
+  // jsdom has no layout, so the guard is the class: the head row doesn't
+  // centre, so a label only as wide as its crest sat 5px left of the icons
+  // under it (Paul, 2026-11-24).
+  it("fills the rail's head so the crest centres on the icons", () => {
+    const { container } = render(<Label collapsed />);
+    const label = container.querySelector("[data-chapter-label]");
+    expect(label).toHaveClass("flex-1", "justify-center");
+  });
 });

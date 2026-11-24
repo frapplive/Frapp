@@ -87,6 +87,7 @@ import {
   useGifAvailability,
   useSetMessageReminder,
   memberFallbackLabel,
+  unreadThreadCount,
 } from "@repo/hooks";
 import { sidebarThreadsByChannel } from "@repo/chat-core/threads";
 import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
@@ -384,10 +385,11 @@ function matchMember(
 const JUMP_MAX_OLDER_PAGES = 20;
 
 /**
- * Below this width the channel header has no room for the name, its
- * description and four buttons: Threads moves into the channel menu. The
- * header is 640px or less beside a page (#5575) and when a thread opens
- * beside the channel on a laptop.
+ * Below this content width (the header inside its padding) the channel header
+ * has no room for the name, its description and four buttons, so Threads moves
+ * into the channel menu; it comes back out at 680 (`useIsNarrow`'s slack).
+ * Chat beside a page (#5575), a thread beside the channel on a laptop, and a
+ * narrow window all land here.
  */
 const NARROW_CHANNEL_HEADER_BELOW = 640;
 
@@ -3502,9 +3504,7 @@ export function ChatShell({
             */}
             {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
             {place === "pane" ? cards : null}
-            {channelsPaneState === "ready" &&
-            direct &&
-            !latestSettled ? (
+            {channelsPaneState === "ready" && direct && !latestSettled ? (
               <ChannelListSkeleton />
             ) : channelsPaneState === "ready" ? (
               <ChannelList
@@ -3595,6 +3595,7 @@ export function ChatShell({
   // thread beside the chat in its place.
   const membersBeside = isWideChat && !membersHidden && !threadBeside;
   const allThreads = {
+    unread: unreadThreadCount(memberThreadsQuery.data ?? []),
     channelNameFor: threadChannelLabel,
     nameFor,
     viewerId: userId,
@@ -3890,9 +3891,7 @@ export function ChatShell({
                 </PopoverContent>
               </Popover>
             ) : null}
-            {narrowHeader ? null : (
-              <AllThreadsPopover {...allThreads} />
-            )}
+            {narrowHeader ? null : <AllThreadsPopover {...allThreads} />}
             <ChannelMenu
               threads={narrowHeader ? allThreads : undefined}
               activeChannelId={activeChannelId}

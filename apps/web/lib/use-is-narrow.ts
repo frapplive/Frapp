@@ -43,7 +43,18 @@ export function useIsNarrow<T extends HTMLElement>(
           setNarrow(next);
         }
       };
-      update(node.getBoundingClientRect().width);
+      // The content box, as the observer's `contentRect` reports it after
+      // this: a padded element (the chat channel header's `px-4`) measured by
+      // its border box first would answer for a width 32px off, then flip a
+      // frame later.
+      const style = getComputedStyle(node);
+      update(
+        node.getBoundingClientRect().width -
+          (parseFloat(style.paddingLeft) || 0) -
+          (parseFloat(style.paddingRight) || 0) -
+          (parseFloat(style.borderLeftWidth) || 0) -
+          (parseFloat(style.borderRightWidth) || 0),
+      );
       const observer = new ResizeObserver((entries) => {
         const entry = entries[entries.length - 1];
         if (entry) update(entry.contentRect.width);

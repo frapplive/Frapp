@@ -35,9 +35,10 @@ import { StartThreadGlyph } from "./chat-glyphs";
  * is another one (`onOpenThread`). The list is the server's: it is re-read
  * each time it opens, once a minute behind the button, and right after a
  * thread is read here (`use-message-thread.ts`). The hook lives in this
- * always-mounted trigger for the button's dot, and the list re-reads it each
- * time it mounts (`AllThreadsPanel`); a `refetchOnMount` change would not
- * fetch on an observer that is already mounted.
+ * trigger for the button's dot, and the list re-reads it each time it mounts
+ * (`AllThreadsPanel`). Where the header is narrow the button isn't drawn and
+ * the channel menu carries the row, the count and the dot instead
+ * (`channel-menu.tsx`), reading the same cached query.
  *
  * Unread reads as a list in a popover does (components.md: a dot in
  * `--foreground` and a bolder title, never a New badge); the count is in the
@@ -67,15 +68,13 @@ export function AllThreadsPopover({
           }
         >
           <StartThreadGlyph className="h-5 w-5" active={unread > 0} />
-          {unread > 0 ? (
-            <span
-              aria-hidden="true"
-              className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary"
-            />
-          ) : null}
+          {unread > 0 ? <ThreadsUnreadDot /> : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(24rem,calc(100vw-1rem))] p-0" align="end">
+      <PopoverContent
+        className="w-[min(24rem,calc(100vw-1rem))] p-0"
+        align="end"
+      >
         <h2 className="border-b border-border px-3 py-2 text-caption font-semibold text-foreground">
           {ALL_THREADS_TITLE}
         </h2>
@@ -91,6 +90,27 @@ export function AllThreadsPopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+/**
+ * The dot on whichever header button carries Threads: this popover's, or the
+ * channel menu's `⋯` while the header is narrow. One mark, so the two never
+ * drift apart.
+ */
+export function ThreadsUnreadDot() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary"
+    />
+  );
+}
+
+/** "1 thread with new replies", for the button that carries the count. */
+export function threadsUnreadPhrase(count: number): string {
+  return count === 1
+    ? "1 thread with new replies"
+    : `${count} threads with new replies`;
 }
 
 export type AllThreadsProps = {
@@ -120,7 +140,9 @@ export function AllThreadsPanel({
   const threads = query.data ?? [];
   const { refetch } = query;
   useEffect(() => {
-    void refetch();
+    // Joins a fetch the new observer already started for stale data rather
+    // than cancelling it and sending a second request.
+    void refetch({ cancelRefetch: false });
   }, [refetch]);
   const names = {
     nameOf: (id: string) =>
@@ -131,123 +153,125 @@ export function AllThreadsPanel({
 
   return (
     <>
-    {query.isPending ? (
-      <p className="px-3 py-4 text-caption text-muted-foreground">
-        Loading your threads…
-      </p>
-    ) : query.isError && threads.length === 0 ? (
-      <div className="flex items-center justify-between gap-3 px-3 py-4">
-        <p className="text-caption text-muted-foreground">
-          {ALL_THREADS_ERROR}
+      {query.isPending ? (
+        <p className="px-3 py-4 text-caption text-muted-foreground">
+          Loading your threads…
         </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          Try again
-        </Button>
-      </div>
-    ) : threads.length === 0 ? (
-      <p className="px-3 py-4 text-caption text-muted-foreground">
-        {ALL_THREADS_EMPTY}
-      </p>
-    ) : (
-      <ul className="max-h-[min(28rem,70vh)] divide-y divide-border overflow-y-auto">
-        {threads.map((thread) => {
-          const isUnread = thread.unread_count > 0;
-          const channelName =
-            channelNameFor(thread.channel_id) ?? "Conversation";
-          const preview = memberThreadPreview(
-            thread.root as unknown as RawChatMessage,
-            viewerId,
-            names,
-          );
-          const rootAuthor = preview.root.sender_blocked
-            ? null
-            : resolveAuthorLabel(preview.root, nameFor, viewerId);
-          const when = formatRelativeDayTime(
-            thread.last_reply_at ?? thread.root.created_at,
-          );
-          return (
-            <li key={thread.thread_root_id}>
-              <button
-                type="button"
-                aria-label={`Thread in ${channelName}${
-                  isUnread ? `, ${thread.unread_count} new` : ""
-                }`}
-                onClick={() => {
-                  onOpenThread(thread.channel_id, thread.thread_root_id);
-                }}
-                className={cn(
-                  "block w-full px-3 py-3 text-left text-caption transition-colors",
-                  "hover:bg-card-hover",
-                  FOCUS_RING,
-                )}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    {isUnread ? (
+      ) : query.isError && threads.length === 0 ? (
+        <div className="flex items-center justify-between gap-3 px-3 py-4">
+          <p className="text-caption text-muted-foreground">
+            {ALL_THREADS_ERROR}
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : threads.length === 0 ? (
+        <p className="px-3 py-4 text-caption text-muted-foreground">
+          {ALL_THREADS_EMPTY}
+        </p>
+      ) : (
+        <ul className="max-h-[min(28rem,70vh)] divide-y divide-border overflow-y-auto">
+          {threads.map((thread) => {
+            const isUnread = thread.unread_count > 0;
+            const channelName =
+              channelNameFor(thread.channel_id) ?? "Conversation";
+            const preview = memberThreadPreview(
+              thread.root as unknown as RawChatMessage,
+              viewerId,
+              names,
+            );
+            const rootAuthor = preview.root.sender_blocked
+              ? null
+              : resolveAuthorLabel(preview.root, nameFor, viewerId);
+            const when = formatRelativeDayTime(
+              thread.last_reply_at ?? thread.root.created_at,
+            );
+            return (
+              <li key={thread.thread_root_id}>
+                <button
+                  type="button"
+                  aria-label={`Thread in ${channelName}${
+                    isUnread ? `, ${thread.unread_count} new` : ""
+                  }`}
+                  onClick={() => {
+                    onOpenThread(thread.channel_id, thread.thread_root_id);
+                  }}
+                  className={cn(
+                    "block w-full px-3 py-3 text-left text-caption transition-colors",
+                    "hover:bg-card-hover",
+                    FOCUS_RING,
+                  )}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      {isUnread ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-2 w-2 shrink-0 rounded-full bg-foreground"
+                        />
+                      ) : null}
                       <span
-                        aria-hidden="true"
-                        className="h-2 w-2 shrink-0 rounded-full bg-foreground"
-                      />
+                        className={cn(
+                          "truncate",
+                          isUnread
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {channelName}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {when}
+                    </span>
+                  </span>
+                  <span className="mt-1 block truncate text-muted-foreground">
+                    {rootAuthor ? (
+                      <>
+                        <span className="font-semibold">
+                          {rootAuthor}:
+                        </span>{" "}
+                      </>
                     ) : null}
+                    {preview.rootText}
+                  </span>
+                  {preview.reply ? (
                     <span
                       className={cn(
-                        "truncate",
+                        "mt-1 line-clamp-2 block whitespace-pre-wrap text-base",
                         isUnread
                           ? "font-semibold text-foreground"
                           : "text-muted-foreground",
                       )}
                     >
-                      {channelName}
+                      {preview.reply.name ? (
+                        <>
+                          <span className="font-semibold">
+                            {preview.reply.name}:
+                          </span>{" "}
+                        </>
+                      ) : null}
+                      {preview.reply.text}
                     </span>
-                  </span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {when}
-                  </span>
-                </span>
-                <span className="mt-1 block truncate text-muted-foreground">
-                  {rootAuthor ? (
-                    <>
-                      <span className="font-semibold">{rootAuthor}:</span>{" "}
-                    </>
                   ) : null}
-                  {preview.rootText}
-                </span>
-                {preview.reply ? (
-                  <span
-                    className={cn(
-                      "mt-1 line-clamp-2 block whitespace-pre-wrap text-base",
-                      isUnread
-                        ? "font-semibold text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {preview.reply.name ? (
-                      <>
-                        <span className="font-semibold">
-                          {preview.reply.name}:
-                        </span>{" "}
-                      </>
-                    ) : null}
-                    {preview.reply.text}
+                  <span className="mt-1 block text-muted-foreground">
+                    {thread.reply_count === 1
+                      ? "1 reply"
+                      : `${thread.reply_count} replies`}
+                    {thread.state === "muted" ? " · Muted" : ""}
                   </span>
-                ) : null}
-                <span className="mt-1 block text-muted-foreground">
-                  {thread.reply_count === 1
-                    ? "1 reply"
-                    : `${thread.reply_count} replies`}
-                  {thread.state === "muted" ? " · Muted" : ""}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </>
   );
 }
