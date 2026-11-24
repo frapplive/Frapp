@@ -57,3 +57,6 @@ export function pointCategoryLabel(
   const words = token.toLowerCase().replace(/_+/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/** The one name for the officer action, wherever it is offered. */
+export const ADJUST_POINTS_LABEL = "Adjust points";

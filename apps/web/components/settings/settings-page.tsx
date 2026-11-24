@@ -66,6 +66,7 @@ import {
   SettingsToolSubpage,
 } from "@/components/settings/settings-tool-views";
 import {
+  LEDGER_MEMBER_PARAM,
   SETTINGS_SUBPAGE_PARAMS,
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
@@ -878,8 +879,12 @@ function SettingsPageContent() {
                       <SettingsToolBody
                         moduleKey={module.key}
                         holdsTool={holdsTool}
+                        ledgerMember={searchParams.get(LEDGER_MEMBER_PARAM)}
                       />
                     }
+                    toolBodyLast={tools.some(
+                      (tool) => tool.page === module.key && tool.growsLong,
+                    )}
                     canSeeWhoCan={canSeeWhoCan}
                     canEditRoles={can("roles:manage", permissions)}
                     focusSwitch={focusModuleKey === module.key}

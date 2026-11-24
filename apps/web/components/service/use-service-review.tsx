@@ -13,9 +13,10 @@ export interface ReviewableServiceEntry {
 }
 
 /**
- * Approve or reject a pending service entry: the one review flow, shared by
- * the Service hours queue and the Activity page (#3897), so the prompt, the
- * optional comment and the toasts are the same wherever an approver acts.
+ * Approve or reject a pending service entry: the one review flow, on
+ * Activity's rows and its panel (#3897; the Service hours page's queue shared
+ * it until that page went, #5950), so the prompt, the optional comment and
+ * the toasts are the same wherever an approver acts.
  *
  * Each resolves `true` when the review was recorded, `false` when it was
  * cancelled or refused (the refusal has already been toasted). Render
@@ -43,8 +44,8 @@ export function useServiceReview() {
         error,
         fallback:
           "Only a pending entry someone else submitted can be approved.",
-        // No Try again here: the callers (the Service queue, the Activity row
-        // and sheet) act on this function's answer, and a retry from the
+        // No Try again here: the callers (the Activity row and its panel)
+        // act on this function's answer, and a retry from the
         // toast would land with none of them told. Their Approve button is
         // back and is the retry.
       });

@@ -7,7 +7,9 @@ import {
 import { StudyZonesManager } from "@/components/geofences/study-zones-manager";
 import { ChatAdminPage } from "@/components/chat-admin/chat-admin-page";
 import { DiscordImportPage } from "@/components/discord-import/discord-import-page";
+import { PointsLedger } from "@/components/points/points-ledger";
 import { ReportsPage } from "@/components/reports/reports-page";
+import { ServiceHistory } from "@/components/service/service-history";
 import { SettingsSubpage as SubpageFrame } from "@/components/settings/settings-subpage";
 import {
   CHAT_SETTINGS_PATH,
@@ -23,17 +25,31 @@ import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
 
 /**
  * The tool a module page draws as its own body: Study zones' zone list,
- * Chat's channels and report queue, the Reports form. Only for a viewer who
+ * Chat's channels and report queue, the Reports form, the points ledger, the
+ * chapter's service history. Only for a viewer who
  * holds it (`holdsTool` takes a `SETTINGS_TOOLS` id); the tool's row is not
  * on the page's Tools list either way (`embedded`).
  */
 export function SettingsToolBody({
   moduleKey,
   holdsTool,
+  ledgerMember,
 }: {
   moduleKey: string;
   holdsTool: (toolId: string) => boolean;
+  /** `?member=`: the member the points ledger opens on. */
+  ledgerMember?: string | null;
 }) {
+  if (moduleKey === "points" && holdsTool("points-ledger")) {
+    // Keyed by the member, so a second card's Ledger link starts from that
+    // member's filter rather than the last one's.
+    return (
+      <PointsLedger key={ledgerMember ?? "all"} initialMember={ledgerMember} />
+    );
+  }
+  if (moduleKey === "hours" && holdsTool("service-history")) {
+    return <ServiceHistory />;
+  }
   if (moduleKey === "geofences" && holdsTool("study-zones")) {
     return <StudyZonesManager />;
   }

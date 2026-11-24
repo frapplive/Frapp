@@ -35,6 +35,7 @@ import {
   useDismissAiSuggestion,
   useMembers,
   useMyPermissions,
+  usePermissionList,
   settleProposedEvent,
   type ActResponse,
   type AiSuggestion,
@@ -109,6 +110,8 @@ import {
 } from "@/components/ui/select";
 import { EYEBROW } from "@/components/ui/typography";
 import { eventDeepLink } from "@/lib/events/event-links";
+import { POINTS_SETTINGS_PATH } from "@/components/settings/settings-paths";
+import { POINTS_STANDINGS_HREF } from "@/components/standing/standing-doors";
 import { cn } from "@/lib/utils";
 
 /**
@@ -164,7 +167,6 @@ const EventEditorDialog = deferredPanel(
 );
 
 const RESULT_LINKS: Record<string, { href: string; label: string }> = {
-  points: { href: "/points", label: ACT_COPY.open_points },
   tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };
@@ -296,8 +298,16 @@ function resolutionLine(resolution: AskProposalResolution): string {
 /** Where a finished change can be opened: the event itself, else its page. */
 function resultLink(
   resolution: AskProposalResolution,
+  canSeeLedger: boolean,
 ): { href: string; label: string } | null {
   if (resolution.kind !== "done") return null;
+  // After points are given: the chapter ledger, where the new rows are, for
+  // a role that reads it; else Directory's standings, which everyone can.
+  if (resolution.page === "points") {
+    return canSeeLedger
+      ? { href: POINTS_SETTINGS_PATH, label: ACT_COPY.open_ledger }
+      : { href: POINTS_STANDINGS_HREF, label: ACT_COPY.open_standings };
+  }
   if (resolution.page === "events" && resolution.id) {
     return {
       href: eventDeepLink(resolution.id),
@@ -322,7 +332,10 @@ function FinishedCard({
   headline: string | null;
   resolution: AskProposalResolution;
 }) {
-  const link = resultLink(resolution);
+  const link = resultLink(
+    resolution,
+    can("points:view_all", usePermissionList()),
+  );
   const shown = resolution.shown ?? null;
   const Icon: LucideIcon =
     resolution.kind === "done"

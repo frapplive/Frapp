@@ -106,8 +106,14 @@ export interface PointsAdjustmentFormProps {
    * card.
    */
   submitToChannel?: (input: PointsAdjustmentInput) => Promise<DispatchResult>;
-  /** The Points page's refresh after a write with no card. */
+  /** The host's refresh after a write with no card. */
   onAdjusted?: () => Promise<void> | void;
+  /**
+   * The member this adjustment is for, when it was opened from them (their
+   * card's menu in Directory, #5950): named in place of the member pick, so
+   * the officer isn't asked who they were just looking at.
+   */
+  member?: { userId: string; name: string };
   initialDraft?: PointsDraft;
   onDraftChange?: (draft: PointsDraft) => void;
   onDone: () => void;
@@ -117,7 +123,8 @@ export interface PointsAdjustmentFormProps {
 
 /**
  * Adjust a member's points: member, amount, category and reason. One body for
- * the Points page's dialog and the chat composer's + card. A missing or
+ * the dialog (opened from a member's card or the chapter ledger) and the chat
+ * composer's + card. A missing or
  * invalid field is outlined, named under it and focused on submit, as the
  * Task form does; only a write the server refuses toasts.
  */
@@ -125,6 +132,7 @@ export function PointsAdjustmentForm({
   layout,
   submitToChannel,
   onAdjusted,
+  member,
   initialDraft,
   onDraftChange,
   onDone,
@@ -140,7 +148,11 @@ export function PointsAdjustmentForm({
   const viewerId = useViewerUserId();
   const { toast } = useToast();
   const [draft, setDraft] = useState<PointsDraft>(
-    () => initialDraft ?? emptyPointsDraft(),
+    () =>
+      initialDraft ?? {
+        ...emptyPointsDraft(),
+        targetUserId: member?.userId ?? "",
+      },
   );
   useReportDraft(draft, onDraftChange);
   const edit = (patch: Partial<PointsDraft>) =>
@@ -176,11 +188,17 @@ export function PointsAdjustmentForm({
     const amount = Number(draft.amount);
     const reason = draft.reason.trim();
     const next: Problems = {
-      member: !draft.targetUserId
-        ? "Pick a member."
-        : !memberOptions.some((option) => option.userId === draft.targetUserId)
-          ? "That member isn't in the chapter any more. Pick another."
-          : undefined,
+      // A member the form was opened from is taken as given: the card that
+      // opened it only offers the action for someone who can be adjusted.
+      member: member
+        ? undefined
+        : !draft.targetUserId
+          ? "Pick a member."
+          : !memberOptions.some(
+                (option) => option.userId === draft.targetUserId,
+              )
+            ? "That member isn't in the chapter any more. Pick another."
+            : undefined,
       // `AdjustPointsDto`'s bounds, checked here so a refusal names the
       // field: through chat a 4xx comes back as one generic "nothing was
       // recorded".
@@ -266,40 +284,42 @@ export function PointsAdjustmentForm({
       */}
       <SubscriptionNotice gate={gate} feature="adjusting points" />
 
-      <div className="grid gap-1">
-        <Label htmlFor={`${ids}-member`}>Member</Label>
-        {/*
-          The fields are gated alongside the submit, not just next to it: an
-          editable form behind a dead Submit is the wasted-effort failure §5
-          names.
-        */}
-        <Select
-          value={draft.targetUserId}
-          onValueChange={(value) => {
-            edit({ targetUserId: value });
-            clear("member");
-          }}
-        >
-          <SelectTrigger
-            ref={memberRef}
-            id={`${ids}-member`}
-            data-plus-autofocus
-            className={field}
-            aria-invalid={problems.member ? true : undefined}
-            {...gate.controlProps()}
+      {member ? null : (
+        <div className="grid gap-1">
+          <Label htmlFor={`${ids}-member`}>Member</Label>
+          {/*
+            The fields are gated alongside the submit, not just next to it: an
+            editable form behind a dead Submit is the wasted-effort failure §5
+            names.
+          */}
+          <Select
+            value={draft.targetUserId}
+            onValueChange={(value) => {
+              edit({ targetUserId: value });
+              clear("member");
+            }}
           >
-            <SelectValue placeholder="Pick a member" />
-          </SelectTrigger>
-          <SelectContent>
-            {memberOptions.map((option) => (
-              <SelectItem key={option.userId} value={option.userId}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {problems.member ? <FieldError>{problems.member}</FieldError> : null}
-      </div>
+            <SelectTrigger
+              ref={memberRef}
+              id={`${ids}-member`}
+              data-plus-autofocus
+              className={field}
+              aria-invalid={problems.member ? true : undefined}
+              {...gate.controlProps()}
+            >
+              <SelectValue placeholder="Pick a member" />
+            </SelectTrigger>
+            <SelectContent>
+              {memberOptions.map((option) => (
+                <SelectItem key={option.userId} value={option.userId}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {problems.member ? <FieldError>{problems.member}</FieldError> : null}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="grid min-w-0 grid-cols-1 content-start gap-1">

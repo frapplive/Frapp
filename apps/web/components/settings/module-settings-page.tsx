@@ -31,6 +31,12 @@ type Props = {
    * link row.
    */
   toolBody?: ReactNode;
+  /**
+   * Draw `toolBody` last, under the rules and who-can: for a body that is a
+   * list that keeps growing (`SettingsTool.growsLong`), which would otherwise
+   * push the page's settings out of reach.
+   */
+  toolBodyLast?: boolean;
   /** The module's stored rules, or nothing when it has none to set. */
   rules?: ReactNode;
   /** Whether the viewer can read roles (`members:view`) for "Who can". */
@@ -55,7 +61,8 @@ type Props = {
  * on/off state, then what the thing does, then who may use it; here the
  * officer tool comes before the rules because it is the thing an officer
  * opens most (Chat admin, Study zones, Reports), and the rules are set once
- * a term.
+ * a term. A tool that is a list which keeps growing (the points ledger, the
+ * service history, #5950) goes last instead, so the rules stay in reach.
  *
  * Everything shown is stored and read somewhere. A module with no rules has
  * no Rules block, rather than a disabled placeholder (#1760, #3439).
@@ -68,6 +75,7 @@ export function ModuleSettingsPage({
   onToggle,
   tools,
   toolBody,
+  toolBodyLast = false,
   rules,
   canSeeWhoCan,
   canEditRoles = false,
@@ -138,7 +146,7 @@ export function ModuleSettingsPage({
         </p>
       ) : null}
 
-      {toolBody}
+      {toolBodyLast ? null : toolBody}
 
       {linkedTools.length > 0 ? (
         <ProfileSection
@@ -158,6 +166,8 @@ export function ModuleSettingsPage({
           canEdit={canEditRoles}
         />
       ) : null}
+
+      {toolBodyLast ? toolBody : null}
     </div>
   );
 }
