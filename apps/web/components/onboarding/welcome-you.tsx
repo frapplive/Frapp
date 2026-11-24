@@ -6,13 +6,12 @@ import { Loader2 } from "lucide-react";
 import {
   useActiveChapterId,
   useCurrentUser,
-  useOwnCustomFields,
-  usePermissionList,
+  type OwnCustomField,
+  useOnboardingCustomFields,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
 import {
-  can,
   DISPLAY_NAME_MAX_LENGTH,
   NAME_LOCK_COPY,
   ONBOARDING_YOU_COPY,
@@ -81,10 +80,10 @@ export function WelcomeYou() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [step, setStep] = useState<"you" | "about">("you");
-  // The chapter's own fields (#5926), read as `/profile` reads them: the
-  // route needs `members:view`.
-  const canViewMembers = can("members:view", usePermissionList());
-  const customFields = useOwnCustomFields({ enabled: canViewMembers });
+  // The chapter's own fields (#5926), with the permission read they wait on
+  // (`useOnboardingCustomFields`), and the list About you opens on.
+  const customFields = useOnboardingCustomFields();
+  const [aboutFields, setAboutFields] = useState<OwnCustomField[]>([]);
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -160,16 +159,11 @@ export function WelcomeYou() {
         return;
       }
     }
-    // Fields still on their way are waited for, so a required one isn't
-    // missed for a slow read.
-    const fields =
-      canViewMembers && customFields.isPending
-        ? await customFields
-            .refetch()
-            .then((result) => result.data ?? [])
-            .catch(() => [])
-        : (customFields.data ?? []);
+    // Fields (and the permissions they need) still on their way are waited
+    // for, so a required one isn't missed for a slow read.
+    const fields = await customFields.load();
     if (needsAboutYou(aboutProfile, fields)) {
+      setAboutFields(fields);
       setLeaving(false);
       setStep("about");
       return;
@@ -194,7 +188,7 @@ export function WelcomeYou() {
     return (
       <WelcomeAbout
         saved={me}
-        fields={customFields.data ?? []}
+        fields={aboutFields}
         leaving={leaving}
         onDone={() => void finish()}
       />

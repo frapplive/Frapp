@@ -4,19 +4,21 @@ import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  errorCopy,
   type OwnCustomField,
+  ownCustomFieldDraft,
   ownCustomFieldFormChanges,
-  ownCustomFieldShownValue,
+  ownCustomFieldTidied,
   useChapterMajors,
   useCurrentUser,
   useFieldReveal,
-  useOwnCustomFields,
+  useOnboardingCustomFields,
   usePermissionList,
   useUpdateOnboarding,
   useUpdateOwnCustomFields,
   useUpdateUser,
+  withoutField,
 } from "@repo/hooks";
-import { formatPhone } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   can,
@@ -95,7 +97,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * #5627.
  *
  * Which screen comes first waits on the push read only so the button can say
- * where it goes; nothing is drawn until the profile and push reads are back,
+ * where it goes; nothing is drawn until the profile, push and chapter-fields reads are back,
  * and a slow read is given up on after {@link DECIDE_TIMEOUT_MS}.
  *
  * Leaving PATCHes `has_completed_onboarding`, so the gate will not send the
@@ -117,7 +119,7 @@ export default function Welcome() {
   const [leaving, setLeaving] = useState(false);
   // The guard itself, since two taps in one frame both read `leaving` false.
   const leavingRef = useRef(false);
-  // `deciding` until the profile and push reads are back (or given up on).
+  // `deciding` until the profile, push and chapter-fields reads are back (or given up on).
   const [step, setStep] = useState<"deciding" | Beat>("deciding");
   const [waitedOut, setWaitedOut] = useState(false);
   const userQuery = useCurrentUser();
@@ -138,30 +140,29 @@ export default function Welcome() {
   // name they have: it shows read-only, and isn't sent.
   const nameLocked = profile?.nameLocked === true;
   const canViewMembers = can("members:view", usePermissionList());
-  // The chapter's own fields (#5926), read as the You tab reads them: the
-  // route needs `members:view`.
-  const customFields = useOwnCustomFields({ enabled: canViewMembers });
+  // The chapter's own fields (#5926), with the permission read they wait on
+  // (`useOnboardingCustomFields`).
+  const customFields = useOnboardingCustomFields();
   // About you (#5284): shown when one of its fields, or a required field of
-  // the chapter's, is empty, decided from the profile and fields as they
-  // stand when the member leaves the name. A failed fields read asks from
-  // the profile alone.
+  // the chapter's, is empty. This drives the name's button label; leaving
+  // the name decides again once the fields are loaded (`leaveYou`). A failed
+  // fields read asks from the profile alone.
+  const aboutProfile = profile && {
+    phone: profile.phone,
+    major: profile.major,
+    graduationYear: profile.graduationYear,
+    birthdayMonth: profile.birthdayMonth,
+    birthdayDay: profile.birthdayDay,
+  };
   const askAbout =
-    profile !== null &&
-    needsAboutYou(
-      {
-        phone: profile.phone,
-        major: profile.major,
-        graduationYear: profile.graduationYear,
-        birthdayMonth: profile.birthdayMonth,
-        birthdayDay: profile.birthdayDay,
-      },
-      customFields.data ?? [],
-    );
+    aboutProfile !== null &&
+    needsAboutYou(aboutProfile, customFields.data ?? []);
   // What About you opened on (so a refetch underneath doesn't move it), what
   // was typed over it, and whether it was shown, for Android's back.
   const [aboutOriginal, setAboutOriginal] = useState<ProfileDraft | null>(null);
   const [aboutEdits, setAboutEdits] = useState<ProfileEdits | null>(null);
-  const [aboutFailed, setAboutFailed] = useState(false);
+  // A failed save's reason: the server's refusal, or the connection line.
+  const [aboutError, setAboutError] = useState<string | null>(null);
   const [savingAbout, setSavingAbout] = useState(false);
   const reveal = useFieldReveal<ProfileDraftField>();
   // The chapter's fields as About you opened on them, what was typed, and
@@ -233,13 +234,9 @@ export default function Welcome() {
   const profileKnown =
     userQuery.data !== undefined || userQuery.isError || waitedOut;
   const primerKnown = primer.ready || waitedOut;
-  // Whether About you comes next waits on the chapter's fields too, so a
-  // read still loading isn't read as "nothing required" (#5926).
-  const customKnown =
-    !canViewMembers ||
-    customFields.isFetched ||
-    customFields.isError ||
-    waitedOut;
+  // The name's button label waits on the chapter's fields too, permissions
+  // first, so a read still loading isn't read as "nothing required" (#5926).
+  const customKnown = customFields.settled || waitedOut;
   if (step === "deciding" && profileKnown && primerKnown && customKnown) {
     setHadPhoto(!!profile?.photoUrl);
     setStep("you");
@@ -277,17 +274,17 @@ export default function Welcome() {
         nameChanged,
       }),
     );
-    if (askAbout && profile) {
-      // The chapter's fields are seeded once: a return here from the name
-      // keeps what was typed in them.
-      if (!customOriginal) {
-        const fields = customFields.data ?? [];
+    // Decided with the chapter's fields loaded (or given up on), never from
+    // a read still on its way (#5926).
+    setSavingName(true);
+    const fields = await customFields.load();
+    setSavingName(false);
+    if (aboutProfile && profile && needsAboutYou(aboutProfile, fields)) {
+      // Seeded once there is something to seed: a return here from the name
+      // keeps what was typed, and an empty first read is filled in later.
+      if (!customOriginal || customOriginal.length === 0) {
         setCustomOriginal(fields);
-        setCustomDraft(
-          Object.fromEntries(
-            fields.map((f) => [f.field_id, ownCustomFieldShownValue(f)]),
-          ),
-        );
+        setCustomDraft(ownCustomFieldDraft(fields));
       }
       setAboutOriginal(draftFromProfile(profile));
       setStep("about");
@@ -302,7 +299,7 @@ export default function Welcome() {
 
   function editAbout(field: ProfileDraftField, value: string) {
     if (!aboutOriginal) return;
-    setAboutFailed(false);
+    setAboutError(null);
     // The phone formats as it is typed (#5798), as on the Edit sheet.
     const next =
       field === "phone" ? typedPhone(value, aboutShown?.phone ?? "") : value;
@@ -322,23 +319,18 @@ export default function Welcome() {
   }
 
   function editCustom(field: OwnCustomField, value: string) {
-    setAboutFailed(false);
-    setCustomProblems((prev) => {
-      if (!(field.field_id in prev)) return prev;
-      const rest = { ...prev };
-      delete rest[field.field_id];
-      return rest;
-    });
+    setAboutError(null);
+    setCustomProblems((prev) => withoutField(prev, field.field_id));
     setCustomDraft((prev) => ({ ...prev, [field.field_id]: value }));
   }
 
   // A number reads (518) 555-0142 once the member leaves it, as on the You
   // tab's More details.
   function leaveCustom(field: OwnCustomField) {
-    if (field.type !== "phone") return;
     setCustomDraft((prev) => {
-      const typed = prev[field.field_id];
-      return typed ? { ...prev, [field.field_id]: formatPhone(typed) } : prev;
+      const typed = prev[field.field_id] ?? "";
+      const tidy = ownCustomFieldTidied(field, typed);
+      return tidy === typed ? prev : { ...prev, [field.field_id]: tidy };
     });
   }
 
@@ -360,7 +352,7 @@ export default function Welcome() {
     const profileChanged = hasChanges(aboutResult.patch);
     if (profileChanged || custom.values.length > 0) {
       setSavingAbout(true);
-      setAboutFailed(false);
+      setAboutError(null);
       try {
         if (profileChanged) {
           await updateUser.mutateAsync(aboutResult.patch);
@@ -372,15 +364,17 @@ export default function Welcome() {
           setAboutEdits(null);
         }
         if (custom.values.length > 0) {
-          const saved = await updateCustom.mutateAsync(custom.values);
-          setCustomOriginal((prev) =>
-            (prev ?? []).map(
-              (f) => saved.find((next) => next.field_id === f.field_id) ?? f,
-            ),
-          );
+          // The answer is all the member's fields, the new baseline.
+          setCustomOriginal(await updateCustom.mutateAsync(custom.values));
         }
-      } catch {
-        setAboutFailed(true);
+      } catch (error) {
+        // A refused value names its field and why (a choice an officer
+        // removed since the step opened); anything else is the connection.
+        setAboutError(
+          errorCopy(error, ONBOARDING_ABOUT_COPY.saveFailed, {
+            serverWritesForMembers: true,
+          }),
+        );
         return;
       } finally {
         setSavingAbout(false);
@@ -464,9 +458,9 @@ export default function Welcome() {
                 onLeave={leaveCustom}
                 editable={!answering}
               />
-              {aboutFailed ? (
+              {aboutError ? (
                 <Text style={styles.error} accessibilityRole="alert">
-                  {ONBOARDING_ABOUT_COPY.saveFailed}
+                  {aboutError}
                 </Text>
               ) : null}
             </>

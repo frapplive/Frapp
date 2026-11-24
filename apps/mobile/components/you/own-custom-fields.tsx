@@ -5,19 +5,17 @@ import {
   type OwnCustomField,
   ownCustomFieldFormChanges,
   ownCustomFieldShownValue,
+  ownCustomFieldTidied,
   useOwnCustomFields,
   usePermissionList,
   useUpdateOwnCustomFields,
+  withoutField,
 } from "@repo/hooks";
-import { formatPhone } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   can,
   CUSTOM_FIELD_AUDIENCE_LINE,
-  customFieldTextMaxLength,
   OWN_CUSTOM_FIELDS_COPY as COPY,
-  ownCustomFieldRule,
-  PHONE_MAX_LENGTH,
 } from "@repo/validation";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import { OptionSheet } from "@/components/option-sheet";
@@ -34,7 +32,7 @@ import {
 } from "@/components/sheet-scaffold";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import {
-  ownCustomFieldKeyboard,
+  ownCustomFieldInputProps,
   ownCustomFieldOptions,
   ownCustomFieldRows,
 } from "@/lib/more/own-custom-fields";
@@ -104,12 +102,7 @@ export function OwnCustomFieldsSection() {
 
   const fieldById = new Map(fields.map((field) => [field.field_id, field]));
   const save = (fieldId: string, value: string | null) => {
-    setFailed((prev) => {
-      if (!(fieldId in prev)) return prev;
-      const rest = { ...prev };
-      delete rest[fieldId];
-      return rest;
-    });
+    setFailed((prev) => withoutField(prev, fieldId));
     update.mutate([{ field_id: fieldId, value }], {
       onError: (error) =>
         setFailed((prev) => ({ ...prev, [fieldId]: refusal(error) })),
@@ -274,23 +267,14 @@ const OwnCustomFieldSheet = forwardRef<
               onBlur={() => {
                 setFocused(false);
                 // A number reads (518) 555-0142 once the member leaves it.
-                if (field.type === "phone" && draft)
-                  setDraft(formatPhone(draft));
+                setDraft(ownCustomFieldTidied(field, draft));
               }}
               onSubmitEditing={commit}
               editable={!update.isPending}
               accessibilityLabel={field.label}
               placeholder={COPY.notSet}
               placeholderTextColor={tokens.color.text.muted}
-              keyboardType={ownCustomFieldKeyboard(field.type)}
-              textContentType={
-                field.type === "phone" ? "telephoneNumber" : undefined
-              }
-              maxLength={
-                field.type === "phone"
-                  ? PHONE_MAX_LENGTH
-                  : customFieldTextMaxLength(ownCustomFieldRule(field))
-              }
+              {...ownCustomFieldInputProps(field)}
               style={[
                 styles.field,
                 focused ? styles.fieldFocused : null,

@@ -14,16 +14,18 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   refetch: vi.fn(),
   customFields: [] as Record<string, unknown>[],
+  /** What the fields read holds when the screen draws; `load` answers with `customFields`. */
+  customFieldsLoaded: true,
   updateCustom: vi.fn(),
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   // The pure helpers (shown value, form changes) are the real ones.
   ...(await importOriginal<typeof import("@repo/hooks")>()),
-  useOwnCustomFields: () => ({
-    data: mocks.customFields,
-    isPending: false,
-    refetch: vi.fn(),
+  useOnboardingCustomFields: () => ({
+    data: mocks.customFieldsLoaded ? mocks.customFields : undefined,
+    settled: mocks.customFieldsLoaded,
+    load: async () => mocks.customFields,
   }),
   useUpdateOwnCustomFields: () => ({ mutateAsync: mocks.updateCustom }),
   useCurrentUser: () => ({
@@ -379,6 +381,7 @@ describe("About you with the chapter's fields (#5926)", () => {
     mocks.isError = false;
     mocks.offline = false;
     mocks.customFields = [CONTACT, SHIRT, ALLERGIES];
+    mocks.customFieldsLoaded = true;
     mocks.updateUser.mockResolvedValue({});
     mocks.updateCustom.mockImplementation(async (values) =>
       mocks.customFields.map((f) => ({
@@ -450,6 +453,37 @@ describe("About you with the chapter's fields (#5926)", () => {
     ).toBeTruthy();
     expect(seeMore().getAttribute("aria-expanded")).toBe("true");
     expect(mocks.updateCustom).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("waits for a fields read still loading, so a required field isn't missed", async () => {
+    mocks.customFieldsLoaded = false;
+    render(<WelcomeYou />);
+
+    // Nothing loaded yet: the button can only go by the profile.
+    fireEvent.click(screen.getByRole("button", { name: "Go to chat" }));
+
+    await screen.findByRole("heading", { name: "About you" });
+    fireEvent.click(seeMore());
+    expect(screen.getByLabelText("Emergency contact (name)")).toBeTruthy();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's refusal, not the connection line", async () => {
+    mocks.updateCustom.mockRejectedValueOnce({
+      statusCode: 400,
+      message: "Pick one of the choices for T-shirt size.",
+    });
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "Grace Hopper" },
+    });
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText("Pick one of the choices for T-shirt size."),
+    ).toBeTruthy();
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 

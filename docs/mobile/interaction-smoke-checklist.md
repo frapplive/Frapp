@@ -39,7 +39,7 @@ came with #2302 (PR #2611).
 | Terms (`/(auth)/terms`) | Tick the box, Agree and continue | `POST /v1/users/me/legal-acceptance`; the gate moves on to welcome or `/` |
 | Terms (`/(auth)/terms`) | Sign out / Delete account | Sign out routes to sign-in; Delete account confirms, deletes, and signs out (Settings is unreachable from here) |
 | Welcome (`/(auth)/welcome`) | How the chapter sees you: the name pre-filled from Apple or Google, empty for an email sign-up; Continue (or Go to chat when About you is skipped and push is already on) | An empty name says `Add your name so the chapter knows who's talking.`; a changed name saves, then About you, the notifications screen or chat |
-| Welcome (`/(auth)/welcome`) | About you (only when phone, major, graduation year or birthday is empty): type a major, Continue; or Skip for now | Continue saves only what changed, then notifications or chat; a phone like `12` shows the phone refusal and stays; Skip for now saves nothing; Android back returns to the name |
+| Welcome (`/(auth)/welcome`) | About you (only when phone, major, graduation year or birthday is empty, or a required chapter field is): type a major, open See more and fill a chapter field, Continue; or Skip for now | Continue saves only what changed, then notifications or chat; a phone like `12` shows the phone refusal and stays; Skip for now saves nothing; Android back returns to the name |
 | Welcome (`/(auth)/welcome`) | Go to chat (the one button, pinned at the bottom) | PATCHes `has_completed_onboarding: true` and replaces into `/` |
 | Chapter picker (empty) | Join or start a chapter | Opens join (s02), which asks invite or start |
 | Create chapter (`/(auth)/create-chapter`) | Directory row → Continue → color + Terms → Create; or Not in our directory? → fields + archetype → Continue | `POST /v1/chapters/onboard`; the later steps stay on this route. A FIJI row shows no letters anywhere |
@@ -157,7 +157,7 @@ Availability and local-notification checks:
 | Screen | Control | Expected outcome |
 |---|---|---|
 | Settings (`/(app)/preferences`) | Push notifications row, Expo Go | Reads "Unavailable" with the Expo Go sentence, draws no switch, and does nothing on a tap |
-| First-run (`/(auth)/welcome`, s03) | Notifications step, Expo Go | Skipped: the screen shows "How the chapter sees you" (name and photo), then About you when a profile field is empty, then "Go to chat", with no notifications step, no disabled "Turn on" and no apology ([#2299](https://github.com/pdcarlson/Frapp/issues/2299)) |
+| First-run (`/(auth)/welcome`, s03) | Notifications step, Expo Go | Skipped: the screen shows "How the chapter sees you" (name and photo), then About you when a profile field or a required chapter field is empty, then "Go to chat", with no notifications step, no disabled "Turn on" and no apology ([#2299](https://github.com/pdcarlson/Frapp/issues/2299)) |
 | Study hours | Background the app mid-session (installed build) | A local "Study session paused" notification appears; returning clears it. **Local** notifications need the native module but no project id and can be tested independently of remote-push setup — this does nothing in Expo Go |
 | Study hours | End a session while paused | The paused notification is cleared rather than left inviting the member back to a session that no longer exists |
 

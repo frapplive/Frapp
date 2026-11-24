@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import {
+  errorCopy,
   type OwnCustomField,
+  ownCustomFieldDraft,
   ownCustomFieldFormChanges,
-  ownCustomFieldShownValue,
   useChapterMajors,
   usePermissionList,
   useUpdateOwnCustomFields,
   useUpdateUser,
+  withoutField,
 } from "@repo/hooks";
 import { formatPhone } from "@repo/formatting";
 import {
@@ -87,9 +89,7 @@ export function WelcomeAbout({
   // The chapter's fields as the step opened on them, and what was typed.
   const [customOriginal, setCustomOriginal] = useState(() => [...fields]);
   const [customDraft, setCustomDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      fields.map((field) => [field.field_id, ownCustomFieldShownValue(field)]),
-    ),
+    ownCustomFieldDraft(fields),
   );
   const [customProblems, setCustomProblems] = useState<Record<string, string>>(
     {},
@@ -99,7 +99,8 @@ export function WelcomeAbout({
   const [yearInvalid, setYearInvalid] = useState(false);
   const [birthdayProblem, setBirthdayProblem] =
     useState<BirthdayDraftProblem | null>(null);
-  const [saveFailed, setSaveFailed] = useState(false);
+  // A failed save's reason: the server's refusal, or the connection line.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const busy = saving || leaving;
 
@@ -130,7 +131,7 @@ export function WelcomeAbout({
     }
     if (Object.keys(body).length > 0 || custom.values.length > 0) {
       setSaving(true);
-      setSaveFailed(false);
+      setSaveError(null);
       try {
         if (Object.keys(body).length > 0) {
           await updateUser.mutateAsync(body);
@@ -138,17 +139,17 @@ export function WelcomeAbout({
           setOriginal(draft);
         }
         if (custom.values.length > 0) {
-          const savedFields = await updateCustom.mutateAsync(custom.values);
-          setCustomOriginal(
-            customOriginal.map(
-              (field) =>
-                savedFields.find((next) => next.field_id === field.field_id) ??
-                field,
-            ),
-          );
+          // The answer is all the member's fields, the new baseline.
+          setCustomOriginal(await updateCustom.mutateAsync(custom.values));
         }
-      } catch {
-        setSaveFailed(true);
+      } catch (error) {
+        // A refused value names its field and why (a choice an officer
+        // removed since the step opened); anything else is the connection.
+        setSaveError(
+          errorCopy(error, ONBOARDING_ABOUT_COPY.saveFailed, {
+            serverWritesForMembers: true,
+          }),
+        );
         setSaving(false);
         return;
       }
@@ -164,14 +165,10 @@ export function WelcomeAbout({
       value={customDraft[field.field_id] ?? ""}
       problem={customProblems[field.field_id] ?? null}
       disabled={busy}
+      fullWidth
       onChange={(value) => {
-        setCustomProblems((prev) => {
-          if (!(field.field_id in prev)) return prev;
-          const rest = { ...prev };
-          delete rest[field.field_id];
-          return rest;
-        });
-        setSaveFailed(false);
+        setCustomProblems((prev) => withoutField(prev, field.field_id));
+        setSaveError(null);
         setCustomDraft((prev) => ({ ...prev, [field.field_id]: value }));
       }}
     />
@@ -198,7 +195,7 @@ export function WelcomeAbout({
             if ("phone" in patch) setPhoneInvalid(false);
             if ("graduation_year" in patch) setYearInvalid(false);
             if ("birthday_month" in patch) setBirthdayProblem(null);
-            setSaveFailed(false);
+            setSaveError(null);
             setDraft((prev) => ({ ...prev, ...patch }));
           }}
         />
@@ -208,7 +205,7 @@ export function WelcomeAbout({
             <button
               type="button"
               className={cn(
-                "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
+                "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border bg-transparent px-3 text-left text-body text-foreground transition-colors hover:bg-card-hover disabled:opacity-50",
                 FOCUS_RING,
               )}
               disabled={busy}
@@ -236,9 +233,9 @@ export function WelcomeAbout({
             ) : null}
           </div>
         ) : null}
-        {saveFailed ? (
+        {saveError ? (
           <p role="alert" className="text-sm text-destructive">
-            {ONBOARDING_ABOUT_COPY.saveFailed}
+            {saveError}
           </p>
         ) : null}
         <div className="grid gap-2">

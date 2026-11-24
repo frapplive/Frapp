@@ -6,11 +6,8 @@ import { formatCustomFieldValue } from "@repo/formatting";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   CUSTOM_FIELD_AUDIENCE_LINE,
-  customFieldTextMaxLength,
   ONBOARDING_ABOUT_COPY,
   OWN_CUSTOM_FIELDS_COPY,
-  ownCustomFieldRule,
-  PHONE_MAX_LENGTH,
 } from "@repo/validation";
 import { DisclosureGlyph, ForwardGlyph } from "@/components/control-glyphs";
 import { ListRow, ListSection } from "@/components/list-section";
@@ -23,7 +20,8 @@ import { OptionSheet } from "@/components/option-sheet";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
 import { Toggle } from "@/components/toggle";
 import {
-  ownCustomFieldKeyboard,
+  ownCustomFieldControl,
+  ownCustomFieldInputProps,
   ownCustomFieldOptions,
 } from "@/lib/more/own-custom-fields";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -86,7 +84,8 @@ export function AboutYouCustomFields({
   const control = (field: OwnCustomField) => {
     const value = draft[field.field_id] ?? "";
     const invalid = !!problems[field.field_id];
-    if (field.type === "boolean") {
+    const kind = ownCustomFieldControl(field.type);
+    if (kind === "switch") {
       // Label, who sees it, and the switch at the row's end, like the
       // birthday's share switch above.
       return (
@@ -105,7 +104,7 @@ export function AboutYouCustomFields({
         </View>
       );
     }
-    if (field.type === "select") {
+    if (kind === "pick") {
       const shown = formatCustomFieldValue(field.type, value || null);
       return (
         <View key={field.field_id} style={styles.group}>
@@ -141,18 +140,9 @@ export function AboutYouCustomFields({
           onChangeText={(next) => onEdit(field, next)}
           onBlur={() => onLeave(field)}
           editable={editable}
-          placeholder={OWN_CUSTOM_FIELDS_COPY.notSet}
           accessibilityLabel={field.label}
-          keyboardType={ownCustomFieldKeyboard(field.type)}
-          textContentType={
-            field.type === "phone" ? "telephoneNumber" : undefined
-          }
+          {...ownCustomFieldInputProps(field)}
           autoCapitalize={field.type === "text" ? "sentences" : "none"}
-          maxLength={
-            field.type === "phone"
-              ? PHONE_MAX_LENGTH
-              : customFieldTextMaxLength(ownCustomFieldRule(field))
-          }
           style={invalid ? styles.invalid : null}
         />
         {line(field)}

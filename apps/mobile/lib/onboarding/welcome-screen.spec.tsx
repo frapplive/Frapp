@@ -76,6 +76,8 @@ const COMPLETE_USER = {
 let currentUser: Record<string, unknown> | undefined = COMPLETE_USER;
 /** The chapter's own fields with the member's values (#5926); none by default. */
 let customFields: Record<string, unknown>[] = [];
+/** Whether the fields read (and the permissions it needs) has answered. */
+let customFieldsSettled = true;
 const updateCustom = vi.fn();
 
 const track = vi.fn();
@@ -109,10 +111,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     refetch: () => Promise.resolve({ data: currentUser }),
   }),
   useUpdateUser: () => ({ mutateAsync: updateUser }),
-  useOwnCustomFields: () => ({
-    data: customFields,
-    isFetched: true,
-    isError: false,
+  useOnboardingCustomFields: () => ({
+    data: customFieldsSettled ? customFields : undefined,
+    settled: customFieldsSettled,
+    load: async () => customFields,
   }),
   useUpdateOwnCustomFields: () => ({ mutateAsync: updateCustom }),
   usePermissionList: () => ["members:view"],
@@ -830,6 +832,7 @@ describe("s03 welcome, About you with the chapter's fields", () => {
     permission = null;
     currentUser = COMPLETE_USER;
     customFields = [CONTACT, CONTACT_PHONE, SHIRT];
+    customFieldsSettled = true;
     completeOnboarding.mockClear();
     updateUser.mockClear().mockResolvedValue({});
     updateCustom.mockReset().mockImplementation(async () => customFields);
@@ -942,6 +945,67 @@ describe("s03 welcome, About you with the chapter's fields", () => {
     expect(texts(root).some((t) => t.includes("Enter a phone number"))).toBe(
       true,
     );
+  });
+
+  it("draws nothing while the fields read is still out, then decides with it", async () => {
+    customFieldsSettled = false;
+    const { root } = await render({ passYou: false });
+
+    // Still deciding: the name's button would only know the profile.
+    expect(
+      root.findAll((n) => n.props.testID === "welcome-deciding").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("waits for the fields on leaving the name, so a required one isn't missed", async () => {
+    customFieldsSettled = false;
+    const { root } = await render({ passYou: false });
+    // Past the 4-second give-up, the screen draws without the fields.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4_100));
+    });
+
+    await answerYou(root);
+
+    expect(onAbout(root)).toBe(true);
+    await press(seeMore(root));
+    expect(input(root, "Emergency contact (name)")).toBeDefined();
+  }, 10_000);
+
+  it("shows the server's refusal, not the connection line", async () => {
+    updateCustom.mockRejectedValueOnce({
+      statusCode: 400,
+      message: "Pick one of the choices for T-shirt size.",
+    });
+    const { root } = await renderOpen();
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
+    );
+
+    await press(button(root, "Go to chat"));
+
+    expect(
+      texts(root).some((t) =>
+        t.includes("Pick one of the choices for T-shirt size."),
+      ),
+    ).toBe(true);
+  });
+
+  it("doesn't resend the profile when only the fields failed", async () => {
+    currentUser = { ...COMPLETE_USER, major: null };
+    updateCustom.mockRejectedValueOnce(new Error("offline"));
+    const { root } = await renderOpen();
+    act(() => input(root, "Major")?.props.onChangeText("Physics"));
+    act(() =>
+      input(root, "Emergency contact (name)")?.props.onChangeText("Grace"),
+    );
+
+    await press(button(root, "Go to chat"));
+    await press(button(root, "Go to chat"));
+
+    expect(updateUser).toHaveBeenCalledTimes(1);
+    expect(updateCustom).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
   });
 
   it("stays with the reason when the fields can't be saved", async () => {

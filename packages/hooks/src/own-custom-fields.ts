@@ -1,15 +1,18 @@
 "use client";
 
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { formatPhone } from "@repo/formatting";
-import { ownCustomFieldChanges } from "@repo/validation";
+import { can, ownCustomFieldChanges } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { useMyPermissions } from "./use-user";
 
 /**
  * Your own custom-field values (#581): the chapter's fields (T-shirt size,
  * allergies, an emergency contact) with what you set for each, read and
- * written on web `/profile` and the phone's You tab. Every tier comes back,
+ * written on web `/profile` and the phone's You tab, and on About you after a
+ * join (#5926, `useOnboardingCustomFields`). Every tier comes back,
  * since a member always reads their own; `visibility` is who else sees it.
  */
 export type OwnCustomField = components["schemas"]["OwnCustomFieldDto"];
@@ -50,6 +53,37 @@ export function ownCustomFieldFormChanges(
   return ownCustomFieldChanges(fields, draft, (field) =>
     ownCustomFieldShownValue(field as OwnCustomField),
   );
+}
+
+/** A form's starting draft: each field's shown value, by field id. */
+export function ownCustomFieldDraft(
+  fields: readonly OwnCustomField[],
+): Record<string, string> {
+  return Object.fromEntries(
+    fields.map((field) => [field.field_id, ownCustomFieldShownValue(field)]),
+  );
+}
+
+/**
+ * The value a typed field reads once the member leaves it: a phone formatted
+ * as every screen shows it ((518) 555-0142), the rest as typed.
+ */
+export function ownCustomFieldTidied(
+  field: Pick<OwnCustomField, "type">,
+  typed: string,
+): string {
+  return field.type === "phone" && typed ? formatPhone(typed) : typed;
+}
+
+/** A per-field record without one field's entry; the same record when absent. */
+export function withoutField<T>(
+  record: Record<string, T>,
+  fieldId: string,
+): Record<string, T> {
+  if (!(fieldId in record)) return record;
+  const rest = { ...record };
+  delete rest[fieldId];
+  return rest;
 }
 
 export function useOwnCustomFields(options: { enabled?: boolean } = {}) {
@@ -104,4 +138,48 @@ export function useUpdateOwnCustomFields() {
       }
     },
   });
+}
+
+/**
+ * The chapter's fields for About you after a join (#5926), on web `/welcome`
+ * and the phone's s03. The read needs `members:view`, and right after a join
+ * the new chapter's permissions are rarely cached yet, so a permission list
+ * still loading is "not known", never "can't read" (`settled`); and `load`
+ * waits for both reads before the step decides, so a slow read can't skip
+ * About you for a member whose only gap is a required field.
+ *
+ * `load` answers `[]` when the member can't read the fields or a read fails,
+ * and gives up after `timeoutMs` with whatever is loaded, so a hung request
+ * never holds the member on the name.
+ */
+export function useOnboardingCustomFields() {
+  const permissions = useMyPermissions();
+  const canView = can("members:view", permissions.data?.permissions ?? []);
+  const fields = useOwnCustomFields({ enabled: canView });
+  const settled =
+    (permissions.isFetched || permissions.isError) &&
+    (!canView || fields.isFetched || fields.isError);
+  const { refetch: refetchPermissions, data: permissionData } = permissions;
+  const { refetch: refetchFields, data: fieldData } = fields;
+  const load = useCallback(
+    async (timeoutMs = 4_000): Promise<OwnCustomField[]> => {
+      const read = async () => {
+        const known =
+          permissionData ?? (await refetchPermissions()).data ?? null;
+        if (!can("members:view", known?.permissions ?? [])) return [];
+        return fieldData ?? (await refetchFields()).data ?? [];
+      };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const gaveUp = new Promise<OwnCustomField[]>((resolve) => {
+        timer = setTimeout(() => resolve(fieldData ?? []), timeoutMs);
+      });
+      try {
+        return await Promise.race([read().catch(() => []), gaveUp]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    [permissionData, fieldData, refetchPermissions, refetchFields],
+  );
+  return { data: fieldData, settled, load };
 }

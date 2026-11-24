@@ -2,7 +2,10 @@ import { type OwnCustomField, ownCustomFieldOffersNotSet } from "@repo/hooks";
 import { formatCustomFieldValue } from "@repo/formatting";
 import {
   CUSTOM_FIELD_AUDIENCE_LINE,
+  customFieldTextMaxLength,
   OWN_CUSTOM_FIELDS_COPY,
+  ownCustomFieldRule,
+  PHONE_MAX_LENGTH,
 } from "@repo/validation";
 import type { SheetOption } from "@/components/option-sheet";
 
@@ -25,6 +28,13 @@ export type OwnCustomFieldRow = {
   on: boolean;
 };
 
+/** The control a field's type gets: a pick, a switch, or typed text. */
+export function ownCustomFieldControl(
+  type: OwnCustomField["type"],
+): OwnCustomFieldRow["control"] {
+  return type === "select" ? "pick" : type === "boolean" ? "switch" : "type";
+}
+
 export function ownCustomFieldRows(
   fields: readonly OwnCustomField[] | undefined,
 ): OwnCustomFieldRow[] {
@@ -35,12 +45,7 @@ export function ownCustomFieldRows(
       formatCustomFieldValue(field.type, field.value) ??
       OWN_CUSTOM_FIELDS_COPY.notSet,
     audience: CUSTOM_FIELD_AUDIENCE_LINE[field.visibility],
-    control:
-      field.type === "select"
-        ? "pick"
-        : field.type === "boolean"
-          ? "switch"
-          : "type",
+    control: ownCustomFieldControl(field.type),
     on: field.value === "true",
   }));
 }
@@ -67,4 +72,24 @@ export function ownCustomFieldKeyboard(
   if (type === "decimal") return "decimal-pad";
   if (type === "phone") return "phone-pad";
   return "default";
+}
+
+/**
+ * A typed field's input rules, the same in the You tab's sheet and About you
+ * after a join (#5926): its keyboard, the phone's autofill hint, and the
+ * longest value it takes.
+ */
+export function ownCustomFieldInputProps(field: OwnCustomField): {
+  keyboardType: ReturnType<typeof ownCustomFieldKeyboard>;
+  textContentType: "telephoneNumber" | undefined;
+  maxLength: number;
+} {
+  return {
+    keyboardType: ownCustomFieldKeyboard(field.type),
+    textContentType: field.type === "phone" ? "telephoneNumber" : undefined,
+    maxLength:
+      field.type === "phone"
+        ? PHONE_MAX_LENGTH
+        : customFieldTextMaxLength(ownCustomFieldRule(field)),
+  };
 }
