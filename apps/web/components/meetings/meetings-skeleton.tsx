@@ -1,7 +1,5 @@
 import {
   PageSkeleton,
-  SectionSkeleton,
-  SkeletonRows,
   SkeletonSectionLabel,
 } from "@/components/shared/page-skeletons";
 import { SkeletonText } from "@/components/shared/async-states";
