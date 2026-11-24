@@ -32,7 +32,7 @@ type BidCandidate = Pick<
 >;
 
 /** A recorded acceptance still waiting for the PNM or an officer. */
-export function rushBidWaiting(
+function rushBidWaiting(
   candidate: Pick<BidCandidate, "bid_state" | "bid_acceptance_recorded_at">,
 ): boolean {
   return (

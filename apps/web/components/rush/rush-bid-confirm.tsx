@@ -96,7 +96,7 @@ function ConfirmBid({ token }: { token: string }) {
  * The bid, its state first (rulebook § 6): waiting with the one button, then
  * what the tap did, or that there is nothing left to confirm.
  */
-export function BidCard({
+function BidCard({
   bid,
   pending,
   onConfirm,

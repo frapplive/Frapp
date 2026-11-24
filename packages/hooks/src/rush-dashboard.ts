@@ -79,7 +79,7 @@ export interface RushRankedProspect {
 }
 
 /** How many prospects each ranked list shows. */
-export const RUSH_DASHBOARD_TOP = 5;
+const RUSH_DASHBOARD_TOP = 5;
 
 export function rushDashboard(
   stages: readonly RushStageView[],
