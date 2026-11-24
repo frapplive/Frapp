@@ -1,6 +1,6 @@
 import { db, miss } from "../harness.mjs";
 
-// ─── Functional: school layer 1 (20261123220535, #5929) ─────────────────────
+// ─── Functional: school layer 1 (20261124182353, #5929) ─────────────────────
 //
 // school-layer.md § 4.3's database-level checks for this slice:
 //
@@ -21,7 +21,7 @@ import { db, miss } from "../harness.mjs";
 //     the functions (§ 4.1).
 //
 // The rows it adds are deleted at the end; the seeded schools stay.
-console.log("\n=== Functional: school layer (20261123220535) ===");
+console.log("\n=== Functional: school layer (20261124182353) ===");
 try {
   const U1 = "a5929000-0000-4000-8000-000000000001";
   const U2 = "a5929000-0000-4000-8000-000000000002";

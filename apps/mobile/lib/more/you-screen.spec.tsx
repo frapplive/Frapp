@@ -48,10 +48,10 @@ const goalReadOptions: ({ enabled?: boolean } | undefined)[] = [];
 let permissionsLoading = false;
 const hiddenFeatureCalls: unknown[][] = [];
 let chapterModules: Record<string, boolean> = {};
-/** The open tenant's kind (#5933): a council's You is the member's own. */
-let tenantKind: "chapter" | "council" = "chapter";
 /** More of the chapter's member view: its archetype and words (#5924). */
 let chapterExtra: Record<string, unknown> = {};
+/** The open tenant's kind (#5933): a council's You is the member's own. */
+let tenantKind: "chapter" | "council" = "chapter";
 /** False while `useCurrentChapter` hasn't answered (#5281's slow-read case). */
 let chapterLoaded = true;
 /** What `useMyProfileStats` answers (#5281); its reads are its own spec's. */
@@ -166,8 +166,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       ? undefined
       : {
           name: "FIJI Tau Nu",
-          kind: tenantKind,
           ...chapterExtra,
+          kind: tenantKind,
           enabled_modules: chapterModules,
           theme_palette: {
             "--signet-accent-text": "#7FB2FF",

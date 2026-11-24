@@ -616,7 +616,7 @@ export interface Database {
         Returns: Json;
       };
       /**
-       * `20261123220535` (#5929). Checks a school-email code against the
+       * `20261124182353` (#5929). Checks a school-email code against the
        * account's open verification and writes the `school_members` row on a
        * match. Answers `{ ok, reason, attempts_left, member_id }`.
        */
@@ -756,7 +756,7 @@ export interface Database {
         Args: { p_import_id: string; p_chapter_id: string };
         Returns: string[];
       };
-      /** `20261124082248` (#5974) — deletes a PNM and its cascade; returns the count. */
+      /** `20261124205834` (#5974) — deletes a PNM and its cascade; returns the count. */
       delete_pnm: {
         Args: { p_pnm_id: string };
         Returns: number;
@@ -791,7 +791,7 @@ export interface Database {
         } | null;
       };
       /**
-       * `20261123220535` (#5929). Deletes the user's open school-email code
+       * `20261124182353` (#5929). Deletes the user's open school-email code
        * whose email didn't go out.
        */
       discard_school_email_verification: {
@@ -1143,7 +1143,7 @@ export interface Database {
         };
         Returns: Task[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb`: `PnmMergeResult`. */
+      /** `20261124205834` (#5974) — `returns jsonb`: `PnmMergeResult`. */
       merge_pnms: {
         Args: {
           p_council_id: string;
@@ -1182,7 +1182,7 @@ export interface Database {
         Args: { p_token_hash: string };
         Returns: Json;
       };
-      /** `20261124082248` (#5974) — the PNM retention sweep; returns the count. */
+      /** `20261124205834` (#5974) — the PNM retention sweep; returns the count. */
       purge_expired_pnms: {
         Args: { p_now: string };
         Returns: number;
@@ -1242,7 +1242,7 @@ export interface Database {
           chunk_count: number;
         }[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
       record_pnm_interest: {
         Args: {
           p_pnm_id: string;
@@ -1483,7 +1483,7 @@ export interface Database {
         Returns: ChatMessage[];
       };
       /**
-       * `20261123220535` (#5929). Schools by name, short name or alias for
+       * `20261124182353` (#5929). Schools by name, short name or alias for
        * the onboarding step, best match first; suspended schools left out.
        * Global reference data, no tenant scope; at most 50 rows.
        */
@@ -1570,7 +1570,7 @@ export interface Database {
         };
         Returns: ChatSidebarPreferences[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
+      /** `20261124205834` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
       set_council_chapter_status: {
         Args: {
           p_council_id: string;
@@ -1596,7 +1596,7 @@ export interface Database {
         };
         Returns: Member[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
       set_school_chapter_status: {
         Args: {
           p_link_id: string;
@@ -1653,7 +1653,7 @@ export interface Database {
         Returns: Json;
       };
       /**
-       * `20261123220535` (#5929). Opens a school-email code, counting the
+       * `20261124182353` (#5929). Opens a school-email code, counting the
        * address, IP and account ceilings under advisory locks. Answers
        * `{ ok, reason, id, expires_at, retry_after_seconds }`.
        */
@@ -1717,7 +1717,7 @@ export interface Database {
         Args: { p_chapter_id: string; p_user_id: string };
         Returns: number | null;
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
       upsert_verified_pnm: {
         Args: {
           p_school_id: string;

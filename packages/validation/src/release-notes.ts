@@ -131,10 +131,19 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Officers no longer see Send back on a task they completed themselves, and Mark not done takes it back instead.",
       "Recruitment cards now offer Vote and Extend bid only to roles your chapter lets do them, and show a candidate's vote count only to roles allowed to see results.",
       "Officers can now add more people to a task they already sent to a group, and each new person gets their own copy.",
+      "Your phone now gets chat notifications when Frapp is open in a browser tab you aren't looking at.",
+      "Add your T-shirt size, allergies, an emergency contact and your chapter's other details under More details on your profile, and see who can read each one.",
+      "Recruitment has its own page, with your prospects on a board or in a list, stages your chapter can rename and reorder, tags, star ratings and notes only the chapter sees.",
+      "Mine and All above a meeting's action items are now plain words instead of a boxed switch, and the small pickers inside forms, like Repeat and Proof, are a quiet gray instead of your chapter's color.",
+      "After you join a chapter, you can add your school and verify your school email with a code, or skip it for now.",
+    ],
+    web: [
+      "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
       "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
+      "Notifications shows All and Unread as plain words beside the title instead of a bar across the top of the list.",
     ],
   },
   {

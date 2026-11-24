@@ -285,7 +285,7 @@ adds a second `realtime` policy, so the expected hosted figure was **10 + 2 = 12
 `20261112280000` (#724, #4513) drops `chat_message_actions_insert`, making it **9 + 2 = 11**, and
 `20261117174649` (#4839) drops `chat_notification_preferences_select_own`, so it was **8 + 2 = 10**.
 The promotion log records that migration as applied; the hosted catalog has not been re-read since
-2026-08-27 (unverified). `20261124010605` (#5933, not yet promoted) adds `auth_admin_can_read_chapters`,
+2026-08-27 (unverified). `20261124203152` (#5933, not yet promoted) adds `auth_admin_can_read_chapters`,
 making it **9 + 2 = 11**, the count the heading and the PGlite check carry now.
 
 The PGlite CI substrate sees **9**, every `public` one. The two absences are schema-gated rather

@@ -91,16 +91,16 @@ function matchesRoute(pathname: string, href: string): boolean {
  * @param isNavItemVisible whether the nav shows a row to this viewer
  *   (`isNavItemVisible` in `protected-nav-item.tsx`, bound to their
  *   permissions and modules). Omitted, every parent shows.
- * @param tenantKind the active tenant's kind: a council's Settings reads
- *   "Council settings".
  * @param vocabulary the chapter's words, for a row named by them
  *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
-  tenantKind?: TenantKind,
   vocabulary?: VocabConfig,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
   if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {

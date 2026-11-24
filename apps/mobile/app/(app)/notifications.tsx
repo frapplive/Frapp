@@ -69,7 +69,6 @@ import { NavGlyph } from "@/components/nav-glyph";
 import { AnnouncementGlyph } from "@/components/chat/card-glyphs";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { InlineNote } from "@/components/inline-note";
-import { Segmented } from "@/components/segmented";
 import { createUnreadDotStyles, unreadDotSize } from "@/components/unread-dot";
 
 /**
@@ -232,29 +231,31 @@ export default function NotificationsScreen() {
           </View>
         ))
       );
-    // Unread / All (#3948) shows once there is something to switch between.
-    if (groups.length === 0 && filter === "all") {
-      return list;
-    }
-    return (
-      <>
-        <View style={styles.filter}>
-          <Segmented
-            accessibilityLabel="Show"
-            options={FILTER_OPTIONS}
-            value={filter}
-            onChange={setFilter}
-          />
-        </View>
-        {list}
-      </>
-    );
+    return list;
   }
+
+  // Unread / All (#3948), on the title's line, once there is something to
+  // switch between: not while the list loads or fails, and not over an empty
+  // All.
+  const hasViews =
+    Boolean(chapterId) &&
+    notificationsQuery.data !== undefined &&
+    !(groups.length === 0 && filter === "all");
 
   return (
     <ScreenShell
       back={BACK_TO_CHAT}
       title="Notifications"
+      views={
+        hasViews
+          ? {
+              accessibilityLabel: "Show",
+              options: FILTER_OPTIONS,
+              value: filter,
+              onChange: setFilter,
+            }
+          : undefined
+      }
       refresh={refresh}
       headerAction={
         unreadIds.length > 0 ? (
@@ -567,12 +568,6 @@ function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     group: {
       gap: tokens.spacing.xs,
-    },
-    // Full width, as iOS's segmented filters sit: each segment is `flex: 1`,
-    // so a track hugging its labels shrank and cut "Unread" to "Un…".
-    filter: {
-      alignSelf: "stretch",
-      marginBottom: tokens.spacing.sm,
     },
     markAllNote: {
       ...typeRole(tokens.typography.role.caption),

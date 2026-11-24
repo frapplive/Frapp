@@ -1,6 +1,6 @@
 -- Data fix #5929: let RPI students verify their school email.
 --
--- School layer 1 (migration 20261123220535_school_layer_schools_and_membership)
+-- School layer 1 (migration 20261124182353_school_layer_schools_and_membership)
 -- seeds one school per chapter_directory university, every one `unverified`
 -- and with no email domain, because our data has no domains (school-layer.md
 -- § 7 step 4). Staff add each school's domain per environment with a data fix

@@ -36,7 +36,7 @@ try {
       ('${A}', 'Slug Tier', 'Tier U', now() - interval '2 days'),
       ('${B}', 'Slug Tier', 'Tier U', now() - interval '1 day'),
       ('${C}', 'Council', '', now());
-    -- A council carries its own fields since 20261124010605 (#5933).
+    -- A council carries its own fields since 20261124203152 (#5933).
     insert into schools (id, name, short_name) values
       ('${D}', 'Slug Tier School', 'STS');
     insert into chapters (id, name, university, kind, council_type,

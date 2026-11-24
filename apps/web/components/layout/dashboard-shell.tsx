@@ -293,6 +293,10 @@ export function DashboardShell({
   // actions render there at every width.
   const [headerActionSlot, setHeaderActionSlot] =
     useState<HTMLDivElement | null>(null);
+  // Its view slot, beside the title (`PageViews`).
+  const [headerViewSlot, setHeaderViewSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const closeChatPanel = useCallback(() => {
     if (!chatOpen) return;
     toggleChat();
@@ -427,8 +431,8 @@ export function DashboardShell({
                 undefined,
                 tenantKind,
               ),
-            tenantKind,
             chapterVocabulary,
+            tenantKind,
           ),
     [
       onChatRoute,
@@ -436,8 +440,8 @@ export function DashboardShell({
       pathname,
       permissions,
       isModuleEnabled,
-      tenantKind,
       chapterVocabulary,
+      tenantKind,
     ],
   );
 
@@ -678,6 +682,7 @@ export function DashboardShell({
                 titleIsHeading={split === true}
                 onClose={closeTool}
                 actionSlotRef={setHeaderActionSlot}
+                viewSlotRef={setHeaderViewSlot}
               />
               <div
                 data-tool-page=""
@@ -692,7 +697,10 @@ export function DashboardShell({
                   askBar && "max-lg:pb-24 max-lg:[--ask-bar-room:4.5rem]",
                 )}
               >
-                <PageHeaderSlotProvider slot={headerActionSlot}>
+                <PageHeaderSlotProvider
+                  slot={headerActionSlot}
+                  viewSlot={headerViewSlot}
+                >
                   {children}
                 </PageHeaderSlotProvider>
               </div>

@@ -112,10 +112,10 @@ describe("isCouncilRoute", () => {
 
 describe("Settings' title by tenant kind", () => {
   it("reads Council settings in a council and Chapter settings otherwise", () => {
-    expect(resolvePageTitle("/settings", undefined, "council")).toEqual({
+    expect(resolvePageTitle("/settings", undefined, undefined, "council")).toEqual({
       title: "Council settings",
     });
-    expect(resolvePageTitle("/settings", undefined, "chapter")).toEqual({
+    expect(resolvePageTitle("/settings", undefined, undefined, "chapter")).toEqual({
       title: "Chapter settings",
     });
     expect(resolvePageTitle("/settings")).toEqual({
