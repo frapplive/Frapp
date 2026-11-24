@@ -254,7 +254,7 @@ export class ChatReportService {
         input.message_id,
         chapterId,
       );
-    // A posted Ask Frapp answer is the Frapp sender's row, but the member
+    // A posted Frapp Intelligence answer is the Frapp sender's row, but the member
     // who chose to post it is who a report is about (#4713).
     const postedBy =
       message.kind === 'ask_answer' &&
@@ -1030,7 +1030,7 @@ export class ChatReportService {
  * A malformed card falls back to `content`, the same as any other message:
  * this runs on the filing path and must not fail it.
  *
- * An Ask Frapp answer posted to a channel (`kind: 'ask_answer'`, #4713)
+ * A Frapp Intelligence answer posted to a channel (`kind: 'ask_answer'`, #4713)
  * keeps the question it answers on its own line first: `content` is the
  * answer alone, and an answer is judged against what was asked. Its report
  * names the member who posted it as the sender (`fileReport`).

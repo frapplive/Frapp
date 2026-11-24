@@ -80,7 +80,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *    now" comes back once, days later, on the chat home (`usePushReminder`).
  *
  * The rest waits until the member wants it: chat display in Preferences,
- * roles in the Directory's Add roles, and Meet Frapp AI at the first use of
+ * roles in the Directory's Add roles, and Meet Frapp Intelligence at the first use of
  * an AI feature (`useAiConsentGate`). They were three more beats here until
  * #5627.
  *

@@ -4020,12 +4020,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get what Meet Frapp AI shows and the caller’s answer
+         * Get what Meet Frapp Intelligence shows and the caller’s answer
          * @description The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.
          */
         get: operations["AiConsentController_getConsent_v1"];
         /**
-         * Answer Meet Frapp AI (turn Frapp AI on or off)
+         * Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)
          * @description Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.
          */
         put: operations["AiConsentController_answerConsent_v1"];
@@ -6132,7 +6132,7 @@ export interface paths {
         put?: never;
         /**
          * Tidy up words dictated into Ask
-         * @description The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Ask Frapp, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp AI’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.
+         * @description The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Frapp Intelligence, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp Intelligence’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.
          */
         post: operations["AskController_cleanDictation_v1"];
         delete?: never;
@@ -6283,7 +6283,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Post an Ask Frapp answer to a channel, or ask what posting would warn about
+         * Post a Frapp Intelligence answer to a channel, or ask what posting would warn about
          * @description The answer comes from the receipt the server sealed into it for the caller, so only an answer Frapp sent can be posted, and only by the member it was sent to. Before anything is written, everything the answer drew on is checked against everyone who can read the channel; `restricted` lists what not all of them could open. With `confirm` false nothing is written. With `confirm` true the answer is posted, by the Frapp sender, only when `acknowledged` names every entry of `restricted`; otherwise `posted` is false and the current list comes back. A posted answer notifies nobody. Posting the same answer to the same channel twice writes one row; the second call is refused.
          */
         post: operations["AskPostController_post_v1"];
@@ -10510,7 +10510,7 @@ export interface components {
              * @description With `audience`: only the members holding a role in this tier (2026-11-22).
              */
             audience_tier_id?: string;
-            /** @description Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them. */
+            /** @description Points on completion (2026-11-22). Only a Frapp Intelligence card proposes them, or an officer edit sets them. */
             point_reward?: number;
             /**
              * @description What Mark done needs, when it is more than nothing (2026-11-22).
@@ -10893,7 +10893,7 @@ export interface components {
             answer: "yes" | "no";
         };
         AiChapterSettingsDto: {
-            /** @description Ask Frapp is on for the chapter. */
+            /** @description The Questions and requests switch: members can ask Frapp Intelligence. */
             ask: boolean;
             /** @description Drafting minutes, and tasks suggested from them, is on. */
             meeting_notes: boolean;
@@ -12289,7 +12289,7 @@ export interface components {
              * @description The task a task card is about.
              */
             task_id: string | null;
-            /** @description One sentence Frapp AI wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written. */
+            /** @description One sentence Frapp Intelligence wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written. */
             line: string | null;
             /** @description A task card's suggested place to start, when AI wrote one. */
             start_here: string | null;
@@ -13299,7 +13299,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             /**
-             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp AI on.
+             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on.
              * @enum {string|null}
              */
             held: "consent_required" | null;
@@ -13309,7 +13309,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             /**
-             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp AI on.
+             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on.
              * @enum {string|null}
              */
             held: "consent_required" | null;
@@ -27838,7 +27838,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp AI on (`ai.consent.required`). */
+            /** @description The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp Intelligence on (`ai.consent.required`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27882,7 +27882,7 @@ export interface operations {
                     "application/json": components["schemas"]["BackworkDraftFillResponseDto"];
                 };
             };
-            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp AI turned off (`ai.chapter_off`). */
+            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has turned off questions and requests (`ai.chapter_off`). */
             403: {
                 headers: {
                     [name: string]: unknown;

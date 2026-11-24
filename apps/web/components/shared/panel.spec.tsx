@@ -107,7 +107,7 @@ describe("Panel docked", () => {
   });
 
   it("covers a child that joins the column while it is open, and releases it on close (#5476)", async () => {
-    // Ask Frapp's floating bar mounts once Ask access resolves, which can be
+    // Frapp Intelligence's floating bar mounts once Ask access resolves, which can be
     // after a deep link opened the panel.
     render(<DockedHarness />);
     const column = document.querySelector("[data-tool-column]")!;

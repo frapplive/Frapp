@@ -25,7 +25,7 @@ export {
 // `isModuleEnabled`, and `subscriptionWriteState`.
 export * from "./analytics-opt-out";
 export * from "./api-error-codes";
-// Ask Frapp (#450): the request, the versioned stream format, and its copy.
+// Frapp Intelligence (#450): the request, the versioned stream format, and its copy.
 export * from "./ask";
 // People and channels named in an Ask answer (#4904).
 export * from "./ask-cards";
@@ -35,7 +35,7 @@ export * from "./ask-entities";
 export * from "./ask-feedback";
 // What Ask opens on: the day, a greeting, the first-open starter (#4904).
 export * from "./ask-greeting";
-// An Ask Frapp answer posted to a channel (#4713).
+// A Frapp Intelligence answer posted to a channel (#4713).
 export * from "./ask-post";
 export * from "./ask-source-chip";
 // Ask's working state as a list of steps (#5427).
@@ -256,6 +256,9 @@ export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
 export * from "./screen-copy";
+// The names of the app's places and of what New starts, one list for web and
+// the phone (#5943).
+export * from "./sections";
 // Roles members pick themselves (#4958): the safety rule and its words.
 export * from "./self-assignable-roles";
 export * from "./service-points";

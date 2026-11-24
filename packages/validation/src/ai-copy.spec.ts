@@ -42,7 +42,7 @@ describe("AI copy", () => {
     // Apple 5.1.2(i): Continue is an explicit yes only because the line
     // above it says who it works with and what Continue does.
     expect(FRAPP_AI_COPY.disclosure("Anthropic and Google")).toBe(
-      "Frapp AI works with Anthropic and Google. Continuing confirms you're 18 or older and turns it on for your account.",
+      "Frapp Intelligence works with Anthropic and Google. Continuing confirms you're 18 or older and turns it on for your account.",
     );
   });
 

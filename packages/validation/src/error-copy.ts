@@ -117,7 +117,7 @@ export function copyForErrorCode(code: string | null): string | null {
     return "Accept the Terms and Privacy Policy to continue.";
   }
   if (code === "ai.consent.required") {
-    return "Turn on Frapp AI in Settings to use this.";
+    return "Turn on Frapp Intelligence in Settings to use this.";
   }
   if (code === "ai.chapter_off") {
     // Every switch starts on (#5294), so it is off only by the president's
@@ -125,12 +125,12 @@ export function copyForErrorCode(code: string | null): string | null {
     return "Your chapter's president has this turned off.";
   }
   if (code === "ai.consent.stale_sheet") {
-    return "Frapp AI changed since you opened this. Look again, then answer.";
+    return "Frapp Intelligence changed since you opened this. Look again, then answer.";
   }
   if (code === "ai.settings.president_only") {
     return "Only your chapter's president can turn AI features on or off.";
   }
-  // Posting an Ask Frapp answer to a channel (#4713).
+  // Posting a Frapp Intelligence answer to a channel (#4713).
   return askPostRefusalCopy(code);
 }
 

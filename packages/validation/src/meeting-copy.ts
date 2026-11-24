@@ -562,7 +562,7 @@ export const MEETING_NOTE_TAKERS_COPY = {
     speakers && speakers > 1
       ? `Transcript, ${speakers} speakers`
       : "Transcript",
-  heldConsent: "Left out until they turn on Frapp AI",
+  heldConsent: "Left out until they turn on Frapp Intelligence",
   /** A note-taker's own view, on someone else's minutes. */
   takeNotes: "Take notes",
   takingNotes: "Taking notes",
@@ -576,7 +576,7 @@ export const MEETING_NOTE_TAKERS_COPY = {
         ? "1 other person is taking notes."
         : `${count} other people are taking notes.`,
   noteTakerConsent:
-    "Turn on Frapp AI so your notes go into the draft. Until then they're saved here but left out.",
+    "Turn on Frapp Intelligence so your notes go into the draft. Until then they're saved here but left out.",
   leave: "Stop taking notes",
   leaveTitle: "Stop taking notes?",
   leaveBody: "Your notes are deleted, and so is a draft written from them.",

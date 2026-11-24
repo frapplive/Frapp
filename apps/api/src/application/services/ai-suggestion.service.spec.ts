@@ -1421,7 +1421,7 @@ describe("a member's own request as a source (#718)", () => {
       chapterId: CHAPTER,
       batchId: `${userId.slice(0, 8)}-0000-4000-8000-${String(title.length).padStart(12, '0')}`,
       requestedFor: userId,
-      source: { type: 'request', id: userId, title: 'Ask Frapp' },
+      source: { type: 'request', id: userId, title: 'Frapp Intelligence' },
       proposals: [taskProposal(title)],
       notify: [],
       expiresWithinDays: 1,
@@ -1587,7 +1587,7 @@ describe('AiSuggestionService change log (Paul, 2026-11-22)', () => {
     );
   });
 
-  it('keeps no words for a decider who has not said yes to Frapp AI', async () => {
+  it('keeps no words for a decider who has not said yes to Frapp Intelligence', async () => {
     const { service, repo } = build({
       changeLog: { consent: null, key: true },
     });

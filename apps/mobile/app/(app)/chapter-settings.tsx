@@ -72,7 +72,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * - **AI**: the president's three switches (#4789), the same ones and the
  *   same rules as web's AI tab (`settings-ai-tab.tsx`): every member here can
  *   read them, only the president changes them, and Include channel messages
- *   sits nested under Ask Frapp and waits for it to be on before it can be
+ *   sits nested under Questions and requests and waits for it to be on before it can be
  *   turned on (never off), by `aiSwitchState`, which web's tab shares. For
  *   `chapter-config:view`, as web's tab is.
  *   Inline switches, as iOS Settings draws a short list of them, rather than

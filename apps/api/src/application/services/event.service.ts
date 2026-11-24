@@ -273,7 +273,7 @@ export class EventService {
    * Of `ids`, the events every one of `viewers` may read, by the list's own
    * rule (`isEventVisibleWith`). An id that names no event in this chapter is
    * not in the answer. One read however many viewers: for a check made over
-   * a whole audience, such as who in a channel could open what an Ask Frapp
+   * a whole audience, such as who in a channel could open what a Frapp Intelligence
    * answer drew on before it is posted there (#4713).
    */
   async visibleToAll(

@@ -312,7 +312,7 @@ export class AiConsentService implements IAiConsentCheck {
   }
 
   /**
-   * Records the person's answer, from Meet Frapp AI (onboarding, an AI
+   * Records the person's answer, from Meet Frapp Intelligence (onboarding, an AI
    * entry point) or later from Settings' switch (#4790). The
    * answer is for the version the client showed, which must be the current
    * one: a Yes given to an older sheet would cover a provider or a kind of
@@ -327,7 +327,7 @@ export class AiConsentService implements IAiConsentCheck {
       throw new ConflictException({
         code: 'ai.consent.stale_sheet',
         message:
-          'Frapp AI changed since this was shown. Show it again and ask again.',
+          'Frapp Intelligence changed since this was shown. Show it again and ask again.',
       });
     }
     const saved = await this.consents.saveConsent(

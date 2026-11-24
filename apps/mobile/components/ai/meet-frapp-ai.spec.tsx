@@ -8,7 +8,7 @@ import { FrappThemeProvider, tint } from "@/lib/theme";
 import { drawnText, screenText } from "@/test/screen-text";
 
 /**
- * Meet Frapp AI on the phone (#4790, `spec/behavior/ai.md` § Consent): the
+ * Meet Frapp Intelligence on the phone (#4790, `spec/behavior/ai.md` § Consent): the
  * screen, and the gate in front of every AI feature. Only a pressed
  * Continue lets anything through.
  */
@@ -167,7 +167,7 @@ describe("useAiConsentGate", () => {
     return <>{gate.consentSheet}</>;
   }
 
-  it("lets a member who has Frapp AI on straight through, with no sheet", async () => {
+  it("lets a member who has Frapp Intelligence on straight through, with no sheet", async () => {
     choice.consent = { ...CONSENT, answer: "yes" };
     render(<Host />);
     await expect(gate.ensureConsent()).resolves.toBe(true);

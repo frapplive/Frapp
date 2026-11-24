@@ -43,10 +43,11 @@ describe("AskBar", () => {
     expect(screenText(render())).toBe(ASK_COPY.placeholder);
   });
 
-  it("is one button named Ask Frapp, which says what it is for", () => {
+  it("is one button named for the words it shows, which says what it is for", () => {
     const button = press(render());
     expect(button.props.accessibilityRole).toBe("button");
-    expect(button.props.accessibilityLabel).toBe(ASK_COPY.name);
+    expect(button.props.accessibilityLabel).toBe("What do you need?");
+    expect(button.props.accessibilityLabel).toBe(ASK_COPY.placeholder);
     expect(button.props.accessibilityHint).toBe(ASK_BAR_HINT);
   });
 

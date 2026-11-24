@@ -147,7 +147,7 @@ function suggestion(kind: "points" | "task" | "new_event", payload: unknown) {
     id: "suggestion-1",
     kind,
     status: "pending",
-    source: { type: "request", id: ME, title: "Ask Frapp" },
+    source: { type: "request", id: ME, title: "Frapp Intelligence" },
     batch_id: "batch",
     task: null,
     points: null,

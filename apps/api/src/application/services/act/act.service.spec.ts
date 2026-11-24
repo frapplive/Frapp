@@ -375,7 +375,7 @@ describe('ActService', () => {
         expect.objectContaining({
           chapterId: CHAPTER,
           requestedFor: OFFICER,
-          source: { type: 'request', id: OFFICER, title: 'Ask Frapp' },
+          source: { type: 'request', id: OFFICER, title: 'Frapp Intelligence' },
           proposals: [{ kind: 'task', payload: { title: 'Book the bus' } }],
           notify: [],
           expiresWithinDays: 1,

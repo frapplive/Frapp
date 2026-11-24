@@ -27,7 +27,7 @@ import { can, type AskAccess } from "@repo/validation";
 export interface AiSurfaces {
   /** The server has AI at all. `undefined` while that is not yet known. */
   available: boolean | undefined;
-  /** Ask Frapp: the chapter's switch is on and the member holds `ai:use`. */
+  /** Frapp Intelligence: the chapter's switch is on and the member holds `ai:use`. */
   ask: boolean;
   /**
    * The same answer in three: `unknown` while a read behind it is in flight

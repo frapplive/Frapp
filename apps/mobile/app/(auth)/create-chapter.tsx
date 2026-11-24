@@ -111,7 +111,7 @@ import { pageSurfaces } from "@/lib/surfaces";
  * match (or describe it by hand), and pick its **Color**. Creating it opens
  * four more: the **live** moment with its channels and an optional logo, the
  * founder's own **display** pick (the same three cards as Settings and the
- * welcome card's Finish your profile, #4056: founders skip s03), **Meet Frapp AI** when the server has AI and
+ * welcome card's Finish your profile, #4056: founders skip s03), **Meet Frapp Intelligence** when the server has AI and
  * the founder never answered it (#4790; their Continue also turns on the new
  * chapter's AI switches, which nobody has set yet), the notifications step
  * when this build can push and push is off, and the **invite** link. Then
@@ -422,7 +422,7 @@ export default function CreateChapter() {
     }
   }
 
-  // After Meet Frapp AI, or past it when there is none.
+  // After Meet Frapp Intelligence, or past it when there is none.
   function afterAi() {
     if (primer.showPrimer) {
       setStep("primer");
