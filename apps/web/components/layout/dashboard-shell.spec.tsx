@@ -728,6 +728,8 @@ describe("DashboardShell", () => {
       expect(header.className).toContain(
         "has-[[data-tool-page-views]:not(:empty)]:flex",
       );
+      // The group NewButton reads to give way sooner beside views.
+      expect(header.className).toContain("group/page-header");
       unmount();
     }
   });

@@ -61,7 +61,7 @@ export function ToolPageHeader({
       // Below the side-by-side width it shows only when a page put actions
       // or views in it (`page-actions.tsx`), as one pinned row of them: the
       // title is in the top bar there and there is nothing to close into.
-      className="@container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 min-[1056px]:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex has-[[data-tool-page-views]:not(:empty)]:flex"
+      className="group/page-header @container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 min-[1056px]:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex has-[[data-tool-page-views]:not(:empty)]:flex"
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {/* The title gives way first: it truncates, the views never wrap. */}
