@@ -227,6 +227,54 @@ describe("buildAuthFailureReport", () => {
   });
 });
 
+describe("native sign-in failures", () => {
+  it("keeps a native SDK's code and the provider, without changing the grouping", () => {
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "apple",
+      error: Object.assign(new Error("The authorization attempt failed for an unknown reason"), {
+        code: "ERR_REQUEST_UNKNOWN",
+      }),
+    });
+    expect(r!.tags.auth_provider).toBe("apple");
+    expect(r!.tags.auth_native_code).toBe("ERR_REQUEST_UNKNOWN");
+    expect(r!.tags.auth_error_code).toBeUndefined();
+    expect(r!.tags.auth_failure_kind).toBe("unknown");
+    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown"]);
+  });
+
+  it("keeps Google's numeric status codes", () => {
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "google",
+      error: { code: 12500 },
+    });
+    expect(r!.tags.auth_native_code).toBe("12500");
+  });
+
+  it("reports a native token the provider refused under the caller's code, at error", () => {
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "apple",
+      code: "native_token_refused",
+      error: authApiError("", 400, "Unacceptable audience in id_token: [live.frapp.mobile.staging]"),
+    });
+    expect(r!.level).toBe("error");
+    expect(r!.tags.auth_error_code).toBe("native_token_refused");
+    expect(r!.error.message).not.toContain("live.frapp");
+  });
+
+  it("never takes a six-digit email code or a sentence for a native code", () => {
+    for (const code of ["482913", "Unacceptable audience", "err_lower"]) {
+      const r = buildAuthFailureReport({ flow: "oauth_start", screen: "/sign-in", error: { code } });
+      expect(r!.tags.auth_native_code, code).toBeUndefined();
+    }
+  });
+});
+
 describe("what a report never carries", () => {
   const EMAIL = "member@school.edu";
   const PASSWORD = "hunter2-correct-horse";

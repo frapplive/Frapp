@@ -559,8 +559,25 @@ export function AuthSessionProvider({
       // `auth_callback`, so its rethrow is not reported again. A cancel is
       // not a failure.
       const startFailed = (error: unknown): unknown => {
-        reportAuthFailure({ flow: "oauth_start", screen: "/sign-in", error });
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          error,
+        });
         return error;
+      };
+      // Supabase refused the native token for setup reasons and the member
+      // goes on to the browser flow. They never see it, but only a dashboard
+      // change fixes it, so it is reported at error (FRAPP-MOBILE-16).
+      const nativeRefused = (error: unknown) => {
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          code: "native_token_refused",
+          error,
+        });
       };
       if (!supabase) throw startFailed(new Error(NOT_CONFIGURED_MESSAGE));
       setCallbackError(null);
@@ -568,9 +585,9 @@ export function AuthSessionProvider({
       let native: "completed" | "cancelled" | "unavailable" = "unavailable";
       try {
         if (provider === "apple") {
-          native = await signInWithNativeApple(supabase);
+          native = await signInWithNativeApple(supabase, nativeRefused);
         } else if (provider === "google") {
-          native = await signInWithNativeGoogle(supabase);
+          native = await signInWithNativeGoogle(supabase, nativeRefused);
         }
       } catch (error) {
         throw startFailed(error);

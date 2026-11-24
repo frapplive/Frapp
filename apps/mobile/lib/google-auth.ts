@@ -7,6 +7,10 @@ import { isWebOrExpoGo } from "./expo-go";
 import { requireGoogleSignIn } from "./google-auth-module";
 import type { GoogleSignInModule } from "./google-auth-types";
 import { createIsolatedModule } from "./isolated-module";
+import {
+  isProviderConfigRejection,
+  type OnProviderRejected,
+} from "./native-id-token";
 
 /**
  * Native Google Sign-In → Supabase `signInWithIdToken`.
@@ -105,6 +109,7 @@ export type NativeGoogleResult = "completed" | "cancelled" | "unavailable";
 
 export async function signInWithNativeGoogle(
   supabase: Pick<SupabaseClient, "auth">,
+  onProviderRejected?: OnProviderRejected,
 ): Promise<NativeGoogleResult> {
   const clientIds = googleClientIds();
   if (!clientIds) return "unavailable";
@@ -164,10 +169,7 @@ export async function signInWithNativeGoogle(
   });
   if (error) {
     if (isProviderConfigRejection(error)) {
-      console.warn(
-        "Supabase refused the native Google ID token; using browser Google sign-in.",
-        error,
-      );
+      onProviderRejected?.(error);
       return "unavailable";
     }
     throw error;
@@ -206,15 +208,4 @@ function isConfigurationError(
     code === "SIGN_IN_ERROR" ||
     code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE
   );
-}
-
-/**
- * Supabase Auth refusing the token because its Google provider is not set up
- * for native clients: the iOS client ID missing from **Client IDs** ("Unacceptable
- * audience in id_token"), or **Skip nonce check** off while iOS's SDK puts its
- * own nonce in the token. Anything else (an expired token, a network failure)
- * is a real error for the sign-in screen.
- */
-function isProviderConfigRejection(error: { message?: string }): boolean {
-  return /audience|nonce/i.test(error.message ?? "");
 }

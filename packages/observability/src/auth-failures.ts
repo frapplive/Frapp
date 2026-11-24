@@ -38,7 +38,11 @@ import { createKeyedRateLimiter } from "./rate-limit";
  *   code, kept only when it is a short snake_case identifier;
  * - `auth_failure_kind`: `refusal`, `server`, `network` or `unknown`;
  * - `http.status_code`, when the SDK had one;
- * - `auth_expected`: `true` or `false`.
+ * - `auth_expected`: `true` or `false`;
+ * - `auth_provider`: `apple` or `google`, when the caller names one;
+ * - `auth_native_code`: a native SDK's own error code (`ERR_REQUEST_UNKNOWN`,
+ *   Google's `"10"`) that `auth_error_code` drops for not being GoTrue's
+ *   snake_case. Without it every failed native sheet reads as `unknown`.
  * The platform and build are the event's own `release`, `environment` and
  * the project it lands in (`frapp-web`, `frapp-mobile`). No email, password,
  * token, OTP or URL is ever read from the input, so none can be sent.
@@ -143,7 +147,11 @@ export interface AuthFailureInput {
    * error's own code.
    */
   readonly code?: string;
+  /** The sign-in provider, for a flow that has one (`oauth_start`). */
+  readonly provider?: AuthFailureProvider;
 }
+
+type AuthFailureProvider = "apple" | "google";
 
 /** What each app's binding passes to `captureException`. */
 export interface AuthFailureReport {
@@ -164,6 +172,12 @@ export interface AuthFailureReporterOptions {
 export type AuthFailureReporter = (input: AuthFailureInput) => void;
 
 const CODE_RE = /^[a-z][a-z0-9_]{1,63}$/;
+/**
+ * A native SDK's code: upper snake case (`ERR_REQUEST_UNKNOWN`,
+ * `SIGN_IN_ERROR`) or Google's short status numbers (`10`, `12500`). Five
+ * digits at most, so a six-digit email code can never pass as one.
+ */
+const NATIVE_CODE_RE = /^(?:[A-Z][A-Z0-9_]{1,63}|-?\d{1,5})$/;
 /** `/sign-in`, `/(auth)/sign-up`, `/auth/callback`, `/join`. No ids, no query. */
 const SCREEN_SEGMENT_RE = /^(?:[a-z]+(?:-[a-z]+)*|\([a-z]+(?:-[a-z]+)*\))$/;
 const UNKNOWN_SCREEN = "unknown";
@@ -239,6 +253,11 @@ export function buildAuthFailureReport(
   };
   if (code) tags.auth_error_code = code;
   if (status !== undefined) tags["http.status_code"] = String(status);
+  if (input.provider === "apple" || input.provider === "google") {
+    tags.auth_provider = input.provider;
+  }
+  const nativeCode = nativeCodeOf(input.error);
+  if (nativeCode !== undefined) tags.auth_native_code = nativeCode;
   const error = new Error(
     expected
       ? `${flow} refused (${label})`
@@ -283,6 +302,17 @@ function screenOf(screen: string): string {
   return segments.every((s) => s.length <= 24 && SCREEN_SEGMENT_RE.test(s))
     ? screen
     : UNKNOWN_SCREEN;
+}
+
+/**
+ * The error's own `code` when it is not GoTrue's snake_case but still a plain
+ * identifier: what Expo's Apple module and Google Sign-In throw. Read only as
+ * an identifier, so a sentence or a token can't pass.
+ */
+function nativeCodeOf(error: unknown): string | undefined {
+  const raw = fieldOf(error, "code");
+  const value = typeof raw === "number" && Number.isInteger(raw) ? String(raw) : raw;
+  return typeof value === "string" && NATIVE_CODE_RE.test(value) ? value : undefined;
 }
 
 function identifierOrUndefined(value: unknown): string | undefined {

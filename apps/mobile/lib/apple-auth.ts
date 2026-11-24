@@ -4,6 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAppleAuth } from "./apple-auth-module";
 import type { AppleAuthModule } from "./apple-auth-types";
 import { createIsolatedModule } from "./isolated-module";
+import {
+  isProviderConfigRejection,
+  type OnProviderRejected,
+} from "./native-id-token";
 
 /**
  * Isolation module for `expo-apple-authentication`.
@@ -43,11 +47,14 @@ export type NativeAppleResult = "completed" | "cancelled" | "unavailable";
 /**
  * Native Sign in with Apple → Supabase `signInWithIdToken`.
  *
- * A missing identity token is treated as unavailable so the caller can fall
- * through to the browser OAuth session rather than stranding the member.
+ * A missing identity token, or Supabase refusing the token because the Apple
+ * provider isn't set up for this build (`lib/native-id-token.ts`), is treated
+ * as unavailable so the caller can fall through to the browser OAuth session
+ * rather than stranding the member.
  */
 export async function signInWithNativeApple(
   supabase: Pick<SupabaseClient, "auth">,
+  onProviderRejected?: OnProviderRejected,
 ): Promise<NativeAppleResult> {
   const apple = loadAppleAuth();
   if (!apple) return "unavailable";
@@ -81,7 +88,15 @@ export async function signInWithNativeApple(
       token: credential.identityToken,
       nonce: rawNonce,
     });
-    if (error) throw error;
+    if (error) {
+      // A build whose bundle ID is missing from the Apple provider's Client
+      // IDs: the browser flow signs in with the Services ID instead.
+      if (isProviderConfigRejection(error)) {
+        onProviderRejected?.(error);
+        return "unavailable";
+      }
+      throw error;
+    }
 
     const fullName = formatAppleFullName(credential.fullName);
     if (fullName) {
