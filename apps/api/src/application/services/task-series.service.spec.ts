@@ -25,6 +25,7 @@ const SERIES: TaskSeries = {
   point_reward: 5,
   proof_kind: 'none',
   subtask_titles: [],
+  attachments: [],
   due_time: '21:00:00',
   recurrence_rule: RULE,
   first_due_date: '2026-11-09',
@@ -61,6 +62,7 @@ const copy = (over: Partial<Task> = {}): Task => ({
   group_id: null,
   meeting_id: null,
   followed_by: null,
+  attachments: [],
   created_at: '2026-11-10T00:00:00.000Z',
   ...over,
 });
@@ -78,7 +80,9 @@ describe('TaskSeriesService (#5119)', () => {
     >
   >;
   let members: jest.Mocked<Pick<IMemberRepository, 'findByUserAndChapter'>>;
-  let tasks: jest.Mocked<Pick<TaskService, 'update' | 'findById' | 'delete'>>;
+  let tasks: jest.Mocked<
+    Pick<TaskService, 'update' | 'findById' | 'delete' | 'checkedAttachments'>
+  >;
   let service: TaskSeriesService;
 
   beforeEach(() => {
@@ -95,6 +99,8 @@ describe('TaskSeriesService (#5119)', () => {
       findByUserAndChapter: jest.fn().mockResolvedValue({ id: 'm' }),
     };
     tasks = {
+      // Takes the list as sent: the checker is TaskService's own spec's.
+      checkedAttachments: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue({ id: 'open' }),
       findById: jest.fn().mockResolvedValue({ id: 'old' }),
       delete: jest.fn().mockResolvedValue(undefined),
@@ -126,6 +132,31 @@ describe('TaskSeriesService (#5119)', () => {
         'ch-1',
         'admin-1',
         expect.objectContaining({ title: 'Kitchen', point_reward: 8 }),
+        undefined,
+      );
+    });
+
+    it('checks a new list once, and writes the open copy with it as checked', async () => {
+      const checked = [
+        { id: 'a', kind: 'document' as const, document_id: 'd1' },
+      ];
+      tasks.checkedAttachments.mockResolvedValueOnce(checked);
+      await service.update('open', 'ch-1', 'admin-1', {
+        attachments: [{ id: 'a', kind: 'document', document_id: 'd1' }],
+      });
+      expect(tasks.checkedAttachments).toHaveBeenCalledTimes(1);
+      expect(repo.updateSeriesIfNext).toHaveBeenCalledWith(
+        'ch-1',
+        'series-1',
+        '2026-11-23',
+        expect.objectContaining({ attachments: checked }),
+      );
+      expect(tasks.update).toHaveBeenCalledWith(
+        'open',
+        'ch-1',
+        'admin-1',
+        expect.objectContaining({ attachments: [expect.anything()] }),
+        checked,
       );
     });
 
@@ -152,6 +183,7 @@ describe('TaskSeriesService (#5119)', () => {
         'ch-1',
         'admin-1',
         expect.anything(),
+        undefined,
       );
       expect(tasks.findById).toHaveBeenCalledWith('old', 'ch-1');
     });
@@ -180,6 +212,7 @@ describe('TaskSeriesService (#5119)', () => {
           due_date: '2026-11-16',
           due_at: '2026-11-17T01:00:00.000Z',
         }),
+        undefined,
       );
     });
 
@@ -260,6 +293,7 @@ describe('TaskSeriesService (#5119)', () => {
           due_date: '2026-11-16',
           due_at: '2026-11-17T01:00:00.000Z',
         }),
+        undefined,
       );
     });
 

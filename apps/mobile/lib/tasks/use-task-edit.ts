@@ -15,6 +15,7 @@ import {
 import {
   TASK_SERIES_SCOPE_COPY,
   taskSeriesBody,
+  type FrappLink,
   type RepeatDraft,
   type TaskProofKind,
 } from "@repo/validation";
@@ -23,6 +24,7 @@ import type { PickedImage } from "@/lib/chat/attachment-upload";
 import type { TaskRowModel } from "@/lib/tasks/board";
 import {
   assigneeSave,
+  attachmentsSave,
   descriptionSave,
   dueSave,
   photosSave,
@@ -61,7 +63,8 @@ interface TaskEditDrafts {
 type DraftKey = keyof TaskEditDrafts;
 
 /** Every field that saves: the typed ones, and those sent as they change. */
-type FieldKey = DraftKey | "proof" | "photos" | "who" | "follower";
+type FieldKey =
+  DraftKey | "proof" | "photos" | "who" | "follower" | "attachments";
 
 const NO_DRAFTS: TaskEditDrafts = {
   title: null,
@@ -90,9 +93,16 @@ const FIELD_ORDER: readonly FieldKey[] = [
   "photos",
   "who",
   "follower",
+  "attachments",
 ];
 
-const SENT_KEYS: readonly FieldKey[] = ["proof", "photos", "who", "follower"];
+const SENT_KEYS: readonly FieldKey[] = [
+  "proof",
+  "photos",
+  "who",
+  "follower",
+  "attachments",
+];
 
 /**
  * Commit every draft: the fields together, then the Repeat (#5119). A
@@ -183,6 +193,13 @@ export interface TaskEditing {
   setProof: (next: TaskProofKind) => void;
   /** From (#5473): a tier, role or group entry, or `null` for none. */
   setFollower: (next: string | null) => void;
+  /**
+   * Attached (`spec/behavior/frapp-links.md`), changed through `update`
+   * against the list as the saves on their way leave it; sent at once.
+   */
+  changeAttachments: (update: (current: FrappLink[]) => FrappLink[]) => void;
+  /** Attached as the saves on their way leave it, drawn meanwhile. */
+  attachments: FrappLink[];
   /** Take one reference photo off the task. */
   removePhoto: (photoId: string) => void;
   /** Pick photos from the library and add them to the task. */
@@ -242,6 +259,10 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
   );
   const [uploading, setUploading] = useState<readonly PickedImage[]>([]);
   const [picking, setPicking] = useState(false);
+  const [shownAttachments, setShownAttachments] = useState<FrappLink[] | null>(
+    null,
+  );
+  const attachmentTurn = useRef(0);
 
   // Read by the callbacks, which outlive a render: the task as last read,
   // the drafts as last typed, each field's save on its way, and what each
@@ -525,6 +546,22 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     [sendField, baseline],
   );
 
+  const changeAttachments = useCallback(
+    (update: (current: FrappLink[]) => FrappLink[]) => {
+      const before = baseline();
+      const next = update(before.attachments);
+      const turn = ++attachmentTurn.current;
+      setShownAttachments(next);
+      // Only the latest change hands back to the task as read.
+      void sendField("attachments", attachmentsSave(before, next)).finally(
+        () => {
+          if (attachmentTurn.current === turn) setShownAttachments(null);
+        },
+      );
+    },
+    [sendField, baseline],
+  );
+
   const removePhoto = useCallback(
     (photoId: string) => {
       const path = referencePhotos(rowRef.current).find(
@@ -636,6 +673,8 @@ export function useTaskEdit(row: TaskRowModel): TaskEditing {
     dismiss,
     setProof,
     setFollower,
+    changeAttachments,
+    attachments: shownAttachments ?? row.attachments,
     removePhoto,
     addPhotos,
     uploading,

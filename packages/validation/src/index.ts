@@ -129,6 +129,7 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -193,6 +194,7 @@ export * from "./notification-categories";
 // `useNotifications` must agree on (#4962).
 export * from "./notification-inbox";
 // The "You" screen after joining, web and phone (#5627).
+export * from "./onboarding-about";
 export * from "./onboarding-you";
 // ── Ops-setup nudges (issue #492) ────────────────────────────────────────────
 // Shared for the same reason as the categories above: each `key` is written
@@ -281,6 +283,8 @@ export * from "./task-proof";
 export * from "./task-row-facts";
 // Who a suggested task names, guessed from its own words (Paul, 2026-11-18).
 export * from "./task-suggestion-guess";
+// Tenant kinds and URL slugs (ADR-27 decision 5, #5918).
+export * from "./tenant-slug";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";

@@ -5,7 +5,7 @@ import { SignetTokens } from "@repo/theme/signet";
 import { ChatGlyph, EventsGlyph, TasksGlyph } from "@/components/tab-glyphs";
 import { Frame, paint } from "@/components/glyph-recipe";
 import { OnboardingPrimaryButton } from "@/components/onboarding/onboarding-primary-button";
-import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import type { PushAskAction } from "@/lib/notifications/use-push-primer";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
 import { pageSurfaces } from "@/lib/surfaces";
@@ -103,8 +103,6 @@ export function PushAskActions({
   onTurnOn: () => void;
   onNotNow: () => void;
 }) {
-  const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
   return (
     <>
       <OnboardingPrimaryButton
@@ -113,15 +111,11 @@ export function PushAskActions({
         disabled={busy || disabled}
         busy={busy}
       />
-      <OnboardingPressable
-        accessibilityRole="button"
+      <OnboardingQuietButton
+        label={"Not now"}
         onPress={onNotNow}
         disabled={busy || disabled}
-        quiet
-        style={styles.quietButton}
-      >
-        <Text style={styles.quietButtonText}>Not now</Text>
-      </OnboardingPressable>
+      />
     </>
   );
 }
@@ -188,17 +182,6 @@ function createStyles(tokens: SignetTokens) {
     footnote: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
-    },
-    quietButton: {
-      alignSelf: "center",
-      minHeight: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
-      justifyContent: "center",
-      marginTop: tokens.spacing.xs,
-    },
-    quietButtonText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.mutedForeground,
     },
   });
 }

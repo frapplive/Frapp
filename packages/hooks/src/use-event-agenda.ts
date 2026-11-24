@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { EventAgendaItem, EventAttachment } from "@repo/validation";
+import {
+  withEventLinkTitles,
+  type EventAgendaItem,
+  type EventAttachment,
+  type FrappTitledLink,
+} from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 /**
@@ -74,12 +79,18 @@ export function useEventListsEditor(
       timer.current = null;
     }
     if (inFlight.current || dirty.current.size === 0) return;
-    const body: Partial<EventLists> = {};
+    const body: {
+      agenda?: EventAgendaItem[];
+      attachments?: FrappTitledLink[];
+      attachments_all_kinds?: boolean;
+    } = {};
     for (const field of dirty.current) {
       const value = editedRef.current[field];
       if (field === "agenda" && value) body.agenda = value as EventAgendaItem[];
       if (field === "attachments" && value) {
-        body.attachments = value as EventAttachment[];
+        body.attachments = withEventLinkTitles(value as EventAttachment[]);
+        // This build sends every kind, so the list replaces what's stored.
+        body.attachments_all_kinds = true;
       }
     }
     dirty.current.clear();
@@ -95,8 +106,11 @@ export function useEventListsEditor(
       if (error) throw error;
       // The read now holds what was saved, so nothing flashes back while
       // the refetches below are out.
+      // The flag is the request's, not the event's: keep it out of the cache.
+      const saved = { ...body };
+      delete saved.attachments_all_kinds;
       queryClient.setQueryData(detailKey, (row: unknown) =>
-        row && typeof row === "object" ? { ...row, ...body } : row,
+        row && typeof row === "object" ? { ...row, ...saved } : row,
       );
     } catch (failure) {
       dirty.current.clear();

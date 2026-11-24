@@ -20,11 +20,15 @@
  * The layers under test are documented in
  * `docs/security/authorization-model.md` §1.
  */
-import { INestApplication } from '@nestjs/common';
+import { Controller, Get, INestApplication, UseGuards } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PermissionsGuard } from '../src/interface/guards/permissions.guard';
+import { SupabaseAuthGuard } from '../src/interface/guards/supabase-auth.guard';
+import { ChapterGuard } from '../src/interface/guards/chapter.guard';
+import { TenantKinds } from '../src/interface/decorators/tenant-kinds.decorator';
+import { CurrentChapterId } from '../src/interface/decorators/current-user.decorator';
 import { configureApp } from '../src/bootstrap';
 import {
   createTableAwareSupabaseMock,
@@ -60,6 +64,25 @@ const INVOICE_B = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const MEMBER_B_IN_A = 'abababab-abab-4aba-8aba-abababababab';
 const NOTIF_A = 'f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1';
 const NOTIF_B = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2';
+// ADR-27 (#5918): a chapter Bob is not in, and a council he is an officer of.
+const CHAPTER_C = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
+const COUNCIL = 'c4c4c4c4-c4c4-44c4-84c4-c4c4c4c4c4c4';
+const MEMBER_B_IN_COUNCIL = 'c5c5c5c5-c5c5-45c5-85c5-c5c5c5c5c5c5';
+
+/**
+ * A route that serves councils alone, for ADR-27 test 5. No council route
+ * exists yet, so this stands in for the first one: the real guards, the
+ * declaration a council route will carry, and the chapter it resolved.
+ */
+@Controller('council-probe')
+@UseGuards(SupabaseAuthGuard, ChapterGuard)
+class CouncilProbeController {
+  @Get()
+  @TenantKinds('council')
+  probe(@CurrentChapterId() chapterId: string) {
+    return { chapter_id: chapterId };
+  }
+}
 
 /** Fresh rows per test — the fake mutates its seed on writes. */
 function seed(): SeededTables {
@@ -85,16 +108,53 @@ function seed(): SeededTables {
     chapters: [
       {
         id: CHAPTER_A,
+        name: 'Alpha',
+        kind: 'chapter',
         subscription_status: 'active',
         past_due_since: null,
         enabled_modules: null,
       },
       {
         id: CHAPTER_B,
+        name: 'Beta',
+        kind: 'chapter',
         subscription_status: 'active',
         past_due_since: null,
         enabled_modules: null,
       },
+      {
+        id: CHAPTER_C,
+        name: 'Gamma',
+        kind: 'chapter',
+        subscription_status: 'active',
+        past_due_since: null,
+        enabled_modules: null,
+      },
+      {
+        id: COUNCIL,
+        name: 'RPI IFC',
+        kind: 'council',
+        subscription_status: 'active',
+        past_due_since: null,
+        enabled_modules: null,
+      },
+    ],
+    // Every tenant's current slug, and one retired slug each for A and B.
+    tenant_slugs: [
+      { slug: 'alpha-rpi', chapter_id: CHAPTER_A, retired_at: null },
+      {
+        slug: 'alpha-old',
+        chapter_id: CHAPTER_A,
+        retired_at: '2026-11-01T00:00:00.000Z',
+      },
+      { slug: 'beta-rpi', chapter_id: CHAPTER_B, retired_at: null },
+      {
+        slug: 'beta-old',
+        chapter_id: CHAPTER_B,
+        retired_at: '2026-11-01T00:00:00.000Z',
+      },
+      { slug: 'gamma-rpi', chapter_id: CHAPTER_C, retired_at: null },
+      { slug: 'rpi-ifc', chapter_id: COUNCIL, retired_at: null },
     ],
     roles: [{ id: ROLE_A, chapter_id: CHAPTER_A, name: 'Treasurer' }],
     invites: [
@@ -194,11 +254,12 @@ function seedDualChapterNotifications(): SeededTables {
  * plus `code`, exactly. The message's wording is for people, so by default it
  * is checked only for being present.
  *
- * One code has two sources: `ChapterGuard` refuses a header that disagrees
- * with the token, and the chapter-config handlers refuse a URL that disagrees
- * with the resolved chapter, both as `chapter.context.mismatch`. The #866
- * cases pass the handler's message as `layerMessage`, because it is the only
- * thing that shows the handler's own check refused rather than the guard.
+ * `chapter.context.mismatch` now has one source, the chapter-config handlers
+ * refusing a URL that disagrees with the resolved chapter. `ChapterGuard`
+ * threw it too, for a header that disagreed with the token, until ADR-27
+ * made the header authoritative (#5918). The #866 cases still pass the
+ * handler's message as `layerMessage`, so a guard that started throwing it
+ * again would fail them rather than pass for the wrong layer.
  */
 function expectDeniedBody(
   body: Record<string, unknown>,
@@ -235,6 +296,7 @@ describe('Cross-tenant isolation (e2e)', () => {
   ) {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
+      controllers: [CouncilProbeController],
     })
       .overrideProvider('SUPABASE_CLIENT')
       .useValue(
@@ -272,20 +334,6 @@ describe('Cross-tenant isolation (e2e)', () => {
 
       expect(res.status).toBe(403);
       expectDeniedBody(res.body, 'chapter.context.invalid');
-    });
-
-    it('rejects an x-chapter-id that disagrees with the JWT active-chapter claim', async () => {
-      // Bob's token says chapter B; the header claims chapter A. The header must
-      // never win — even though Bob is a genuine member of chapter B.
-      app = await boot({ active_chapter_id: CHAPTER_B });
-
-      const res = await asBob(
-        request(app.getHttpServer()).get(`${V1}/tasks`),
-        CHAPTER_A,
-      );
-
-      expect(res.status).toBe(403);
-      expectDeniedBody(res.body, 'chapter.context.mismatch');
     });
 
     it('allows the caller into their own chapter (positive control)', async () => {
@@ -402,6 +450,25 @@ describe('Cross-tenant isolation (e2e)', () => {
       );
     });
 
+    // ADR-27 test 9: the handler's own check still refuses with the header
+    // now authoritative. The header names B, the claim A, the URL A: the
+    // resolved chapter is the header's, so the URL disagrees with it.
+    it('rejects a URL chapter id that disagrees with the header’s chapter, whatever the claim', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_A });
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/chapters/${CHAPTER_A}/config`),
+        CHAPTER_B,
+      );
+
+      expect(res.status).toBe(403);
+      expectDeniedBody(
+        res.body,
+        'chapter.context.mismatch',
+        URL_MISMATCH_MESSAGE,
+      );
+    });
+
     it('allows a URL chapter id that matches the active chapter (positive control)', async () => {
       app = await boot({ active_chapter_id: CHAPTER_B });
 
@@ -447,6 +514,242 @@ describe('Cross-tenant isolation (e2e)', () => {
         'chapter.context.mismatch',
         URL_MISMATCH_MESSAGE,
       );
+    });
+  });
+
+  /**
+   * ADR-27 decision 3 (#5918): the page's URL, sent as `x-chapter-id`, names
+   * the chapter; the token's claim is only the default. Bob is a member of A
+   * and B (and an officer of the council), not of C. The numbers are the
+   * ADR's cross-tenant test list; test 8 (analytics identity) is in
+   * `analytics-identity.e2e-spec.ts`, which sets the salt it needs, and test
+   * 10 (two web tabs) belongs to rollout step 2.
+   */
+  describe('header-first chapter context (ADR-27)', () => {
+    function seedTenants(): SeededTables {
+      const tables = seedDualChapterNotifications();
+      tables.members = [
+        ...tables.members,
+        {
+          id: MEMBER_B_IN_COUNCIL,
+          user_id: USER_B,
+          chapter_id: COUNCIL,
+          role_ids: [],
+          custom_role_ids: [],
+        },
+      ];
+      return tables;
+    }
+
+    const ids = (res: request.Response) =>
+      res.body.map((n: { id: string }) => n.id);
+
+    it('1. serves the header’s chapter, not the claim’s, to a member of both', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/notifications`),
+        CHAPTER_A,
+      );
+
+      expect(res.status).toBe(200);
+      expect(ids(res)).toEqual([NOTIF_A]);
+      expect(JSON.stringify(res.body)).not.toContain('Chapter B notice');
+    });
+
+    it('2. refuses a header for a chapter the caller is not in, whatever the claim says', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/tasks`),
+        CHAPTER_C,
+      );
+
+      expect(res.status).toBe(403);
+      expectDeniedBody(res.body, 'chapter.context.invalid');
+    });
+
+    it('3. gives two concurrent requests on one token each their own chapter', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+      const server = app.getHttpServer();
+
+      const [a, b] = await Promise.all([
+        asBob(request(server).get(`${V1}/notifications`), CHAPTER_A),
+        asBob(request(server).get(`${V1}/notifications`), CHAPTER_B),
+      ]);
+
+      expect(ids(a)).toEqual([NOTIF_A]);
+      expect(ids(b)).toEqual([NOTIF_B]);
+    });
+
+    it('4a. serves the claim’s chapter when no header is sent', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_A }, seedTenants());
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/notifications`)
+        .set('authorization', 'Bearer token-bob');
+
+      expect(res.status).toBe(200);
+      expect(ids(res)).toEqual([NOTIF_A]);
+    });
+
+    it('4b. asks a multi-chapter member with no header and no claim to choose', async () => {
+      app = await boot(null, seedTenants());
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/notifications`)
+        .set('authorization', 'Bearer token-bob');
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('chapter.context.required');
+    });
+
+    it('5a. refuses a council on a chapter-kind route, as a non-member', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/tasks`),
+        COUNCIL,
+      );
+
+      expect(res.status).toBe(403);
+      expectDeniedBody(res.body, 'chapter.context.invalid');
+    });
+
+    it('5b. refuses a chapter on a council-kind route, as a non-member', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/council-probe`),
+        CHAPTER_B,
+      );
+
+      expect(res.status).toBe(403);
+      expectDeniedBody(res.body, 'chapter.context.invalid');
+    });
+
+    it('5c. serves the council on a council-kind route (positive control)', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await asBob(
+        request(app.getHttpServer()).get(`${V1}/council-probe`),
+        COUNCIL,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ chapter_id: COUNCIL });
+    });
+
+    describe('6. GET /v1/tenants/resolve', () => {
+      const resolve = (slug: string) =>
+        request(app.getHttpServer())
+          .get(`${V1}/tenants/resolve`)
+          .query({ slug })
+          .set('authorization', 'Bearer token-bob');
+
+      /** The body minus `requestId`, which differs on every request. */
+      const comparable = (res: request.Response) => {
+        const { requestId, ...rest } = res.body as Record<string, unknown>;
+        expect(requestId).toEqual(expect.stringMatching(/^req_/));
+        return rest;
+      };
+
+      it('answers an unknown slug and another tenant’s current and retired slugs identically', async () => {
+        app = await boot({ active_chapter_id: CHAPTER_B });
+
+        const unknown = await resolve('nobody-here');
+        const theirCurrent = await resolve('alpha-rpi');
+        const theirRetired = await resolve('alpha-old');
+
+        expect(unknown.status).toBe(404);
+        expect(theirCurrent.status).toBe(404);
+        expect(theirRetired.status).toBe(404);
+        expect(comparable(unknown)).toEqual(comparable(theirCurrent));
+        expect(comparable(unknown)).toEqual(comparable(theirRetired));
+        expect(comparable(unknown)).toMatchObject({ code: 'tenant.not_found' });
+        expect(JSON.stringify(theirCurrent.body)).not.toContain(CHAPTER_A);
+        expect(JSON.stringify(theirRetired.body)).not.toContain('alpha-rpi');
+      });
+
+      it('resolves the caller’s own current slug without a redirect', async () => {
+        app = await boot({ active_chapter_id: CHAPTER_B });
+
+        const res = await resolve('beta-rpi');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({
+          id: CHAPTER_B,
+          name: 'Beta',
+          kind: 'chapter',
+          slug: 'beta-rpi',
+          redirected: false,
+        });
+      });
+
+      it('redirects the caller’s own retired slug to the current one', async () => {
+        app = await boot({ active_chapter_id: CHAPTER_B });
+
+        const res = await resolve('beta-old');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+          id: CHAPTER_B,
+          slug: 'beta-rpi',
+          redirected: true,
+        });
+      });
+
+      it('7. resolves a slug the tenant took back without a redirect', async () => {
+        // The state after B retires `beta-rpi` and clears `retired_at` on
+        // `beta-old` (the database half of test 7, that another tenant can't
+        // insert a retired slug and the owner can take one back, is the
+        // `tenant-slugs` PGlite tier).
+        const tables = seed();
+        tables.tenant_slugs = tables.tenant_slugs.map((row) =>
+          row.chapter_id !== CHAPTER_B
+            ? row
+            : {
+                ...row,
+                retired_at:
+                  row.slug === 'beta-rpi' ? '2026-11-20T00:00:00.000Z' : null,
+              },
+        );
+        app = await boot({ active_chapter_id: CHAPTER_B }, tables);
+
+        const back = await resolve('beta-old');
+        const left = await resolve('beta-rpi');
+
+        expect(back.body).toMatchObject({
+          slug: 'beta-old',
+          redirected: false,
+        });
+        expect(left.body).toMatchObject({ slug: 'beta-old', redirected: true });
+      });
+    });
+
+    it('GET /v1/chapters carries each tenant’s slug and kind', async () => {
+      app = await boot({ active_chapter_id: CHAPTER_B }, seedTenants());
+
+      const res = await request(app.getHttpServer())
+        .get(`${V1}/chapters`)
+        .set('authorization', 'Bearer token-bob');
+
+      expect(res.status).toBe(200);
+      const byId = Object.fromEntries(
+        res.body.map(
+          (s: {
+            chapter_id: string;
+            slug: string;
+            kind: string;
+            school: null;
+          }) => [s.chapter_id, [s.slug, s.kind, s.school]],
+        ),
+      );
+      expect(byId).toEqual({
+        [CHAPTER_A]: ['alpha-rpi', 'chapter', null],
+        [CHAPTER_B]: ['beta-rpi', 'chapter', null],
+        [COUNCIL]: ['rpi-ifc', 'council', null],
+      });
     });
   });
 

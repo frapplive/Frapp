@@ -907,9 +907,19 @@ It was s03's first beat, shown only when the photo or the name was missing, unti
 
 | State | Title | Copy |
 |---|---|---|
-| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`. |
+| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` when About you or (on the phone) the notifications screen follows, else `Go to chat`. |
 | No name | as above | Under the field: `Add your name so the chapter knows who's talking.` |
 | Save failed | as above | Under the field: `Couldn't save your name. Check your connection and try again.` The member stays with what they typed. |
+
+### About you (after a join)
+
+The optional screen after the name on web (`/welcome`) and the phone (s03), shown only when phone, major, graduation year or birthday is empty (#5284). Copy in `ONBOARDING_ABOUT_COPY` (`packages/validation/src/onboarding-about.ts`); the field labels, placeholders and hints are the profile form's (`PROFILE_FIELD_COPY`, `BIRTHDAY_COPY`), so the step and Profile read the same.
+
+| State | Title | Copy |
+|---|---|---|
+| Screen | `About you` | `Officers use this to reach you, and it fills in your profile in the directory.` Then Phone (hint `Members of your chapter see it on your profile.`), Major and Grad year, Birthday. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`; under it the quiet `Skip for now`. |
+| Refused value | as above | The profile form's refusal on the field (a phone, a year, half a birthday): on the phone once the member leaves the field or presses the button, on web when they press it (as `/profile`). Nothing is sent. |
+| Save failed | as above | `Couldn't save that. Check your connection and try again.` The member stays with what they typed. |
 
 ### Display step (onboarding)
 
