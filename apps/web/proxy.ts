@@ -31,6 +31,8 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/messages",
   "/rush",
   "/whats-new",
+  "/chapters",
+  "/affiliations",
   "/join",
   "/no-access",
   "/welcome",
@@ -253,7 +255,7 @@ export const config = {
     "/dashboard/:path*",
     {
       source:
-        "/((?:activity|members|alumni|roles|events|tasks|service|documents|backwork|discord-import|geofences|study|chat|chat-admin|points|billing|reports|profile|preferences|settings|ask|meetings|messages|rush|whats-new)(?:/.*)?)",
+        "/((?:activity|members|alumni|roles|events|tasks|service|documents|backwork|discord-import|geofences|study|chat|chat-admin|points|billing|reports|profile|preferences|settings|ask|meetings|messages|rush|whats-new|chapters|affiliations)(?:/.*)?)",
       missing: [{ type: "header", key: "next-router-prefetch" }],
     },
   ],

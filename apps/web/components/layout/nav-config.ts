@@ -1,6 +1,7 @@
 import {
   ActivityGlyph,
   BackworkGlyph,
+  ChaptersGlyph,
   DirectMessagesGlyph,
   DirectoryGlyph,
   DocumentsGlyph,
@@ -95,11 +96,13 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  *   only. A council (ADR-27) is a tenant served by chat, members, roles,
  *   invites and the audit log, and every other chapter route answers it 403
  *   (`chapter.context.invalid`), so a council's sidebar keeps only the rows
- *   that name `council` here, Messages and Directory, beside New, Search and
+ *   that name `council` here, Messages, Chapters and Directory, beside New, Search and
  *   the channel list (`sidebar.tsx`). Activity, which has no module to switch
  *   off, is the row this gate exists for. Opt-in, so a new chapter row never
  *   reaches a council by default. While the kind is unknown nothing hides,
- *   as with the module gate (`useTenantKind`).
+ *   as with the module gate (`useTenantKind`), except a council-only row
+ *   (Chapters, #5974), which waits for the answer, so a chapter never sees
+ *   it drawn and taken back.
  */
 
 type NavPermissionRule =
@@ -216,6 +219,18 @@ export const SIDEBAR_ROWS: NavItem[] = [
     description: "Chapter files and organizational documents.",
     module: "documents",
     hiddenUntilSetUp: "documents",
+  },
+  {
+    // A council's member chapters, requests and invitations (#5974;
+    // `council-types.md` § What each council's space shows). Every
+    // council member reads it; `council:chapters_manage` acts on it.
+    id: "chapters",
+    label: "Chapters",
+    icon: ChaptersGlyph,
+    href: "/chapters",
+    description: "Member chapters, requests to join and invitations.",
+    requirePermission: "members:view",
+    kinds: ["council"],
   },
   {
     id: "members",

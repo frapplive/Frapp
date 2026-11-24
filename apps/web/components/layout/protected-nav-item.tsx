@@ -117,7 +117,8 @@ function isGranted(
  * `tenantKind` is the fourth, the kind gate (#5933): a row hides in a tenant
  * whose kind it doesn't serve (`NavItem.kinds`, chapters only when omitted),
  * so a council's nav never offers a page its routes refuse. Undefined while
- * the kind is unknown, which gates nothing, like the module gate.
+ * the kind is unknown, which gates nothing, like the module gate, except a
+ * council-only row (#5974), which stays hidden until the kind is known.
  */
 export function isNavItemVisible(
   item: NavItem,
@@ -127,6 +128,10 @@ export function isNavItemVisible(
   tenantKind?: TenantKind,
 ): boolean {
   if (tenantKind && !(item.kinds ?? CHAPTER_ONLY).includes(tenantKind)) {
+    return false;
+  }
+  // A row no chapter has waits for the kind (#5974), unlike a chapter row.
+  if (!tenantKind && item.kinds && !item.kinds.includes("chapter")) {
     return false;
   }
   const resolved = permissions !== undefined && permissions !== null;

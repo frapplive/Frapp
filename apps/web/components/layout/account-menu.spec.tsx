@@ -256,6 +256,10 @@ describe("AccountMenu", () => {
     expect(
       screen.getByRole("menuitem", { name: "Start a council" }),
     ).toHaveAttribute("href", "/start-council");
+    // School and council opens its own page (#5974).
+    expect(
+      screen.getByRole("menuitem", { name: "School and council" }),
+    ).toHaveAttribute("href", "/affiliations");
     // One chapter: nothing to switch to, so no heading for it.
     expect(screen.queryByText("Switch chapter")).not.toBeInTheDocument();
   });
@@ -284,6 +288,37 @@ describe("AccountMenu", () => {
     expect(screen.getByText("Switch chapter or council")).toBeInTheDocument();
     expect(screen.getByText("Interfraternity Council")).toBeInTheDocument();
     expect(screen.getByText("Westfield University")).toBeInTheDocument();
+    // A council has no school link to manage from here (#5974).
+    expect(
+      screen.queryByRole("menuitem", { name: "School and council" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers School and council only to a chapter viewer who reads its config (#5974)", async () => {
+    nav.permissions = ["members:view", "backwork:upload"];
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <AccountMenu variant="foot" switcher={ONE_CHAPTER} />,
+    );
+    await user.click(screen.getByRole("button", { name: /account menu/i }));
+    expect(
+      screen.getByRole("menuitem", { name: "Join another chapter" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "School and council" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    // Nor while the permission read is in flight.
+    nav.permissions = undefined;
+    render(<AccountMenu variant="foot" switcher={ONE_CHAPTER} />);
+    await user.click(screen.getByRole("button", { name: /account menu/i }));
+    expect(
+      screen.getByRole("menuitem", { name: "Join another chapter" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "School and council" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers Chapter settings only where Settings holds something for the viewer", async () => {

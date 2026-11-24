@@ -57,10 +57,29 @@ export interface RushCandidateWork {
   bid_invite_sent: boolean | null;
 }
 
+/**
+ * The school layer's columns (#5974, `school-layer.md` § 2.5): the PNM a
+ * prospect is. Kept off {@link RushCandidate} so the rush DTOs' drift
+ * guards don't make that slice change the rush contract. The rush
+ * repository reads `*`, so its rows carry them undocumented; every row is
+ * `pnm_id` null and `origin` `manual` until the form slice links
+ * candidates, and that slice documents them on the rush routes or stops
+ * sending them.
+ */
+export interface RushCandidatePnmLink {
+  /** The school-level PNM this prospect is, or null for a hand-added one. */
+  pnm_id: string | null;
+  /** `manual` (a member added them) or `pnm`; never changes. */
+  origin: 'manual' | 'pnm';
+}
+
 export type RushBidAnsweredVia = 'member' | 'pnm' | 'system';
 
-/** A whole `rush_candidates` row. */
+/** A `rush_candidates` row as the pipeline works it. */
 export type RushCandidateRow = RushCandidate & RushCandidateWork;
+
+/** A whole `rush_candidates` row, as the table holds it (`database.types.ts`). */
+export type RushCandidateTableRow = RushCandidateRow & RushCandidatePnmLink;
 
 export interface RushCandidateVote {
   id: string;

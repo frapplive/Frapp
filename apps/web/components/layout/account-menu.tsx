@@ -8,12 +8,14 @@ import {
   Landmark,
   LogOut,
   Plus,
+  School,
   Settings,
   Smile,
   Sparkles,
   User,
 } from "lucide-react";
 import { useCurrentUser, useMemberDisplayNames } from "@repo/hooks";
+import { CHAPTER_AFFILIATIONS_COPY, can } from "@repo/validation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -144,6 +146,10 @@ export function AccountMenu({
     permissions,
     isModuleEnabled,
   );
+  // The chapter's School and council page (#5974): a chapter's officers who
+  // read its config. A council has no school link of its own to manage here.
+  const showAffiliationsLink =
+    tenantKind === "chapter" && can("chapter-config:view", permissions ?? []);
 
   // Your own dot, on the avatar that opens this menu. Read from presence, so
   // it is what the chapter sees (the Idle clock included), except that
@@ -284,6 +290,14 @@ export function AccountMenu({
             <Link href="/settings" onClick={onNavigate}>
               <Landmark className="h-4 w-4" aria-hidden="true" />
               <span>{SETTINGS_TITLE[tenantKind ?? "chapter"]}</span>
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        {showAffiliationsLink ? (
+          <DropdownMenuItem asChild>
+            <Link href="/affiliations" onClick={onNavigate}>
+              <School className="h-4 w-4" aria-hidden="true" />
+              <span>{CHAPTER_AFFILIATIONS_COPY.title}</span>
             </Link>
           </DropdownMenuItem>
         ) : null}

@@ -7420,6 +7420,334 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chapter/affiliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The chapter's school and councils
+         * @description Its live school links, and the councils at its confirmed schools with the chapter's link to each, if any.
+         */
+        get: operations["ChapterAffiliationController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chapter/affiliations/school": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Name and confirm the chapter's school
+         * @description Proposes the link and, since the caller is the chapter's officer, confirms it. A second school becomes a secondary link. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        post: operations["ChapterAffiliationController_linkSchool_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chapter/affiliations/school/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Confirm, decline or end a school link
+         * @description Ending a confirmed link ends the chapter's council links at that school. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        patch: operations["ChapterAffiliationController_decideSchool_v1"];
+        trace?: never;
+    };
+    "/v1/chapter/affiliations/councils": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask to join a council
+         * @description The council at the chapter's confirmed school accepts or declines. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        post: operations["ChapterAffiliationController_requestCouncil_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chapter/affiliations/councils/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Answer a council's invitation, or leave
+         * @description `accepted` or `declined` answers an invitation; `ended` withdraws the chapter's request or leaves. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        patch: operations["ChapterAffiliationController_decideCouncil_v1"];
+        trace?: never;
+    };
+    "/v1/council/chapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The council's chapters
+         * @description Member chapters, suspended ones, invitations out and requests waiting on the council, newest first.
+         */
+        get: operations["CouncilChaptersController_list_v1"];
+        put?: never;
+        /**
+         * Invite a chapter
+         * @description The chapter's officers accept or decline. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        post: operations["CouncilChaptersController_invite_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/chapters/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chapters the council can invite
+         * @description Chapters that confirmed the council's school and have no live link to it, offered archetypes first.
+         */
+        get: operations["CouncilChaptersController_candidates_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/chapters/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Answer a chapter's request, suspend, reinstate or remove
+         * @description 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).
+         */
+        patch: operations["CouncilChaptersController_decide_v1"];
+        trace?: never;
+    };
+    "/v1/council/recruitment/seasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The council's recruitment seasons
+         * @description Newest first. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        get: operations["CouncilRecruitmentController_listSeasons_v1"];
+        put?: never;
+        /**
+         * Add a recruitment season
+         * @description 409 `council.season_exists` for a term the council already has; 400 when it closes before it opens. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        post: operations["CouncilRecruitmentController_createSeason_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/recruitment/seasons/{term}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a season: its dates, status or retention
+         * @description 404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        patch: operations["CouncilRecruitmentController_updateSeason_v1"];
+        trace?: never;
+    };
+    "/v1/council/recruitment/pnms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The council's master list for a season
+         * @description Shared fields, never a phone number. Counts only until the season is closed. 404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        get: operations["CouncilRecruitmentController_masterList_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/recruitment/pnms/{pnmId}/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A PNM's phone number
+         * @description Logged before it is read. 404 `pnm.not_found` for anyone not on this council's list. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        get: operations["CouncilRecruitmentController_phone_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/recruitment/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The merge queue
+         * @description Suspected duplicates on the council's list: the same name and phone, or the same name and class year. Never merged automatically. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        get: operations["CouncilRecruitmentController_duplicates_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/recruitment/duplicates/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Not the same person
+         * @description The pair stops being suggested. 404 `pnm.not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        post: operations["CouncilRecruitmentController_dismiss_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/council/recruitment/merges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge two records of one person
+         * @description Moves registrations and interests to the survivor and repoints each chapter's candidate where it can. Logged; no unmerge. 404 `pnm.not_found`; 409 `pnm.already_merged` or `pnm.two_accounts`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.
+         */
+        post: operations["CouncilRecruitmentController_merge_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pnms/{pnmId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A PNM linked to this chapter
+         * @description Their shared fields, and their phone only when they chose to share it. 404 `pnm.not_found` for any PNM not linked to this chapter.
+         */
+        get: operations["ChapterPnmController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -14768,6 +15096,273 @@ export interface components {
             notifications?: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        AffiliationSchoolSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Rensselaer Polytechnic Institute */
+            name: string;
+            /** @example RPI */
+            short_name: string;
+        };
+        AffiliationSchoolDto: {
+            /** Format: uuid */
+            link_id: string;
+            /** @enum {string} */
+            status: "proposed" | "active" | "declined" | "ended";
+            is_primary: boolean;
+            school: components["schemas"]["AffiliationSchoolSummaryDto"];
+        };
+        AffiliationCouncilSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example RPI IFC */
+            name: string;
+            /** @enum {string|null} */
+            council_type: "ifc" | "panhellenic" | "nphc" | "mgc" | "other" | null;
+            /** @description Whether Frapp staff verified the council. */
+            verified: boolean;
+            /** Format: uuid */
+            school_id: string | null;
+        };
+        CouncilLinkDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "proposed" | "accepted" | "declined" | "suspended" | "ended";
+            /**
+             * @description Who proposed it: the council invited, or the chapter asked.
+             * @enum {string}
+             */
+            proposed_by_side: "council" | "chapter";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            decided_at: string | null;
+        };
+        ChapterCouncilDto: {
+            council: components["schemas"]["AffiliationCouncilSummaryDto"];
+            /** @description The live link, or null when the chapter isn't linked. */
+            link: components["schemas"]["CouncilLinkDto"] | null;
+            /** @description Whether this council's type is offered the chapter's archetype (council-types.md § Link offers). A chapter may still ask any council at its school. */
+            offered: boolean;
+        };
+        ChapterAffiliationsDto: {
+            /** @description The chapter's live school links, primary first. */
+            schools: components["schemas"]["AffiliationSchoolDto"][];
+            /** @description The councils at the chapter's confirmed schools, and any it is linked to. */
+            councils: components["schemas"]["ChapterCouncilDto"][];
+        };
+        LinkSchoolDto: {
+            /**
+             * Format: uuid
+             * @description The chapter's school. The officer naming it confirms it in the same step.
+             */
+            school_id: string;
+        };
+        DecideSchoolLinkDto: {
+            /**
+             * @description `active` confirms a proposed link, `declined` refuses it, `ended` unlinks a confirmed one (and ends the chapter's council links at that school).
+             * @enum {string}
+             */
+            status: "active" | "declined" | "ended";
+        };
+        SchoolLinkDecisionDto: {
+            /** Format: uuid */
+            link_id: string;
+            /** @enum {string} */
+            status: "proposed" | "active" | "declined" | "ended";
+        };
+        RequestCouncilDto: {
+            /**
+             * Format: uuid
+             * @description The council to ask to join.
+             */
+            council_id: string;
+        };
+        DecideCouncilLinkDto: {
+            /**
+             * @description `accepted` or `declined` answers the other side's proposal; `accepted` also lifts the council's own suspension. `suspended` is the council's, on a member chapter. `ended` withdraws a proposal or ends a membership, from either side.
+             * @enum {string}
+             */
+            status: "accepted" | "declined" | "suspended" | "ended";
+        };
+        ChapterListingDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Phi Gamma Delta */
+            name: string;
+            /** @example ifc */
+            org_archetype: string | null;
+            /** @example Rensselaer Polytechnic Institute */
+            university: string;
+        };
+        CouncilChapterDto: {
+            link: components["schemas"]["CouncilLinkDto"];
+            /** @description The chapter's public listing only: never its members or data (#4068 decision 11). */
+            chapter: components["schemas"]["ChapterListingDto"];
+        };
+        InviteCandidateDto: {
+            chapter: components["schemas"]["ChapterListingDto"];
+            /** @description Whether the council's type is offered this chapter's archetype; offered chapters come first. */
+            offered: boolean;
+        };
+        InviteChapterDto: {
+            /**
+             * Format: uuid
+             * @description The chapter to invite.
+             */
+            chapter_id: string;
+        };
+        RecruitmentSeasonDto: {
+            /** @example Spring 2027 */
+            term: string;
+            /** Format: date-time */
+            opens_at: string;
+            /** Format: date-time */
+            closes_at: string;
+            /** Format: date-time */
+            bid_window_opens_at: string | null;
+            /** Format: date-time */
+            bid_window_closes_at: string | null;
+            /**
+             * @description Until it is `closed`, the council sees interests as counts only.
+             * @enum {string}
+             */
+            status: "planned" | "open" | "closed";
+            /**
+             * @description Days after `closes_at` a PNM record is kept (default and most 180).
+             * @example 180
+             */
+            pnm_retention_days: number;
+        };
+        CreateRecruitmentSeasonDto: {
+            /** @example Spring 2027 */
+            term: string;
+            /** Format: date-time */
+            opens_at: string;
+            /** Format: date-time */
+            closes_at: string;
+            /** Format: date-time */
+            bid_window_opens_at?: string | null;
+            /** Format: date-time */
+            bid_window_closes_at?: string | null;
+            /** @enum {string} */
+            status?: "planned" | "open" | "closed";
+            pnm_retention_days?: number;
+        };
+        UpdateRecruitmentSeasonDto: {
+            /** Format: date-time */
+            opens_at?: string;
+            /** Format: date-time */
+            closes_at?: string;
+            /** Format: date-time */
+            bid_window_opens_at?: string | null;
+            /** Format: date-time */
+            bid_window_closes_at?: string | null;
+            /** @enum {string} */
+            status?: "planned" | "open" | "closed";
+            pnm_retention_days?: number;
+        };
+        ChapterTotalDto: {
+            /** Format: uuid */
+            chapter_id: string;
+            name: string;
+            interested: number;
+        };
+        MasterListRowDto: {
+            /** Format: uuid */
+            id: string;
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            /** @example student@rpi.edu */
+            school_email: string;
+            /** @example 2030 */
+            class_year: number | null;
+            /** @description Whether the person proved the school address. An imported record that hasn't reaches no chapter. */
+            email_verified: boolean;
+            /** @enum {string} */
+            source: "interest_form" | "council_registration" | "council_import";
+            /** Format: date-time */
+            registered_at: string;
+            /** @description Whether a phone number is on file. Reading it is `GET …/phone`, logged. */
+            has_phone: boolean;
+            /** @description How many of the council's member chapters they showed interest in. */
+            interest_count: number;
+            /** @description Which member chapters, by id: null until the season is closed (counts only in season). */
+            interested_chapter_ids: string[] | null;
+        };
+        MasterListDto: {
+            season: components["schemas"]["RecruitmentSeasonDto"];
+            /** @description True while the season isn't closed: interests are counts only. */
+            counts_only: boolean;
+            chapter_totals: components["schemas"]["ChapterTotalDto"][];
+            pnms: components["schemas"]["MasterListRowDto"][];
+        };
+        PnmPhoneDto: {
+            phone: string | null;
+        };
+        PnmSharedDto: {
+            /** Format: uuid */
+            id: string;
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            /** @example student@rpi.edu */
+            school_email: string;
+            /** @example 2030 */
+            class_year: number | null;
+            /** @description Whether the person proved the school address. An imported record that hasn't reaches no chapter. */
+            email_verified: boolean;
+            /** @enum {string} */
+            source: "interest_form" | "council_registration" | "council_import";
+        };
+        DuplicatePairDto: {
+            a: components["schemas"]["PnmSharedDto"];
+            b: components["schemas"]["PnmSharedDto"];
+            reasons: ("same_name_and_phone" | "same_name_and_class_year")[];
+        };
+        DismissDuplicateDto: {
+            /** Format: uuid */
+            a: string;
+            /** Format: uuid */
+            b: string;
+        };
+        MergePnmsDto: {
+            /**
+             * Format: uuid
+             * @description The record that stays.
+             */
+            survivor_id: string;
+            /**
+             * Format: uuid
+             * @description The record merged into it.
+             */
+            loser_id: string;
+        };
+        MergedPnmsDto: {
+            /** Format: uuid */
+            survivor_id: string;
+            /** @description Chapters that already had a candidate for each record keep both until they merge them themselves. */
+            candidate_conflicts: number;
+        };
+        ChapterPnmDto: {
+            /** Format: uuid */
+            id: string;
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            /** @example student@rpi.edu */
+            school_email: string;
+            /** @example 2030 */
+            class_year: number | null;
+            /** @description Whether the person proved the school address. An imported record that hasn't reaches no chapter. */
+            email_verified: boolean;
+            /** @enum {string} */
+            source: "interest_form" | "council_registration" | "council_import";
+            /** @description Only when the PNM chose to share it. */
+            phone: string | null;
         };
     };
     responses: never;
@@ -31548,6 +32143,562 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BootstrapDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterAffiliationController_get_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterAffiliationsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterAffiliationController_linkSchool_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkSchoolDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffiliationSchoolDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterAffiliationController_decideSchool_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideSchoolLinkDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolLinkDecisionDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterAffiliationController_requestCouncil_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestCouncilDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilLinkDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterAffiliationController_decideCouncil_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideCouncilLinkDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilLinkDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilChaptersController_list_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilChapterDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilChaptersController_invite_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteChapterDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilLinkDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilChaptersController_candidates_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCandidateDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilChaptersController_decide_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideCouncilLinkDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilLinkDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_listSeasons_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecruitmentSeasonDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_createSeason_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRecruitmentSeasonDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecruitmentSeasonDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_updateSeason_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                term: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRecruitmentSeasonDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecruitmentSeasonDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_masterList_v1: {
+        parameters: {
+            query: {
+                term: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterListDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_phone_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pnmId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PnmPhoneDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_duplicates_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatePairDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_dismiss_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissDuplicateDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CouncilRecruitmentController_merge_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergePnmsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergedPnmsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChapterPnmController_get_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pnmId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterPnmDto"];
                 };
             };
             /** @description Error */

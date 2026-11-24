@@ -106,7 +106,7 @@ Tasks, Points, Study hours, Service hours, Recruitment, Meetings and Backwork ea
 Until its step lands a page stays reachable from More, a dropdown under its button that is lit while one of its pages is open and is not drawn when none of its rows is visible.
 Resources opens Documents until #5949 makes the two one page, and the page keeps the title Documents.
 Chapter settings has no row: it opens from the member's menu, its one door ([§ Account menu](#account-menu)).
-In a council ([#5933](https://github.com/frapplive/Frapp/issues/5933), ADR-27) the sidebar keeps what a council's routes serve: New, Search, Messages, Directory and the channel list (`NavItem.kinds`; `council-route-gate.tsx` sends any other page to `/chat`). Its New opens the council's home, its crest, type and school, then Invite delegates and Edit titles for an officer (`council-home.tsx`): a council has neither the assistant nor a chapter's forms. The member menu names its settings Council settings, offers Start a council beside Join another chapter, and reads a council by its type in the switch list. _(#5946 by pdcarlson, 2026-11-24: the council's home sat in the shell's empty view, which #5946 deleted; on New pending Paul.)_
+In a council ([#5933](https://github.com/frapplive/Frapp/issues/5933), ADR-27) the sidebar keeps what a council's routes serve: New, Search, Messages, Chapters ([§ Council and school links](#council-and-school-links), #5974), Directory and the channel list (`NavItem.kinds`; `council-route-gate.tsx` sends any other page to `/chat`). Its New opens the council's home, its crest, type and school, then Invite delegates and Edit titles for an officer (`council-home.tsx`): a council has neither the assistant nor a chapter's forms. Chapters is a council's row only and stays hidden until the tenant kind is known, so a chapter's sidebar never draws it. The member menu names its settings Council settings, offers Start a council beside Join another chapter, and reads a council by its type in the switch list. _(#5946 by pdcarlson, 2026-11-24: the council's home sat in the shell's empty view, which #5946 deleted; on New pending Paul.)_
 There is no Polls row: polls live in the channel where they were made, and the chapter-wide `/polls` list, which could only show the older REST poll shape no client creates any more, was retired ([#3871](https://github.com/pdcarlson/Frapp/issues/3871), Shawn, 2026-11-09).
 Officer setup and officer tools sit behind Chapter settings; there is no Admin group ([#2946](https://github.com/pdcarlson/Frapp/issues/2946)).
 It was named Settings until 2026-11-10: it is the chapter's, and a member's own settings are a separate page on the member's menu ([§ Two doors](#two-doors-chapter-settings-and-your-settings), [#3856](https://github.com/pdcarlson/Frapp/issues/3856)).
@@ -127,6 +127,7 @@ Recorded decisions this layout changed, kept for their reasons:
 | Home     | Messages      | `/messages`                                 | —                                               | —                                                                                                                                                                                                                                               |
 | Home     | Calendar      | `/events` (the row was Events until #5946)  | `events`                                        | —                                                                                                                                                                                                                                               |
 | Home     | Resources     | `/documents`, titled Documents, until #5949 | `documents`                                     | — (upload gated by `chapter_docs:upload`, delete by `chapter_docs:manage`; hidden from a viewer without `chapter_docs:upload` while there are no documents: [`modules.md` § Not-set-up features](../../product/modules.md#not-set-up-features)) |
+| Home     | Chapters      | `/chapters`                                 | —                                               | `members:view`, in a council only (`kinds: ["council"]`, #5974); acting needs `council:chapters_manage`. Hidden until the tenant kind is known                                                                                                  |
 | Home     | Directory     | `/members`                                  | —                                               | `members:view`                                                                                                                                                                                                                                  |
 | More     | Tasks         | `/tasks`                                    | `tasks`                                         | — (filtered to own tasks unless `tasks:manage`)                                                                                                                                                                                                 |
 | More     | Points        | `/points`                                   | `points`                                        | —                                                                                                                                                                                                                                               |
@@ -231,7 +232,7 @@ It is one menu for the member and the chapter, in this order:
 1. The member's name and email.
 2. Theirs: Status and the custom status line (2026-11-09, #3845: first, because it is the row a member reaches for before practice, as on Discord and Slack), Profile, and Settings (`/preferences`, the member's own settings page;
    it replaced the "Notification settings" link into `/profile` on 2026-11-10, [#3856](https://github.com/pdcarlson/Frapp/issues/3856)).
-3. The chapter's: Chapter settings, whenever Settings holds something for this viewer ([§ Navigation map](#navigation-map)), Join another chapter, and the member's other chapters under "Switch chapter".
+3. The chapter's: Chapter settings, whenever Settings holds something for this viewer ([§ Navigation map](#navigation-map)), then School and council for a chapter's holders of `chapter-config:view` ([§ Council and school links](#council-and-school-links), #5974), Join another chapter, and the member's other chapters under "Switch chapter".
 4. What's new (`/whats-new`, the changelog members read, from `RELEASE_NOTES` in `@repo/validation`, the same list as mobile Settings → What's new;
    2026-11-07;
    [§ What's new](#whats-new) has its unread dot), and Sign out.
@@ -1036,6 +1037,26 @@ Changed in #5973 by `gampheadband`, 2026-11-24, from Winston's UI design v8 § 3
 - **More details** follows the Directory profile form (#581, `components/profile/own-custom-fields-section.tsx`): the chapter's custom fields, every tier, each with a line of who else sees it, and its own Save details button, which sends only what changed.
   A `select` is a `Select` with Not set first (gone once a required field has a value), a `boolean` a `Switch` at the row's end, a `phone` a phone field formatted on leaving it, the rest text fields; a refused value says why under its field on Save.
   Nothing draws for a chapter with no fields or a viewer without `members:view`. The phone draws the same fields, words and order under Details ([`../mobile/screens.md`](../mobile/screens.md) s15); the rules are [`members.md` § Custom Fields](../../behavior/members.md#custom-fields).
+
+### Council and school links
+
+Built for [#5974](https://github.com/frapplive/Frapp/issues/5974) (`school-layer.md` § 2.4, `council-types.md` § What each council's space shows).
+Two pages, one per side of a link. The phone draws the council's side as a section of the council home, in the same words (`COUNCIL_CHAPTERS_COPY` in `@repo/validation`); the chapter's side is web only for now (`CHAPTER_AFFILIATIONS_COPY`), and a chapter officer on the phone can't yet confirm a school or answer a council.
+
+- **Chapters (`/chapters`, a council's sidebar row).**
+  `apps/web/components/affiliations/council-chapters-page.tsx`.
+  Waiting on you (a chapter's request: Accept, Decline), Member chapters (accepted, and suspended with a Suspended badge; the row's menu holds Suspend or Reinstate, then Remove from council, each destructive step confirmed), and Invited (the council's own invitations: Cancel invite).
+  Invite a chapter is the header's main action, a searchable list of the chapters at the council's school, suggested ones (`COUNCIL_LINK_OFFERS`) first.
+  A chapter shows by its public listing only (name, kind, school): a council never reads a chapter's data (#4068 decision 11).
+  A delegate (`members:view` without `council:chapters_manage`) sees Member chapters alone, read-only.
+  A chapter that opens the route is sent to chat (`COUNCIL_ONLY_ROUTES`, `council-route-gate.tsx`).
+- **School and council (`/affiliations`, the member's menu).**
+  `apps/web/components/affiliations/school-and-council-page.tsx`, reached from the member's menu at the sidebar's foot, under Chapter settings, by a chapter's holders of `chapter-config:view`.
+  School: none offers a school search, whose pick links and confirms it; a proposed school offers Confirm and Not our school; a confirmed one has Unlink school in its menu, whose confirm says it also ends the chapter's council memberships there.
+  Councils, once a school is confirmed: each council at it with its status (`councilLinkLabel`) and the step for its state (Ask to join, Cancel request, Accept or Decline an invitation, and Leave council in the row's menu).
+  Without `chapter-config:manage` the page is read-only.
+  It is its own page, not a Settings tab, for now; folding it into Chapter settings waits on that screen's open PR.
+- Comparable apps: Slack Connect's invitations between workspaces (either side accepts or declines; a pending invite can be cancelled), GitHub's organization membership requests, and Discord's server settings for partnered servers.
 
 ### Two doors: Chapter settings and your Settings
 

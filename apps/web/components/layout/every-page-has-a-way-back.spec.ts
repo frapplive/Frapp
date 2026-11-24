@@ -60,6 +60,7 @@ const OFF_NAV_DOORS: Readonly<Record<string, string>> = {
   "/profile": "the member's menu at the sidebar's foot",
   "/preferences": "the member's menu at the sidebar's foot",
   "/settings": "the member's menu at the sidebar's foot",
+  "/affiliations": "the member's menu at the sidebar's foot",
   "/whats-new": "the member's menu at the sidebar's foot",
   // New's own row, which lights on it (`sidebar.tsx`).
   "/ask": "the New row",

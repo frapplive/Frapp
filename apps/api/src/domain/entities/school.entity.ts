@@ -91,12 +91,16 @@ export interface SchoolChapter {
   school_id: string;
   chapter_id: string;
   is_primary: boolean;
-  status: 'proposed' | 'active';
+  /** § 2.4's full set since #5974: an officer confirms, declines or ends. */
+  status: SchoolChapterStatus;
   proposed_by: string | null;
   confirmed_by: string | null;
   confirmed_at: string | null;
+  ended_at: string | null;
   created_at: string;
 }
+
+export type SchoolChapterStatus = 'proposed' | 'active' | 'declined' | 'ended';
 
 /** A row `search_schools` returns. */
 export interface SchoolSearchRow {

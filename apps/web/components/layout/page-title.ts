@@ -1,4 +1,4 @@
-import type { TenantKind } from "@repo/validation";
+import { CHAPTER_AFFILIATIONS_COPY, type TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import type { VocabConfig } from "@repo/org-archetypes";
 import {
@@ -65,6 +65,8 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/preferences": "Settings",
   "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
+  // Opened from the member's menu (#5974).
+  "/affiliations": CHAPTER_AFFILIATIONS_COPY.title,
   // The sidebar's New row opens it (#5946).
   [ASK_ROUTE]: "Frapp Intelligence",
 };
