@@ -4,6 +4,7 @@ import {
   SUPABASE_KEEP_ALIVE_MS,
   createSupabaseDispatcher,
   createSupabaseFetch,
+  supabaseDispatcherOptions,
 } from './supabase-fetch';
 
 /**
@@ -16,15 +17,21 @@ function startServer(): Promise<{
   server: Server;
   url: string;
   connections: () => number;
+  received: () => string;
 }> {
   let connections = 0;
+  let received = '';
   const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     connections += 1;
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
     socket.on('error', () => undefined);
-    socket.on('data', () => {
+    socket.on('data', (chunk) => {
+      received += chunk.toString('latin1');
+      // One answer per request: its last chunk is the one that ends the
+      // headers of a bodiless request, or the multipart body's closing line.
+      if (!/\r\n\r\n$|--\r\n$/.test(received)) return;
       socket.write(
         'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}',
       );
@@ -38,6 +45,7 @@ function startServer(): Promise<{
         server,
         url: `http://127.0.0.1:${port}/`,
         connections: () => connections,
+        received: () => received,
       });
     });
   });
@@ -65,6 +73,27 @@ describe('the Supabase connection pool', () => {
 
   it('keeps idle connections far longer than the 4 seconds Node gives them', () => {
     expect(SUPABASE_KEEP_ALIVE_MS).toBeGreaterThanOrEqual(60_000);
+    // The default pool is built with that number, not Node's.
+    expect(supabaseDispatcherOptions()).toEqual({
+      keepAliveTimeout: SUPABASE_KEEP_ALIVE_MS,
+    });
+  });
+
+  it('sends a FormData body as multipart, as a Blob upload to Storage needs', async () => {
+    const { server, url, received } = await startServer();
+    const dispatcher = createSupabaseDispatcher();
+    stop = async () => {
+      await dispatcher.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    };
+    const body = new FormData();
+    body.append('', new Blob(['hello']), 'note.txt');
+    await (
+      await createSupabaseFetch(dispatcher)(url, { method: 'POST', body })
+    ).text();
+    expect(received()).toMatch(/content-type: multipart\/form-data/i);
+    expect(received()).toContain('hello');
+    expect(received()).not.toContain('[object FormData]');
   });
 
   it('reuses the open connection for a call made after an idle gap', async () => {
