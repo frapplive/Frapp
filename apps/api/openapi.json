@@ -16181,6 +16181,53 @@
         ]
       }
     },
+    "/v1/frapp-links/resolve": {
+      "post": {
+        "operationId": "FrappLinkController_resolve_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveFrappLinksDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveFrappLinksResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone",
+        "tags": [
+          "Frapp links"
+        ]
+      }
+    },
     "/v1/channels/{channelId}/polls": {
       "post": {
         "operationId": "PollController_createPoll_v1",
@@ -25786,29 +25833,52 @@
           "id": {
             "type": "string",
             "maxLength": 64,
-            "description": "The client's id for the attachment. Unique within the event."
+            "description": "The client's id for the entry. Unique within its list."
           },
           "kind": {
             "type": "string",
             "enum": [
               "link",
-              "document"
+              "document",
+              "minutes",
+              "event",
+              "message"
             ]
           },
           "url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "A `link` attachment's address: http or https only."
+            "description": "A `link`'s address: http or https only. Never fetched."
           },
           "document_id": {
             "type": "string",
             "format": "uuid",
-            "description": "A `document` attachment's Chapter Files document (`GET /v1/documents/{id}` opens it). An id that isn't the chapter's is a 400."
+            "description": "A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400."
+          },
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`minutes`: the meeting whose minutes it opens."
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`event`: the event."
+          },
+          "channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`message`: the message's channel. On a save it is taken from the message, whatever is sent."
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`message`: the message."
           },
           "title": {
             "type": "string",
             "maxLength": 120,
-            "description": "What the list shows. For a document, its name when it was attached."
+            "description": "A web link's title. On a record it is the kind's own word (\"Document\", \"Minutes\", \"Event\", \"Message\"), which the API sets whatever is sent, so no record's name is stored where a member who can't open it would read it."
           }
         },
         "required": [
@@ -25925,7 +25995,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26087,7 +26157,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26237,7 +26307,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26374,7 +26444,7 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
@@ -26519,11 +26589,15 @@
             }
           },
           "attachments": {
-            "description": "This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since.",
+            "description": "This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EventAttachmentDto"
             }
+          },
+          "attachments_all_kinds": {
+            "type": "boolean",
+            "description": "Set with `attachments` by a build that sends every Frapp link kind, so the list replaces what is stored. Without it, the stored minutes, event and message links are kept, since phone builds from before Frapp links drop the kinds they cannot read."
           },
           "check_in_zone": {
             "description": "Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. Send an empty array to clear an existing zone.",
@@ -31887,6 +31961,65 @@
           "url"
         ]
       },
+      "FrappLinkDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The client's id for the entry. Unique within its list."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "link",
+              "document",
+              "minutes",
+              "event",
+              "message"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "A `link`'s address: http or https only. Never fetched."
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400."
+          },
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`minutes`: the meeting whose minutes it opens."
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`event`: the event."
+          },
+          "channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`message`: the message's channel. On a save it is taken from the message, whatever is sent."
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`message`: the message."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "A `link`'s title (its domain when empty). An event's `document` keeps the name it had when attached, for older phone builds; every other record's name is read live with `POST /v1/frapp-links/resolve` and never stored."
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ]
+      },
       "CreateTaskDto": {
         "type": "object",
         "properties": {
@@ -31935,6 +32068,14 @@
             "type": "string",
             "pattern": "^(tier|role|group):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "description": "The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task."
+          },
+          "attachments": {
+            "maxItems": 10,
+            "description": "What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrappLinkDto"
+            }
           },
           "due_date": {
             "type": "string",
@@ -32172,6 +32313,13 @@
             "nullable": true,
             "description": "The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task."
           },
+          "attachments": {
+            "description": "What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrappLinkDto"
+            }
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -32221,6 +32369,7 @@
           "group_id",
           "meeting_id",
           "followed_by",
+          "attachments",
           "created_at",
           "photos"
         ]
@@ -32308,6 +32457,14 @@
             "nullable": true,
             "pattern": "^(tier|role|group):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "description": "The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. Null takes it off. A new one must name a tier, role or group the editor is in; the one the task has stays whoever edits. With `scope: group` it changes every copy, confirmed ones too. Not with `scope: series`."
+          },
+          "attachments": {
+            "maxItems": 10,
+            "description": "What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. With `scope: group` every copy not yet confirmed takes it; with `scope: series` the next copies are made with it.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrappLinkDto"
+            }
           },
           "scope": {
             "type": "string",
@@ -35251,6 +35408,113 @@
             }
           }
         }
+      },
+      "FrappLinkTargetDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "document",
+              "minutes",
+              "event",
+              "message"
+            ]
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "channel_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "ResolveFrappLinksDto": {
+        "type": "object",
+        "properties": {
+          "targets": {
+            "maxItems": 40,
+            "description": "The records to read, at most 40. A record asked twice is answered once.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrappLinkTargetDto"
+            }
+          }
+        },
+        "required": [
+          "targets"
+        ]
+      },
+      "FrappLinkResolvedDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Which target this answers: `document:<id>`, `minutes:<id>`, `event:<id>` or `message:<message id>`."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "removed",
+              "hidden"
+            ],
+            "description": "`ok`: the caller may open it. `hidden`: it exists but they may not, and its name is not sent. `removed`: deleted, or not this chapter’s."
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "The document's, meeting's or event's name; a message's channel name. Null unless `ok`."
+          },
+          "date": {
+            "type": "string",
+            "nullable": true,
+            "description": "The meeting's or event's start, or when the message was sent (ISO 8601). Null unless `ok`, and on a document."
+          },
+          "author": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who sent the message. Null on every other kind."
+          }
+        },
+        "required": [
+          "key",
+          "state",
+          "title",
+          "date",
+          "author"
+        ]
+      },
+      "ResolveFrappLinksResponseDto": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrappLinkResolvedDto"
+            }
+          }
+        },
+        "required": [
+          "links"
+        ]
       },
       "CreatePollDto": {
         "type": "object",

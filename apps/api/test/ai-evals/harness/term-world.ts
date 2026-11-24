@@ -443,6 +443,7 @@ export function createTermWorld(
       created_by: termId(task.createdById),
       due_date: task.due,
       due_at: null,
+      attachments: [],
       status: pastDue ? TaskStatus.OVERDUE : stored,
       stored_status: stored,
       point_reward: task.points > 0 ? task.points : null,

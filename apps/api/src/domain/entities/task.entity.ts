@@ -1,4 +1,5 @@
 import type {
+  FrappLink,
   TaskGroupAudience,
   TaskGroupProgress,
   TaskProofKind,
@@ -91,6 +92,13 @@ export interface Task {
    * finished or overdue; it grants nothing else.
    */
   followed_by: string | null;
+  /**
+   * What is attached (`spec/behavior/frapp-links.md`), in order, at most
+   * `FRAPP_LINKS_MAX`. A record link stores ids only, never a name: the
+   * screens read each one's name for the member looking. A group's copies
+   * hold the same list; a series' copies are made with its template's.
+   */
+  attachments: FrappLink[];
   created_at: string;
 }
 
@@ -163,6 +171,8 @@ export interface TaskSeries {
   proof_kind: TaskProofKind;
   /** The checklist each copy starts with, in order. */
   subtask_titles: string[];
+  /** What each copy is made with (Frapp links). */
+  attachments: FrappLink[];
   /** Copies' time of day on the rule's wall clock (`HH:MM:SS`), or null. */
   due_time: string | null;
   /** The rule, in the event rule format with an open end allowed. */

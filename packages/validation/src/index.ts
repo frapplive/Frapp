@@ -129,6 +129,7 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
