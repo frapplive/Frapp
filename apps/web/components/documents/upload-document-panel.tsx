@@ -1,5 +1,6 @@
 "use client";
 
+import { useNewIntent } from "@/components/layout/new-intent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { localIsoDate } from "@repo/formatting";
 import { ChevronRight, Loader2, Upload } from "lucide-react";
@@ -293,6 +294,8 @@ export function useDocumentUpload(
     (next: boolean) => (next ? openPanel() : uploadDialog.setOpen(false)),
     [openPanel, uploadDialog],
   );
+  // New's "Upload" (`new-intent.ts`): the panel this page's button opens.
+  useNewIntent(() => openPanel(), gate.allowed && canUpload);
   useKeptPanel({
     page: "documents",
     form: UPLOAD_DRAFT,

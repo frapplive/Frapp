@@ -150,8 +150,7 @@ export function AccountMenu({
     ? `Account menu for ${name}, ${presenceLabel(ownDot)}`
     : `Account menu for ${name}`;
   // Under the name: what the member wrote, else their presence in words.
-  const statusLine =
-    own?.line ?? (ownDot ? presenceLabel(ownDot) : null);
+  const statusLine = own?.line ?? (ownDot ? presenceLabel(ownDot) : null);
 
   async function handleSignOut() {
     if (!(await confirmDrop("sign-out"))) return;
@@ -214,7 +213,10 @@ export function AccountMenu({
                 {user.avatar_url ? (
                   <AvatarImage src={user.avatar_url} alt="" />
                 ) : null}
-                <AvatarFallback className="text-xs font-semibold" tint={ownTint}>
+                <AvatarFallback
+                  className="text-xs font-semibold"
+                  tint={ownTint}
+                >
                   {initials(name)}
                 </AvatarFallback>
               </Avatar>

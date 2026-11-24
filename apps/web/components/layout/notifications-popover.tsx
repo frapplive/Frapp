@@ -252,7 +252,6 @@ export function useNotificationsLive(): void {
     enabled: Boolean(frappUser.userId),
   });
 
-
   /*
     Keep the officer report queue in step with its notifications (#2257).
 

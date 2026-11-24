@@ -128,6 +128,8 @@ import {
 import { useMediaQuery } from "@/lib/use-media-query";
 import { IconButton } from "@/components/ui/icon-button";
 import { PanelCloseButton } from "@/components/layout/tool-page-header";
+import { useNewIntent } from "@/components/layout/new-intent";
+
 import {
   CHANNEL_LIST_BODY_ATTRIBUTE,
   useChannelListSlot,
@@ -3307,6 +3309,9 @@ export function ChatShell({
   // the search would pop open the next time Direct messages shows.
   const dmSearchShown = directView && channelsPaneState === "ready";
   if (dmSearchOpen && !dmSearchShown) setDmSearchOpen(false);
+  // New's "New message" (`new-intent.ts`): the Messages page's people search,
+  // the one its pencil opens.
+  useNewIntent(() => setDmSearchOpen(true), dmSearchShown);
   // Direct messages with none to open: the member has never had one, or has
   // hidden every one. The thread column says how to start one instead of
   // drawing a timeline for no conversation.
@@ -3382,65 +3387,65 @@ export function ChatShell({
   const listBody = (kind: ChatView, place: "sidebar" | "pane") => {
     const direct = kind === "direct";
     return (
-    <>
-      {place === "pane" ? (
-        /*
+      <>
+        {place === "pane" ? (
+          /*
           48px, matching the sidebar's head and the channel header beside it,
           so the headers line up across the whole route (`3a` geometry). The
           "N channels" count that used to sit under the title is deleted
           (`1t`) - it restated the length of a list already on screen.
         */
-        <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-3">
-          <h2 className="text-sm font-semibold text-foreground">
-            {direct ? SECTION_NAMES.messages : "Channels"}
-          </h2>
-          <div className="ml-auto flex items-center gap-1">
-            {direct && channelsPaneState === "ready" ? (
-              // New message (#3774), where the phone's Messages screen,
-              // iMessage and Instagram keep it. It opens the people search
-              // (#4668), as their pencil opens a "To:" search, rather than
-              // the Directory.
-              <Button
-                variant="ghost"
-                size="icon"
-                className={compactControlClassName}
-                aria-label="New message"
-                title="New message"
-                onClick={() => setDmSearchOpen(true)}
-              >
-                <SquarePen className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            ) : null}
-            {listFilters(kind)}
+          <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-3">
+            <h2 className="text-sm font-semibold text-foreground">
+              {direct ? SECTION_NAMES.messages : "Channels"}
+            </h2>
+            <div className="ml-auto flex items-center gap-1">
+              {direct && channelsPaneState === "ready" ? (
+                // New message (#3774), where the phone's Messages screen,
+                // iMessage and Instagram keep it. It opens the people search
+                // (#4668), as their pencil opens a "To:" search, rather than
+                // the Directory.
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={compactControlClassName}
+                  aria-label="New message"
+                  title="New message"
+                  onClick={() => setDmSearchOpen(true)}
+                >
+                  <SquarePen className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : null}
+              {listFilters(kind)}
+            </div>
+          </header>
+        ) : null}
+        {direct && dmSearchShown ? (
+          // Where Discord keeps "Find or start a conversation" (#4668).
+          <div className="shrink-0 px-2 pt-2">
+            <DmSearch
+              open={dmSearchOpen}
+              onOpenChange={setDmSearchOpen}
+              // What a click on the conversation's row does, minus the hidden
+              // reopen: the search lists no hidden DM, and a member pick has
+              // already reopened one through `POST /v1/channels/dm`.
+              onOpenChannel={(channelId) => {
+                setSelectedChannelId(channelId);
+                openThreadPane();
+                setUnreachableTarget(null);
+              }}
+            />
           </div>
-        </header>
-      ) : null}
-      {direct && dmSearchShown ? (
-        // Where Discord keeps "Find or start a conversation" (#4668).
-        <div className="shrink-0 px-2 pt-2">
-          <DmSearch
-            open={dmSearchOpen}
-            onOpenChange={setDmSearchOpen}
-            // What a click on the conversation's row does, minus the hidden
-            // reopen: the search lists no hidden DM, and a member pick has
-            // already reopened one through `POST /v1/channels/dm`.
-            onOpenChannel={(channelId) => {
-              setSelectedChannelId(channelId);
-              openThreadPane();
-              setUnreachableTarget(null);
-            }}
-          />
-        </div>
-      ) : null}
-      {/*
+        ) : null}
+        {/*
         The gutter is on an inner wrapper, not the scroller: a scroller's own
         padding sits outside the box a sticky child pins to, so a pinned
         category heading would stop 8px short of the top and rows would scroll
         through that band, half-cut under the title row (#4051).
       */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="p-2">
-          {/*
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="p-2">
+            {/*
               Only `loading` shimmers, and `no-chapter` deliberately does not.
 
               `loading` is now the state a cold load actually renders — see
@@ -3452,81 +3457,83 @@ export function ChatShell({
               open. That is the same defect `profile-panel.tsx` rejects
               `hasHydrated` for, reached from the other side.
             */}
-          {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
-          {/*
+            {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
+            {/*
             What's on right now, at the top of the list (#5777), where the
             phone puts it on Chat home and Discord shows a live voice channel.
           */}
-          {channelsPaneState === "ready" ? <NowCard className="mb-2" /> : null}
-          {/*
+            {channelsPaneState === "ready" ? (
+              <NowCard className="mb-2" />
+            ) : null}
+            {/*
           The officer setup checklist, above the channels where Discord puts
           its server guide. Renders `null` for anyone with nothing to set up.
         */}
-          {channelsPaneState === "ready" && !direct ? (
-            <SetupChecklistSection />
-          ) : null}
-          {channelsPaneState === "ready" &&
-          (direct || recentSort) &&
-          !latestSettled ? (
-            <ChannelListSkeleton />
-          ) : channelsPaneState === "ready" ? (
-            <ChannelList
-              kind={kind}
-              latestAt={direct ? directLatest?.at : channelLatestAt}
-              previews={direct ? directLatest?.previews : undefined}
-              rowMeta={direct ? directLatest?.meta : undefined}
-              viewerId={userId}
-              memberNames={memberNames}
-              avatarTintFor={avatarTintFor}
-              channels={direct ? directChannels : plainChannels}
-              categories={categories}
-              unreadByChannelId={unreadByChannelId}
-              threads={railThreads}
-              // No row is lit while the conversation is out of sight: the
-              // lit row says what is on screen.
-              activeChannelId={shown ? activeChannelId : null}
-              onHide={hideFromRail}
-              rowActions={rowActions}
-              sidebar={sidebarControls}
-              // In the sidebar nothing sits over the list, so its sort and
-              // filters open from a heading (`ChannelList`).
-              headingControl={
-                place === "sidebar" ? listFilters(kind, true) : undefined
-              }
-              // The chapter's order is for channels: a DM is never placed in
-              // it, and the empty categories an officer drags onto would sit
-              // in a list of conversations (#3774). Under Recent or A–Z the
-              // list keeps categories draggable and turns off channel-row
-              // drag itself (#2877).
-              reorder={direct ? undefined : railReorder}
-              onCreateChannel={
-                canManageChannel && !direct
-                  ? (categoryId) => setCreateChannelIn(categoryId)
-                  : undefined
-              }
-              onPick={(ch) => {
-                if (ch.hidden) {
-                  const memberId = otherMemberId(ch, userId);
-                  if (memberId) reopenDm.mutate({ member_id: memberId });
+            {channelsPaneState === "ready" && !direct ? (
+              <SetupChecklistSection />
+            ) : null}
+            {channelsPaneState === "ready" &&
+            (direct || recentSort) &&
+            !latestSettled ? (
+              <ChannelListSkeleton />
+            ) : channelsPaneState === "ready" ? (
+              <ChannelList
+                kind={kind}
+                latestAt={direct ? directLatest?.at : channelLatestAt}
+                previews={direct ? directLatest?.previews : undefined}
+                rowMeta={direct ? directLatest?.meta : undefined}
+                viewerId={userId}
+                memberNames={memberNames}
+                avatarTintFor={avatarTintFor}
+                channels={direct ? directChannels : plainChannels}
+                categories={categories}
+                unreadByChannelId={unreadByChannelId}
+                threads={railThreads}
+                // No row is lit while the conversation is out of sight: the
+                // lit row says what is on screen.
+                activeChannelId={shown ? activeChannelId : null}
+                onHide={hideFromRail}
+                rowActions={rowActions}
+                sidebar={sidebarControls}
+                // In the sidebar nothing sits over the list, so its sort and
+                // filters open from a heading (`ChannelList`).
+                headingControl={
+                  place === "sidebar" ? listFilters(kind, true) : undefined
                 }
-                setSelectedChannelId(ch.id);
-                // Below `lg` the list and the thread are never both on screen,
-                // so picking has to navigate. Inert at `lg` and up.
-                openThreadPane();
-                // Deliberately leaves any pending jump target alone - it is
-                // gated on its own channel and will resolve if the member
-                // returns. Only the notice is channel-scoped for display.
-                setUnreachableTarget(null);
-                // The shell puts the conversation on screen, and the rail's
-                // Channels popover closes behind the pick.
-                onPick?.(kind);
-                notifyPicked();
-              }}
-            />
-          ) : null}
+                // The chapter's order is for channels: a DM is never placed in
+                // it, and the empty categories an officer drags onto would sit
+                // in a list of conversations (#3774). Under Recent or A–Z the
+                // list keeps categories draggable and turns off channel-row
+                // drag itself (#2877).
+                reorder={direct ? undefined : railReorder}
+                onCreateChannel={
+                  canManageChannel && !direct
+                    ? (categoryId) => setCreateChannelIn(categoryId)
+                    : undefined
+                }
+                onPick={(ch) => {
+                  if (ch.hidden) {
+                    const memberId = otherMemberId(ch, userId);
+                    if (memberId) reopenDm.mutate({ member_id: memberId });
+                  }
+                  setSelectedChannelId(ch.id);
+                  // Below `lg` the list and the thread are never both on screen,
+                  // so picking has to navigate. Inert at `lg` and up.
+                  openThreadPane();
+                  // Deliberately leaves any pending jump target alone - it is
+                  // gated on its own channel and will resolve if the member
+                  // returns. Only the notice is channel-scoped for display.
+                  setUnreachableTarget(null);
+                  // The shell puts the conversation on screen, and the rail's
+                  // Channels popover closes behind the pick.
+                  onPick?.(kind);
+                  notifyPicked();
+                }}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
-    </>
+      </>
     );
   };
   /*
@@ -3550,7 +3557,9 @@ export function ChatShell({
         )
       : null;
   const paneList =
-    !isDesktopShell || (directView && !toolBeside) ? listBody(view, "pane") : null;
+    !isDesktopShell || (directView && !toolBeside)
+      ? listBody(view, "pane")
+      : null;
 
   // The members column is on screen: a wide window, not hidden, and no
   // thread beside the chat in its place.

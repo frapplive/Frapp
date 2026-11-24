@@ -62,6 +62,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -434,6 +435,11 @@ export function TasksBoard() {
   // The add line shows once New task is pressed (#5578): at rest the first
   // task is the first thing under the header, as Linear's list is.
   const [adding, setAdding] = useState(false);
+  // New's "New task" (`new-intent.ts`): what this page's button does.
+  useNewIntent(() => {
+    setAdding(true);
+    setExpandSignal((n) => n + 1);
+  }, canManage && gate.allowed);
   const newTaskRef = useRef<HTMLButtonElement>(null);
   // List groups opened past their first rows.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(

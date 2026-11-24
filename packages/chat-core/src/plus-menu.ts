@@ -1,5 +1,9 @@
 import { MODULE_CATALOG } from "@repo/org-archetypes";
-import { canAll, EVENT_CREATE_PERMISSIONS } from "@repo/validation";
+import {
+  canAll,
+  EVENT_CREATE_PERMISSIONS,
+  TASK_CREATE_PERMISSIONS,
+} from "@repo/validation";
 import { getSlashCommand } from "./integrations";
 
 /**
@@ -77,11 +81,11 @@ export const PLUS_MENU_PERMISSIONS: Record<PlusMenuCommand, readonly string[]> =
     points: ["points:adjust", "members:view"],
   };
 
-/** What `POST /v1/tasks` needs: `tasks:manage` under `members:view`. */
-export const TASK_CREATE_PERMISSIONS: readonly string[] = [
-  "tasks:manage",
-  "members:view",
-];
+/**
+ * What `POST /v1/tasks` needs. Defined in `@repo/validation` beside the
+ * event rule (`permissions.ts`); re-exported here for the + menu's readers.
+ */
+export { TASK_CREATE_PERMISSIONS };
 
 /** The `enabled_modules` key a command's form needs: its `SLASH_COMMANDS` entry's. */
 function rowModule(command: PlusMenuCommand): string | null {

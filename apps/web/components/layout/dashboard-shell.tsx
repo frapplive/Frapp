@@ -17,6 +17,7 @@ import { ChannelListSlotProvider } from "@/components/layout/channel-list-slot";
 import { FindProvider } from "@/components/layout/find-bar";
 import {
   ESCAPE_LEAVES_ATTRIBUTE,
+  isAskRoute,
   isChatRoute,
   isFullWidthToolRoute,
   isMessagesRoute,
@@ -54,6 +55,7 @@ import { WelcomeGate } from "@/components/onboarding/welcome-gate";
 import { WhatsNewHost } from "@/components/whats-new/whats-new-host";
 import { GetTheAppCard } from "@/components/layout/get-the-app-card";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
+import { useAskEntry, useAskPending } from "@/components/ask/ask-host";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { cn } from "@/lib/utils";
 
@@ -332,12 +334,20 @@ function Shell({
   const isModuleEnabled = useChapterModuleGate();
   // The crumb's parent link follows its nav row's gates, so a title never
   // offers a member a door the sidebar hides from them.
+  // New's page is named for the assistant only for a member who has it; for
+  // anyone else it is the forms alone, and says "New" (`ask-page.tsx`).
+  const askEntry = useAskEntry();
+  const askPending = useAskPending();
+  const newWithoutAssistant =
+    isAskRoute(pathname) && askEntry === null && !askPending;
   const pageTitle = useMemo(
     () =>
-      resolvePageTitle(pathname, (item) =>
-        isNavItemVisible(item, permissions, isModuleEnabled),
-      ),
-    [pathname, permissions, isModuleEnabled],
+      newWithoutAssistant
+        ? { title: "New" }
+        : resolvePageTitle(pathname, (item) =>
+            isNavItemVisible(item, permissions, isModuleEnabled),
+          ),
+    [newWithoutAssistant, pathname, permissions, isModuleEnabled],
   );
 
   const toggleNavCollapsed = useCallback(() => {

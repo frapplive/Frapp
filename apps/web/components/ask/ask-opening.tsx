@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { AskOpeningMode, AskStarterStore } from "@repo/hooks";
 import { CornerDownRight } from "lucide-react";
 import {
@@ -16,15 +16,19 @@ import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
 /**
- * What Ask opens on before the first turn (#4904; Paul, 2026-11-17), the
- * same as the phone's (`apps/mobile/components/ask/ask-opening.tsx`): the
- * crest in the chapter's colour over a glow of that colour, the day and a
- * greeting, and what this member could ask right now as rows led by an arrow,
- * just above the field. No paragraph about how Ask works: on a member's first
- * open in this browser that is an exchange that already happened instead,
- * "What can you do?" and Frapp's answer, which is our copy and is never sent.
- * Bevel's assistant home and ChatGPT's and Claude's empty screens open the
- * same way.
+ * What New opens on, before the first turn (#4904, Paul 2026-11-17; the
+ * app's start view since #5946): the crest in the chapter's colour over a
+ * glow of that colour, the day and a greeting, then the field and what New
+ * starts (`children`: `ask-page.tsx` passes them, so the field is the first
+ * thing under the greeting, where ChatGPT and Claude put theirs), then what
+ * this member could ask right now as rows led by an arrow. No paragraph
+ * about how it works: on a member's first open in this browser that is an
+ * exchange that already happened instead, "What can you do?" and Frapp's
+ * answer, which is our copy and is never sent.
+ *
+ * The greeting sits a little above the middle of the page and everything
+ * else hangs under it, so the suggestions arriving a moment later fill in
+ * below the field and move nothing.
  */
 export function AskOpening({
   displayName,
@@ -33,7 +37,10 @@ export function AskOpening({
   canAct,
   suggestions,
   onPick,
+  children,
 }: {
+  /** The field and New's actions, between the greeting and the suggestions. */
+  children?: ReactNode;
   displayName: string | null;
   /** From `useAskStarter`: the first open's starter, the greeting, or neither yet. */
   mode: AskOpeningMode;
@@ -57,8 +64,9 @@ export function AskOpening({
       <div
         className={cn(
           "flex flex-col items-center gap-4 text-center",
-          // Room above the crest for its glow, which the scroll area would cut.
-          starter ? "pt-12" : "flex-1 justify-center py-14",
+          // Room above the crest for its glow, which the scroll area would
+          // cut; the greeting lands about a third of the way down the page.
+          starter ? "pt-12" : "pb-2 pt-[max(3.5rem,14vh)]",
         )}
       >
         <span
@@ -93,19 +101,19 @@ export function AskOpening({
       </div>
 
       {starter ? (
-        <div className="flex flex-1 flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <AskQuestionBubble>{ASK_STARTER.question}</AskQuestionBubble>
           <p className="text-sm text-foreground">{ASK_STARTER.answer}</p>
           {canAct ? (
-            <p className="text-sm text-foreground">
-              {ASK_STARTER.answer_act}
-            </p>
+            <p className="text-sm text-foreground">{ASK_STARTER.answer_act}</p>
           ) : null}
         </div>
       ) : null}
 
+      {children}
+
       {suggestions.length > 0 ? (
-        // Fades in at the bottom, where nothing sits below it to move.
+        // Fades in under the field, where nothing sits below it to move.
         <ul className="divide-y divide-border animate-in fade-in duration-300 motion-reduce:animate-none">
           {suggestions.map((suggestion) => (
             <li key={suggestion.text}>

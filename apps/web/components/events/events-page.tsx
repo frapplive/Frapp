@@ -78,6 +78,7 @@ import {
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -910,6 +911,12 @@ export function EventsPage() {
     setAttendanceFilter("all");
     setRecurrenceFilter("all");
   }
+
+  // New's "New event" (`new-intent.ts`): the form this page's button opens.
+  useNewIntent(
+    () => openCreate(null),
+    canCreateEvents && eventWriteGate.allowed,
+  );
 
   // An hour of the hour grid starts then.
   function openCreate(day: Date | null, startHour?: number) {

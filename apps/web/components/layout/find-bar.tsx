@@ -53,7 +53,10 @@ type FindEntry = {
    * opened it); `typed` is a key pressed on the field, which starts or
    * extends the query instead of selecting it.
    */
-  openFind: (options?: { returnTo?: HTMLElement | null; typed?: string }) => void;
+  openFind: (options?: {
+    returnTo?: HTMLElement | null;
+    typed?: string;
+  }) => void;
 };
 
 const FindContext = createContext<FindEntry | null>(null);

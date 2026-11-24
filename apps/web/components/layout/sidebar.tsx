@@ -166,7 +166,11 @@ export function Sidebar({
     React.ComponentProps<typeof ProtectedNavItem>["count"]
   > = {
     activity: activityCount
-      ? { text: activityCount.label, label: activityCount.spoken, tone: "plain" }
+      ? {
+          text: activityCount.label,
+          label: activityCount.spoken,
+          tone: "plain",
+        }
       : undefined,
     messages:
       unreadMessages > 0
@@ -244,11 +248,7 @@ export function Sidebar({
           rail && "items-center",
         )}
       >
-        <NewRow
-          pathname={pathname}
-          collapsed={rail}
-          onNavigate={onNavigate}
-        />
+        <NewRow pathname={pathname} collapsed={rail} onNavigate={onNavigate} />
         <SearchRow collapsed={rail} onNavigate={onNavigate} />
         {SIDEBAR_ROWS.map((item) => {
           const current = currentFor(item, pathname);
@@ -296,15 +296,15 @@ export function Sidebar({
       ) : rail ? (
         <div className="flex min-h-0 flex-1 flex-col items-center">
           {/* Rail grouping is a hairline, since a heading has nowhere to go. */}
-          <span aria-hidden="true" className="mb-2 h-px w-6 shrink-0 bg-border" />
+          <span
+            aria-hidden="true"
+            className="mb-2 h-px w-6 shrink-0 bg-border"
+          />
           <ChannelsPopover unread={channelsUnread} />
         </div>
       ) : (
         <>
-          <span
-            aria-hidden="true"
-            className="mx-2 h-px shrink-0 bg-border"
-          />
+          <span aria-hidden="true" className="mx-2 h-px shrink-0 bg-border" />
           {/*
             The chapter's channels, in whatever height is left. `section`
             with a name, so a screen reader finds the list as a region; the
@@ -469,7 +469,8 @@ function MoreRow({
               active: Boolean(open),
               focusClassName: FOCUS_RING_SHELL,
             }),
-            !open && "data-[state=open]:bg-card data-[state=open]:text-foreground",
+            !open &&
+              "data-[state=open]:bg-card data-[state=open]:text-foreground",
           )}
         >
           <Ellipsis className={ICON} aria-hidden="true" />
