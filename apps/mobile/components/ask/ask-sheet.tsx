@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import {
   Pressable,
@@ -12,6 +13,7 @@ import {
   Text,
   View,
   type NativeScrollEvent,
+  type ScrollView,
   type NativeSyntheticEvent,
 } from "react-native";
 import {
@@ -73,6 +75,12 @@ import { useFieldDictation } from "@/components/dictation/use-field-dictation";
 import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
 import { ASK_STARTER_STORE } from "@/lib/ask/starter-seen";
+import {
+  HostScrollLockProvider,
+  ScrollRevealProvider,
+  useScrollReveal,
+  type ScrollReveal,
+} from "@/lib/keep-above-keyboard";
 
 /**
  * Ask Frapp on the phone (`spec/ui/mobile/screens.md` s17;
@@ -324,6 +332,26 @@ export const AskSheet = forwardRef<
     });
   }, []);
 
+  // A part of a turn that opens in place (an event card's form, 2026-11-22)
+  // or a field in it taking focus: the member is reading that, not the
+  // newest words, so the thread stops following and brings it into view,
+  // on the next frame, after any follow its own growth asked for.
+  const revealIn = useScrollReveal(
+    scroller as unknown as RefObject<ScrollView | null>,
+    { top: 0, margin: tokens.spacing.md },
+  );
+  const reveal = useCallback<ScrollReveal>(
+    (target) => {
+      following.current = false;
+      requestAnimationFrame(() => revealIn(target));
+    },
+    [revealIn],
+  );
+
+  // A held agenda row in that form: the drag, not the thread or the sheet,
+  // follows the finger, as the event form's own sheet locks both.
+  const [locked, setLocked] = useState(false);
+
   // A new turn shows the newest words.
   useEffect(() => {
     following.current = true;
@@ -417,6 +445,7 @@ export const AskSheet = forwardRef<
         // rows, and the composer lays out below the screen edge.
         {...tallSheet}
         keyboardBehavior="interactive"
+        enableContentPanningGesture={!locked}
         backgroundStyle={backgroundStyle}
         handleComponent={SheetGrabber}
         backdropComponent={SheetScrim}
@@ -467,6 +496,7 @@ export const AskSheet = forwardRef<
           // (#5426, above).
           key={exchanges.length > 0 ? "thread" : "opening"}
           ref={scroller}
+          scrollEnabled={!locked}
           onAccessibilityEscape={closeSheet}
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -495,27 +525,34 @@ export const AskSheet = forwardRef<
           // member scrolled up to read something else.
           onContentSizeChange={follow}
         >
-          {exchanges.length > 0 ? (
-            exchanges.map((exchange) => (
-              <View key={exchange.id} style={styles.turn}>
-                <AskTurn {...turns.propsFor(exchange)} />
-                {turns.sourceFailed(exchange.id) ? (
-                  <Text accessibilityLiveRegion="polite" style={styles.caption}>
-                    {SOURCE_OPEN_FAILED}
-                  </Text>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <AskOpening
-              displayName={displayName}
-              mode={opening.mode}
-              onStarterShown={opening.starterShown}
-              canAct={canAct}
-              suggestions={suggestions}
-              onPick={pick}
-            />
-          )}
+          <HostScrollLockProvider value={setLocked}>
+            <ScrollRevealProvider value={reveal}>
+              {exchanges.length > 0 ? (
+                exchanges.map((exchange) => (
+                  <View key={exchange.id} style={styles.turn}>
+                    <AskTurn {...turns.propsFor(exchange)} />
+                    {turns.sourceFailed(exchange.id) ? (
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={styles.caption}
+                      >
+                        {SOURCE_OPEN_FAILED}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))
+              ) : (
+                <AskOpening
+                  displayName={displayName}
+                  mode={opening.mode}
+                  onStarterShown={opening.starterShown}
+                  canAct={canAct}
+                  suggestions={suggestions}
+                  onPick={pick}
+                />
+              )}
+            </ScrollRevealProvider>
+          </HostScrollLockProvider>
         </BottomSheetScrollView>
 
         <View style={styles.composer}>
@@ -532,9 +569,7 @@ export const AskSheet = forwardRef<
             />
           ) : null}
           {original !== null && dictation.phase === "idle" ? (
-            <DictationOriginal
-              onPress={field.restoreOriginal}
-            />
+            <DictationOriginal onPress={field.restoreOriginal} />
           ) : null}
           <View style={styles.composerRow}>
             <View
@@ -572,9 +607,7 @@ export const AskSheet = forwardRef<
                     style={styles.composerField}
                   />
                   {dictation.available ? (
-                    <DictationMic
-                      onPress={field.start}
-                    />
+                    <DictationMic onPress={field.start} />
                   ) : null}
                 </>
               )}
