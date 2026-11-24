@@ -611,7 +611,7 @@ describe("AskSheet", () => {
   });
 
   // #5139: search left the field for its own screen; typing lists nothing.
-  it("only asks: typing lists no places, and the field reads Ask Frapp anything", () => {
+  it("only asks: typing lists no places, and the field reads What do you need?", () => {
     const tree = render();
     open(tree);
     act(() => field(tree).props.onChangeText("rush"));

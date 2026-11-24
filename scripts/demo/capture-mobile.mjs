@@ -390,23 +390,29 @@ const STORE_SCREENS = [
 
 /**
  * Whether an AI surface is in the shot. Since #4702 Ask's entry is the bar
- * above the tab bar, a button named "Frapp Intelligence", on every tab for a member
- * with Ask. Also matched: a row that only exists with AI on (the Tasks tab's
- * "N suggested tasks"), the words "Frapp Intelligence" (the sheet's title, should a
- * shot ever open one), and the ✦ glyph and bare "Ask" the entry used before,
- * so an old bundle is still refused. Runs in the page.
+ * above the tab bar, a button that reads "What do you need?", on every tab for
+ * a member with it. Also matched: a row that only exists with AI on (the Tasks
+ * tab's "N suggested tasks"), the words "Frapp Intelligence" (the sheet's
+ * title, should a shot ever open one), and every name the entry had before
+ * (the ✦ glyph, bare "Ask", and "Ask Frapp" / "Ask Frapp anything" until
+ * #5945), so an old bundle is still refused. Runs in the page.
  */
 const ASK_ON_SCREEN = () =>
   document.body.innerText.includes("✦") ||
   Boolean(
-    document.querySelector('[aria-label="Ask"], [aria-label="Frapp Intelligence"]'),
+    document.querySelector(
+      '[aria-label="Ask"], [aria-label="Ask Frapp"], [aria-label="Frapp Intelligence"], [aria-label="What do you need?"]',
+    ),
   ) ||
   [...document.querySelectorAll("body *")].some((el) => {
     if (el.childElementCount !== 0) return false;
     const text = el.textContent.trim();
     return (
       text === "Ask" ||
+      text === "Ask Frapp" ||
+      text === "Ask Frapp anything" ||
       text === "Frapp Intelligence" ||
+      text === "What do you need?" ||
       /^\d+ suggested tasks?$/.test(text)
     );
   });

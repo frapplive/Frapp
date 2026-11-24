@@ -333,7 +333,10 @@ describe("Frapp Intelligence", () => {
       tree.root.findAll(
         (node) =>
           typeof node.props.accessibilityLabel === "string" &&
-          node.props.accessibilityLabel.includes("Ask"),
+          // Every name the entry has had: a row put back would carry one.
+          /Ask|Frapp Intelligence|What do you need/.test(
+            node.props.accessibilityLabel,
+          ),
       ),
     ).toHaveLength(0);
   });

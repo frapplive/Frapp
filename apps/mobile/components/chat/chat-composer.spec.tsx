@@ -756,7 +756,7 @@ describe("ChatComposer @-mention picker", () => {
         value: "@Frapp when is formal?",
         ask: { naming: true },
       }).tree;
-      const send = byLabel(naming, "Frapp Intelligence")!;
+      const send = byLabel(naming, "Send to Frapp Intelligence")!;
       expect(send.props.accessibilityHint).toBe(
         "Only you will see this question and Frapp's answer.",
       );
@@ -764,7 +764,7 @@ describe("ChatComposer @-mention picker", () => {
 
       const plain = renderComposer({ value: "when is formal?", ask }).tree;
       expect(byLabel(plain, "Send message")).toBeDefined();
-      expect(byLabel(plain, "Frapp Intelligence")).toBeUndefined();
+      expect(byLabel(plain, "Send to Frapp Intelligence")).toBeUndefined();
     });
   });
 });

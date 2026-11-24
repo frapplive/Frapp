@@ -259,7 +259,7 @@ export const DASHBOARD_NAV: NavSection[] = [
      * one Chat uses. It is not a claim that this group is an app home.
      */
     id: "directory",
-    label: "Directory",
+    label: SECTION_NAMES.directory,
     anchor: true,
     items: [
       {

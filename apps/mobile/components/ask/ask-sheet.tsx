@@ -119,7 +119,8 @@ import { ASK_STARTER_STORE } from "@/lib/ask/starter-seen";
  * field while the member typed (Paul's pick of 2026-11-13). Search is its own
  * screen now, pushed from Chat home (`components/search/search-screen.tsx`),
  * which every member has and which can hand its words to this sheet
- * (`initialDraft`). The field and the bar read "Ask Frapp anything" again.
+ * (`initialDraft`). The field and the bar read "What do you need?" ("Ask
+ * Frapp anything" until #5945).
  *
  * **It opens on the member's own account** (#4700, owner 2026-11-13: "not
  * just be like some presets"). Before the first turn the sheet offers up to
@@ -427,9 +428,12 @@ export const AskSheet = forwardRef<
       >
         <SheetBackToClose onClose={closeSheet} />
         <View style={styles.headerRow}>
-          {/* Before the first turn the opening's big crest is the mark, and
-              the bar that opened the sheet already said "Ask Frapp"; the
-              name comes back here with the conversation (#4904). */}
+          {/* Before the first turn the opening's big crest is the mark; the
+              name comes back here with the conversation (#4904). Until #5945
+              the bar that opened the sheet said the name ("Ask Frapp"); it
+              reads "What do you need?" now, so nothing visible names
+              Frapp Intelligence before the first turn. #5946 rebuilds this
+              entry and owns that. */}
           {exchanges.length > 0 ? (
             <View style={styles.headerName}>
               <FrappCrest height={20} color={accent} />

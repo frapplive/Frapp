@@ -35,7 +35,7 @@ import type { AskTool } from './ask-tool';
  * the question found, and counts no citation of it.
  */
 
-export const ASK_ANSWER_PROMPT_VERSION = 'ask.answer@v5';
+export const ASK_ANSWER_PROMPT_VERSION = 'ask.answer@v6';
 export const ASK_PLAN_PROMPT_VERSION = 'ask.plan@v3';
 
 /** Earlier questions shown to the planner and added to the search. */

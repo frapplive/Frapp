@@ -78,7 +78,11 @@
 //   the name for Frapp's AI features" in Privacy section 4) and the chapter's
 //   Ask switch named "questions and requests", moved only the Terms and
 //   Privacy pins on the ADR-25 rename precedent (#2580), pending the owner's
-//   material-or-not ruling in its PR.
+//   material-or-not ruling in its PR. Both pages also say the features were
+//   "called Frapp AI in earlier versions of the app", because an installed
+//   build's consent screen still says Frapp AI and links the policy, and two
+//   Privacy sentences that named the two old names were reworded so they do
+//   not repeat the one new name.
 //
 // SCOPE. Reads source files, never the module, so the API specs' mocks of
 // `#domain/constants/legal` (`'test-version'`, `'current-version'`) can't
@@ -117,12 +121,12 @@ export const PINNED_PAGES = {
   terms: {
     path: "apps/landing/app/terms/page.tsx",
     lastUpdated: "September 2026",
-    fingerprint: "daf894109c4ef6a6",
+    fingerprint: "223ecb2066eea36a",
   },
   privacy: {
     path: "apps/landing/app/privacy/page.tsx",
     lastUpdated: "November 2026",
-    fingerprint: "23c053737ed803bc",
+    fingerprint: "e56bbf2a598dd547",
   },
   ferpa: {
     path: "apps/landing/app/ferpa/page.tsx",

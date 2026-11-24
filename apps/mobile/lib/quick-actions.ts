@@ -19,8 +19,8 @@ import {
  * action opens is `components/quick-actions/quick-actions-host.tsx`.
  *
  * The actions, their order and their words are the app's New list
- * (`@repo/validation` `sections.ts`, #5943), so web's New page (#5946) reads
- * the same ones.
+ * (`@repo/validation` `sections.ts`, #5943). This panel is its one reader
+ * until web's New page is built (#5946).
  */
 export type QuickActionKey = NewActionKey;
 

@@ -102,19 +102,30 @@ export function AskBar({
       onClick={ask.openAsk}
       className={cn(
         // The Default control step (48), fully round, as the phone's bar.
-        "flex h-12 w-full items-center gap-3 rounded-full border pl-[18px] pr-2 text-left transition hover:brightness-125",
+        "flex h-12 w-full items-center rounded-full border text-left transition hover:brightness-125",
+        // The sidebar's shared row leaves the name about 135px: the Small
+        // type step and no send arrow, or "Frapp Intelligence" is cut.
+        compact ? "gap-2 pl-3 pr-2" : "gap-3 pl-[18px] pr-2",
         GLASS,
         FOCUS_RING_SHELL,
         className,
       )}
     >
       <FrappCrest className="h-[22px] w-[18px] shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate text-body text-muted-foreground">
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-muted-foreground",
+          compact ? "text-sm" : "text-body",
+        )}
+      >
         {compact ? ASK_COPY.name : ASK_COPY.placeholder}
       </span>
       <span
         aria-hidden="true"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-subtle"
+        className={cn(
+          "h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-subtle",
+          compact ? "hidden" : "grid",
+        )}
       >
         <svg
           viewBox={ASK_SEND_GLYPH.viewBox}

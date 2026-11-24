@@ -490,7 +490,7 @@ Slack draws a slash command's reply this way ("Only visible to you"), and Discor
   It is read from the text (`askMentionQuestion` in `@repo/validation`), so a typed handle, a pasted one and a picked one behave the same.
 - **Said before it is sent.**
   While the draft names `@Frapp`, the line by the message box reads "Only you will see this question and Frapp's answer."
-  On the phone it takes the typing line's place, so nothing moves, and the send button is named Frapp Intelligence.
+  On the phone it takes the typing line's place, so nothing moves, and the send button is named "Send to Frapp Intelligence".
 - **Frapp in the `@` list** is offered only to a member with Ask, in a message box that can ask.
   It is the first row, on a bare `@` and once its name is being typed, as Slack lists an app above people, so a member who never knew they could ask in a channel finds Frapp the first time they mention anyone; its crest is drawn in the chapter's colour on the chapter's tint.
   Enter straight after `@` picks Frapp, which still sends nothing: the line by the message box says the draft is a question, and taking `@Frapp` out undoes it.
@@ -1172,7 +1172,7 @@ Frapp does not keep the text of prompts or answers, with four exceptions.
 | What people change in a suggestion                                 | The member's question, the text the suggestion proposed and the text they saved         | The Frapp team                                                                                                    | 90 days, encrypted                                            |
 
 - A suggested task from minutes sent with **Add to next meeting's agenda** (#5790) is decided, so it keeps no text; the item it became keeps its words, which are the posted action item (no model wrote them; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)). A copy of the suggestion as it stood is kept for one day so Undo can put it back, then emptied by the hourly sweep.
-- **What people change in a suggestion is kept, so Frapp learns what it got wrong** (Paul, 2026-11-22: "we defo need to log what humans change when Frapp Intelligence makes suggestions. that's how we learn what is good and not good").
+- **What people change in a suggestion is kept, so Frapp learns what it got wrong** (Paul, 2026-11-22: "we defo need to log what humans change when Frapp AI makes suggestions. that's how we learn what is good and not good").
   When a member confirms, edits or dismisses a suggestion (an Ask card for an event, a task or points, a task suggested from minutes, or a "this time last year" event), sends it to the next meeting's agenda (kept as dismissed), or it expires untouched, Frapp keeps one record of it: how it was decided, whether through the card or the full form its Edit opened, and field by field whether what was saved kept, changed, added or removed what was proposed.
   Who is invited (the roles, and whether anyone outside them is), who a task is for, times, days and points are kept as ids and numbers, with the shift in minutes; a text field is kept only as kept, changed, added or removed.
   A "this time last year" event is always made in its own form from last year's, so its record holds the decision alone.

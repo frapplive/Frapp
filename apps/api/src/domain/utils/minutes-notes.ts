@@ -34,7 +34,7 @@ import { spellingLines } from './minutes-context';
  * the officer before anything is posted. Decisions and action items keep
  * the draft pass's word-for-word check.
  */
-export const MINUTES_NOTES_PROMPT_VERSION = 'minutes-notes@v3';
+export const MINUTES_NOTES_PROMPT_VERSION = 'minutes-notes@v4';
 
 export const MinutesNotesOutputSchema = z.object({
   summary: z.string(),

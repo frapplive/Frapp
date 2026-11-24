@@ -81,12 +81,13 @@ export type BackworkFillResult =
 
 /**
  * The upload-time backwork fill (#5233, `spec/behavior/backwork.md` § AI
- * fill). Separate from Frapp Intelligence (Paul, 2026-11-16): it reads one draft's
+ * fill). Separate from the conversation members have with Frapp Intelligence
+ * (Paul, 2026-11-16): it reads one draft's
  * redacted text for its uploader, proposes fields, and the uploader checks
  * every one before anything is filed. Ask never reads backwork files.
  *
  * Steps, in order:
- * 1. Consent: the chapter's Frapp Intelligence switch and the uploader's own Yes,
+ * 1. Consent: the chapter's Questions and requests switch and the uploader's own Yes,
  *    checked before the file is read, so a member who said No costs nothing.
  * 2. The draft: the caller's own only. One uploaded as-is is refused, since
  *    its stored file is the original; one with every field already set is

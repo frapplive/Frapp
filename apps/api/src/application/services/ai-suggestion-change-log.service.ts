@@ -68,7 +68,7 @@ export interface AiSuggestionDecided {
 
 /**
  * The change log of AI suggestions (`ai_suggestion_changes`, Paul,
- * 2026-11-22: "we defo need to log what humans change when Frapp Intelligence makes
+ * 2026-11-22: "we defo need to log what humans change when Frapp AI makes
  * suggestions"; `spec/behavior/ai.md` § Stored AI text).
  *
  * - **Changes always**: field by field whether what was saved kept, changed,

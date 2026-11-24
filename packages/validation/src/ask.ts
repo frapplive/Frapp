@@ -699,7 +699,8 @@ export const ASK_COPY = {
   sources: "Sources",
   unavailable: {
     consent_required: "Turn on Frapp Intelligence to ask questions.",
-    chapter_off: "Your chapter's president has turned off questions and requests.",
+    chapter_off:
+      "Your chapter's president has turned off questions and requests.",
     chapter_limit:
       "Your chapter has used its AI allowance for this month. It comes back on the 1st.",
     member_limit:
@@ -738,6 +739,12 @@ export const ASK_COPY = {
    * before it does it.
    */
   only_you_hint: "Only you will see this question and Frapp's answer.",
+  /**
+   * The phone's send button while the draft names `@Frapp`: what pressing it
+   * does, in place of "Send message". A verb, because the product's name
+   * alone tells a screen-reader user nothing about the button.
+   */
+  send_from_channel: "Send to Frapp Intelligence",
   /** The same, where there is room for two words beside the private mark. */
   only_you_short: "Only you",
   /** On an answer drawn in a channel for the asker alone. */

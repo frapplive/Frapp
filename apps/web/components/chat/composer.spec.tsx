@@ -2616,7 +2616,12 @@ describe("Composer carries no Frapp Intelligence control (#4904)", () => {
     ["an alumnus who can read but not post", { canPost: false }],
   ])("draws none in %s", (_, props) => {
     render(<Composer {...baseProps(props)} />);
-    expect(screen.queryByRole("button", { name: /ask frapp/i })).toBeNull();
+    // Every name the entry has had: a control put back would carry one.
+    expect(
+      screen.queryByRole("button", {
+        name: /ask frapp|frapp intelligence|what do you need/i,
+      }),
+    ).toBeNull();
   });
 });
 

@@ -117,7 +117,7 @@ import {
  * "Only you see the answer". A message that names `@Frapp` is a question for Frapp
  * and is never posted (`components/ask/ask-in-channel.tsx`); the screen
  * decides that on Send, and while the draft names it the send button is
- * called "Frapp Intelligence" and the screen says above the composer that only the
+ * called "Send to Frapp Intelligence" and the screen says above the composer that only the
  * member will see it.
  *
  * **A long press on Send schedules the message** (`onSchedule`, #4956), as
@@ -611,7 +611,7 @@ export function ChatComposer({
               context?.kind === "edit"
                 ? "Save edit"
                 : ask?.naming
-                  ? ASK_COPY.name
+                  ? ASK_COPY.send_from_channel
                   : "Send message"
             }
             accessibilityHint={

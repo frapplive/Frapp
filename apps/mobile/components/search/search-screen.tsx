@@ -20,7 +20,7 @@ import {
 } from "@repo/hooks";
 import { useDebouncedValue } from "@repo/hooks/use-debounced-value";
 import { SETTINGS_SEARCH_COPY } from "@repo/hooks/settings-search";
-import { ASK_COPY, isModuleEnabled } from "@repo/validation";
+import { ASK_COPY, isModuleEnabled, SECTION_NAMES } from "@repo/validation";
 import { FilterChips, SearchField } from "@/components/filter-chips";
 import { PressableRow } from "@/components/list-section";
 import { FrappCrest } from "@/components/frapp-crest";
@@ -77,7 +77,7 @@ import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
  */
 
 export const SEARCH_COPY = {
-  title: "Search",
+  title: SECTION_NAMES.search,
   placeholder: "Search your chapter",
   recent: "Recent",
   clearRecent: "Clear",

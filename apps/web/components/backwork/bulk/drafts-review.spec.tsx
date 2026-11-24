@@ -262,7 +262,9 @@ describe("Backwork drafts AI fill (#5233)", () => {
     state.drafts = [draft("a", {}), draft("b", {}), draft("c", {})];
     render(<DraftsReview />);
     expect(
-      await screen.findByText("Frapp Intelligence is off for your chapter, so drafts aren't filled in for you."),
+      await screen.findByText(
+        "Your chapter's president has turned off questions and requests, so drafts aren't filled in for you.",
+      ),
     ).toBeInTheDocument();
     expect(state.fill).toHaveBeenCalledTimes(2);
   });

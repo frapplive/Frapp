@@ -8,12 +8,14 @@
  * Calendar), and where is it and who is it (Resources, Directory). Before
  * this file each app kept its own words, and they had drifted: web said
  * "Direct messages" and "Events" where the phone said "Messages" and
- * "Calendar". A place is named here once; an app that draws it reads the
- * name from here.
+ * "Calendar". A place is named here once, and what draws its name on a screen
+ * reads it from here: web's nav rows, and the phone's tab and screen titles,
+ * back labels and You rows.
  *
- * A name is added here when an app first draws the place under it. Web's
- * Events and Direct messages rows take theirs with the steps of #5943 that
- * rebuild those rows (#5946, #5948).
+ * Not yet read from here, and why: web's page metadata titles (checked
+ * against the nav rows by `page-title.spec.ts` instead), and web's Events
+ * and Direct messages rows, which take the phone's words with the steps of
+ * #5943 that rebuild them (#5946, #5948).
  */
 export const SECTION_NAMES = {
   activity: "Activity",
@@ -23,12 +25,11 @@ export const SECTION_NAMES = {
   search: "Search",
 } as const;
 
-export type SectionKey = keyof typeof SECTION_NAMES;
-
 /**
- * What New starts, in the order a member who never rearranges them sees
- * (the phone's + panel today, `apps/mobile/lib/quick-actions.ts`; web's New
- * page with #5946). The order's reasons are the phone's and are recorded
+ * What New starts, in the order a member who never rearranges them sees.
+ * Its one reader today is the phone's + panel
+ * (`apps/mobile/lib/quick-actions.ts`); web's New page becomes the second
+ * with #5946, and until then a change here changes only the phone. The order's reasons are the phone's and are recorded
  * there. Who may use each is still decided where it is drawn, by the same
  * checks the API makes.
  */

@@ -440,6 +440,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "ai",
       "ask frapp",
       "frapp intelligence",
+      "questions and requests",
       "assistant",
       "meeting notes",
       "transcription",

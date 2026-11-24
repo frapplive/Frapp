@@ -5,6 +5,7 @@ import { NotificationsGlyph } from "@/components/more/more-glyphs";
 import { SearchGlyph } from "@/components/control-glyphs";
 import { selectUnreadNonChatCount } from "@/lib/more/notifications";
 import { useFrappTheme } from "@/lib/theme";
+import { SECTION_NAMES } from "@repo/validation";
 
 /**
  * Chat home's top-right rounds: Search (#5139), then the notification bell
@@ -80,7 +81,7 @@ export function SearchButton() {
   const router = useRouter();
   return (
     <HeaderButton
-      label="Search"
+      label={SECTION_NAMES.search}
       hint="Searches channels, settings, members, messages and events."
       onPress={() => router.push("/search")}
     >

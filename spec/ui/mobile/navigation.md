@@ -488,7 +488,7 @@ the camera path ("why not?"), so 0.13.0 ships `expo-camera` again, for s18's Sca
 again, the three plugins that write the key.
 
 _2026-11-17 ([#5276](https://github.com/frapplive/Frapp/issues/5276)):_ **`package.json`
-and `app.json` gained `expo-speech-recognition`** for dictating into Frapp Intelligence (Paul picked
+and `app.json` gained `expo-speech-recognition`** for dictating into Ask Frapp (Paul picked
 the phone's own recogniser over sending audio to a provider), through the integrator
 carve-out as a standalone PR, with the native version 0.13.0 to 0.14.0. Its plugin is a
 fourth writer of `microphonePermission`, with the same text as the other three, and the
@@ -630,3 +630,5 @@ states pass none. The rule itself lives in [`patterns.md` § Screen headers](pat
 **The launch logo touched `app/_layout.tsx`, as an integrator change** (2026-11-18, [#5449](https://github.com/frapplive/Frapp/issues/5449), Paul's pick on the [proposal page](https://claude.ai/artifact/XUfPohiqQviPXxtLVu7mCR)). The layout no longer hides the native splash once Figtree registers: it mounts the app under `LaunchCover` (`components/launch-cover.tsx`), which hides the splash under the same emblem and covers the app until its first screen is ready ([§ The launch logo](#the-launch-logo)). The provider tree moved, unchanged, into a `RootProviders` component beside it. No route, provider order or screen option changed. JS only, so it ships over the air.
 
 **The task screen touched `app/(app)/_layout.tsx`, as an integrator change** (2026-11-18, [#5492](https://github.com/frapplive/Frapp/issues/5492) step 2, Paul's pick on its design page). The stack registers `task-details`, one task as a pushed screen that replaces the task sheets, titled "Task" on a back capsule (`SCREEN_TITLES`). Its backing file redirects to `/tasks` until the screen's own PR fills it, and nothing links to it before then. No other route or screen option changed. JS only, so it ships over the air. _(2026-11-18, #5492 step 3: the file now draws the task screen, [`screens.md` § Task](screens.md#task); the board's rows, the Calendar's task rows and a task push open it, and the task detail sheet is gone.)_
+
+**The rename to Frapp Intelligence touched `app.json`, as an integrator change** (2026-11-24, [#5945](https://github.com/frapplive/Frapp/issues/5945), Paul's decision that day: one name everywhere a member sees it). The microphone purpose string (in its four places) and the speech-recognition purpose string say "Frapp Intelligence" where they said "Ask Frapp"; nothing else in the file changed, and `scripts/check-mobile-native-declarations.mjs` pins the new words. They reach a phone with the next store build, so an installed build keeps asking in the old words until then.

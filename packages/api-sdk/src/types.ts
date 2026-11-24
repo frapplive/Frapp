@@ -10725,7 +10725,7 @@ export interface components {
             answer: "yes" | "no";
         };
         AiChapterSettingsDto: {
-            /** @description Frapp Intelligence is on for the chapter. */
+            /** @description The Questions and requests switch: members can ask Frapp Intelligence. */
             ask: boolean;
             /** @description Drafting minutes, and tasks suggested from them, is on. */
             meeting_notes: boolean;
@@ -27597,7 +27597,7 @@ export interface operations {
                     "application/json": components["schemas"]["BackworkDraftFillResponseDto"];
                 };
             };
-            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp Intelligence turned off (`ai.chapter_off`). */
+            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has turned off questions and requests (`ai.chapter_off`). */
             403: {
                 headers: {
                     [name: string]: unknown;

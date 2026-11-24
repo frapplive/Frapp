@@ -538,7 +538,9 @@ describe("DashboardShell", () => {
     // bottom of the page (the next test).
     expect(
       within(banner)
-        .queryAllByRole("button", { name: /ask/i })
+        .queryAllByRole("button", {
+          name: /ask|frapp intelligence|what do you need/i,
+        })
         .filter((button) => !/^(Find|Search)/.test(button.textContent ?? "")),
     ).toHaveLength(0);
   });
@@ -599,7 +601,12 @@ describe("DashboardShell", () => {
   it("floats Frapp Intelligence's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
     mockPathname.value = "/events";
     const view = render(<DashboardShell>content</DashboardShell>);
-    expect(screen.queryByRole("button", { name: /^Frapp Intelligence/ })).toBeNull();
+    // Neither bar: the sidebar's reads the name, the floating one its words.
+    expect(
+      screen.queryByRole("button", {
+        name: /^(Frapp Intelligence|What do you need)/,
+      }),
+    ).toBeNull();
     let page = view.container.querySelector("[data-tool-page]") as HTMLElement;
     expect(page.className).not.toContain("pb-24");
     view.unmount();
@@ -1301,7 +1308,9 @@ describe("DashboardShell", () => {
         screen.queryByRole("button", { name: "What do you need?" }),
       );
       const nav = screen.getByRole("navigation", { name: "Primary" });
-      const sidebarAsk = screen.getByRole("button", { name: "Frapp Intelligence" });
+      const sidebarAsk = screen.getByRole("button", {
+        name: "Frapp Intelligence",
+      });
       expect(nav.parentElement).toContainElement(sidebarAsk);
     });
 
