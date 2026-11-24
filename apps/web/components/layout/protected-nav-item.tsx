@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { can, canAny } from "@repo/validation";
+import { can, canAll, canAny } from "@repo/validation";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +70,9 @@ function isGranted(
   if (item.requireAnyOf) {
     return canAny(item.requireAnyOf, permissions);
   }
+  if (item.requireAllOf) {
+    return canAll(item.requireAllOf, permissions);
+  }
   return true;
 }
 
@@ -115,7 +118,9 @@ export function isNavItemVisible(
 ): boolean {
   const resolved = permissions !== undefined && permissions !== null;
   const gated =
-    item.requirePermission !== undefined || item.requireAnyOf !== undefined;
+    item.requirePermission !== undefined ||
+    item.requireAnyOf !== undefined ||
+    item.requireAllOf !== undefined;
   if (permissions === undefined) {
     // Fail closed (#3854): never draw a door before we know it opens.
     if (gated) return false;

@@ -257,6 +257,8 @@ export * from "./repeat-draft";
 export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).
