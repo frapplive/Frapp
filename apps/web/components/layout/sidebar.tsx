@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
-  Ellipsis,
+  LayoutGrid,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -473,7 +473,8 @@ function MoreRow({
               "data-[state=open]:bg-card data-[state=open]:text-foreground",
           )}
         >
-          <Ellipsis className={ICON} aria-hidden="true" />
+          {/* Not ⋯, which is the app's action menu (rulebook § 9). */}
+          <LayoutGrid className={ICON} aria-hidden="true" />
           {collapsed ? null : (
             <>
               <span className="truncate">More</span>

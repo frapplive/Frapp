@@ -833,6 +833,16 @@ export function EventsPage() {
    * those paint `--card`, which on a flush route redraws the card the route
    * deleted (`spec/ui/web-dashboard/README.md` § Page grammar).
    */
+  // New's "New event" (`new-intent.ts`): the form this page's button opens,
+  // once the page that holds it is drawn.
+  useNewIntent(
+    () => openCreate(null),
+    canCreateEvents &&
+      eventWriteGate.allowed &&
+      !eventsQuery.isLoading &&
+      !eventsQuery.isError,
+  );
+
   if (isOffline && anyReadUncached(eventsQuery)) {
     return (
       <div className="space-y-4">
@@ -911,12 +921,6 @@ export function EventsPage() {
     setAttendanceFilter("all");
     setRecurrenceFilter("all");
   }
-
-  // New's "New event" (`new-intent.ts`): the form this page's button opens.
-  useNewIntent(
-    () => openCreate(null),
-    canCreateEvents && eventWriteGate.allowed,
-  );
 
   // An hour of the hour grid starts then.
   function openCreate(day: Date | null, startHour?: number) {

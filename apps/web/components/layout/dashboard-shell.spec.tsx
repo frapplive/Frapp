@@ -666,12 +666,14 @@ describe("DashboardShell", () => {
     });
   });
 
-  it("draws one sidebar on the server, the channel list's place held by its skeleton, and no chat beside a page", () => {
+  it("draws one sidebar on the server, the list's and the docked panel's places held, and no chat built yet", () => {
     mockPathname.value = "/events";
     const html = renderToString(<DashboardShell>events</DashboardShell>);
     expect(html.match(/data-sidebar=""/g)).toHaveLength(1);
     expect(html).toContain("data-channel-list-slot");
-    // Chat beside a page waits for a known-wide window.
+    // The docked panel holds its place, so the page paints at its final
+    // width; chat itself waits for a known-wide window.
+    expect(html).toContain("data-chat-panel");
     expect(html).not.toContain('data-testid="chat-stub"');
   });
 

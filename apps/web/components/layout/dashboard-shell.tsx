@@ -320,10 +320,13 @@ function Shell({
   /*
     Mounted on its own routes at every width (the single page below `lg`),
     and on every route from `lg` up, shown or not: the sidebar's channel list
-    is this chat's list. Beside a page it waits for the client to know the
-    window is wide, so a phone never builds a chat it cannot show.
+    is this chat's list. While the width is not known (the server render,
+    hydration) the panel is mounted too, holding its place by CSS with chat's
+    skeleton, so a page beside it paints at its final width; chat itself
+    waits for the client to know the window is wide, so a phone never builds
+    a chat it cannot show (below).
   */
-  const chatMounted = onChatRoute || desktop === true;
+  const chatMounted = onChatRoute || desktop !== false;
   // `undefined` hides gated rows until the read answers; `null` means the
   // offline dashboard can't ask, and shows them (`useNavPermissions`, #3854).
   const permissions = useNavPermissions();
