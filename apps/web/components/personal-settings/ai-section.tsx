@@ -12,12 +12,12 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { useToast } from "@/lib/hooks/use-toast";
 
 /**
- * Settings → Frapp AI: the member's own switch, changed any time
+ * Settings → Frapp Intelligence: the member's own switch, changed any time
  * (`spec/behavior/ai.md` § Consent). It sits in "My account" because the
  * answer is the person's, not a chapter's: one answer covers every chapter
  * they are in.
  *
- * Turning it on opens Meet Frapp AI, so the yes is given where the companies
+ * Turning it on opens Meet Frapp Intelligence, so the yes is given where the companies
  * are named and the privacy policy is linked, as everywhere else. Turning it
  * off is immediate, and the server drops what was made from the member's
  * words (`onConsentWithdrawn`).

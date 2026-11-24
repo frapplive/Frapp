@@ -441,7 +441,7 @@ describe("ThreadPanel (#3785)", () => {
     renderPanel({
       askRefusal: (text) =>
         text.includes("@Frapp")
-          ? "Ask Frapp from the channel, not from a reply."
+          ? "Ask @Frapp from the channel, not from a reply."
           : null,
     });
     const user = userEvent.setup();
@@ -450,7 +450,7 @@ describe("ThreadPanel (#3785)", () => {
     // Nothing is posted to the thread, where everyone would read it.
     expect(thread.send).not.toHaveBeenCalled();
     expect(toastSpy).toHaveBeenCalledWith({
-      title: "Ask Frapp from the channel, not from a reply.",
+      title: "Ask @Frapp from the channel, not from a reply.",
     });
     expect(box).toHaveValue("@Frapp who is driving");
     // A reply that is not a question is sent as ever.

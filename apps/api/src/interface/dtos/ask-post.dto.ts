@@ -11,7 +11,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AI_REPORT_RECEIPT_MAX_LENGTH } from '@repo/validation';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 
-/** `POST /v1/ai/ask/posts`: post an Ask Frapp answer to a channel (#4713). */
+/** `POST /v1/ai/ask/posts`: post a Frapp Intelligence answer to a channel (#4713). */
 export class AskPostDto {
   @ApiProperty({
     format: 'uuid',

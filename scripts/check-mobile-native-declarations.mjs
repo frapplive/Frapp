@@ -188,7 +188,7 @@ export const IOS_PURPOSE_STRINGS = new Map([
     // `requestPermissionsAsync(` asks for the microphone and speech together.
     "NSMicrophoneUsageDescription",
     {
-      text: "Frapp uses the microphone when you tap the mic to dictate a message or a question to Ask Frapp, and when an officer records a chapter meeting to write its minutes. It listens only after you tap.",
+      text: "Frapp uses the microphone when you tap the mic to dictate a message or a question to Frapp Intelligence, and when an officer records a chapter meeting to write its minutes. It listens only after you tap.",
       requestedBy: { file: RECORDER_DEVICE, call: "requestRecordingPermissionsAsync(" },
     },
   ],
@@ -198,7 +198,7 @@ export const IOS_PURPOSE_STRINGS = new Map([
     // came with chat's dictation (#5772, 2026-11-21), pending his approval.
     "NSSpeechRecognitionUsageDescription",
     {
-      text: "Frapp turns what you say into text when you tap the mic in a chat or in Ask Frapp. On most phones this happens on the phone itself.",
+      text: "Frapp turns what you say into text when you tap the mic in a chat or in Frapp Intelligence. On most phones this happens on the phone itself.",
       requestedBy: { file: DICTATION_SPEECH, call: "requestPermissionsAsync(" },
     },
   ],

@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class DiscordAuthorLinkDto {
   @ApiProperty({
@@ -34,6 +34,27 @@ export class DiscordAuthorLinkDto {
   linked_at: string | null;
 }
 
+export class BeginDiscordAuthorLinkDto {
+  @ApiPropertyOptional({
+    enum: ['web', 'mobile'],
+    description:
+      'Where Discord sends the member back: the web Settings → Linked apps (the default), or the phone app at `return_url`.',
+  })
+  @IsOptional()
+  @IsIn(['web', 'mobile'])
+  client?: 'web' | 'mobile';
+
+  @ApiPropertyOptional({
+    description:
+      'For `mobile`: the app’s Settings address, `frapp://preferences` (outside production, the staging app’s `frapp-staging://preferences` too). Any other address is refused, Expo Go’s included.',
+    example: 'frapp://preferences',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  return_url?: string;
+}
+
 export class BeginDiscordAuthorLinkResponseDto {
   @ApiProperty({
     description:
@@ -48,7 +69,7 @@ export class BeginDiscordAuthorLinkResponseDto {
 export class ConfirmDiscordAuthorLinkDto {
   @ApiProperty({
     description:
-      'The one-time token the OAuth callback put on the redirect to the Settings page. It links the Discord account only for the member who started the handshake, in the chapter it was started in.',
+      'The one-time token the OAuth callback put on the redirect to Settings (the web page, or the phone app). It links the Discord account only for the member who started the handshake, in the chapter it was started in.',
   })
   @IsUUID()
   handshake: string;

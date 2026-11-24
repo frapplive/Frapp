@@ -12,7 +12,7 @@ import { ChapterDocumentModule } from '../chapter-document/chapter-document.modu
 import { MeetingModule } from '../meeting/meeting.module';
 
 /**
- * Posting an Ask Frapp answer to a channel (#4713).
+ * Posting a Frapp Intelligence answer to a channel (#4713).
  *
  * Its own module, apart from `AskModule`, on purpose: Ask and the acting
  * agent hold no way to write a message (`ask-posts-nothing.spec.ts`), and

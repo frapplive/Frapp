@@ -208,7 +208,7 @@ interface RanCall {
 }
 
 /**
- * The loop Ask's agent runs in (#4899, `spec/behavior/ai.md` § Ask Frapp).
+ * The loop Ask's agent runs in (#4899, `spec/behavior/ai.md` § Frapp Intelligence).
  *
  * The model is offered read tools and asks for some; this runs them and
  * asks again, until it writes an answer or a limit says it must. Every rule

@@ -110,7 +110,7 @@ from search results and are checked at Google before a paid run.
 ## Real questions (#4903)
 
 The cases above grade the rules Frapp enforces around a model. `real-questions/` grades the answer:
-forty-five questions a member, a committee chair or an officer would really ask, plus requests Frapp AI
+forty-five questions a member, a committee chair or an officer would really ask, plus requests Frapp Intelligence
 must decline, each with what a right answer holds. Did it know who asked, look in the right places,
 get the facts right and stay short.
 
@@ -250,7 +250,7 @@ reference answer that fails its own checks.
 
 ### Turning a miss into a case
 
-When Frapp AI gets a real question wrong, the question becomes a case and the member's text does
+When Frapp Intelligence gets a real question wrong, the question becomes a case and the member's text does
 not:
 
 1. Write down the shape of the miss, not its words: who asked (a role, not a person), where from,

@@ -876,6 +876,7 @@ describe('SupabaseTaskRepository — task photos (#4635)', () => {
           point_reward: null,
           proof_kind: 'none',
           subtask_titles: [],
+          attachments: [],
           due_time: null,
           recurrence_rule: 'FREQ=DAILY;INTERVAL=1;TZID=UTC',
           first_due_date: '2026-11-16',
@@ -1195,6 +1196,7 @@ describe('SupabaseTaskRepository — a group from minutes (#5562)', () => {
     point_reward: null,
     proof_kind: 'none' as const,
     subtask_titles: [],
+    attachments: [],
     meeting_id: 'm1',
   };
   const fakeClient = (linkResult: { data: unknown; error: unknown }) => {

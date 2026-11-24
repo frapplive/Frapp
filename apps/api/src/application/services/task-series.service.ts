@@ -19,6 +19,8 @@ import {
   TASK_REPEAT_NEEDS_DUE_DATE,
   nextTaskRepeatDate,
   type TaskRepeatRule,
+  readFrappLinks,
+  sameFrappLinks,
 } from '@repo/validation';
 import { taskDueInstant } from '#domain/utils/member-nudge';
 import { TaskService, type UpdateTaskInput } from './task.service';
@@ -122,6 +124,19 @@ export class TaskSeriesService {
     ) {
       patch.proof_kind = input.proof_kind;
     }
+    // Checked against the template's own list; the open copy then takes the
+    // same list as a task edit.
+    const attachments = await this.taskService.checkedAttachments(
+      chapterId,
+      input.attachments,
+      series.attachments ?? [],
+    );
+    if (
+      attachments !== undefined &&
+      !sameFrappLinks(attachments, readFrappLinks(series.attachments ?? []))
+    ) {
+      patch.attachments = attachments;
+    }
     if (
       input.assignee_id !== undefined &&
       input.assignee_id !== series.assignee_id
@@ -216,6 +231,7 @@ export class TaskSeriesService {
         assignee_id: input.assignee_id,
         point_reward: input.point_reward,
         proof_kind: input.proof_kind,
+        attachments: input.attachments,
       };
       if ('due_time' in patch) {
         // On the copy's own day, in the series' zone: built here, so it
@@ -229,11 +245,14 @@ export class TaskSeriesService {
         copyInput.reference_photo_paths = input.reference_photo_paths;
       }
       try {
+        // The list checked once above, so the copy neither reads it again
+        // nor refuses what the series just took.
         const updated = await this.taskService.update(
           open.id,
           chapterId,
           actorId,
           copyInput,
+          attachments,
         );
         if (editedIsOpen) return updated;
       } catch (error) {

@@ -53,6 +53,8 @@ The shipping mark is **locked emblem B**: an abstract crest with a neck break, g
 
 The mark and logo **MUST NOT** take the chapter accent — ever. Chapter theming recolors product UI through the accent engine; the brand itself never retints.
 
+> Renamed 2026-11-24 (Paul, #5945): the assistant and the umbrella once called Ask Frapp and Frapp AI are Frapp Intelligence; older notes below keep the names they shipped with.
+>
 > **One exception, Paul's, 2026-11-13: the crest on Ask Frapp's front doors takes the chapter accent.** Changed in #4702 by pdcarlson, 2026-11-13 (Paul's pick on the Ask redesign, default 2 on #4698: "it should show up with the logo"). The crest's outline is drawn as a one-colour glyph in the chapter's accent in three places and nowhere else: the Ask Frapp button in the web chat composer, the Ask Frapp bar above the phone's tab bar, and the header of the conversation each opens. There it is an icon for Ask, always beside the words "Ask Frapp", not the brand's signature: the mark everywhere else (the app icon, sign-in, the landing, the What's new sheet, every raster) stays the fixed gold on charcoal above, and `check:brand-assets` still holds the rasters to it. The glyph's one path is `FRAPP_CREST_PATH` in `packages/theme/src/crest.ts`, held to the brand vector by `crest.spec.ts`.
 >
 > Changed in #4904 by pdcarlson, 2026-11-13: on web the first of those places is now the Ask Frapp row in the Find dialog, since the composer button is gone. The exception itself is unchanged.
@@ -63,7 +65,7 @@ The mark and logo **MUST NOT** take the chapter accent — ever. Chapter theming
 >
 > Changed in #4904 by pdcarlson, 2026-11-17 (Paul's pick: "a big ... glowing logo and the chapter crest" when Ask opens): a fourth place, the opening of the conversation before its first turn, where the crest is drawn large over a glow of the accent ([`design-system/components.md`](design-system/components.md) §11). It is still Ask's icon inside Ask, not the brand's signature, but there the words "Ask Frapp" are on the bar or field that opened it and in the dialog's name rather than beside the crest. Everywhere else the rule above holds.
 >
-> Added in #5476 by pdcarlson, 2026-11-18 (recording what was already drawn, not a new place): the crest also takes the accent as Frapp's own mark inside a channel, where a member asks it there ([`../behavior/ai.md` § Asking from a channel](../behavior/ai.md#asking-from-a-channel)): Frapp's row in a composer's `@` list, on the accent's tint where an avatar goes (#4713; the first row since #5476), and the mark beside an answer drawn in the channel (#4713). The phone's Search screen's "Ask Frapp about …" row is another (#5139). The full list of places is [`design-system/components.md`](design-system/components.md)'s bullet on the crest.
+> Added in #5476 by pdcarlson, 2026-11-18 (recording what was already drawn, not a new place): the crest also takes the accent as Frapp's own mark inside a channel, where a member asks it there ([`../behavior/ai.md` § Asking from a channel](../behavior/ai.md#asking-from-a-channel)): Frapp's row in a composer's `@` list, on the accent's tint where an avatar goes (#4713; the first row since #5476), and the mark beside an answer drawn in the channel (#4713). The phone's Search screen's "Frapp Intelligence: …" row is another (#5139). The full list of places is [`design-system/components.md`](design-system/components.md)'s bullet on the crest.
 
 ### Banned logo vocabulary
 

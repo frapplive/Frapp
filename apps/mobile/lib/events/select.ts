@@ -22,7 +22,7 @@ import {
   attendanceFieldsOf,
   checkInOpensMinutes,
   readEventAgenda,
-  readEventAttachments,
+  readFrappLinks,
   type EventAgendaItem,
   type EventAttachment,
   type EventAttendanceFields,
@@ -273,7 +273,7 @@ export function selectEventDetail(data: unknown): EventDetail | null {
     description: str(data, "description"),
     notes: str(data, "notes"),
     agenda: readEventAgenda(data.agenda),
-    attachments: readEventAttachments(data.attachments),
+    attachments: readFrappLinks(data.attachments),
     check_in_zone_name: str(data, "check_in_zone_name"),
     hasCheckInZone:
       Array.isArray(data.check_in_zone) && data.check_in_zone.length > 0,

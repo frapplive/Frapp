@@ -37,7 +37,7 @@ const TASK_SUGGESTION_EXPIRY_DAYS = 14;
  * A suggested task, as stored and as listed. A task suggested from minutes
  * never carries points (`spec/behavior/meetings.md` § Suggested tasks): "give
  * Jake 50 points" said in a meeting is not an instruction, and the officer
- * adds points by hand. A card Ask Frapp drafts from the officer's own words
+ * adds points by hand. A card Frapp Intelligence drafts from the officer's own words
  * may (2026-11-22, `spec/behavior/ai.md` § Asking Frapp to do something):
  * the officer said them.
  */
@@ -92,11 +92,11 @@ export interface TaskSuggestionPayload {
 
 /** Where a proposal came from, as the kind is told. */
 export interface TaskProposalContext {
-  /** The suggestion source's type: `request` is Ask Frapp. */
+  /** The suggestion source's type: `request` is Frapp Intelligence. */
   sourceType?: string;
 }
 
-/** The source type of an officer's own request to Ask Frapp. */
+/** The source type of an officer's own request to Frapp Intelligence. */
 const ASK_SOURCE_TYPE = 'request';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

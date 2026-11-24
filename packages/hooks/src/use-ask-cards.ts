@@ -5,7 +5,7 @@ import { useAiSuggestions, type AiSuggestion } from "./use-ai-suggestions";
 import { useViewerUserId } from "./use-user";
 
 /**
- * The cards under an Ask answer (#4904, `spec/behavior/ai.md` § Ask Frapp):
+ * The cards under an Ask answer (#4904, `spec/behavior/ai.md` § Frapp Intelligence):
  * the suggestions `answer.proposals` names, read from the asker's own waiting
  * requests (`GET /v1/ai/suggestions` for source `request`, whose id is the
  * asker). There is no route for one suggestion by id.

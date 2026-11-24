@@ -447,7 +447,7 @@ export class TaskSuggestionDto {
 
   @ApiPropertyOptional({
     description:
-      'Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them.',
+      'Points on completion (2026-11-22). Only a Frapp Intelligence card proposes them, or an officer edit sets them.',
   })
   point_reward?: number;
 

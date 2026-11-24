@@ -538,7 +538,9 @@ describe("DashboardShell", () => {
     // bottom of the page (the next test).
     expect(
       within(banner)
-        .queryAllByRole("button", { name: /ask/i })
+        .queryAllByRole("button", {
+          name: /ask|frapp intelligence|what do you need/i,
+        })
         .filter((button) => !/^(Find|Search)/.test(button.textContent ?? "")),
     ).toHaveLength(0);
   });
@@ -596,10 +598,15 @@ describe("DashboardShell", () => {
    * of chat itself: the padding just reappears around a layout that still
    * "works".
    */
-  it("floats Ask Frapp's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
+  it("floats Frapp Intelligence's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
     mockPathname.value = "/events";
     const view = render(<DashboardShell>content</DashboardShell>);
-    expect(screen.queryByRole("button", { name: /^Ask Frapp/ })).toBeNull();
+    // Neither bar: the sidebar's reads the name, the floating one its words.
+    expect(
+      screen.queryByRole("button", {
+        name: /^(Frapp Intelligence|What do you need)/,
+      }),
+    ).toBeNull();
     let page = view.container.querySelector("[data-tool-page]") as HTMLElement;
     expect(page.className).not.toContain("pb-24");
     view.unmount();
@@ -607,7 +614,7 @@ describe("DashboardShell", () => {
     askEntry.current = { open: false, openAsk: vi.fn() };
     const { container } = render(<DashboardShell>content</DashboardShell>);
     // Named by its own words (WCAG 2.5.3).
-    const bar = screen.getByRole("button", { name: "Ask Frapp anything" });
+    const bar = screen.getByRole("button", { name: "What do you need?" });
     expect(screen.getByRole("banner")).not.toContainElement(bar);
     const column = container.querySelector("[data-tool-column]") as HTMLElement;
     expect(column).toContainElement(bar);
@@ -627,7 +634,7 @@ describe("DashboardShell", () => {
     const { container } = render(<DashboardShell>content</DashboardShell>);
     const column = container.querySelector("[data-tool-column]") as HTMLElement;
     expect(
-      within(column).queryByRole("button", { name: "Ask Frapp anything" }),
+      within(column).queryByRole("button", { name: "What do you need?" }),
     ).toBeNull();
     const page = container.querySelector("[data-tool-page]") as HTMLElement;
     expect(page.className).not.toContain("pb-24");
@@ -1289,7 +1296,7 @@ describe("DashboardShell", () => {
       expect(document.cookie).toContain("frapp_chat_width=375");
     });
 
-    it("keeps Ask Frapp in the sidebar's foot, not over the home view (#5560)", () => {
+    it("keeps Frapp Intelligence in the sidebar's foot, not over the home view (#5560)", () => {
       setWindowWidth(1440);
       mockPathname.value = "/chat";
       askEntry.current = { open: false, openAsk: vi.fn() };
@@ -1298,10 +1305,12 @@ describe("DashboardShell", () => {
       );
       const home = container.querySelector("[data-chapter-home]")!;
       expect(home.parentElement).not.toContainElement(
-        screen.queryByRole("button", { name: "Ask Frapp anything" }),
+        screen.queryByRole("button", { name: "What do you need?" }),
       );
       const nav = screen.getByRole("navigation", { name: "Primary" });
-      const sidebarAsk = screen.getByRole("button", { name: "Ask Frapp" });
+      const sidebarAsk = screen.getByRole("button", {
+        name: "Frapp Intelligence",
+      });
       expect(nav.parentElement).toContainElement(sidebarAsk);
     });
 

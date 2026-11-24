@@ -1,6 +1,6 @@
-# AI suggestion changes: what people change when Frapp AI suggests something
+# AI suggestion changes: what people change when Frapp Intelligence suggests something
 
-How the Frapp team sees what members change when they confirm, edit or dismiss a Frapp AI suggestion, so a weak suggestion can be found, understood and turned into an eval case (Paul, 2026-11-22). The rules are in [`spec/behavior/ai.md` § Stored AI text](../../spec/behavior/ai.md#stored-ai-text); the table is the migration's (`20261122221259_ai_suggestion_changes.sql`).
+How the Frapp team sees what members change when they confirm, edit or dismiss a Frapp Intelligence suggestion, so a weak suggestion can be found, understood and turned into an eval case (Paul, 2026-11-22). The rules are in [`spec/behavior/ai.md` § Stored AI text](../../spec/behavior/ai.md#stored-ai-text); the table is the migration's (`20261122221259_ai_suggestion_changes.sql`).
 
 ## What is kept
 
@@ -12,7 +12,7 @@ One row of `ai_suggestion_changes` per suggestion decided or expired, written by
 | `via`          | On an accept: `card` (as shown, or with the card's own fields) or `form` (made in the full form the card's Edit opened)                                                                                                                                                                         |
 | `fields`       | Field by field: `verdict` (`kept`, `changed`, `added`, `removed`), and for fields that are not free text the `proposed` and `saved` values as ids, numbers and booleans, with `delta_minutes` for a moment or a day. A text field has its verdict only. A field empty on both sides is left out |
 | `ask_id`       | The Ask turn that made the card, the `id` of its row in `ai_ask_traces` ([`ask-answer-quality.md`](ask-answer-quality.md)), while that trace is kept. Null for a card from the older request lane (`ASK_AGENT` off), which keeps no trace                                                       |
-| `words_sealed` | The member's question, the proposed text and the saved text, sealed with `AI_STORED_TEXT_KEY`, only when the member who decided has Frapp AI on. Null without the key, and for a card drawn from chat (`ai_suggestions.drew_on_chat`, or a channel source)                                      |
+| `words_sealed` | The member's question, the proposed text and the saved text, sealed with `AI_STORED_TEXT_KEY`, only when the member who decided has Frapp Intelligence on. Null without the key, and for a card drawn from chat (`ai_suggestions.drew_on_chat`, or a channel source)                                      |
 
 The fields each kind compares are its handler's `changeLog` (`ai-suggestion-*-kind.ts`). A new event is always compared with the event as saved, read back, so who it invites is in the row even when it was set in the form.
 

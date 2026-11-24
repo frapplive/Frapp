@@ -57,10 +57,10 @@ const consent = (overrides: Record<string, unknown> = {}) => ({
 });
 
 /**
- * Settings → Frapp AI (#4790): one switch. On opens Meet Frapp AI, where
+ * Settings → Frapp Intelligence (#4790): one switch. On opens Meet Frapp Intelligence, where
  * the companies are named; off is immediate.
  */
-describe("the member's Frapp AI switch in Settings", () => {
+describe("the member's Frapp Intelligence switch in Settings", () => {
   beforeEach(() => {
     state.turnOn.mockReset().mockResolvedValue(true);
     state.notNow.mockReset().mockResolvedValue(undefined);
@@ -71,34 +71,34 @@ describe("the member's Frapp AI switch in Settings", () => {
   it("shows it off until the member said yes, and names no company", () => {
     state.consent = consent();
     render(<AiSection />);
-    expect(screen.getByRole("switch", { name: "Frapp AI" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Frapp Intelligence" })).not.toBeChecked();
     expect(screen.getByText(FRAPP_AI_COPY.settingsCaption)).toBeInTheDocument();
-    // The companies are named on Meet Frapp AI, where the yes is given.
+    // The companies are named on Meet Frapp Intelligence, where the yes is given.
     expect(screen.queryByText(/anthropic|google/i)).toBeNull();
   });
 
-  it("turning it on opens Meet Frapp AI, and Continue there turns it on", async () => {
+  it("turning it on opens Meet Frapp Intelligence, and Continue there turns it on", async () => {
     const user = userEvent.setup();
     state.consent = consent({ answer: "no" });
     render(<AiSection />);
-    await user.click(screen.getByRole("switch", { name: "Frapp AI" }));
+    await user.click(screen.getByRole("switch", { name: "Frapp Intelligence" }));
     expect(state.turnOn).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Meet Frapp AI");
+    expect(dialog).toHaveTextContent("Meet Frapp Intelligence");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(state.turnOn).toHaveBeenCalledTimes(1);
-    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp AI is on" });
+    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp Intelligence is on" });
   });
 
   it("turning it off records a No at once", async () => {
     const user = userEvent.setup();
     state.consent = consent({ answer: "yes" });
     render(<AiSection />);
-    const control = screen.getByRole("switch", { name: "Frapp AI" });
+    const control = screen.getByRole("switch", { name: "Frapp Intelligence" });
     expect(control).toBeChecked();
     await user.click(control);
     expect(state.notNow).toHaveBeenCalledTimes(1);
-    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp AI is off" });
+    expect(state.toast).toHaveBeenCalledWith({ title: "Frapp Intelligence is off" });
   });
 
   it("says why when turning it off can't be saved", async () => {
@@ -106,10 +106,10 @@ describe("the member's Frapp AI switch in Settings", () => {
     state.consent = consent({ answer: "yes" });
     state.notNow.mockRejectedValue({ statusCode: 500 });
     render(<AiSection />);
-    await user.click(screen.getByRole("switch", { name: "Frapp AI" }));
+    await user.click(screen.getByRole("switch", { name: "Frapp Intelligence" }));
     expect(state.toast).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: "Couldn't turn off Frapp AI",
+        title: "Couldn't turn off Frapp Intelligence",
         variant: "destructive",
       }),
     );
@@ -119,7 +119,7 @@ describe("the member's Frapp AI switch in Settings", () => {
     state.consent = consent();
     state.offline = true;
     render(<AiSection />);
-    expect(screen.getByRole("switch", { name: "Frapp AI" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Frapp Intelligence" })).toBeDisabled();
   });
 
   it("draws nothing on a server with no AI", () => {

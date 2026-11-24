@@ -485,7 +485,7 @@ export class MeetingService {
    * rule as `canRead` (`readable`), for members whose permissions and roles
    * the caller already holds. An id that names no minutes is not in the
    * answer. For a check made over a whole audience: who in a channel could
-   * open what an Ask Frapp answer drew on, before it is posted there (#4713).
+   * open what a Frapp Intelligence answer drew on, before it is posted there (#4713).
    */
   async readableByAll(
     chapterId: string,

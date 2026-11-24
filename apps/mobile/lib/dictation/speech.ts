@@ -9,7 +9,7 @@ import type {
 } from "./speech-types";
 
 /**
- * The phone's own speech recogniser, for dictating into Ask Frapp (#5276;
+ * The phone's own speech recogniser, for dictating into Frapp Intelligence (#5276;
  * Paul picked on-device speech on 2026-11-17 over sending audio to a
  * provider). Apple's `SFSpeechRecognizer` on iOS and Android's
  * `SpeechRecognizer`, through `expo-speech-recognition`.

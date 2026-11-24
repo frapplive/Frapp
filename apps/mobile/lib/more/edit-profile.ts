@@ -1,5 +1,9 @@
 import type { components } from "@repo/api-sdk";
-import { formatPhone, normalizePhone } from "@repo/formatting";
+import {
+  formatPhone,
+  formatPhoneInput,
+  normalizePhone,
+} from "@repo/formatting";
 import {
   birthdayDraftProblem,
   type BirthdayDraftProblem,
@@ -271,3 +275,50 @@ export function sameDraft(a: ProfileDraft, b: ProfileDraft): boolean {
     (field) => a[field] === b[field],
   );
 }
+
+/**
+ * `profilePatch` for s03's About you (#5284): the same rules and the same
+ * refusals as the Edit sheet, over the fields that step asks. The name isn't
+ * on the step (the screen before it saved it), so it is held equal on both
+ * sides and is never sent or refused here.
+ */
+export function aboutYouPatch(
+  original: ProfileDraft,
+  draft: ProfileDraft,
+): ProfilePatchResult {
+  const held = { displayName: "-", bio: "", city: "", company: "" };
+  return profilePatch({ ...original, ...held }, { ...draft, ...held });
+}
+
+/**
+ * The phone as typed, formatted as it goes (#5798). `onChangeText` reports no
+ * caret, so it is worked out from the text before. Shared by the Edit sheet
+ * and s03's About you.
+ */
+export function typedPhone(value: string, previous: string): string {
+  return formatPhoneInput(value, undefined, previous).value;
+}
+
+/**
+ * The phone once the member leaves the field: a 7-digit local number reads
+ * `555-0142`, not half-grouped as a longer one (#5798). `null` when there is
+ * nothing to tidy.
+ */
+export function tidiedPhone(phone: string): string | null {
+  const tidy = formatPhone(phone);
+  return tidy === phone ? null : tidy;
+}
+
+/**
+ * The graduation year's width beside Major: four digits at the body size plus
+ * the field's padding, rounded up to the grid (foundations §9). The Edit sheet
+ * and s03's About you both lay the row out with it.
+ */
+export const YEAR_FIELD_WIDTH = 96;
+
+/** What a screen reader announces for each birthday field, on both forms. */
+export const BIRTHDAY_FIELD_ACCESSIBLE_LABELS = {
+  birthdayMonth: "Birthday month, 1 to 12",
+  birthdayDay: "Birthday day",
+  birthdayYear: "Birth year, optional",
+} as const;

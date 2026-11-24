@@ -451,7 +451,7 @@ function marksText(
 }
 
 /**
- * Ask Frapp (#450, #451, `spec/behavior/ai.md`): one member's question,
+ * Frapp Intelligence (#450, #451, `spec/behavior/ai.md`): one member's question,
  * answered from what that member could open, with every claim tied to a
  * source the server checked.
  *

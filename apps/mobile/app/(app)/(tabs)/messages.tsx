@@ -75,6 +75,7 @@ import { confirmHideConversation } from "@/lib/chat/hide-conversation-prompt";
 import { channelsErrorCopy } from "@/lib/chat/channels-error";
 import { useShownUnreadCounts } from "@/lib/chat/unread-first-paint";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { SECTION_NAMES } from "@repo/validation";
 
 /** Under the search while the roster is still being read. */
 const MEMBERS_LOADING = "Loading your chapter's members…";
@@ -368,7 +369,7 @@ export default function MessagesScreen() {
   return (
     <ScreenShell
       keyboardShouldPersistTaps="handled"
-      title="Messages"
+      title={SECTION_NAMES.messages}
       refresh={refresh}
       // New message, where iMessage and Instagram keep it. It focuses the
       // search below, as their pencil opens a "To:" field (#4668).

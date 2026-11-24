@@ -340,7 +340,7 @@ export class MeetingNotesService {
    * What a draft of these minutes is written from, as of now: every
    * note-taker's notes that may still go in, then the recording's
    * transcript. Notes are left out when their writer can no longer take
-   * notes here, or has not said yes to Frapp AI (their own words go to a
+   * notes here, or has not said yes to Frapp Intelligence (their own words go to a
    * provider only with their yes). 400 when there is nothing to draft from,
    * or more than one draft reads.
    */
@@ -424,7 +424,7 @@ export class MeetingNotesService {
 
   /**
    * The sources a queued draft may still send, checked again when its run
-   * runs (#4935): a note-taker who has since said No to Frapp AI, lost the
+   * runs (#4935): a note-taker who has since said No to Frapp Intelligence, lost the
    * meeting's event, or stopped taking notes is left out. The recording
    * stays. Ranks stay as they were asked on.
    */
@@ -609,7 +609,7 @@ export class MeetingNotesService {
 
   /**
    * How a note-taker's notes rank now, or null when they are left out: the
-   * writer can't take notes here any more, or hasn't said yes to Frapp AI.
+   * writer can't take notes here any more, or hasn't said yes to Frapp Intelligence.
    */
   private async standingOf(
     chapterId: string,

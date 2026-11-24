@@ -2604,19 +2604,24 @@ describe("Composer in the audit log", () => {
 });
 
 /**
- * Ask Frapp has no control in the composer (#4904, Paul's pick of
+ * Frapp Intelligence has no control in the composer (#4904, Paul's pick of
  * 2026-11-13): it was a button here for a day (#4702) and read as out of
  * place. The floating Ask bar asks (#5476); `@Frapp` typed here still does
  * (#4713).
  */
-describe("Composer carries no Ask Frapp control (#4904)", () => {
+describe("Composer carries no Frapp Intelligence control (#4904)", () => {
   it.each([
     ["a channel the member can post in", {}],
     ["a channel that is read-only for the member's role", { isReadOnly: true }],
     ["an alumnus who can read but not post", { canPost: false }],
   ])("draws none in %s", (_, props) => {
     render(<Composer {...baseProps(props)} />);
-    expect(screen.queryByRole("button", { name: /ask frapp/i })).toBeNull();
+    // Every name the entry has had: a control put back would carry one.
+    expect(
+      screen.queryByRole("button", {
+        name: /ask frapp|frapp intelligence|what do you need/i,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -2985,7 +2990,7 @@ describe("Composer asks Frapp instead of posting (#4713)", () => {
     );
     expect(mockToast).toHaveBeenCalledWith({
       title:
-        "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+        "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();

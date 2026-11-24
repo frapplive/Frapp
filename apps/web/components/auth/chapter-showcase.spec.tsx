@@ -127,7 +127,7 @@ describe("ChapterShowcase", () => {
     const { container } = render(<ChapterShowcase />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(
-      /\bgoing\b|rsvp|dues|ask frapp|signet|\bdone\b|\bbeta\b/i,
+      /\bgoing\b|rsvp|dues|ask frapp|frapp intelligence|signet|\bdone\b|\bbeta\b/i,
     );
     // Check in opens at the event's start, so nothing posts before 8:00.
     expect(text).not.toMatch(/7:\d\d PM/);

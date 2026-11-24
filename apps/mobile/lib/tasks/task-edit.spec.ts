@@ -14,6 +14,7 @@ import {
   dueSave,
   editFactsOfLive,
   editFactsOfRow,
+  attachmentsSave,
   followerSave,
   photosSave,
   pointsSave,
@@ -494,5 +495,27 @@ describe("a copy of a repeating task (#5119)", () => {
   it("measures the next change against a stopped series", () => {
     const after = rowAfter(live(), { recurrence_rule: null });
     expect(after.series?.ended).toBe(true);
+  });
+});
+
+describe("Attached (spec/behavior/frapp-links.md)", () => {
+  const doc = { id: "l1", kind: "document" as const, document_id: "d1" };
+
+  it("reads the stored list, sends a changed one whole, and nothing unchanged", () => {
+    const held = row({ attachments: [doc, { id: "x", kind: "nope" }] });
+    // An entry this build can't read is left out, never drawn half-made.
+    expect(held.attachments).toEqual([doc]);
+    expect(attachmentsSave(held, [doc])).toEqual({ kind: "none" });
+    expect(attachmentsSave(held, [])).toEqual({
+      kind: "save",
+      body: { attachments: [] },
+    });
+    expect(rowAfter(held, { attachments: [] }).attachments).toEqual([]);
+  });
+
+  it("changes a group task's list on every copy", () => {
+    expect(scopedEdit(row({ group_id: "g1" }), { attachments: [doc] })).toEqual(
+      { attachments: [doc], scope: "group" },
+    );
   });
 });

@@ -39,7 +39,7 @@ import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
  * `AiEnabledGuard` first, so a server with `AI_ENABLED` off answers 404
  * `ai.not_available` and the web app hides the fill. Then the member, their
  * chapter, and `backwork:upload`: the draft must be the caller's own. The
- * chapter's Frapp AI switch and the member's answer on the AI sheet are the
+ * chapter's Questions and requests switch and the member's answer on the AI sheet are the
  * service's checks.
  */
 @ApiTags('Backwork')
@@ -67,7 +67,7 @@ export class BackworkFillController {
   @ApiOkResponse({ type: BackworkDraftFillResponseDto })
   @ApiForbiddenResponse({
     description:
-      'The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp AI turned off (`ai.chapter_off`).',
+      'The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has turned off questions and requests (`ai.chapter_off`).',
   })
   @ApiConflictResponse({
     description: 'Another fill of this draft is still running.',

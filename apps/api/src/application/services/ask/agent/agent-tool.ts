@@ -6,7 +6,7 @@ import type { AgentToolSpec } from '../ask-tool';
 
 /**
  * The contract between Ask's agent loop and the tools it can call (epic
- * #4898, `spec/behavior/ai.md` § Ask Frapp). Paul approved the loop and the
+ * #4898, `spec/behavior/ai.md` § Frapp Intelligence). Paul approved the loop and the
  * rule changes it needs on 2026-11-13; this file is the shape every tool is
  * written against, so the tools and the loop can be built side by side.
  * `AgentLoopService` runs them, for a server with `ASK_AGENT=on`.
