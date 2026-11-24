@@ -1,4 +1,5 @@
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import {
   DASHBOARD_NAV_ITEMS,
   navItemHolds,
@@ -58,16 +59,24 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
  * Pages under a nav row that read as their own step, titled under that row
  * ("Backwork › Bulk upload"), shown only when that row is.
  */
-const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
-  "/backwork/upload": "Bulk upload",
-};
+/**
+ * Pages under a nav row, each with the page it goes back to: Bulk upload goes
+ * back to Backwork, the view it was opened from (#5949, Resources).
+ */
+const SUB_PAGE_TITLES: Readonly<Record<string, { title: string; back: string }>> =
+  {
+    "/backwork/upload": { title: "Bulk upload", back: "/backwork" },
+  };
 
 /**
  * Pages one record deep under a nav row, matched by prefix: any
  * `/meetings/<id>` is that meeting's "Minutes", under Meetings.
  */
-const RECORD_PAGE_TITLES: Readonly<Record<string, string>> = {
-  "/meetings/": "Minutes",
+const RECORD_PAGE_TITLES: Readonly<
+  Record<string, { title: string; back: string }>
+> = {
+  // Back to the chapter's minutes in Documents (#5949).
+  "/meetings/": { title: "Minutes", back: MINUTES_DOCUMENTS_HREF },
 };
 
 /** `matchesRoute` for an off-nav or sub-page route. */
@@ -100,10 +109,10 @@ export function resolvePageTitle(
   if (navItem && subPage) {
     return isNavItemVisible(navItem)
       ? {
-          title: subPage[1],
-          parent: { label: navItem.label, href: navItem.href },
+          title: subPage[1].title,
+          parent: { label: navItem.label, href: subPage[1].back },
         }
-      : { title: subPage[1] };
+      : { title: subPage[1].title };
   }
   if (navItem) return { title: navItem.label };
 

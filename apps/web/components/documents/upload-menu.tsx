@@ -1,8 +1,14 @@
 "use client";
 
-import { useRef } from "react";
-import { ChevronDown, FolderSync, FolderUp } from "lucide-react";
+import { useRef, useState } from "react";
+import { ChevronDown, FilePlus2, FolderSync, FolderUp } from "lucide-react";
 import { useGoogleDriveStatus, type DocumentTypeRow } from "@repo/hooks";
+import { useKeptPanel } from "@repo/hooks/kept-drafts";
+import { NEW_ACTION_LABELS } from "@repo/validation";
+import {
+  MINUTES_DRAFT,
+  StartMinutesPanel,
+} from "@/components/meetings/start-minutes-panel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,6 +53,7 @@ export function UploadMenu({
   folderRows,
   canUpload,
   canManage,
+  canStartMinutes,
 }: {
   gate: SubscriptionGate;
   upload: DocumentUpload;
@@ -60,7 +67,23 @@ export function UploadMenu({
   canUpload: boolean;
   /** `chapter_docs:manage`: Google Drive, and renaming and deleting types. */
   canManage: boolean;
+  /**
+   * `meetings:record` with the meetings module on: New minutes (#5949).
+   * Posted minutes are filed here, so starting them is one more way in, as
+   * the Meetings page's New minutes was before that page folded into
+   * Documents.
+   */
+  canStartMinutes: boolean;
 }) {
+  const [startingMinutes, setStartingMinutes] = useState(false);
+  // Reopens on return when the page was left mid-form (#4593).
+  useKeptPanel({
+    page: "documents",
+    form: MINUTES_DRAFT,
+    open: startingMinutes,
+    setOpen: setStartingMinutes,
+    ready: canStartMinutes,
+  });
   const openImport = useRef<(() => void) | null>(null);
   const openDrive = useRef<(() => void) | null>(null);
   // Drive's status is `chapter_docs:manage` only on the API, so nobody else
@@ -72,7 +95,7 @@ export function UploadMenu({
   // The items carry the gate's reason and its notice, as the buttons did.
   const { title, "aria-describedby": describedBy } = gate.controlProps();
   const gateReason = { title, "aria-describedby": describedBy };
-  const hasMenu = canUpload || showDrive;
+  const hasMenu = canUpload || showDrive || canStartMinutes;
   if (!hasMenu) return null;
 
   return (
@@ -122,6 +145,14 @@ export function UploadMenu({
               Import a folder
             </DropdownMenuItem>
           ) : null}
+          {canStartMinutes ? (
+            // Minutes aren't a subscription-gated write here: the panel's
+            // own start says so if the chapter's subscription refuses it.
+            <DropdownMenuItem onSelect={() => setStartingMinutes(true)}>
+              <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+              {NEW_ACTION_LABELS.newMinutes}
+            </DropdownMenuItem>
+          ) : null}
           {showDrive ? (
             <DropdownMenuItem
               disabled={!gate.allowed}
@@ -142,6 +173,12 @@ export function UploadMenu({
           gate={gate}
           context={importContext}
           openerRef={openImport}
+        />
+      ) : null}
+      {canStartMinutes ? (
+        <StartMinutesPanel
+          open={startingMinutes}
+          onOpenChange={setStartingMinutes}
         />
       ) : null}
       {canManage ? (

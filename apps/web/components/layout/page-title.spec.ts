@@ -29,13 +29,19 @@ describe("resolvePageTitle", () => {
     expect(resolvePageTitle("/eventsx")).toBeNull();
   });
 
-  it("puts Bulk upload under its Backwork row", () => {
+  // #5949: Documents and Backwork are views of one Resources page.
+  it("titles Documents and Backwork as Resources, the one row they share", () => {
+    expect(resolvePageTitle("/documents")).toEqual({ title: "Resources" });
+    expect(resolvePageTitle("/backwork")).toEqual({ title: "Resources" });
+  });
+
+  it("puts Bulk upload under Resources, going back to Backwork", () => {
     expect(resolvePageTitle("/backwork/upload")).toEqual({
       title: "Bulk upload",
-      parent: { label: "Backwork", href: "/backwork" },
+      parent: { label: "Resources", href: "/backwork" },
     });
     expect(
-      resolvePageTitle("/backwork/upload", (item) => item.href !== "/backwork"),
+      resolvePageTitle("/backwork/upload", (item) => item.id !== "resources"),
     ).toEqual({
       title: "Bulk upload",
     });
@@ -53,11 +59,10 @@ describe("resolvePageTitle", () => {
     });
   });
 
-  it("titles one meeting's minutes under Meetings, and Meetings alone at its root", () => {
-    expect(resolvePageTitle("/meetings")).toEqual({ title: "Meetings" });
+  it("titles one meeting's minutes under Resources, going back to the chapter's minutes (#5949)", () => {
     expect(resolvePageTitle("/meetings/0b9d1c1e")).toEqual({
       title: "Minutes",
-      parent: { label: "Meetings", href: "/meetings" },
+      parent: { label: "Resources", href: "/documents?type=minutes" },
     });
   });
 

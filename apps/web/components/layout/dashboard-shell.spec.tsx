@@ -266,7 +266,7 @@ describe("DashboardShell", () => {
     mockPermissions.value = ["members:view", "backwork:upload"];
     mockChapter.value = {
       name: "Alpha Beta Gamma",
-      enabled_modules: { backwork: false },
+      enabled_modules: { points: false },
     };
     try {
       render(
@@ -276,10 +276,10 @@ describe("DashboardShell", () => {
       );
       const nav = screen.getByRole("navigation", { name: "Primary" });
       expect(
-        within(nav).queryByRole("link", { name: "Backwork" }),
+        within(nav).queryByRole("link", { name: "Points" }),
       ).not.toBeInTheDocument();
       expect(
-        within(nav).getByRole("link", { name: "Documents" }),
+        within(nav).getByRole("link", { name: "Resources" }),
       ).toBeInTheDocument();
     } finally {
       mockPermissions.value = [];
@@ -374,6 +374,8 @@ describe("DashboardShell", () => {
   });
 
   it("gives a page under a nav row its parent as a link back", () => {
+    // Bulk upload is under Resources and goes back to Backwork, the view it
+    // was opened from (#5949).
     mockPathname.value = "/backwork/upload";
     mockPermissions.value = ["members:view", "backwork:admin"];
     render(
@@ -386,54 +388,35 @@ describe("DashboardShell", () => {
       "Bulk upload",
     );
     expect(
-      within(banner).getByRole("link", { name: "Backwork" }),
+      within(banner).getByRole("link", { name: "Resources" }),
     ).toHaveAttribute("href", "/backwork");
   });
 
   it("offers no crumb to a member the nav hides the parent row from", () => {
-    // The parent follows its row's own gates: a member holding none of its
-    // permissions sees the page's title, and no door the nav closed.
-    mockPathname.value = "/backwork/upload";
+    // The parent follows its row's own gates: with every module Resources
+    // holds switched off, the page's title shows and no door the nav closed.
+    mockPathname.value = "/meetings/abc";
     mockPermissions.value = ["members:view"];
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Bulk upload",
-    );
-    expect(
-      within(banner).queryByRole("link", { name: "Backwork" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("offers no crumb while permissions are still loading (#3854)", () => {
-    // An officer's crumb arrives with the answer; a member must never get a
-    // door to click before it.
-    mockPathname.value = "/backwork/upload";
-    mockPermissions.value = undefined;
-    const { rerender } = render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    expect(
-      within(banner).queryByRole("link", { name: "Backwork" }),
-    ).not.toBeInTheDocument();
-    mockPermissions.value = ["members:view", "backwork:admin"];
-    rerender(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(
-      within(screen.getByRole("banner")).getByRole("link", {
-        name: "Backwork",
-      }),
-    ).toBeInTheDocument();
+    mockChapter.value = {
+      name: "Alpha Beta Gamma",
+      enabled_modules: { documents: false, meetings: false, backwork: false },
+    };
+    try {
+      render(
+        <DashboardShell>
+          <p>route content</p>
+        </DashboardShell>,
+      );
+      const banner = screen.getByRole("banner");
+      expect(
+        within(banner).getByRole("heading", { level: 1 }),
+      ).toHaveTextContent("Minutes");
+      expect(
+        within(banner).queryByRole("link", { name: "Resources" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      mockChapter.value = undefined;
+    }
   });
 
   it("leaves the title cell empty on a route it does not know", () => {

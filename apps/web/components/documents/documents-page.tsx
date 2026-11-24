@@ -77,6 +77,7 @@ import {
 import { documentTypeOptions } from "@/lib/documents/upload-defaults";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { useToast } from "@/lib/hooks/use-toast";
 import { asArray, getErrorMessage } from "@/lib/utils";
 
@@ -229,6 +230,11 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     "chapter_docs:upload",
     permissionsPayload?.permissions ?? [],
   );
+  // New minutes, for whoever records them while the module is on (#5949).
+  const isModuleEnabled = useChapterModuleGate();
+  const canStartMinutes =
+    can("meetings:record", permissionsPayload?.permissions ?? []) &&
+    (isModuleEnabled?.("meetings") ?? false);
 
   /*
     The folder tab, then the toolbar's search, filters and order, all local,
@@ -488,6 +494,7 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
           folderRows={folders}
           canUpload={canUpload}
           canManage={canManageTypes}
+          canStartMinutes={canStartMinutes}
         />
         <Can permission="chapter_docs:upload">
           <DocumentsPageDropTarget

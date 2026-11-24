@@ -8,30 +8,6 @@ import { SkeletonText } from "@/components/shared/async-states";
 import type { MeetingSummary } from "@repo/hooks";
 import { meetingWhenLabel } from "@repo/validation";
 
-/** The minutes rows: a name over the type and day. */
-export function MeetingRowsSkeleton() {
-  return (
-    <SectionSkeleton label="Loading minutes">
-      <div className="space-y-2">
-        <SkeletonSectionLabel width="w-20" count />
-        <SkeletonRows rows={6} lines={2} />
-      </div>
-    </SectionSkeleton>
-  );
-}
-
-/** `/meetings` while it loads. */
-export function MeetingsPageSkeleton() {
-  return (
-    <PageSkeleton label="Loading minutes" className="space-y-6">
-      <div className="space-y-2">
-        <SkeletonSectionLabel width="w-20" count />
-        <SkeletonRows rows={6} lines={2} />
-      </div>
-    </PageSkeleton>
-  );
-}
-
 /**
  * `/meetings/:id` while it loads: the header as it will be (named from the
  * Minutes list when it is already loaded, so a tap from the list opens on

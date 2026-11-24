@@ -138,10 +138,10 @@ describe("isNavItemVisible", () => {
     expect(isNavItemVisible(moduleItem, undefined, undefined)).toBe(true);
   });
 
-  it("hides the real Directory and Backwork rows until permissions resolve", async () => {
+  it("hides the real Directory row until permissions resolve", async () => {
     const { isNavItemVisible } = await import("./protected-nav-item");
     const { DASHBOARD_NAV_ITEMS } = await import("./nav-config");
-    for (const id of ["members", "backwork"]) {
+    for (const id of ["members"]) {
       const row = DASHBOARD_NAV_ITEMS.find((item) => item.id === id);
       expect(row, id).toBeDefined();
       expect(
@@ -153,6 +153,16 @@ describe("isNavItemVisible", () => {
         id,
       ).toBe(true);
     }
+  });
+
+  // #2956: a row that holds several modules' views shows while any is on.
+  it("shows a row with anyModule while any of its modules is on", async () => {
+    const { isNavItemVisible } = await import("./protected-nav-item");
+    const item = { ...coreItem, anyModule: ["documents", "backwork"] };
+    expect(isNavItemVisible(item, [], (key) => key === "backwork")).toBe(true);
+    expect(isNavItemVisible(item, [], () => false)).toBe(false);
+    // A module gate not answered yet hides nothing.
+    expect(isNavItemVisible(item, [], undefined)).toBe(true);
   });
 
   it("renders nothing, so nothing is clickable, while permissions are unresolved", () => {

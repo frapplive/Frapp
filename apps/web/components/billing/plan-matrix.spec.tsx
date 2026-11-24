@@ -31,7 +31,11 @@ afterEach(() => {
  */
 
 const SHIPPED = new Set<string>([
-  ...DASHBOARD_NAV_ITEMS.flatMap((item) => (item.module ? [item.module] : [])),
+  ...DASHBOARD_NAV_ITEMS.flatMap((item) => [
+    ...(item.module ? [item.module] : []),
+    // Resources holds Documents, Meetings and Backwork in one row (#5949).
+    ...(item.anyModule ?? []),
+  ]),
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",
   // Polls live in chat since #3871 retired the nav row, as dues lives on

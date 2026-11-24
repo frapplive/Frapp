@@ -85,8 +85,9 @@ describe("AppNav", () => {
     // Directory and Finance were two one-item sections whose headings each
     // restated the row beneath them; the board merges them into one unlabeled
     // group, so neither word may appear as a heading. The Admin group folded
-    // into Chapter settings (#2946), so its heading is gone too.
-    expect(headings).toEqual(["Chapter", "Resources"]);
+    // into Chapter settings (#2946), so its heading is gone too. Resources is
+    // one row since #5949, so its heading would only repeat it.
+    expect(headings).toEqual(["Chapter"]);
   });
 
   it("keeps Chat ungrouped and first", () => {
@@ -133,7 +134,7 @@ describe("AppNav", () => {
     // clickable, until the permission read answered and took them back.
     {
       const { unmount } = renderNav({ permissions: undefined });
-      for (const gated of ["Directory", "Backwork"]) {
+      for (const gated of ["Directory"]) {
         expect(
           screen.queryByRole("link", { name: gated }),
         ).not.toBeInTheDocument();
@@ -141,7 +142,7 @@ describe("AppNav", () => {
       // Rows with no permission rule render at once.
       expect(screen.getByRole("link", { name: "Events" })).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: "Documents" }),
+        screen.getByRole("link", { name: "Resources" }),
       ).toBeInTheDocument();
       unmount();
     }
@@ -181,11 +182,11 @@ describe("AppNav", () => {
         (el) => el.textContent,
       );
       expect(rows).not.toContain("Study hours");
-      expect(rows).not.toContain("Documents");
       // Service hours shares Study's module, and members log their own.
       expect(rows).toContain("Service hours");
-      // Members upload backwork themselves, so it has no setup gate.
-      expect(rows).toContain("Backwork");
+      // Resources holds minutes and Backwork too, so an empty library
+      // doesn't hide it (#5949).
+      expect(rows).toContain("Resources");
     } finally {
       hidden.features = new Set();
     }
@@ -197,13 +198,51 @@ describe("AppNav", () => {
     expect(hidden.calls.at(-1)).toEqual([["members:view"], gate]);
   });
 
-  it("drops Backwork for a viewer the library refuses", () => {
-    renderNav({ permissions: ["members:view", "alumni:post"] });
+  // #5949, #2956: Meetings, Documents and Backwork are one Resources row.
+  it("draws one Resources row in place of Meetings, Documents and Backwork", () => {
+    renderNav({ permissions: ["members:view", "backwork:upload"] });
+    const rows = Array.from(document.querySelectorAll("nav a")).map(
+      (el) => el.textContent,
+    );
+    expect(rows).toContain("Resources");
+    for (const gone of ["Meetings", "Documents", "Backwork"]) {
+      expect(rows).not.toContain(gone);
+    }
+    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+      "href",
+      "/documents",
+    );
+  });
+
+  it("keeps Resources while any of its modules is on, and drops it when all three are off", () => {
+    const { unmount } = renderNav({
+      isModuleEnabled: (key) => key === "backwork",
+    });
+    expect(screen.getByRole("link", { name: "Resources" })).toBeInTheDocument();
+    unmount();
+    renderNav({
+      isModuleEnabled: (key) =>
+        !["documents", "meetings", "backwork"].includes(key),
+    });
     expect(
-      screen.queryByRole("link", { name: "Backwork" }),
+      screen.queryByRole("link", { name: "Resources" }),
     ).not.toBeInTheDocument();
-    renderNav({ permissions: ["members:view", "backwork:admin"] });
-    expect(screen.getByRole("link", { name: "Backwork" })).toBeInTheDocument();
+  });
+
+  it("lights Resources on Backwork and on a meeting's minutes, the pages under it", () => {
+    for (const pathname of ["/backwork", "/backwork/upload", "/meetings/abc"]) {
+      const { unmount } = renderNav({ pathname });
+      expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+      unmount();
+    }
+    renderNav({ pathname: "/documents" });
+    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("marks the active route", () => {
