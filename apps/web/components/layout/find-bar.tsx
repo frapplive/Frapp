@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Search } from "lucide-react";
 import { useChannels } from "@repo/hooks";
 import { cn } from "@/lib/utils";
@@ -8,12 +17,18 @@ import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { FindDialog, FIND_PLACEHOLDER } from "@/components/layout/find-dialog";
 
 /**
- * The top bar's Find entry: a field-shaped button that opens the centered Find
- * dialog (`find-dialog.tsx`), plus the Cmd/Ctrl+F binding that opens it too.
+ * Find: the centered Find dialog (`find-dialog.tsx`), the Cmd/Ctrl+F binding
+ * that opens it, and the two visible ways in. From `lg` up that is the
+ * sidebar's Search row (`sidebar.tsx`, #5946); below it, where the sidebar is
+ * a drawer, the top bar keeps the field-shaped button (`FindField`).
  *
- * **It looks like a field because it is the visible way in.** The shortcut is
- * not advertised (Paul removed the keycap, 2026-11-05), so a member who never
- * presses it still sees where search lives. Clicking it, pressing Enter or
+ * `FindProvider` wraps the shell and owns the dialog, so there is one dialog
+ * and one query whichever entry opened it, and the shortcut works on every
+ * route. `useFind` is how an entry opens it.
+ *
+ * **Each entry is visible because the shortcut is not advertised** (Paul
+ * removed the keycap, 2026-11-05), so a member who never presses it still
+ * sees where search lives. On the field, clicking it, pressing Enter or
  * Space on it, or simply typing while it has focus (as one would into the
  * field it looks like) lands in the dialog's own input.
  *
@@ -25,17 +40,36 @@ import { FindDialog, FIND_PLACEHOLDER } from "@/components/layout/find-dialog";
  *
  * **It only searches** (#5476, Paul, 2026-11-18). From #4904 (2026-11-13) it
  * read "Search or ask Frapp" for a member with Ask and its dialog asked too;
- * Ask now has its own bar (`ask/ask-bar.tsx`).
+ * Frapp Intelligence has its own page, which New opens.
  *
  * The query lives here, not in the dialog, so closing the dialog (Escape or a
  * click outside) and reopening it keeps what was typed.
  */
-export function FindBar({ className }: { className?: string }) {
+type FindEntry = {
+  open: boolean;
+  query: string;
+  /**
+   * Opens Find. `returnTo` takes focus back when it closes (the control that
+   * opened it); `typed` is a key pressed on the field, which starts or
+   * extends the query instead of selecting it.
+   */
+  openFind: (options?: { returnTo?: HTMLElement | null; typed?: string }) => void;
+};
+
+const FindContext = createContext<FindEntry | null>(null);
+
+/** The way into Find, from inside the dashboard shell. */
+export function useFind(): FindEntry {
+  const entry = useContext(FindContext);
+  if (!entry) throw new Error("useFind must be used inside FindProvider");
+  return entry;
+}
+
+export function FindProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   // False only when a keystroke on the field opened the dialog; see FindDialog.
   const [selectOnOpen, setSelectOnOpen] = useState(true);
-  const placeholder = FIND_PLACEHOLDER;
   /*
    * Read here, while the dialog is closed, on purpose. It keeps `["channels"]`
    * warm on every dashboard route, so the dialog's Channels group is instant
@@ -44,13 +78,12 @@ export function FindBar({ className }: { className?: string }) {
    */
   useChannels();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   /*
    * Where focus goes back to on close. Radix returns focus to a
    * `Dialog.Trigger`, and this dialog has none (the shortcut opens it from
    * anywhere), so without this focus lands on <body> and the next Tab starts
    * from the top of the document. A shortcut press returns to wherever the
-   * member was; a click returns to the field.
+   * member was; a click returns to the control that was clicked.
    */
   const returnFocusRef = useRef<HTMLElement | null>(null);
   // Read inside the window listener, which is bound once.
@@ -106,55 +139,30 @@ export function FindBar({ className }: { className?: string }) {
   const restoreFocus = useCallback(() => {
     const target = returnFocusRef.current;
     returnFocusRef.current = null;
-    (target?.isConnected ? target : triggerRef.current)?.focus();
+    if (target?.isConnected) target.focus();
   }, []);
+  const openFind = useCallback<FindEntry["openFind"]>((options) => {
+    returnFocusRef.current = options?.returnTo ?? null;
+    const typed = options?.typed;
+    if (typed === undefined) {
+      setSelectOnOpen(true);
+    } else {
+      // The first key replaces a kept query, like typing over the selected
+      // text the dialog would show; a fast second one, landing before the
+      // dialog's input takes focus, appends to it.
+      setQuery((previous) => (openRef.current ? previous + typed : typed));
+      setSelectOnOpen(false);
+    }
+    setOpen(true);
+  }, []);
+  const entry = useMemo<FindEntry>(
+    () => ({ open, query, openFind }),
+    [open, query, openFind],
+  );
 
   return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={placeholder}
-        onClick={() => {
-          returnFocusRef.current = null;
-          setSelectOnOpen(true);
-          setOpen(true);
-        }}
-        onKeyDown={(event) => {
-          /*
-           * A printable key starts a search, as it would in a real field: the
-           * dialog opens with that character as the query. Space is left alone
-           * so it still presses the button, and a chord (Cmd+C) is not typing.
-           */
-          if (event.key.length !== 1 || event.key === " ") return;
-          if (event.metaKey || event.ctrlKey || event.altKey) return;
-          event.preventDefault();
-          returnFocusRef.current = null;
-          // The first key replaces a kept query, like typing over the selected
-          // text the dialog would show; a fast second one, landing before the
-          // dialog's input takes focus, appends to it.
-          const key = event.key;
-          setQuery((previous) => (open ? previous + key : key));
-          setSelectOnOpen(false);
-          setOpen(true);
-        }}
-        className={cn(
-          "flex h-[34px] items-center gap-2.5 rounded-[10px] border border-control-edge bg-surface-1 px-3 text-left text-sm text-muted-foreground transition hover:text-foreground",
-          FOCUS_RING_SHELL,
-          className,
-        )}
-      >
-        <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">
-          {query.trim() ? (
-            <span className="text-foreground">{query}</span>
-          ) : (
-            placeholder
-          )}
-        </span>
-      </button>
+    <FindContext.Provider value={entry}>
+      {children}
       <FindDialog
         open={open}
         onOpenChange={onOpenChange}
@@ -164,6 +172,44 @@ export function FindBar({ className }: { className?: string }) {
         onCloseFocus={restoreFocus}
         selectOnOpen={selectOnOpen}
       />
-    </>
+    </FindContext.Provider>
+  );
+}
+
+/**
+ * The top bar's field-shaped Find button, below `lg`. It looks like a field
+ * because it is the visible way in there.
+ */
+export function FindField({ className }: { className?: string }) {
+  const { open, query, openFind } = useFind();
+  const placeholder = FIND_PLACEHOLDER;
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-label={placeholder}
+      onClick={(event) => openFind({ returnTo: event.currentTarget })}
+      onKeyDown={(event) => {
+        if (event.key.length !== 1 || event.key === " ") return;
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        event.preventDefault();
+        openFind({ returnTo: event.currentTarget, typed: event.key });
+      }}
+      className={cn(
+        "flex h-[34px] items-center gap-2.5 rounded-[10px] border border-control-edge bg-surface-1 px-3 text-left text-sm text-muted-foreground transition hover:text-foreground",
+        FOCUS_RING_SHELL,
+        className,
+      )}
+    >
+      <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate">
+        {query.trim() ? (
+          <span className="text-foreground">{query}</span>
+        ) : (
+          placeholder
+        )}
+      </span>
+    </button>
   );
 }

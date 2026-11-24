@@ -35,7 +35,14 @@ import {
  *
  * ## Where it sits
  *
- * `top-bar`: in the dashboard's top bar, before the notifications bell. It
+ * `sidebar`: in the sidebar's head from `lg` up, before the notifications
+ * bell, where the top bar's was until the top bar went (#5946). The head has
+ * the chapter's name to fit, so it is always the dot alone, in a slot the
+ * head keeps whether or not there is anything to say; the sentence is a
+ * click away.
+ *
+ * `top-bar`: in the dashboard's top bar below `lg`, before the notifications
+ * bell. It
  * floated below the bar until 2026-11-06 (#2244), which kept it out of the
  * layout but put it over the first row of every page, chat's channel header
  * included. In the bar it covers nothing. It draws its label only from `xl`,
@@ -58,7 +65,7 @@ import {
 export function ConnectionPill({
   placement = "floating",
 }: {
-  placement?: "floating" | "top-bar";
+  placement?: "floating" | "top-bar" | "sidebar";
 }) {
   const { state } = useNetwork();
   const transport = useOpenChatTransport();
@@ -87,6 +94,7 @@ export function ConnectionPill({
               FOCUS_RING_ALWAYS,
               placement === "top-bar" &&
                 "max-xl:w-7 max-xl:justify-center max-xl:px-0",
+              placement === "sidebar" && "w-7 justify-center px-0",
             )}
           >
             <span
@@ -101,6 +109,7 @@ export function ConnectionPill({
               className={cn(
                 "truncate font-medium",
                 placement === "top-bar" && "max-xl:hidden",
+                placement === "sidebar" && "hidden",
               )}
             >
               {indicator.label}
@@ -108,7 +117,10 @@ export function ConnectionPill({
           </button>
         </PopoverTrigger>
         {/* The sentence, a tap away on a touch screen with no hover title. */}
-        <PopoverContent align="end" className="w-64">
+        <PopoverContent
+          align={placement === "sidebar" ? "start" : "end"}
+          className="w-64"
+        >
           <p className="text-caption text-foreground">
             {indicator.description}
           </p>
@@ -117,7 +129,7 @@ export function ConnectionPill({
     </>
   );
 
-  if (placement === "top-bar") return pill;
+  if (placement !== "floating") return pill;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-2 z-40 flex justify-center px-4 [html:has([data-dashboard-shell])_&]:hidden">

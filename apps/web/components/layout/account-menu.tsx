@@ -5,7 +5,9 @@ import { useState, type ReactNode } from "react";
 import {
   Check,
   ChevronsUpDown,
+  Landmark,
   LogOut,
+  Plus,
   Settings,
   Smile,
   Sparkles,
@@ -50,6 +52,10 @@ import { cn, initials } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { PERSONAL_SETTINGS_PATH } from "@/components/personal-settings/personal-settings-sections";
+import type { ChapterSwitcher } from "@/components/layout/chapter-switcher";
+import { hasSettingsDestination } from "@/components/settings/settings-access";
+import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 
 type CurrentUser = {
   display_name?: string | null;
@@ -58,35 +64,46 @@ type CurrentUser = {
 };
 
 /**
- * The account menu: identity, and only identity.
+ * The member, at the foot of the sidebar, and the one menu they open (#5946,
+ * Paul 2026-11-24: "copy the entire Claude sidebar system where the user
+ * lives at the bottom and we have a menu with more settings for the user and
+ * organization").
  *
- * It hangs off the top-bar avatar on desktop (`topbar`) and off a full-width
- * row at the bottom of the mobile drawer (`sheet`). The greenfield shell moved
- * it out of the nav entirely — board `1t` records "sidebar account menu →
- * top-bar avatar" — which is what freed the bottom of the nav for the collapse
- * toggle and nothing else.
+ * **The row** is the member's avatar with their presence dot, their name,
+ * and under it their custom status when they have set one, otherwise their
+ * presence in words ("Online", "Do Not Disturb"), the way Discord's user
+ * panel reads. In the rail it is the avatar alone.
  *
- * Contents are exactly Status and the custom status line, a divider, Profile,
- * Settings, What's new, a divider, Sign out (`1i`; Settings replaced `1i`'s
- * "Notification settings" row on 2026-11-10, #3856: it opens the member's own
- * settings page, whose first section is notifications, the way Discord's User
- * Settings and Slack's Preferences open from the avatar; plus What's
- * new, 2026-11-07: the changelog members read, the same list as mobile
- * Settings → What's new, with a dot while an entry is unread, #3943; plus Status, 2026-11-09, #3845: the member's own
- * Online / Idle / Do Not Disturb / Invisible and custom line, first because
- * it is the row people reach for before practice, as on Discord and Slack). **Chapter switching is deliberately not here**: it lives in the nav's
- * chapter header row, because identity and chapter are separate menus. Putting
- * a chapter action in the account menu is the merge that board note warns
- * against.
+ * **The menu is one menu for the member and the chapter**, in three groups:
+ *
+ * 1. Theirs: Status and the custom status line (#3845, first because it is
+ *    the row people reach for before practice, as on Discord and Slack),
+ *    Profile, and Settings (the member's own page, #3856).
+ * 2. The chapter's: Chapter settings, whenever Settings holds something for
+ *    this viewer (`hasSettingsDestination`; without the check a member
+ *    followed the link to a page with nothing they could use, #2946), Join
+ *    another chapter, and the member's other chapters to switch to.
+ * 3. What's new (the changelog, with a dot while an entry is unread, #3943)
+ *    and Sign out.
+ *
+ * Until #5946 identity and chapter were two menus: this one on the top-bar
+ * avatar, and the chapter's on the chapter's name atop the nav
+ * (`chapter-nav-header.tsx`, deleted; board `1i` asked for the split). Paul's
+ * note of 2026-11-19 made that chapter menu the one door into Chapter
+ * settings; it is still one door, here.
  *
  * (The theme control that once lived here was deleted with next-themes in the
  * #920 shell slice — Signet is dark-only.)
  */
 export function AccountMenu({
   variant,
+  switcher,
   onNavigate,
 }: {
-  variant: "topbar" | "sheet";
+  /** `foot`: the full row, in the sidebar and the drawer. `rail`: the avatar. */
+  variant: "foot" | "rail";
+  /** The member's chapters, from the sidebar's one read (`chapter-switcher.tsx`). */
+  switcher: ChapterSwitcher;
   /**
    * Closes the mobile drawer behind a navigation, exactly as `ProtectedNavItem`
    * does. Without it the drawer and its overlay stay up over the page the
@@ -110,6 +127,14 @@ export function AccountMenu({
   const email = user.email ?? null;
 
   const { confirmDrop, confirmDropDialog } = useConfirmDropBulkUploads();
+  // The one door into Chapter settings (Paul, 2026-11-19), so it asks: is
+  // there anything there for this viewer?
+  const permissions = useNavPermissions();
+  const isModuleEnabled = useChapterModuleGate();
+  const showChapterSettings = hasSettingsDestination(
+    permissions,
+    isModuleEnabled,
+  );
 
   // Your own dot, on the avatar that opens this menu. Read from presence, so
   // it is what the chapter sees (the Idle clock included), except that
@@ -124,6 +149,9 @@ export function AccountMenu({
   const accountLabel = ownDot
     ? `Account menu for ${name}, ${presenceLabel(ownDot)}`
     : `Account menu for ${name}`;
+  // Under the name: what the member wrote, else their presence in words.
+  const statusLine =
+    own?.line ?? (ownDot ? presenceLabel(ownDot) : null);
 
   async function handleSignOut() {
     if (!(await confirmDrop("sign-out"))) return;
@@ -139,28 +167,27 @@ export function AccountMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {variant === "topbar" ? (
+        {variant === "rail" ? (
           /*
-           * In the top bar the control is the avatar alone: a 30px circle, no
-           * name, no email, no chevron. The name is still the accessible name
-           * via `aria-label`, so nothing is lost to a screen reader — only the
-           * three lines of chrome the board deletes.
+           * In the rail the control is the avatar alone. The name is still
+           * the accessible name via `aria-label`.
            */
           <button
             type="button"
             aria-label={accountLabel}
+            title={name}
             className={cn(
-              "ml-1 shrink-0 rounded-full transition",
+              "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] transition hover:bg-card",
               FOCUS_RING_SHELL,
             )}
           >
             <span className="relative block">
-              <Avatar className="h-[30px] w-[30px] border border-border bg-popover">
+              <Avatar className="h-[26px] w-[26px] border border-border bg-popover">
                 {user.avatar_url ? (
                   <AvatarImage src={user.avatar_url} alt="" />
                 ) : null}
                 <AvatarFallback
-                  className="text-[11px] font-semibold"
+                  className="text-[10px] font-semibold"
                   tint={ownTint}
                 >
                   {initials(name)}
@@ -173,30 +200,33 @@ export function AccountMenu({
           <button
             type="button"
             aria-label={accountLabel}
+            data-member-row=""
             className={cn(
-              "flex w-full items-center gap-2 rounded-[10px] px-2 py-2 text-left transition",
-              "hover:bg-card",
+              // 44px: two lines beside a 32px avatar, and the touch floor in
+              // the drawer.
+              "flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left transition",
+              "hover:bg-card data-[state=open]:bg-card",
               FOCUS_RING_SHELL,
             )}
           >
             <span className="relative shrink-0">
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-8 w-8 border border-border bg-popover">
                 {user.avatar_url ? (
                   <AvatarImage src={user.avatar_url} alt="" />
                 ) : null}
-                <AvatarFallback className="text-xs" tint={ownTint}>
+                <AvatarFallback className="text-xs font-semibold" tint={ownTint}>
                   {initials(name)}
                 </AvatarFallback>
               </Avatar>
               <AvatarPresenceDot status={ownDot} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-foreground">
+              <span className="block truncate text-sm font-medium leading-5 text-foreground">
                 {name}
               </span>
-              {email ? (
-                <span className="block truncate text-caption text-muted">
-                  {email}
+              {statusLine ? (
+                <span className="block truncate text-caption leading-4 text-muted-foreground">
+                  {statusLine}
                 </span>
               ) : null}
             </span>
@@ -208,9 +238,11 @@ export function AccountMenu({
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={variant === "topbar" ? "end" : "start"}
-        side={variant === "topbar" ? "bottom" : "top"}
-        className="w-[260px]"
+        align="start"
+        side={variant === "rail" ? "right" : "top"}
+        // The sidebar's width inside its 8px gutters, so the menu sits over
+        // the column it belongs to and nothing else.
+        className="w-[248px]"
       >
         <DropdownMenuLabel className="font-normal">
           <span className="block truncate text-sm font-medium">{name}</span>
@@ -222,7 +254,6 @@ export function AccountMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <StatusRows own={own} onEditLine={() => setEditingLine(true)} />
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/profile" onClick={onNavigate}>
             <User className="h-4 w-4" aria-hidden="true" />
@@ -230,15 +261,52 @@ export function AccountMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          {/*
-           * The member's own settings, not the chapter's: the chapter menu's
-           * "Chapter settings" is the chapter's (`chapter-nav-header.tsx`).
-           */}
+          {/* The member's own settings; the chapter's are in the group below. */}
           <Link href={PERSONAL_SETTINGS_PATH} onClick={onNavigate}>
             <Settings className="h-4 w-4" aria-hidden="true" />
             <span>Settings</span>
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {showChapterSettings ? (
+          <DropdownMenuItem asChild>
+            <Link href="/settings" onClick={onNavigate}>
+              <Landmark className="h-4 w-4" aria-hidden="true" />
+              <span>Chapter settings</span>
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem asChild>
+          <Link href="/join" onClick={onNavigate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Join another chapter</span>
+          </Link>
+        </DropdownMenuItem>
+        {switcher.otherChapters.length > 0 ? (
+          <>
+            <DropdownMenuLabel className="pb-1 pt-2 text-xs font-normal text-muted-foreground">
+              Switch chapter
+            </DropdownMenuLabel>
+            {switcher.otherChapters.map((membership) => (
+              <DropdownMenuItem
+                key={membership.chapter_id}
+                onSelect={() => switcher.select(membership.chapter_id)}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">
+                    {membership.chapter?.name ?? "Untitled chapter"}
+                  </span>
+                  {membership.chapter?.university ? (
+                    <span className="block truncate text-caption text-muted-foreground">
+                      {membership.chapter.university}
+                    </span>
+                  ) : null}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
+        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/whats-new" onClick={onNavigate}>
             <Sparkles className="h-4 w-4" aria-hidden="true" />
@@ -254,7 +322,6 @@ export function AccountMenu({
             ) : null}
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={isSigningOut}
           onSelect={(event) => {

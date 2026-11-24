@@ -3,7 +3,6 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signetDarkTokens } from "@repo/theme/signet";
-import { useNotifications } from "@repo/hooks";
 import { useNavPermissions } from "@/lib/hooks/use-nav-permissions";
 import {
   Sheet,
@@ -13,24 +12,23 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { SKIP_LINK_CLASSES } from "@/components/ui/focus";
-import { AppNav } from "@/components/layout/app-nav";
-import { NavColumn } from "@/components/layout/nav-column";
+import { Sidebar } from "@/components/layout/sidebar";
+import { ChannelListSlotProvider } from "@/components/layout/channel-list-slot";
+import { FindProvider } from "@/components/layout/find-bar";
 import {
   ESCAPE_LEAVES_ATTRIBUTE,
-  isAskRoute,
   isChatRoute,
   isFullWidthToolRoute,
+  isMessagesRoute,
+  MESSAGES_ROUTE,
   PANE_FLOOR,
   SPLIT_QUERY,
   useMediaQueryState,
 } from "@/components/layout/shell-layout";
 import {
-  parseChatView,
   persistChatOpen,
-  persistChatView,
   persistChatWidth,
   DEFAULT_CHAT_WIDTH,
-  type ChatView,
 } from "@/components/layout/shell-prefs";
 import {
   SplitDivider,
@@ -38,18 +36,12 @@ import {
 } from "@/components/layout/split-divider";
 import { ToolPageHeader } from "@/components/layout/tool-page-header";
 import { PageHeaderSlotProvider } from "@/components/layout/page-actions";
-import { ChapterHome } from "@/components/layout/chapter-home";
 import { ChatPanelBoundary } from "@/components/layout/chat-panel-boundary";
 import { ChatPage } from "@/components/chat/chat-page";
 import { ChatRouteSkeleton } from "@/components/chat/chat-route-skeleton";
-import {
-  CHAT_CHANNEL_PARAM,
-  CHAT_MESSAGE_PARAM,
-  CHAT_VIEW_PARAM,
-} from "@/lib/chat/chat-links";
+import type { ChatView } from "@/lib/chat/chat-links";
 import { TopBar } from "@/components/layout/top-bar";
-import { NotificationsPopover } from "@/components/layout/notifications-popover";
-import { AccountMenu } from "@/components/layout/account-menu";
+import { useNotificationsLive } from "@/components/layout/notifications-popover";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
 import { resolvePageTitle } from "@/components/layout/page-title";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
@@ -61,113 +53,103 @@ import { TermsPromptGate } from "@/components/auth/terms-prompt";
 import { WelcomeGate } from "@/components/onboarding/welcome-gate";
 import { WhatsNewHost } from "@/components/whats-new/whats-new-host";
 import { GetTheAppCard } from "@/components/layout/get-the-app-card";
-import { AskBar } from "@/components/ask/ask-bar";
-import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
-import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
 import { cn } from "@/lib/utils";
 
 /**
- * The greenfield dashboard shell: flush-left nav, 48px top bar, content.
+ * The dashboard shell: one sidebar, then the page and the open conversation
+ * (#5946, Paul 2026-11-24; epic #5943).
  *
- * Three flush columns rather than a centered page. The previous shell wrapped
+ * Flush columns rather than a centered page. An earlier shell wrapped
  * everything in `mx-auto max-w-[1400px]`, which on a wide display left the nav
- * floating in from the left edge with background either side of it. The board
- * seats the nav against the viewport edge (`1b`: "three flush columns, 100vh,
- * independent scroll") and lets content use the width it has.
+ * floating in from the left edge with background either side of it. The
+ * board seats the sidebar against the viewport edge (`1b`: "flush columns,
+ * 100vh, independent scroll") and lets content use the width it has.
+ *
+ * **There is no top bar from `lg` up.** It held the page title, the Find
+ * field, the connection pill, the bell and the account avatar across 48px of
+ * every route. Each has a home in the sidebar now: Search is a row, the pill
+ * and the bell sit in the sidebar's head, the member is at its foot
+ * (`sidebar.tsx`), and a page's title is in the page's own header
+ * (`tool-page-header.tsx`). The conversation starts at the top of the window.
+ * Below `lg` the sidebar is a drawer, so a slim bar stays there to open it
+ * and to hold Find, the pill and the bell (`top-bar.tsx`).
+ *
+ * **Chat is a panel of the shell, not a page** (#3779, Paul 2026-11-10), and
+ * its channel list is in the sidebar (#5946). The shell mounts one chat from
+ * `lg` up on every route, because the sidebar's list is that chat's own list
+ * (`channel-list-slot.tsx`): on `/chat` the conversation has the row, beside
+ * a page it docks on the right with a divider between them (#5575, Paul
+ * 2026-11-19), and where it has no room (Chapter settings, or closed by its
+ * X) it stays mounted out of sight so the list keeps working. `/messages` is
+ * the Messages page: the same panel showing the member's conversations
+ * listed beside the open one. `shell-layout.ts` owns the state model: the
+ * open page is the URL, chat open or closed beside a page and the divider
+ * are cookies.
  *
  * What this shell deliberately no longer does:
  *
- * - **No ⌘K palette and no keydown listener for it.** Find in the top bar is
- *   the replacement: a visible field that opens a centered dialog, as does
- *   Cmd/Ctrl+F, both owned by `find-bar.tsx`. The `cmdk` dependency stays: `components/ui/command.tsx` still
- *   serves the chat slash palette and the chapter wizard.
- * - **The page title is the top bar's**, derived from the route by
- *   `page-title.ts` (2026-11-05). It reads the nav rows' own labels rather
- *   than keeping a table of its own, and a route it does not know gets no
- *   title rather than a made-up one: the "a route with no nav row is called
- *   Dashboard" defect stays retired.
- * - **No account menu in the nav, no subscription card, no BETA row.** Identity
- *   moved to the top-bar avatar; the other two are deleted outright (`1t`).
+ * - **No ⌘K palette and no keydown listener for it.** Find is the
+ *   replacement: the sidebar's Search row opens a centered dialog, as does
+ *   Cmd/Ctrl+F, both owned by `find-bar.tsx`. The `cmdk` dependency stays:
+ *   `components/ui/command.tsx` still serves the chat slash palette and the
+ *   chapter wizard.
+ * - **No home view.** With nothing open the old shell drew the chapter's
+ *   mark on a glow (`chapter-home.tsx`, deleted). An empty screen is now the
+ *   place to start something: the New row opens Frapp Intelligence's page,
+ *   and `/chat` is always the open conversation.
+ * - **No floating assistant bar.** New is the one way in (`ask-bar.tsx`,
+ *   deleted).
  *
- * **Chat is a panel of the shell, not a page** (#3779, Paul 2026-11-10). The
- * nav column always stays; its Chat row opens and closes the chat panel, and
- * a tool row opens its page. Beside chat the tool page takes the main column
- * and chat is a side panel on the right, one pane at a time, with a divider
- * between them (#5575, Paul 2026-11-19). Chat and one tool can be open; with neither, the home view
- * (`chapter-home.tsx`). `shell-layout.ts` owns the state model: the open tool
- * is the URL, chat open or closed and the divider are cookies.
- *
- * The responsive contract: below `lg` the nav lives in a drawer and the rail
- * never appears; the drawer renders the same `AppNav`, so navigation is never
- * duplicated into a second list that can drift. Below the side-by-side width
- * (`SPLIT_MIN_WIDTH`) the shell is a single page: `/chat` is chat, a tool
- * route is its tool, and the Chat row is a link.
+ * The responsive contract: two states, one switch at `lg`. Below it the
+ * sidebar lives in a drawer and the shell is a single page: `/chat` is chat
+ * with its own list pane, a tool route is its tool. From `lg` up it is the
+ * sidebar, the page and the conversation. The drawer renders the same
+ * `Sidebar`, so navigation is never duplicated into a second list that can
+ * drift.
  */
-
-/**
- * The drawer's nav, with the rows that have something new lit (#3824). Its
- * own component so the unread reads redraw the drawer, not the shell; the
- * sheet mounts it only while open.
- */
-function DrawerNav(
-  props: Pick<
-    React.ComponentProps<typeof AppNav>,
-    "permissions" | "isModuleEnabled" | "pathname" | "onNavigate" | "chatView"
-  >,
-) {
-  const { highlighted, counts } = useNavHighlights();
-  return (
-    <AppNav
-      variant="drawer"
-      collapsed={false}
-      highlighted={highlighted}
-      counts={counts}
-      {...props}
-    />
-  );
-}
 
 type DashboardShellProps = {
   children: React.ReactNode;
   /**
    * Collapse preference, read from a cookie by the server layout so the first
    * paint is already correct. Reading it on the client instead would render
-   * 240px and then snap to 56px after hydration, on every route.
+   * 264px and then snap to 56px after hydration, on every route.
    */
   defaultNavCollapsed?: boolean;
-  /** Chat open or closed, from its cookie (`shell-prefs.ts`). */
+  /** Chat open or closed beside a page, from its cookie (`shell-prefs.ts`). */
   defaultChatOpen?: boolean;
-  /** Which list chat shows, channels or direct messages, from its cookie. */
-  defaultChatView?: ChatView;
-  /** Chat's side-panel width beside a tool, from its cookie (#5575). */
+  /** The docked conversation's width beside a page, from its cookie (#5575). */
   defaultChatWidth?: number;
   /** Chat's member column preference (`lib/chat/members-panel.ts`). */
   defaultMembersHidden?: boolean;
 };
 
-/** `/chat`'s title while the panel shows direct messages (#3774). */
-const DIRECT_MESSAGES_TITLE = "Direct messages";
-
 /** Chat's panel enters and leaves with the standard Signet tokens. */
 const PANEL_ENTER_MS = signetDarkTokens.motion.duration.context;
 const PANEL_EXIT_MS = signetDarkTokens.motion.duration.standard;
 
-export function DashboardShell({
+export function DashboardShell(props: DashboardShellProps) {
+  return (
+    // Find's dialog and the channel list's slot are the shell's, so the
+    // sidebar, the drawer and the top bar all reach the same ones.
+    <FindProvider>
+      <ChannelListSlotProvider>
+        <Shell {...props} />
+      </ChannelListSlotProvider>
+    </FindProvider>
+  );
+}
+
+function Shell({
   children,
   defaultNavCollapsed = false,
   defaultChatOpen = true,
-  defaultChatView = "channels",
   defaultChatWidth = DEFAULT_CHAT_WIDTH,
   defaultMembersHidden = false,
 }: DashboardShellProps) {
-  // Frapp Intelligence's bar (#5476) floats at the bottom of the page below `lg`,
-  // where there is no sidebar to hold it (#5560), so a page there reserves
-  // room under its last row. Not on the Ask page itself, whose own field is
-  // there.
   const pathname = usePathname();
-  const askBar = useAskEntry() !== null && !isAskRoute(pathname);
   const searchParams = useSearchParams();
   const router = useRouter();
   // Chapter accent, shell-wide: maps the persisted engine roles onto the
@@ -175,93 +157,41 @@ export function DashboardShell({
   // the nav's active-item tint does not depend on which route is open.
   useChapterTheme();
   // Chat's inbox, joined on every page, so a message arriving while the member
-  // is on Events lights the nav's Chat row within seconds (#3745).
+  // is on Calendar lights its channel in the sidebar within seconds (#3745).
   useChatRealtimeBinding();
+  // What notifications need on every page, whichever bell is on screen.
+  useNotificationsLive();
 
   const [navCollapsed, setNavCollapsed] = useState(defaultNavCollapsed);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Side by side: `null` until the client knows its width, so a hydration
-  // render never unmounts chat beside a tool page.
-  const split = useMediaQueryState(SPLIT_QUERY);
+  // The sidebar's width (`lg`), where the page and the conversation also sit
+  // side by side: `null` until the client knows its width, so a hydration
+  // render never mounts a chat a phone cannot show.
+  const desktop = useMediaQueryState(SPLIT_QUERY);
   const onChatRoute = isChatRoute(pathname);
+  const onMessages = isMessagesRoute(pathname);
   const hasTool = !onChatRoute;
+  // The Messages page lists the member's conversations; everywhere else the
+  // panel is the open conversation alone.
+  const chatView: ChatView = onMessages ? "direct" : "channels";
 
-  // A chat deep link (`?channel=`, `?message=`) opens chat even when the
-  // cookie says closed: the member followed a link to a message, from an
-  // email, a push or sign-in, and the home view would swallow it.
-  const [chatOpen, setChatOpen] = useState(
-    () =>
-      defaultChatOpen ||
-      (onChatRoute &&
-        Boolean(
-          searchParams?.get(CHAT_CHANNEL_PARAM) ||
-          searchParams?.get(CHAT_MESSAGE_PARAM),
-        )),
-  );
-  /*
-    Which list the panel shows (#3774): the chapter's channels, or the
-    member's direct messages. The Chat and Direct messages rows switch it, a
-    chat URL's `?view=` sets it, and the panel itself moves it when the
-    channel it opens is the other kind (a notification for a DM, say).
-  */
-  const urlView = onChatRoute ? searchParams?.get(CHAT_VIEW_PARAM) : null;
-  const [chatView, setChatView] = useState<ChatView>(() =>
-    urlView ? parseChatView(urlView) : defaultChatView,
-  );
+  // Beside a page only: on `/chat` and `/messages` the conversation is the
+  // page, whatever this says.
+  const [chatOpen, setChatOpen] = useState(defaultChatOpen);
   const [chatWidth, setChatWidth] = useState(defaultChatWidth);
   const splitRowRef = useRef<HTMLElement>(null);
-
-  /*
-    Arriving at a chat URL opens chat: a `/chat` link, a notification, a Find
-    result, the directory's Message action. The arrivals that must not are
-    the shell's own: closing a tool (`closeTool`), which goes to `/chat`
-    meaning "no tool" and leaves chat as it was, and dropping a stale `?view=`
-    (`dropUrlView`). Adjusted during render, keyed on the URL, so there is no
-    frame of the home view first.
-
-    The list follows the URL too (#3774). A `?view=` names it. A bare `/chat`
-    is Chat's own link, so arriving there (Back from `/chat?view=direct`, say)
-    shows channels. A link to a conversation names no list: the panel follows
-    the conversation's kind.
-  */
-  const url = `${pathname}?${searchParams?.toString() ?? ""}`;
-  const [seenUrl, setSeenUrl] = useState(url);
-  // Only an open the member asked for plays the entrance; a page load or a
-  // link that opens chat paints it in place. Cleared when the entrance ends,
-  // so a later remount (the window narrowing and widening) does not replay it.
+  // Only an open the member asked for plays the entrance; a page load paints
+  // chat in place. Cleared when the entrance ends, so a later remount (the
+  // window narrowing and widening) does not replay it.
   const [animateOpen, setAnimateOpen] = useState(false);
-  const [shellNavigating, setShellNavigating] = useState(false);
-  if (seenUrl !== url) {
-    setSeenUrl(url);
-    if (shellNavigating) setShellNavigating(false);
-    else {
-      if (onChatRoute && !chatOpen) {
-        setChatOpen(true);
-        // A link paints chat in place; only the Chat row plays the entrance.
-        setAnimateOpen(false);
-      }
-      if (urlView) setChatView(parseChatView(urlView));
-      else if (
-        onChatRoute &&
-        !searchParams?.get(CHAT_CHANNEL_PARAM) &&
-        !searchParams?.get(CHAT_MESSAGE_PARAM)
-      ) {
-        setChatView("channels");
-      }
-    }
-  }
-  // The cookies follow the state, whichever way it changed.
+  // The cookie follows the state, whichever way it changed.
   useEffect(() => {
     persistChatOpen(chatOpen);
   }, [chatOpen]);
-  useEffect(() => {
-    persistChatView(chatView);
-  }, [chatView]);
 
   /*
-    Closing plays the exit before the panel unmounts. `leaving` is the panel
+    Closing plays the exit before the panel hides. `leaving` is the panel
     still on screen while it fades and slides out.
   */
   const [leaving, setLeaving] = useState(false);
@@ -271,76 +201,74 @@ export function DashboardShell({
     return () => window.clearTimeout(timer);
   }, [leaving]);
 
-  const toggleChat = useCallback(() => {
-    if (chatOpen) {
-      setLeaving(true);
-      setAnimateOpen(false);
-    } else setAnimateOpen(true);
-    setChatOpen(!chatOpen);
-  }, [chatOpen]);
+  const toolColumnRef = useRef<HTMLDivElement>(null);
+  // The tool page header's action slot (`page-actions.tsx`): a page's
+  // actions render there at every width.
+  const [headerActionSlot, setHeaderActionSlot] =
+    useState<HTMLDivElement | null>(null);
   /*
     The X in chat's channel header (#4223): closes chat and leaves the tool
     page, which fills the row. The X goes with the panel, so focus moves to
     the page rather than dropping to `<body>`, and Escape there still closes
     the page.
   */
-  const toolColumnRef = useRef<HTMLDivElement>(null);
-  // The tool page header's action slot (`page-actions.tsx`): a page's
-  // actions render there at every width.
-  const [headerActionSlot, setHeaderActionSlot] =
-    useState<HTMLDivElement | null>(null);
   const closeChatPanel = useCallback(() => {
     if (!chatOpen) return;
-    toggleChat();
+    setLeaving(true);
+    setAnimateOpen(false);
+    setChatOpen(false);
     toolColumnRef.current?.focus();
-  }, [chatOpen, toggleChat]);
+  }, [chatOpen]);
   const closeTool = useCallback(() => {
-    setShellNavigating(true);
     router.push("/chat");
   }, [router]);
 
-  /*
-    A `?view=` the list has since left: the address would name the other list,
-    so a reload put it back, and below the side-by-side width the row linking
-    to that address would be a link to the page already open, which does
-    nothing. Dropped in place, as the shell's own move.
-  */
-  const dropUrlView = useCallback(
-    (view: ChatView) => {
-      if (!urlView || parseChatView(urlView) === view) return;
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      params.delete(CHAT_VIEW_PARAM);
-      const query = params.toString();
-      setShellNavigating(true);
-      router.replace(query ? `${pathname}?${query}` : (pathname ?? "/chat"));
-    },
-    [urlView, searchParams, router, pathname],
-  );
-  /** The panel opened a conversation of the other kind (`ChatShell`). */
-  const followPanelView = useCallback(
-    (view: ChatView) => {
-      setChatView(view);
-      dropUrlView(view);
-    },
-    [dropUrlView],
-  );
+  // A full-width tool (Chapter settings) hides chat without closing it: the
+  // cookie stays as it was, so leaving the page brings chat back beside the
+  // next tool.
+  const fullWidthTool = hasTool && isFullWidthToolRoute(pathname);
 
   /*
-    The Chat and Direct messages rows, from the side-by-side width up
-    (#3774). One panel: the row for the list on screen closes it, the other
-    row switches it in place, and either opens it when it is closed.
+    The member picked a conversation from a list (`ChatShell`): a channel in
+    the sidebar, or a conversation on the Messages page. The panel selects it
+    itself; the shell's part is making sure it is on screen. A channel picked
+    from Messages leaves Messages for the conversation alone. Beside a page it
+    opens the docked panel if its X had closed it, and where the page leaves
+    it no room (Chapter settings, or a window too narrow to split) the pick
+    goes to `/chat`, because a pick that showed nothing would be a dead click.
   */
-  const selectChatView = useCallback(
-    (view: ChatView) => {
-      if (chatOpen && chatView === view) {
-        toggleChat();
+  const showPickedConversation = useCallback(
+    (kind: ChatView) => {
+      if (kind === "direct") return;
+      if (onMessages || (hasTool && (fullWidthTool || desktop !== true))) {
+        router.push("/chat");
         return;
       }
-      setChatView(view);
-      if (!chatOpen) toggleChat();
-      dropUrlView(view);
+      if (hasTool && !chatOpen) {
+        setAnimateOpen(true);
+        setChatOpen(true);
+      }
     },
-    [chatOpen, chatView, toggleChat, dropUrlView],
+    [onMessages, hasTool, fullWidthTool, desktop, chatOpen, router],
+  );
+  /*
+    The open conversation is the other kind from the page it is on: a link, a
+    notification, a Find result or a bookmark into a DM landed on `/chat`, or
+    one into a channel landed on Messages. The address follows the
+    conversation, keeping its target, so a DM is always read on Messages with
+    its list beside it. Replaced, not pushed: the link the member followed is
+    the one entry. Beside a page there is no list to disagree with, so
+    nothing moves.
+  */
+  const followConversationKind = useCallback(
+    (kind: ChatView) => {
+      if (hasTool) return;
+      if ((kind === "direct") === onMessages) return;
+      const query = searchParams?.toString() ?? "";
+      const base = kind === "direct" ? MESSAGES_ROUTE : "/chat";
+      router.replace(query ? `${base}?${query}` : base);
+    },
+    [hasTool, onMessages, searchParams, router],
   );
 
   /*
@@ -352,22 +280,22 @@ export function DashboardShell({
     (side: SplitSide) => {
       setCollapsing(null);
       if (side === "page") closeTool();
-      else if (chatOpen) toggleChat();
+      else closeChatPanel();
     },
-    [chatOpen, closeTool, toggleChat],
+    [closeTool, closeChatPanel],
   );
 
   /*
-    Escape inside the tool page closes it, from the side-by-side width up.
-    Not from a field, where Escape means "stop typing" and closing would throw
-    the draft away (unless the field says Escape is the page's: Ask's, while
-    empty), and not when something inside already used the key: a
-    Radix dialog, menu or popover handles Escape first and marks it handled.
+    Escape inside the tool page closes it, from `lg` up. Not from a field,
+    where Escape means "stop typing" and closing would throw the draft away
+    (unless the field says Escape is the page's: Frapp Intelligence's, while
+    empty), and not when something inside already used the key: a Radix
+    dialog, menu or popover handles Escape first and marks it handled.
   */
   const onToolKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (split !== true) return;
+      if (desktop !== true) return;
       const target = event.target as HTMLElement;
       if (
         target.closest(
@@ -380,19 +308,20 @@ export function DashboardShell({
       event.preventDefault();
       closeTool();
     },
-    [split, closeTool],
+    [desktop, closeTool],
   );
 
-  // A full-width tool (Chapter settings) hides chat without closing it: the
-  // cookie and the Chat row's state stay as they were, so leaving the page
-  // brings chat back beside the next tool.
-  const fullWidthTool = hasTool && isFullWidthToolRoute(pathname);
-  const chatShown = (chatOpen || leaving) && !fullWidthTool;
-  // Mounted: alone on `/chat` below the side-by-side width whatever the
-  // cookie says (the single page), and beside a tool only when open there.
-  const chatMounted = onChatRoute
-    ? chatShown || split !== true
-    : chatShown && split !== false;
+  // Docked beside the page: open (or still leaving), and the page leaves room.
+  const chatDocked = hasTool && (chatOpen || leaving) && !fullWidthTool;
+  // On screen at all: the page itself on a chat route, else docked from `lg`.
+  const conversationShown = onChatRoute || (chatDocked && desktop === true);
+  /*
+    Mounted on its own routes at every width (the single page below `lg`),
+    and on every route from `lg` up, shown or not: the sidebar's channel list
+    is this chat's list. Beside a page it waits for the client to know the
+    window is wide, so a phone never builds a chat it cannot show.
+  */
+  const chatMounted = onChatRoute || desktop === true;
   // `undefined` hides gated rows until the read answers; `null` means the
   // offline dashboard can't ask, and shows them (`useNavPermissions`, #3854).
   const permissions = useNavPermissions();
@@ -401,27 +330,15 @@ export function DashboardShell({
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
   const isModuleEnabled = useChapterModuleGate();
-  // The crumb's parent link follows its nav row's gates, so the top bar never
-  // offers a member the Settings door the nav hides from them.
-  // `/chat` is titled for the list on screen: the Direct messages row's
-  // label when that is what the panel shows (#3774).
+  // The crumb's parent link follows its nav row's gates, so a title never
+  // offers a member a door the sidebar hides from them.
   const pageTitle = useMemo(
     () =>
-      onChatRoute && chatView === "direct"
-        ? { title: DIRECT_MESSAGES_TITLE }
-        : resolvePageTitle(pathname, (item) =>
-            isNavItemVisible(item, permissions, isModuleEnabled),
-          ),
-    [onChatRoute, chatView, pathname, permissions, isModuleEnabled],
+      resolvePageTitle(pathname, (item) =>
+        isNavItemVisible(item, permissions, isModuleEnabled),
+      ),
+    [pathname, permissions, isModuleEnabled],
   );
-
-  const { data: notificationsData } = useNotifications();
-  const unreadNotifications = useMemo(() => {
-    if (!Array.isArray(notificationsData)) return 0;
-    return (notificationsData as Array<{ read_at?: string | null }>).filter(
-      (n) => !n.read_at,
-    ).length;
-  }, [notificationsData]);
 
   const toggleNavCollapsed = useCallback(() => {
     // The cookie write is deliberately OUTSIDE the updater. React requires an
@@ -434,13 +351,15 @@ export function DashboardShell({
 
   const chatPanelClassName = cn(
     // `clip`, as `<main>` is: never a scroll container that hides its header.
-    "flex min-h-0 min-w-0 flex-col overflow-clip bg-background",
+    "min-h-0 min-w-0 flex-col overflow-clip bg-background",
     onChatRoute
-      ? // Alone: the whole row. Closed, it still shows below the
-        // side-by-side width, where `/chat` is the chat page.
-        cn("flex-1", !chatShown && "min-[1056px]:hidden")
-      : // Beside a tool: from the side-by-side width up only.
-        "hidden shrink min-[1056px]:flex",
+      ? // The page itself: the whole row.
+        "flex flex-1"
+      : chatDocked
+        ? // Beside a page: from `lg` up only.
+          "hidden shrink lg:flex"
+        : // Mounted for the sidebar's list, with nowhere to show.
+          "hidden",
     // A divider drag about to close chat fades it first.
     collapsing === "chat" && "opacity-40 transition-opacity",
   );
@@ -453,9 +372,9 @@ export function DashboardShell({
         : undefined,
     ...(hasTool
       ? {
-          // The side panel keeps the member's width and the tool page takes
-          // the rest (#5575). CSS holds both floors: chat never below 375,
-          // and never so wide that the tool page (`min-w-[375px]`; the
+          // The docked conversation keeps the member's width and the page
+          // takes the rest (#5575). CSS holds both floors: chat never below
+          // 375, and never so wide that the page (`min-w-[375px]`; the
           // divider's `w-2 -mx-1` nets no width) drops below 375, whatever
           // width was saved.
           flex: `0 1 ${chatWidth}px`,
@@ -464,16 +383,16 @@ export function DashboardShell({
         }
       : {}),
   };
-  const showDivider = hasTool && chatShown && split !== false;
+  const showDivider = chatDocked && desktop !== false;
 
   return (
     /*
-      The visible viewport's height. The connection pill sits in the top bar
-      (`connection-pill.tsx`) and takes no row of its own, so nothing here
+      The visible viewport's height. The connection pill sits in the sidebar's head
+      (`connection-pill.tsx`; the top bar below `lg`) and takes no row of its own, so nothing here
       makes room for it. This used to subtract the banner's published height,
       and that is exactly what moved the whole shell down every time the state
       left ONLINE (#2244). `data-dashboard-shell` is how the root layout's
-      floating pill knows to stand down while the bar carries one.
+      floating pill knows to stand down while the shell carries one.
 
       `dvh`, not `vh`: on a phone browser whose toolbar can hide, `100vh` is
       the viewport with the toolbar hidden, so a shell that clips its overflow
@@ -508,9 +427,9 @@ export function DashboardShell({
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*
-          The drawer is the sidebar: it renders the same `AppNav`, never a
-          second hand-maintained list. It supplies the scroll container and the
-          account block, which on desktop live in the top bar instead.
+          The drawer is the sidebar: it renders the same `Sidebar`, never a
+          second hand-maintained list, and the sheet mounts it only while
+          open.
         */}
         <SheetContent
           side="left"
@@ -522,19 +441,14 @@ export function DashboardShell({
               Open dashboard routes and chapter tools.
             </SheetDescription>
           </SheetHeader>
-          <DrawerNav
+          <Sidebar
+            variant="drawer"
+            collapsed={false}
             permissions={permissions}
             isModuleEnabled={isModuleEnabled}
             pathname={pathname}
-            chatView={chatView}
             onNavigate={() => setMobileNavOpen(false)}
           />
-          <div className="mt-2 shrink-0 border-t border-border pt-2">
-            <AccountMenu
-              variant="sheet"
-              onNavigate={() => setMobileNavOpen(false)}
-            />
-          </div>
         </SheetContent>
       </Sheet>
 
@@ -543,26 +457,17 @@ export function DashboardShell({
       </a>
 
       {/*
-        The nav column always stays (#3779): one column on every route, so
-        nothing in it jumps going in and out of Chat.
+        The sidebar always stays (#3779): one column on every route, so
+        nothing in it jumps going between a page and a channel.
       */}
       <div className="hidden lg:flex">
-        <NavColumn
+        <Sidebar
           collapsed={navCollapsed}
           onToggleCollapsed={toggleNavCollapsed}
           permissions={permissions}
           isModuleEnabled={isModuleEnabled}
           pathname={pathname}
-          chatRow={
-            // Beside a full-width tool the Chat row is the link to `/chat`
-            // it is below the side-by-side width: a toggle would open a
-            // panel the page has no room for.
-            split === true && !fullWidthTool
-              ? { onSelect: selectChatView, open: chatOpen, view: chatView }
-              : undefined
-          }
-          chatView={chatView}
-          onCloseTool={split === true && hasTool ? closeTool : undefined}
+          onCloseTool={desktop === true && hasTool ? closeTool : undefined}
         />
       </div>
 
@@ -574,28 +479,22 @@ export function DashboardShell({
         missing declaration was six of the seven routes in #1142.
       */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* "View as a role" (#4072): above the top bar, on every route. */}
+        {/* "View as a role" (#4072): above everything, on every route. */}
         <RolePreviewBanner />
+        {/* Below `lg` only: the drawer's trigger, the title, Find, the bell. */}
         <TopBar
-          // The home view is no page: "Chat" over it would name what's closed.
-          pageTitle={
-            onChatRoute && !chatShown && split === true ? null : pageTitle
-          }
-          // A tool page's title is its own header's from the side-by-side
-          // width up (`tool-page-header.tsx`).
-          titleMovesBesideChat={hasTool}
-          titleIsHeading={!(hasTool && split === true)}
-          unreadNotifications={unreadNotifications}
-          notifications={(bell) => (
-            <NotificationsPopover
-              open={notificationsOpen}
-              onOpenChange={setNotificationsOpen}
-            >
-              {bell}
-            </NotificationsPopover>
-          )}
+          pageTitle={pageTitle}
+          titleIsHeading={desktop !== true}
           onOpenMobileNav={() => setMobileNavOpen(true)}
         />
+        {/*
+          The route's one `<h1>` on a chat route from `lg` up, where no bar
+          names it: read, not drawn, because the channel header (or the
+          Messages list's own title) already says where the member is.
+        */}
+        {onChatRoute && pageTitle && desktop === true ? (
+          <h1 className="sr-only">{pageTitle.title}</h1>
+        ) : null}
         {/* On a phone only, until dismissed (#4002). Above `<main>` so it
             sits over chat and every tool page alike. */}
         <GetTheAppCard />
@@ -610,7 +509,7 @@ export function DashboardShell({
           above): a `hidden` box is still a scroll container, so a jump, a
           focused control or an anchor deep in a long page (minutes) scrolled
           `<main>` itself and slid the page's header, its title and X, up
-          under the top bar, with no wheel to bring it back (Paul,
+          out of view, with no wheel to bring it back (Paul,
           2026-11-20: "no way for me to x out or to go back"). Only the page
           and chat's own scrollers scroll.
         */}
@@ -620,8 +519,8 @@ export function DashboardShell({
           className="flex min-h-0 min-w-0 flex-1 overflow-clip"
         >
           {/*
-            The tool page. It scrolls independently of the nav, which is what
-            makes the nav's own scroll position survive navigation. `min-w-0`
+            The tool page. It scrolls independently of the sidebar, which is
+            what makes the channel list's scroll position survive navigation. `min-w-0`
             and `min-h-0` are load-bearing: as flex items, without them this
             refuses to shrink below its widest unbreakable content and the
             whole page scrolls sideways (six of the seven routes in #1142).
@@ -639,44 +538,28 @@ export function DashboardShell({
               className={cn(
                 // `relative`: a docked panel (`shared/panel.tsx`) covers the column.
                 "relative flex min-h-0 min-w-0 flex-1 flex-col outline-none transition-opacity",
-                chatShown && "min-[1056px]:min-w-[375px]",
+                chatDocked && "lg:min-w-[375px]",
                 collapsing === "page" && "opacity-40",
               )}
             >
               <ToolPageHeader
                 pageTitle={pageTitle}
-                titleIsHeading={split === true}
+                titleIsHeading={desktop === true}
                 onClose={closeTool}
                 actionSlotRef={setHeaderActionSlot}
               />
               <div
                 data-tool-page=""
-                className={cn(
-                  "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-6",
-                  // Below `lg` only, where the bar floats here: its 48, its
-                  // 24 off the bottom, and 24 more, so the last row scrolls
-                  // clear of it. A control the page pins to its own bottom
-                  // (`sticky bottom-*`) adds `--ask-bar-room`, the bar's 72,
-                  // so it sits above the bar rather than under. From `lg` up
-                  // the bar is in the sidebar and covers nothing.
-                  askBar && "max-lg:pb-24 max-lg:[--ask-bar-room:4.5rem]",
-                )}
+                className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-6"
               >
                 <PageHeaderSlotProvider slot={headerActionSlot}>
                   {children}
                 </PageHeaderSlotProvider>
               </div>
-              {askBar ? <FloatingAskBar /> : null}
             </div>
-          ) : chatShown ? null : (
-            // `/chat` with chat closed: the home view, from the side-by-side
-            // width up (below it `/chat` is the chat page).
-            <div className="relative hidden min-h-0 min-w-0 flex-1 min-[1056px]:flex">
-              <ChapterHome />
-            </div>
-          )}
+          ) : null}
           {showDivider ? (
-            <div className="hidden min-[1056px]:flex">
+            <div className="hidden lg:flex">
               <SplitDivider
                 width={chatWidth}
                 onChange={setChatWidth}
@@ -690,9 +573,7 @@ export function DashboardShell({
           {chatMounted ? (
             <section
               id="chat-panel"
-              aria-label={
-                chatView === "direct" ? DIRECT_MESSAGES_TITLE : "Chat"
-              }
+              aria-label={onMessages ? "Messages" : "Chat"}
               data-chat-panel=""
               inert={leaving}
               className={chatPanelClassName}
@@ -706,14 +587,16 @@ export function DashboardShell({
                   panel holds its place with chat's skeleton, so a phone never
                   builds and tears down a chat it cannot show.
                 */}
-                {onChatRoute || split === true ? (
+                {onChatRoute || desktop === true ? (
                   <ChatPage
                     defaultMembersHidden={defaultMembersHidden}
                     toolBeside={hasTool}
                     view={chatView}
-                    onViewChange={followPanelView}
+                    onViewChange={followConversationKind}
+                    onPick={showPickedConversation}
+                    shown={conversationShown}
                     onClose={
-                      hasTool && split === true ? closeChatPanel : undefined
+                      hasTool && desktop === true ? closeChatPanel : undefined
                     }
                   />
                 ) : (
@@ -724,22 +607,6 @@ export function DashboardShell({
           ) : null}
         </main>
       </div>
-    </div>
-  );
-}
-
-/**
- * Frapp Intelligence's bar (#5476, Paul's pick of 2026-11-18) below `lg`, where the
- * shell is one page and has no sidebar: floating 24px above the bottom of the
- * page and centred in it, at most 520px wide, as the phone's bar floats above
- * its tab bar. From `lg` up it lives in the sidebar's foot (`app-nav.tsx`,
- * #5560). The strip around it lets clicks through to the page; only the bar
- * takes them.
- */
-function FloatingAskBar() {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center px-4 lg:hidden">
-      <AskBar className="pointer-events-auto max-w-[520px]" />
     </div>
   );
 }

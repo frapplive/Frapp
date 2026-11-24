@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   CHANNELS_ROLE_REFUSAL_TITLE,
   channelsRoleRefusalBody,
@@ -26,7 +27,6 @@ import { memberLabel } from "@repo/hooks/display-names";
 import { useReportOpenChatTransport } from "@repo/hooks/open-chat-transport";
 import { ChannelHeaderTitle } from "./channel-header-title";
 import { ChannelStart } from "./channel-start";
-import { AskBar } from "@/components/ask/ask-bar";
 import { ErrorState } from "@/components/shared/async-states";
 import {
   canHideConversation,
@@ -110,6 +110,7 @@ import {
   isDirectChannel,
   type MentionCandidate,
   type MentionChipTargets,
+  SECTION_NAMES,
   spacedMentionNames,
 } from "@repo/validation";
 import { MentionChipTargetsContext } from "@repo/hooks/mention-chips";
@@ -127,6 +128,10 @@ import {
 import { useMediaQuery } from "@/lib/use-media-query";
 import { IconButton } from "@/components/ui/icon-button";
 import { PanelCloseButton } from "@/components/layout/tool-page-header";
+import {
+  CHANNEL_LIST_BODY_ATTRIBUTE,
+  useChannelListSlot,
+} from "@/components/layout/channel-list-slot";
 import { useChapterStore } from "@/lib/stores/chapter-store";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
@@ -143,7 +148,7 @@ import {
   useThreadBlockList,
 } from "@/lib/chat/use-thread-block-list";
 import { readLastChannel, writeLastChannel } from "@/lib/chat/last-channel";
-import type { ChatView } from "@/components/layout/shell-prefs";
+import type { ChatView } from "@/lib/chat/chat-links";
 import { useToast } from "@/lib/hooks/use-toast";
 import { reminderSetDescription } from "@/lib/chat/reminder-copy";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
@@ -516,6 +521,8 @@ export function ChatShell({
   onClose,
   view = "channels",
   onViewChange,
+  onPick,
+  shown = true,
 }: {
   initialChannelId?: string | null;
   initialMessageId?: string | null;
@@ -539,19 +546,34 @@ export function ChatShell({
    */
   onClose?: () => void;
   /**
-   * Which list the rail shows (#3774): the chapter's channels, or the
-   * member's direct and group messages. The nav's Chat and Direct messages
-   * rows switch it (`dashboard-shell.tsx`), and each list lands on its own
-   * last conversation.
+   * Which page the panel is (#3774, #5946). `direct` is the Messages page:
+   * the member's direct and group messages listed beside the open one.
+   * `channels` is everywhere else, where the panel is the open conversation
+   * alone and the chapter's channels are in the sidebar. Each lands on its
+   * own last conversation.
    */
   view?: ChatView;
   /**
-   * The open conversation is the other kind: a link, a notification, a
-   * search hit or a bookmark into a DM while channels show, or the reverse.
-   * The shell moves the panel to that list, so the open row is always on the
-   * rail.
+   * The open conversation is the other kind from the page: a link, a
+   * notification, a search hit or a bookmark into a DM off the Messages
+   * page, or into a channel on it. The shell moves the address to match
+   * (`dashboard-shell.tsx`), so a DM is read with its list beside it.
    */
   onViewChange?: (view: ChatView) => void;
+  /**
+   * The member picked a row from a list: a channel in the sidebar, or a
+   * conversation on the Messages page. The panel has selected it; the shell
+   * makes sure it is on screen (it may be closed beside a page, or hidden
+   * behind Chapter settings).
+   */
+  onPick?: (kind: ChatView) => void;
+  /**
+   * Whether the conversation is on screen. The shell keeps the panel mounted
+   * where it has no room to show (closed beside a page, behind Chapter
+   * settings), because the sidebar's channel list is this panel's list; a
+   * conversation nobody can see must not be stamped read.
+   */
+  shown?: boolean;
 } = {}) {
   const activeChapterId = useChapterStore((state) => state.activeChapterId);
   /*
@@ -681,14 +703,21 @@ export function ChatShell({
       ),
     [channels],
   );
-  // The rail's half of the list (#3774): channels, or direct and group
-  // messages. Everything that resolves a channel by id (links, search,
-  // bookmarks, mentions) still reads the whole list.
   const directView = view === "direct";
-  const railChannels = useMemo(
-    () => channels.filter((ch) => isDirectChannel(ch) === directView),
-    [channels, directView],
+  // The two lists (#3774): the chapter's channels, which the sidebar holds,
+  // and the member's direct and group messages, which the Messages page
+  // lists. Everything that resolves a channel by id (links, search,
+  // bookmarks, mentions) still reads the whole list.
+  const plainChannels = useMemo(
+    () => channels.filter((ch) => !isDirectChannel(ch)),
+    [channels],
   );
+  const directChannels = useMemo(
+    () => channels.filter((ch) => isDirectChannel(ch)),
+    [channels],
+  );
+  // The page's own list: where a visit with nothing picked lands.
+  const railChannels = directView ? directChannels : plainChannels;
 
   // Always formal (#3787): every row asks its channel's density by id, so the
   // locked ids are copied where those rows read them. Only from a loaded list:
@@ -823,7 +852,7 @@ export function ChatShell({
     messageId: initialMessageId,
   });
   /**
-   * Which of the two columns is on screen below `lg`, and beside a tool.
+   * Which of the two columns is on screen below `lg`.
    *
    * The shell's responsive contract is two states switching once at `lg`
    * (`spec/ui/web-dashboard/README.md` § Responsive contract), and chat has to
@@ -835,9 +864,9 @@ export function ChatShell({
    * check is for.
    *
    * So below `lg` exactly one column renders, the way every chat client on a
-   * phone does it. At `lg` and up both are visible and this is inert, except
-   * beside a tool page, where chat is a one-pane side panel (#5575) and this
-   * picks the pane there too.
+   * phone does it. At `lg` and up this is inert: the chapter's channels are
+   * in the sidebar (#5946), the Messages page shows its list beside the
+   * conversation, and beside a tool page the panel is the conversation alone.
    *
    * Defaults to the thread rather than the list: a channel is always resolved
    * (the rail falls back to #general), and a `?message=` deep link must land on
@@ -869,20 +898,15 @@ export function ChatShell({
     setMembersHidden(next);
     persistMembersHidden(next);
   };
-  // From `lg` up the channels and the thread are both on screen.
+  // From `lg` up the conversation is always on screen with whatever list it
+  // has: the sidebar's channels, or the Messages page's own pane.
   const isDesktopShell = useIsDesktopShell();
-  /*
-    Beside a tool page chat is a side panel one pane wide (#5575): the list
-    and the conversation take turns, as they do below `lg`, with the same back
-    arrow. Only the layout follows: the pane history (#3824) stays a below-`lg`
-    affair, so Back still moves between pages, not within the panel.
-  */
-  const twoColumns = isDesktopShell && !toolBeside;
-  // The classes that show one pane at a time: below `lg`, or always beside a
-  // tool. The shell mounts chat beside a tool only once the client knows the
-  // width, so `toolBeside` never differs between server and client.
-  const oneOnly = toolBeside ? "hidden" : "max-lg:hidden";
-  const oneAtATimeOnly = toolBeside ? undefined : "lg:hidden";
+  const twoColumns = isDesktopShell;
+  // The classes that show one pane at a time, below `lg`.
+  const oneOnly = "max-lg:hidden";
+  const oneAtATimeOnly = "lg:hidden";
+  // The sidebar's place for the chapter's channels (`channel-list-slot.tsx`).
+  const { slot: sidebarSlot, notifyPicked } = useChannelListSlot();
 
   useEffect(() => {
     if (
@@ -979,9 +1003,8 @@ export function ChatShell({
   }, [isDesktopShell]);
   const backToChannels = useCallback(() => {
     setNarrowPane("channels");
-    // From `lg` up (the one-pane side panel beside a tool, #5575) the arrow
-    // only switches panes: a Back here would leave the tool page, even when a
-    // below-`lg` pick's entry is still under it.
+    // From `lg` up there is no pane to go back to, and a Back would leave
+    // the page, even when a below-`lg` pick's entry is still under it.
     if (isDesktopShellRef.current) return;
     if (backPending.current) return;
     if (onThreadEntry.current || isThreadPaneEntry(window.history.state)) {
@@ -1167,13 +1190,15 @@ export function ChatShell({
   /*
     The panel and the open conversation agree on the list (#3774).
 
-    The nav switching lists drops a selection of the other kind, so the new
-    list lands on its own last conversation. Adjusted during render, keyed on
-    the view, so the old conversation never paints beside the new list.
+    Moving between the Messages page and `/chat` drops a selection of the
+    other kind, so each lands on its own last conversation. Adjusted during
+    render, keyed on the view, so the old conversation never paints beside
+    the new list. Beside a tool page there is no list to agree with, so the
+    conversation that was open stays docked, whichever kind it is (#5946).
 
     Anything else that opens the other kind (a link, a notification, a
-    search hit or a bookmark into a DM while channels show) moves the panel
-    instead, so the open row is always on the rail.
+    search hit or a bookmark into a DM off Messages) moves the address
+    instead (`onViewChange`), so a DM is read with its list beside it.
   */
   const [seenView, setSeenView] = useState(view);
   if (seenView !== view) {
@@ -1183,13 +1208,9 @@ export function ChatShell({
           (ch) => ch.id === selectedChannelId || ch.name === selectedChannelId,
         )
       : undefined;
-    if (selected && isDirectChannel(selected) !== directView) {
+    if (selected && isDirectChannel(selected) !== directView && !toolBeside) {
       setSelectedChannelId(null);
     }
-    // Beside a tool the panel is one pane wide (#5575): the nav row the
-    // member pressed asked for that list, so show it, unread counts and all,
-    // rather than one conversation from it.
-    if (toolBeside) setNarrowPane("channels");
   }
   const activeView: ChatView | null = activeChannel
     ? isDirectChannel(activeChannel)
@@ -2222,10 +2243,12 @@ export function ChatShell({
     nav's Chat row never lit and the channel came back read. Leaving the
     thread for the list runs the cleanup, which stamps it read on the way out as leaving
     a channel always has; coming back claims and stamps it again. From `lg`
-    up both are on screen and `narrowPane` changes nothing, except beside a
-    tool, where the panel shows one at a time (#5575).
+    up the thread is on screen whenever the panel is, and `narrowPane`
+    changes nothing. The panel itself can be out of sight while mounted
+    (`shown`: closed beside a page, behind Chapter settings), and then
+    nothing is on screen to read.
   */
-  const threadOnScreen = twoColumns || narrowPane === "thread";
+  const threadOnScreen = shown && (twoColumns || narrowPane === "thread");
   useEffect(() => {
     if (!activeChannelId || !threadOnScreen) return;
     markReadMutate(activeChannelId);
@@ -2357,7 +2380,7 @@ export function ChatShell({
     and so the order and the lines. A hidden DM has no latest row (the server
     leaves it out), so it gets no line rather than a false "No messages yet".
   */
-  const recentSort = !directView && sidebarPreferences.sort === "recent";
+  const recentSort = sidebarPreferences.sort === "recent";
   const latestQuery = useChannelLatestMessages({
     enabled: directView || recentSort,
   });
@@ -2380,7 +2403,7 @@ export function ChatShell({
     // Each row's time and, on the viewer's own last line, the server's sent
     // or read check (#5519).
     const meta = new Map<string, ConversationRowMeta>();
-    for (const channel of railChannels) {
+    for (const channel of directChannels) {
       if (channel.hidden) continue;
       const latest = byId.get(channel.id);
       if (latest) {
@@ -2405,7 +2428,7 @@ export function ChatShell({
       );
     }
     return { at, previews, meta };
-  }, [directView, latestRows, railChannels, userId, nameFor, now]);
+  }, [directView, latestRows, directChannels, userId, nameFor, now]);
   // Recent on the channels rail (#2877): each channel's latest message time.
   // Absent until the read answers or if it failed, when the shared
   // arrangement keeps the chapter's order rather than sorting on nothing.
@@ -2761,34 +2784,6 @@ export function ChatShell({
   // The chat column, and the live composer's attach path, for the drop
   // target over the column (#4143).
   const chatColumnRef = useRef<HTMLElement | null>(null);
-  const channelsColumnRef = useRef<HTMLElement | null>(null);
-  /*
-    Beside a tool the panes take turns (#5575), and the control that switched
-    them (the back arrow, a row) goes with the pane it was in, which drops
-    keyboard focus to `<body>`. Focus follows into the pane that appeared,
-    but only on a switch, and only when focus was lost: a page load, or a
-    switch the member made from the tool page, leaves focus where it is.
-  */
-  const shownPaneRef = useRef(narrowPane);
-  useEffect(() => {
-    if (shownPaneRef.current === narrowPane) return;
-    shownPaneRef.current = narrowPane;
-    if (!toolBeside) return;
-    const active = document.activeElement;
-    if (
-      active &&
-      active !== document.body &&
-      active.getClientRects().length > 0
-    ) {
-      return;
-    }
-    // The thread's target is its timeline, the skip link's (`#chat-timeline`).
-    const target =
-      narrowPane === "channels"
-        ? channelsColumnRef.current
-        : chatColumnRef.current?.querySelector<HTMLElement>("#chat-timeline");
-    target?.focus({ preventScroll: true });
-  }, [narrowPane, toolBeside]);
   const dropAttachRef = useRef<((files: File[]) => void) | null>(null);
   const threadRootId =
     openThread && openThread.channelId === activeChannel?.id
@@ -3304,8 +3299,8 @@ export function ChatShell({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [twoColumns, narrowPane, channelsPaneState, backToChannels]);
 
-  // The rail's title is the nav row's label for the list it shows (#3774).
-  const railTitle = directView ? "Direct messages" : "Channels";
+  // The list pane's title: the sidebar row's word for the list it shows.
+  const railTitle = directView ? SECTION_NAMES.messages : "Channels";
   // The people search (#4668) is there only on a loaded Direct messages list.
   // Unmounting its dialog doesn't call `onOpenChange`, so an open flag left
   // behind (Back to a channel while it was open) is cleared here; otherwise
@@ -3333,7 +3328,8 @@ export function ChatShell({
     userId !== null &&
     activeChannelId === null;
   // Nothing to pick at all: the member has never had a DM, or hid every one.
-  const directEmpty = directNoneOpen && !railChannels.some((ch) => !ch.hidden);
+  const directEmpty =
+    directNoneOpen && !directChannels.some((ch) => !ch.hidden);
   const timelineReady =
     channelsPaneState === "ready" &&
     !requestedChannelMissing &&
@@ -3364,52 +3360,62 @@ export function ChatShell({
     return had;
   }, []);
 
-  // The channels pane's contents.
-  const channelsPaneBody = (
+  /*
+    One list's contents (#5946). `sidebar` is the chapter's channels drawn
+    into the sidebar: the list alone, with no title and no control over it
+    (Paul, 2026-11-24), its sort and filters on a category heading's own
+    control. `pane` is the list as a pane of this panel: the Messages page's
+    conversations from `lg` up, and either list below `lg`, where the panel
+    is the whole page and the list is one of its two screens.
+  */
+  const listFilters = (kind: ChatView, heading = false) => (
+    <ChannelFilters
+      heading={heading}
+      filters={sidebarPreferences.filters}
+      // Direct messages always run newest first, so their panel offers no
+      // sort.
+      sort={kind === "direct" ? undefined : sidebarPreferences.sort}
+      reorderable={kind !== "direct" && !!railReorder}
+      onChange={sidebarControls.onSetFilters}
+    />
+  );
+  const listBody = (kind: ChatView, place: "sidebar" | "pane") => {
+    const direct = kind === "direct";
+    return (
     <>
-      {/*
-            48px, matching the top bar and the channel header beside it, so the
-            three headers line up across the whole route (`3a` geometry: "Top bar,
-            column headers 48"). The "N channels" count that used to sit under the
-            title is deleted (`1t`) - it restated the length of a list already on
-            screen.
-          */}
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-3">
-        <h2 className="text-sm font-semibold text-foreground">{railTitle}</h2>
-        <div className="ml-auto flex items-center gap-1">
-          {directView && channelsPaneState === "ready" ? (
-            // New message (#3774), where the phone's Messages screen, iMessage
-            // and Instagram keep it. It opens the people search (#4668), as
-            // their pencil opens a "To:" search, rather than the Directory.
-            <Button
-              variant="ghost"
-              size="icon"
-              className={compactControlClassName}
-              aria-label="New message"
-              title="New message"
-              onClick={() => setDmSearchOpen(true)}
-            >
-              <SquarePen className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          ) : null}
-          <ChannelFilters
-            filters={sidebarPreferences.filters}
-            // Direct messages always run newest first, so their panel
-            // offers no sort.
-            sort={directView ? undefined : sidebarPreferences.sort}
-            reorderable={!directView && !!railReorder}
-            onChange={sidebarControls.onSetFilters}
-          />
-          {/*
-            Beside a tool the list is its own pane (#5575), so it carries the
-            panel's X too: chat closes from whichever pane is on screen (#4223).
-          */}
-          {toolBeside && onClose ? (
-            <PanelCloseButton label="Close chat" onClick={onClose} />
-          ) : null}
-        </div>
-      </header>
-      {dmSearchShown ? (
+      {place === "pane" ? (
+        /*
+          48px, matching the sidebar's head and the channel header beside it,
+          so the headers line up across the whole route (`3a` geometry). The
+          "N channels" count that used to sit under the title is deleted
+          (`1t`) - it restated the length of a list already on screen.
+        */
+        <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-3">
+          <h2 className="text-sm font-semibold text-foreground">
+            {direct ? SECTION_NAMES.messages : "Channels"}
+          </h2>
+          <div className="ml-auto flex items-center gap-1">
+            {direct && channelsPaneState === "ready" ? (
+              // New message (#3774), where the phone's Messages screen,
+              // iMessage and Instagram keep it. It opens the people search
+              // (#4668), as their pencil opens a "To:" search, rather than
+              // the Directory.
+              <Button
+                variant="ghost"
+                size="icon"
+                className={compactControlClassName}
+                aria-label="New message"
+                title="New message"
+                onClick={() => setDmSearchOpen(true)}
+              >
+                <SquarePen className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            {listFilters(kind)}
+          </div>
+        </header>
+      ) : null}
+      {direct && dmSearchShown ? (
         // Where Discord keeps "Find or start a conversation" (#4668).
         <div className="shrink-0 px-2 pt-2">
           <DmSearch
@@ -3448,46 +3454,53 @@ export function ChatShell({
             */}
           {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
           {/*
-          The officer setup checklist, above the channels where Discord puts
-          its server guide. Renders `null` for anyone with nothing to set up.
-        */}
-          {/*
-            What's on right now, at the top of the rail (#5777), where the
+            What's on right now, at the top of the list (#5777), where the
             phone puts it on Chat home and Discord shows a live voice channel.
           */}
           {channelsPaneState === "ready" ? <NowCard className="mb-2" /> : null}
-          {channelsPaneState === "ready" && !directView ? (
+          {/*
+          The officer setup checklist, above the channels where Discord puts
+          its server guide. Renders `null` for anyone with nothing to set up.
+        */}
+          {channelsPaneState === "ready" && !direct ? (
             <SetupChecklistSection />
           ) : null}
           {channelsPaneState === "ready" &&
-          (directView || recentSort) &&
+          (direct || recentSort) &&
           !latestSettled ? (
             <ChannelListSkeleton />
           ) : channelsPaneState === "ready" ? (
             <ChannelList
-              kind={view}
-              latestAt={directView ? directLatest?.at : channelLatestAt}
-              previews={directLatest?.previews}
-              rowMeta={directLatest?.meta}
+              kind={kind}
+              latestAt={direct ? directLatest?.at : channelLatestAt}
+              previews={direct ? directLatest?.previews : undefined}
+              rowMeta={direct ? directLatest?.meta : undefined}
               viewerId={userId}
               memberNames={memberNames}
               avatarTintFor={avatarTintFor}
-              channels={railChannels}
+              channels={direct ? directChannels : plainChannels}
               categories={categories}
               unreadByChannelId={unreadByChannelId}
               threads={railThreads}
-              activeChannelId={activeChannelId}
+              // No row is lit while the conversation is out of sight: the
+              // lit row says what is on screen.
+              activeChannelId={shown ? activeChannelId : null}
               onHide={hideFromRail}
               rowActions={rowActions}
               sidebar={sidebarControls}
+              // In the sidebar nothing sits over the list, so its sort and
+              // filters open from a heading (`ChannelList`).
+              headingControl={
+                place === "sidebar" ? listFilters(kind, true) : undefined
+              }
               // The chapter's order is for channels: a DM is never placed in
               // it, and the empty categories an officer drags onto would sit
               // in a list of conversations (#3774). Under Recent or A–Z the
               // list keeps categories draggable and turns off channel-row
               // drag itself (#2877).
-              reorder={directView ? undefined : railReorder}
+              reorder={direct ? undefined : railReorder}
               onCreateChannel={
-                canManageChannel && !directView
+                canManageChannel && !direct
                   ? (categoryId) => setCreateChannelIn(categoryId)
                   : undefined
               }
@@ -3504,22 +3517,40 @@ export function ChatShell({
                 // gated on its own channel and will resolve if the member
                 // returns. Only the notice is channel-scoped for display.
                 setUnreachableTarget(null);
+                // The shell puts the conversation on screen, and the rail's
+                // Channels popover closes behind the pick.
+                onPick?.(kind);
+                notifyPicked();
               }}
             />
           ) : null}
         </div>
       </div>
-      {/*
-        Frapp Intelligence's bar (#5476) below `lg`, at the foot of the list when chat
-        has the page to itself. From `lg` up it lives in the sidebar's foot
-        (`app-nav.tsx`, #5560). The thread's composer owns the bottom of the
-        channel, and asks there through `@Frapp`.
-      */}
-      {toolBeside ? null : (
-        <AskBar compact className="mx-2 mb-3 mt-1 w-auto shrink-0 lg:hidden" />
-      )}
     </>
-  );
+    );
+  };
+  /*
+    Where each list is drawn. From `lg` up the chapter's channels go to the
+    sidebar's slot whenever one is on screen (the column, or the rail's
+    popover while open) and the Messages page keeps its conversations in a
+    pane of its own. Below `lg` there is no sidebar: the page's own list is
+    the pane. So the two lists can both be on screen, but never the same
+    list twice, and nothing is subscribed twice.
+  */
+  const sidebarList =
+    isDesktopShell && sidebarSlot
+      ? createPortal(
+          <div
+            {...{ [CHANNEL_LIST_BODY_ATTRIBUTE]: "" }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            {listBody("channels", "sidebar")}
+          </div>,
+          sidebarSlot,
+        )
+      : null;
+  const paneList =
+    !isDesktopShell || (directView && !toolBeside) ? listBody(view, "pane") : null;
 
   // The members column is on screen: a wide window, not hidden, and no
   // thread beside the chat in its place.
@@ -3649,26 +3680,25 @@ export function ChatShell({
       <div role="status" aria-live="polite" className="sr-only">
         {channelsPaneState === "loading" ? "Loading channels" : ""}
       </div>
+      {sidebarList}
       {/*
-        Channels: 240px, full height, its own scroll, no search field (`1b`
-        pin 5), on `--surface-1`, the step the left column takes. Beside the
-        thread from `lg` up; below it, and beside a tool page (#5575), the
-        list and the thread are one screen each (`narrowPane`).
+        The list pane: full height, its own scroll, on `--surface-1`, the
+        step the sidebar takes. Below `lg` it is one of the panel's two
+        screens (`narrowPane`). From `lg` up it is the Messages page's
+        conversations, 240px beside the open one; the chapter's channels are
+        in the sidebar instead, and beside a tool page the panel is the
+        conversation alone (#5946), so then it is not drawn. Hidden by CSS as
+        well, so the server's render never flashes a second channel column.
       */}
       <section
-        ref={channelsColumnRef}
         aria-label={railTitle}
-        // A focus target for a pane switch beside a tool, never a Tab stop.
-        tabIndex={-1}
         className={cn(
-          "flex min-h-0 flex-col border-r border-border bg-surface-1 outline-none",
-          // Full width below `lg`, where it is the only column on screen.
-          // Beside a tool, the whole panel whenever it shows (#5575).
-          toolBeside ? "w-full" : "w-full lg:w-60 lg:shrink-0",
+          "flex min-h-0 w-full flex-col border-r border-border bg-surface-1",
+          directView && !toolBeside ? "lg:w-60 lg:shrink-0" : "lg:hidden",
           narrowPane === "thread" && oneOnly,
         )}
       >
-        {channelsPaneBody}
+        {paneList}
       </section>
 
       {/*

@@ -484,6 +484,14 @@ export interface ChannelListProps {
    * null for the default Channels group. Absent, no heading offers it.
    */
   onCreateChannel?: (categoryId: string | null) => void;
+  /**
+   * A control for the whole list, drawn on its first heading (#5946). In the
+   * sidebar nothing sits over the list, so its sort and filters
+   * (`ChannelFilters`) open from here, the way Slack and Discord hang a
+   * list's own controls on a section heading. Shown on hover or focus, and
+   * always while it has something to say (a filter that is on lights it).
+   */
+  headingControl?: ReactNode;
 }
 
 /**
@@ -604,6 +612,7 @@ export function ChannelList({
   sidebar,
   reorder,
   onCreateChannel,
+  headingControl,
   threads,
 }: ChannelListProps) {
   const preferences = sidebar?.preferences ?? DEFAULT_PREFERENCES;
@@ -1433,6 +1442,12 @@ export function ChannelList({
         )
       : null;
 
+  // The list's own control (`headingControl`) rides its first heading.
+  const firstSectionKey = drawOrder.find(
+    (entry): entry is Extract<DrawEntry, { kind: "section" }> =>
+      entry.kind === "section",
+  )?.section.key;
+
   return (
     <div
       ref={railRef}
@@ -1452,7 +1467,13 @@ export function ChannelList({
           return renderEmptyCategory(entry.key, entry.label);
         }
         const section = entry.section;
-        const headerId = `channel-section:${section.key}`;
+        // Two lists can be on screen at once (the sidebar's channels and
+        // the Messages page's conversations, #5946), and both can have a
+        // Pinned section, so each names its headings for its own kind.
+        const headerId =
+          kind === "direct"
+            ? `conversation-section:${section.key}`
+            : `channel-section:${section.key}`;
         const orderable = !!reorder && isOrderableSection(section.key);
         const categoryId = categoryIdOf(section.key);
         const headerDrag: RailDrag | null =
@@ -1546,6 +1567,20 @@ export function ChannelList({
                     </span>
                   ) : null}
                 </button>
+                {headingControl && section.key === firstSectionKey ? (
+                  <span
+                    data-heading-control=""
+                    className={cn(
+                      // On the label's line, as the + beside it is.
+                      "mb-1 flex shrink-0 items-center",
+                      "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
+                      // Open, or saying a filter is on: it stays.
+                      "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                    )}
+                  >
+                    {headingControl}
+                  </span>
+                ) : null}
                 {createButtonFor(section.key, section.label)}
               </div>
             ) : (
@@ -1664,11 +1699,12 @@ function ChannelMark({
 }
 
 /**
- * The rail's sort and two filters (#2877), behind one control in the Channels
- * header.
+ * The list's sort and two filters (#2877), behind one control: on the first
+ * category heading in the sidebar (`heading`, #5946, where nothing sits over
+ * the list), and in the list pane's header on the Messages page and below
+ * `lg`.
  *
- * A popover rather than chips: the channels column is 240px wide and its
- * header already carries the column title. The sort is a three-way segmented
+ * A popover rather than chips: the list is a narrow column. The sort is a three-way segmented
  * control on top, the way Slack's sidebar menu offers "Sort" above its
  * filters, so the held answer is always in view. The trigger shows a dot
  * while any filter is on, so a shortened list never reads as a chapter that
@@ -1679,7 +1715,10 @@ export function ChannelFilters({
   sort,
   reorderable = false,
   onChange,
+  heading = false,
 }: {
+  /** Sized to a category heading's line, as the + beside it is. */
+  heading?: boolean;
   filters: SidebarPreferences["filters"];
   /** The member's sort. Absent, the popover offers none (the Direct messages panel). */
   sort?: SidebarSort;
@@ -1699,7 +1738,13 @@ export function ChannelFilters({
         <Button
           variant="ghost"
           size="icon"
-          className={cn(compactControlClassName, "relative ml-auto")}
+          data-filter-active={active ? "" : undefined}
+          className={cn(
+            "relative",
+            heading
+              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              : cn(compactControlClassName, "ml-auto"),
+          )}
           aria-label={
             sort
               ? active
@@ -1710,16 +1755,25 @@ export function ChannelFilters({
                 : FILTER_ONLY_CHANNELS_LABEL
           }
         >
-          <ListFilter className="h-4 w-4" aria-hidden="true" />
+          <ListFilter
+            className={heading ? "h-3.5 w-3.5" : "h-4 w-4"}
+            aria-hidden="true"
+          />
           {active ? (
             <span
               aria-hidden="true"
-              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary"
+              className={cn(
+                "absolute h-1.5 w-1.5 rounded-full bg-primary",
+                heading ? "-right-0.5 -top-0.5" : "right-1.5 top-1.5",
+              )}
             />
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-3 p-3">
+      <PopoverContent
+        align={heading ? "start" : "end"}
+        className="w-64 space-y-3 p-3"
+      >
         {sort ? (
           <div className="space-y-1.5">
             <p

@@ -12,16 +12,15 @@
  * reads it from here: web's nav rows, and the phone's tab and screen titles,
  * back labels and You rows.
  *
- * Not yet read from here, and why: web's page metadata titles (checked
- * against the nav rows by `page-title.spec.ts` instead), and web's Events
- * and Direct messages rows, which take the phone's words with the steps of
- * #5943 that rebuild them (#5946, #5948).
+ * Not yet read from here, and why: web's page metadata titles, which are
+ * checked against the nav rows by `page-title.spec.ts` instead.
  */
 export const SECTION_NAMES = {
   activity: "Activity",
   calendar: "Calendar",
   directory: "Directory",
   messages: "Messages",
+  resources: "Resources",
   search: "Search",
 } as const;
 
