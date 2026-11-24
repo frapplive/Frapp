@@ -46,12 +46,15 @@ import {
   TASK_RESUBMIT_NEEDS_CHANGE_CODE,
 } from '@repo/validation';
 import { memberFixture, userFixture } from '#test/helpers/entity-fixtures';
+import { frappLinkRepoMocks } from '#test/helpers/frapp-link-repos.fixture';
+import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 
 /** A send-back's caller: an officer who isn't the assignee (#5917). */
 const ADMIN = { actorUserId: 'admin-1' };
 
 describe('TaskService', () => {
   let service: TaskService;
+  let linkRepos: ReturnType<typeof frappLinkRepoMocks>;
   let mockTaskRepo: jest.Mocked<ITaskRepository>;
   let mockMemberRepo: jest.Mocked<IMemberRepository>;
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
@@ -118,6 +121,7 @@ describe('TaskService', () => {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: '2026-02-26T00:00:00.000Z',
   };
 
@@ -241,6 +245,7 @@ describe('TaskService', () => {
       }),
     };
 
+    linkRepos = frappLinkRepoMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TaskService,
@@ -256,6 +261,8 @@ describe('TaskService', () => {
         { provide: CHAPTER_GROUP_REPOSITORY, useValue: mockGroupRepo },
         { provide: ROLE_TIER_REPOSITORY, useValue: mockTierRepo },
         { provide: OPEN_TASK_REPOSITORY, useValue: mockOpenTaskRepo },
+        FrappLinkChecker,
+        ...linkRepos.providers,
       ],
     }).compile();
 
@@ -852,6 +859,7 @@ describe('TaskService', () => {
         proof_kind: 'none',
         subtask_titles: ['Open it'],
         followed_by: null,
+        attachments: [],
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -2003,6 +2011,7 @@ describe('TaskService', () => {
         first_due_at: '2026-11-17T02:00:00.000Z',
         latest_due_at: '2026-11-17T02:00:00.000Z',
         next_due_date: '2026-11-23',
+        attachments: [],
       });
       expect(mockTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskRepo.createSubtasks).not.toHaveBeenCalled();
@@ -2088,6 +2097,147 @@ describe('TaskService', () => {
 
       expect(task.series).toBeNull();
       expect(mockTaskRepo.findSeries).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('attachments (Frapp links)', () => {
+    const DOC = '00000000-0000-4000-8000-0000000000d1';
+    const MSG = '00000000-0000-4000-8000-0000000000a1';
+
+    it("stores a task's links with ids only, its message on its own channel", async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue(baseTask);
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Finish the rush schedule',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        attachments: [
+          { id: 'a', kind: 'document', document_id: DOC, title: 'Bylaws' },
+          {
+            id: 'b',
+            kind: 'message',
+            channel_id: 'sent-by-the-client',
+            message_id: MSG,
+          },
+          { id: 'c', kind: 'link', url: 'https://www.docs.google.com/x' },
+        ],
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            { id: 'a', kind: 'document', document_id: DOC },
+            {
+              id: 'b',
+              kind: 'message',
+              channel_id: `channel-of-${MSG}`,
+              message_id: MSG,
+            },
+            {
+              id: 'c',
+              kind: 'link',
+              url: 'https://www.docs.google.com/x',
+              title: 'docs.google.com',
+            },
+          ],
+        }),
+      );
+    });
+
+    it("refuses a record that is not the chapter's, writing nothing", async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      linkRepos.missing.add(DOC);
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          title: 'Read the bylaws',
+          assignee_id: 'user-1',
+          created_by: 'admin-1',
+          attachments: [{ id: 'a', kind: 'document', document_id: DOC }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a record newly attached from a module the chapter turned off', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      linkRepos.enabledModules.documents = false;
+      await expect(
+        service.create({
+          chapter_id: 'ch-1',
+          title: 'Read the bylaws',
+          assignee_id: 'user-1',
+          created_by: 'admin-1',
+          attachments: [{ id: 'a', kind: 'document', document_id: DOC }],
+        }),
+      ).rejects.toThrow('Chapter Files is off in this chapter');
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the first when the same record comes twice', async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(baseMember);
+      mockTaskRepo.create.mockResolvedValue(baseTask);
+      await service.create({
+        chapter_id: 'ch-1',
+        title: 'Read the bylaws',
+        assignee_id: 'user-1',
+        created_by: 'admin-1',
+        attachments: [
+          { id: 'a', kind: 'event', event_id: DOC },
+          { id: 'b', kind: 'event', event_id: DOC },
+        ],
+      });
+      expect(mockTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [{ id: 'a', kind: 'event', event_id: DOC }],
+        }),
+      );
+    });
+
+    it('keeps a record it already held, even once it is gone', async () => {
+      const held = { id: 'a', kind: 'document' as const, document_id: DOC };
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        attachments: [held],
+      });
+      mockTaskRepo.updateUnconfirmed.mockImplementation((_id, _ch, patch) =>
+        Promise.resolve({ ...baseTask, ...patch }),
+      );
+      linkRepos.missing.add(DOC);
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        attachments: [
+          held,
+          { id: 'b', kind: 'link', url: 'https://a.example', title: 'A' },
+        ],
+      });
+      expect(mockTaskRepo.updateUnconfirmed).toHaveBeenCalledWith(
+        'task-1',
+        'ch-1',
+        {
+          attachments: [
+            held,
+            { id: 'b', kind: 'link', url: 'https://a.example', title: 'A' },
+          ],
+        },
+      );
+      expect(linkRepos.documentRepo.findByIds).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the list is unchanged', async () => {
+      const held = {
+        id: 'a',
+        kind: 'link' as const,
+        url: 'https://a.example',
+        title: 'A',
+      };
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        attachments: [held],
+      });
+      await service.update('task-1', 'ch-1', 'admin-1', {
+        attachments: [held],
+      });
+      expect(mockTaskRepo.updateUnconfirmed).not.toHaveBeenCalled();
     });
   });
 

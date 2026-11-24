@@ -468,9 +468,9 @@ export function TaskRowSkeleton({ index = 0 }: { index?: number }) {
 /**
  * The Tasks tab while the board loads: a section caption over task-shaped
  * rows, so the real board lands in place. The caption is a bar, since which
- * section comes first (TODAY, THIS WEEK or LATER) depends on the tasks. The
- * rows sit flush on the page, so the region is `flush` and its bars take
- * `--surface-1`, one step up (#5606).
+ * section comes first (OVERDUE, TODAY, THIS WEEK, LATER or NO DUE DATE)
+ * depends on the tasks. The rows sit flush on the page, so the region is
+ * `flush` and its bars take `--surface-1`, one step up (#5606).
  */
 export function TaskListSkeleton() {
   const { tokens } = useFrappTheme();

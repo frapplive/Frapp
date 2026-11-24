@@ -41,7 +41,7 @@ export function renumberRows(
 /**
  * The rows with a member added at the end, as the newest of the class. The
  * other rows are left as they are, so adding someone never writes anyone
- * else's number (which a member ranked above the officer would refuse). The
+ * else's number, so an add changes only the member added. The
  * added member takes the next number after the highest when the class has
  * numbers, and none when it has none: a chapter that doesn't number its
  * members (#3967) never gets numbers from an add.

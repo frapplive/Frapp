@@ -172,7 +172,7 @@ describe("the AI hooks", () => {
   });
 });
 
-describe("Meet Frapp AI's answers (#4790)", () => {
+describe("Meet Frapp Intelligence's answers (#4790)", () => {
   let queryClient: QueryClient;
   beforeEach(() => {
     queryClient = createTestQueryClient();

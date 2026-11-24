@@ -1,5 +1,5 @@
 /**
- * An Ask Frapp answer posted to a channel (#4713, `spec/behavior/ai.md`
+ * A Frapp Intelligence answer posted to a channel (#4713, `spec/behavior/ai.md`
  * § Posting an answer to the channel): the request, what the server says back, the posted
  * row's payload, and the words both clients show.
  *
@@ -113,7 +113,7 @@ export const AskPostedAnswerSchema = z.object({
 export type AskPostedAnswer = z.infer<typeof AskPostedAnswerSchema>;
 
 /**
- * Whether `userId` is the member who posted this Ask Frapp answer. The row
+ * Whether `userId` is the member who posted this Frapp Intelligence answer. The row
  * is the Frapp sender's, so a sender check is false for everyone; the server
  * writes who posted it in `payload.asked_by` and no client can send the
  * kind, so it is as trustworthy as `sender_id`. The API and both clients

@@ -49,7 +49,7 @@ export type ChatMessageKind = (typeof CHAT_MESSAGE_KINDS)[number];
  *   chapter for a card reconciled away seconds later, leaving a notification
  *   pointing at a message that no longer exists. It is internal machinery, not
  *   a category of message a member receives.
- * - **`ask_answer`**: an Ask Frapp answer its asker posted to the channel
+ * - **`ask_answer`**: a Frapp Intelligence answer its asker posted to the channel
  *   (#4713). It notifies nobody (`spec/behavior/ai.md` § Posting an answer to the channel):
  *   the worker returns on it and `decidePush` refuses it, as for `imported`,
  *   so a preference for it could never be consulted.

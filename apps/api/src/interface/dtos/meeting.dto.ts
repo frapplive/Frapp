@@ -812,7 +812,7 @@ export class MeetingOwnNotesDto {
     enum: ['consent_required'],
     nullable: true,
     description:
-      'Why these notes would be left out of a draft now: their writer has not turned Frapp AI on.',
+      'Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on.',
   })
   held: 'consent_required' | null;
 }

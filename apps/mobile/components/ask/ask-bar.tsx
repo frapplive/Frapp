@@ -12,9 +12,10 @@ import { selectionHaptic } from "@/lib/haptics";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * Ask Frapp's front door on the phone (#4702): a glass bar above the tab bar
- * on the four tab screens, with the crest in the chapter's colour and the
- * field's own words, "Ask Frapp anything". From #4904 (Paul's pick of
+ * Frapp Intelligence's front door on the phone (#4702): a glass bar above the
+ * tab bar on the four tab screens, with the crest in the chapter's colour and
+ * the field's own words, "What do you need?" ("Ask Frapp anything" until
+ * #5945). From #4904 (Paul's pick of
  * 2026-11-13) until #5139 (Paul, 2026-11-16) it read "Search or ask Frapp",
  * when the field searched too; search is its own screen now, pushed from
  * Chat home.
@@ -62,7 +63,9 @@ export function AskBar({
       <Pressable
         testID="ask-bar"
         accessibilityRole="button"
-        accessibilityLabel={ASK_COPY.name}
+        // Its name is its words, as web's bar (WCAG 2.5.3): Voice Control
+        // finds it by what it shows.
+        accessibilityLabel={ASK_COPY.placeholder}
         accessibilityHint={ASK_BAR_HINT}
         onPress={() => {
           selectionHaptic();

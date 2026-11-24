@@ -48,7 +48,7 @@ import { prefersReducedMotion } from "@/components/chat/use-rail-flip";
 import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
 
 /**
- * Ask Frapp on web (#450, #451, #718): one conversation with Frapp, the
+ * Frapp Intelligence on web (#450, #451, #718): one conversation with Frapp, the
  * body of the Ask page (`app/(dashboard)/ask`). The member types in one
  * field; Frapp answers from the chapter's sources, each claim marked with
  * the source it came from, or shows a card for something they asked to have
@@ -153,7 +153,7 @@ export function AskPage() {
 export function AskPageSkeleton() {
   return (
     <PageSkeleton
-      label="Loading Ask Frapp"
+      label="Loading Frapp Intelligence"
       className="mx-auto mt-auto w-full max-w-[720px]"
     >
       <Skeleton className="h-10 w-full rounded-md" />

@@ -245,7 +245,7 @@ describe("AppNav", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("holds Ask Frapp at its foot, the crest alone in the rail (#5560)", () => {
+  it("holds Frapp Intelligence at its foot, the crest alone in the rail (#5560)", () => {
     askEntry.current = {
       open: false,
       openAsk: vi.fn(),
@@ -253,8 +253,8 @@ describe("AppNav", () => {
       keepDraft: vi.fn(),
     };
     const { unmount } = renderNav({ onToggleCollapsed: vi.fn() });
-    const ask = screen.getByRole("button", { name: "Ask Frapp" });
-    expect(ask).toHaveTextContent("Ask Frapp");
+    const ask = screen.getByRole("button", { name: "Frapp Intelligence" });
+    expect(ask).toHaveTextContent("Frapp Intelligence");
     // One foot row: Ask fills it and the toggle is a glyph at its end, named
     // by its label and tooltip, so a full sidebar still fits 1024x768.
     const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
@@ -269,9 +269,9 @@ describe("AppNav", () => {
 
     // With no toggle passed, the rail still has its place.
     const { unmount: unmountRail } = renderNav({ collapsed: true });
-    const crest = screen.getByRole("button", { name: "Ask Frapp" });
-    expect(crest).not.toHaveTextContent("Ask Frapp");
-    expect(crest).toHaveAttribute("title", "Ask Frapp");
+    const crest = screen.getByRole("button", { name: "Frapp Intelligence" });
+    expect(crest).not.toHaveTextContent("Frapp Intelligence");
+    expect(crest).toHaveAttribute("title", "Frapp Intelligence");
     expect(crest).not.toHaveAttribute("aria-current");
     // The crest opens the Ask page, as the bar does.
     fireEvent.click(crest);
@@ -286,7 +286,7 @@ describe("AppNav", () => {
       keepDraft: vi.fn(),
     };
     const { unmount: unmountOpen } = renderNav({ collapsed: true });
-    expect(screen.getByRole("button", { name: "Ask Frapp" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Frapp Intelligence" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -295,7 +295,7 @@ describe("AppNav", () => {
     // The drawer has none; below `lg` the page floats its own.
     renderNav({ variant: "drawer" });
     expect(
-      screen.queryByRole("button", { name: "Ask Frapp" }),
+      screen.queryByRole("button", { name: "Frapp Intelligence" }),
     ).not.toBeInTheDocument();
   });
 

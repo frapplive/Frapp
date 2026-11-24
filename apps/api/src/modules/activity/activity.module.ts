@@ -163,7 +163,7 @@ import { TaskModule } from '../task/task.module';
       useClass: SupabaseActivityLayoutRepository,
     },
   ],
-  // For Frapp AI's standing tools (#4901), which read the standing as `GET
+  // For Frapp Intelligence's standing tools (#4901), which read the standing as `GET
   // /v1/activity/standing` does.
   exports: [ActivityStandingService],
 })

@@ -59,7 +59,7 @@ import { fontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
  * One turn of the Ask conversation on the phone: what the member typed, then
  * what Frapp came back with. That is an answer with a numbered marker at
  * each cited sentence and the sources those markers open
- * (`spec/ui/design-system/components.md` §11; `spec/behavior/ai.md` § Ask;
+ * (`spec/ui/design-system/components.md` §11; `spec/behavior/ai.md` § Frapp Intelligence;
  * #450, #451), or the card for something the member asked to have done
  * (`ask-proposal.tsx`, passed in as `proposal`). Web's twin is
  * `apps/web/components/ask/ask-answer.tsx`, and both read the same words

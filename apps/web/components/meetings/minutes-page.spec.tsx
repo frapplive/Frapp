@@ -1460,7 +1460,7 @@ describe("MinutesPage", () => {
       mocks.requestDraft.mockResolvedValue({ ...NO_DRAFT, status: "drafting" });
       render(<MinutesPage id="m-1" />);
       expect(
-        screen.getByText(/Turn on Frapp AI to draft from your notes/),
+        screen.getByText(/Turn on Frapp Intelligence to draft from your notes/),
       ).toBeTruthy();
       fireEvent.change(screen.getByRole("textbox", { name: "Your notes" }), {
         target: { value: "notes" },

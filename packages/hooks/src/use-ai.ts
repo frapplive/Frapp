@@ -7,7 +7,7 @@ import { can, type AskAccess } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 
 /**
- * The AI switches and the member's Frapp AI answer (#4308, #4790,
+ * The AI switches and the member's Frapp Intelligence answer (#4308, #4790,
  * `spec/behavior/ai.md` § Consent), shared by web and mobile.
  *
  * **Whether this server has AI at all** is read from the same calls: with
@@ -75,7 +75,7 @@ export function aiAvailableFrom(consent: {
 }
 
 /**
- * Whether this member has Ask Frapp, from the three reads that decide it:
+ * Whether this member has Frapp Intelligence, from the three reads that decide it:
  * the server has AI, the president has Ask on, and the member holds `ai:use`.
  * `unknown` until each read the answer rests on has data, in flight or
  * failed alike. An entry point shows only on `yes`; a composer that would
@@ -209,7 +209,7 @@ export function useUpdateAiChapterSettings() {
 }
 
 /**
- * The two answers on the Meet Frapp AI screen (#4790), for every place that
+ * The two answers on the Meet Frapp Intelligence screen (#4790), for every place that
  * shows it: onboarding, the one ask on next open, an AI entry point, and
  * Settings.
  *
@@ -264,7 +264,7 @@ export function useFrappAiChoice() {
 }
 
 /**
- * Whether Meet Frapp AI should be put in front of the member by itself: the
+ * Whether Meet Frapp Intelligence should be put in front of the member by itself: the
  * server has AI and they have never answered on its current version. A
  * member who chose Not now has answered; they are not asked again unprompted.
  */

@@ -701,7 +701,7 @@ describe('AiGatewayService', () => {
     };
     const QUESTION = {
       promptVersion: 'ask.agent@v1',
-      system: 'You are Ask Frapp.',
+      system: 'You are Frapp Intelligence.',
       messages: [{ role: 'user' as const, content: 'What do I owe?' }],
       tools: [TOOL],
       context: [{ id: 'asker', title: 'The member asking', text: 'Jordan.' }],

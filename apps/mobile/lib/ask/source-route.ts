@@ -6,7 +6,7 @@ import {
 import type { NotificationTarget } from "@/lib/notifications/targets";
 
 /**
- * Where an Ask source opens on the phone (`spec/behavior/ai.md` § Ask; #451),
+ * Where an Ask source opens on the phone (`spec/behavior/ai.md` § Frapp Intelligence; #451),
  * or `null` when this build has no screen for it. A source with no screen is
  * still listed, as plain text: kinds and targets are open strings on the wire
  * (`ask.ts`), so a newer server can cite something this build can't open.

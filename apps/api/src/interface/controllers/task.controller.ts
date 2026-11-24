@@ -245,6 +245,7 @@ export class TaskController {
       // neither yet) makes the very task the form would (#4313).
       audience_tier_id: dto.audience_tier_id,
       followed_by: dto.followed_by,
+      attachments: dto.attachments,
       created_by: createdBy,
       due_date: dto.due_date,
       due_at: dto.due_at ?? null,

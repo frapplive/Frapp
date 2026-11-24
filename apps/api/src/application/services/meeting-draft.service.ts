@@ -687,7 +687,7 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
     const request = await this.draftRequest(chapterId, meeting, draft, userId);
     if (request.sources) {
       // Who may still contribute is checked as late as the call: a
-      // note-taker who said No to Frapp AI or left since the officer asked
+      // note-taker who said No to Frapp Intelligence or left since the officer asked
       // is not sent (#4935).
       request.sources = await this.meetingNotes.stillContributing(
         chapterId,

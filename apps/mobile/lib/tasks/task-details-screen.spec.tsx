@@ -141,8 +141,16 @@ const updateTask = vi.fn<
   (input: { id: string; body: Record<string, unknown> }) => Promise<unknown>
 >(async () => undefined);
 
+const frappLinkNames = vi.hoisted(() => ({
+  value: new Map<string, unknown>(),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Frapp links: names read live, and what the attach picker offers.
+  useFrappLinks: () => ({ resolved: frappLinkNames.value, isLoading: false }),
+  useFrappLinkCandidates: () => ({ candidates: [], isLoading: false }),
+  useDocumentDownloadUrl: () => ({ mutateAsync: vi.fn() }),
   useActiveChapterId: () => "chapter-1",
   useViewerUserId: () => ME,
   usePermissionList: () => permissions,

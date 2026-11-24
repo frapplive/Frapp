@@ -104,7 +104,7 @@ export const CHAT_CATCH_UP_STATUSES = [
 export type ChatCatchUpStatus = (typeof CHAT_CATCH_UP_STATUSES)[number];
 
 export const CHAT_CATCH_UP_UNAVAILABLE_REASONS = [
-  /** The member has not turned Frapp AI on. Show Meet Frapp AI. */
+  /** The member has not turned Frapp Intelligence on. Show Meet Frapp Intelligence. */
   "consent_required",
   /** The president has Ask and summaries turned off. */
   "chapter_off",
@@ -204,9 +204,9 @@ export const CHAT_CATCH_UP_COPY = {
   try_again: "Try again",
   unverified:
     "Part of the summary could not be matched to a message and was left out.",
-  consent_action: "Turn on Frapp AI",
+  consent_action: "Turn on Frapp Intelligence",
   unavailable: {
-    consent_required: "Turn on Frapp AI to use summaries.",
+    consent_required: "Turn on Frapp Intelligence to use summaries.",
     chapter_off: "Your chapter's president has turned summaries off.",
     chat_off:
       "Your chapter's president has channel messages for AI turned off, so there is nothing a summary may read.",

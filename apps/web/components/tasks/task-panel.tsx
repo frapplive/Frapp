@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, Undo2, UserPlus, Users } from "lucide-react";
 import {
   TASK_ACTION_LABELS,
@@ -48,6 +48,9 @@ import {
   type RepeatDraft,
   type TaskProofKind,
   type TaskWho,
+  FRAPP_LINK_COPY,
+  readFrappLinks,
+  type FrappLink,
 } from "@repo/validation";
 import {
   Panel,
@@ -57,6 +60,7 @@ import {
   OWNS_ESCAPE,
 } from "@/components/shared/panel";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import { FrappLinksEditor } from "@/components/shared/frapp-links";
 import { RepeatOptions } from "@/components/shared/repeat-options";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import { Button } from "@/components/ui/button";
@@ -552,6 +556,11 @@ function TaskPanelBody({
         {task.meeting_id ? (
           <FromMinutesRow meetingId={task.meeting_id} />
         ) : null}
+        <AttachedRow
+          task={task}
+          editable={editable}
+          onSave={(attachments) => save({ attachments })}
+        />
         <FollowerRow
           task={task}
           editable={editable && !task.series}
@@ -649,6 +658,52 @@ export function FromMinutesRow({ meetingId }: { meetingId: string }) {
       >
         {name}
       </Link>
+    </FieldRow>
+  );
+}
+
+/**
+ * Attached (`spec/behavior/frapp-links.md`): the task's documents, minutes,
+ * events, chat messages and web links, each named live for whoever reads
+ * it. A `tasks:manage` holder attaches and removes in place; the row shows
+ * the change at once and goes back if the save is refused. Hidden for a
+ * member when nothing is attached.
+ */
+function AttachedRow({
+  task,
+  editable,
+  onSave,
+}: {
+  task: BoardTask;
+  editable: boolean;
+  onSave: (attachments: FrappLink[]) => Promise<boolean>;
+}) {
+  const stored = useMemo(
+    () => readFrappLinks(task.attachments),
+    [task.attachments],
+  );
+  const [shown, setShown] = useState<FrappLink[] | null>(null);
+  // Only the latest save puts the row back on the stored list, so an
+  // earlier save finishing late never flashes the list it replaced.
+  const turn = useRef(0);
+  const links = shown ?? stored;
+  if (!editable && links.length === 0) return null;
+  return (
+    <FieldRow label={FRAPP_LINK_COPY.field} alignTop>
+      <div className="px-2 py-1">
+        <FrappLinksEditor
+          links={links}
+          canEdit={editable}
+          onChange={(update) => {
+            const next = update(links);
+            const mine = ++turn.current;
+            setShown(next);
+            void onSave(next).finally(() => {
+              if (turn.current === mine) setShown(null);
+            });
+          }}
+        />
+      </div>
     </FieldRow>
   );
 }

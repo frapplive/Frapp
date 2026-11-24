@@ -15,6 +15,7 @@ import {
   isAllowedUploadMime,
   channelAccessEntry,
   normalizeChannelAccessList,
+  type TenantKind,
 } from '@repo/validation';
 import { assertSafeStoragePath } from '#domain/utils/storage-path';
 import {
@@ -37,6 +38,10 @@ import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interf
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
+import {
+  TENANT_SLUG_REPOSITORY,
+  type ITenantSlugRepository,
+} from '#domain/repositories/tenant-slug.repository.interface';
 import {
   STORAGE_PROVIDER,
   type IStorageProvider,
@@ -136,6 +141,19 @@ export interface ChapterMembershipSummary {
   // an unprojected chapter here leaked the same identifiers `/current` did
   // (#930). See `chapter-member-view.ts`.
   chapter: ChapterMemberView;
+  /**
+   * The tenant's current slug (ADR-27, #5918), what its pages will live
+   * under as `/c/<slug>/…`. Every tenant has one from 20261123194106 on;
+   * null only if the registry read finds none.
+   */
+  slug: string | null;
+  /** `chapters.kind`: a chapter or a council (ADR-27 decision 3). */
+  kind: TenantKind;
+  /**
+   * The tenant's school. Null until the school layer lands (#5835); the key
+   * is here now so step 2's clients are written against the final shape.
+   */
+  school: null;
 }
 
 @Injectable()
@@ -155,6 +173,8 @@ export class ChapterService {
     private readonly channelRepo: IChatChannelRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly auditLog: ChapterAuditLogService,
+    @Inject(TENANT_SLUG_REPOSITORY)
+    private readonly tenantSlugRepo: ITenantSlugRepository,
   ) {}
 
   /**
@@ -235,11 +255,16 @@ export class ChapterService {
       return [];
     }
 
-    const chapters = await this.chapterRepo.findByIds(
-      memberships.map((member) => member.chapter_id),
-    );
+    const chapterIds = memberships.map((member) => member.chapter_id);
+    const [chapters, slugs] = await Promise.all([
+      this.chapterRepo.findByIds(chapterIds),
+      this.tenantSlugRepo.findCurrentByChapterIds(chapterIds),
+    ]);
     const chaptersById = new Map(
       chapters.map((chapter) => [chapter.id, chapter]),
+    );
+    const slugByChapter = new Map(
+      slugs.map((row) => [row.chapter_id, row.slug]),
     );
 
     return memberships.flatMap((member) => {
@@ -248,7 +273,13 @@ export class ChapterService {
         return [];
       }
 
-      return [this.mapMembershipSummary(member, chapter)];
+      return [
+        this.mapMembershipSummary(
+          member,
+          chapter,
+          slugByChapter.get(chapter.id) ?? null,
+        ),
+      ];
     });
   }
 
@@ -868,6 +899,7 @@ export class ChapterService {
   private mapMembershipSummary(
     member: Member,
     chapter: Chapter,
+    slug: string | null,
   ): ChapterMembershipSummary {
     return {
       member_id: member.id,
@@ -881,6 +913,10 @@ export class ChapterService {
       // reaching `selectOpsNudge`.
       dismissed_ops_nudges: member.dismissed_ops_nudges ?? [],
       chapter: toChapterMemberView(chapter),
+      slug,
+      // `select('*')` reads the column, which is `not null default 'chapter'`.
+      kind: chapter.kind ?? 'chapter',
+      school: null,
     };
   }
 }

@@ -29,7 +29,7 @@ import { drawnText, screenText } from "@/test/screen-text";
 import { AskTurn } from "./ask-turn";
 
 /**
- * One turn of the Ask conversation (`spec/behavior/ai.md` § Ask; #450, #451).
+ * One turn of the Ask conversation (`spec/behavior/ai.md` § Frapp Intelligence; #450, #451).
  * Every word is read from `ASK_COPY`, the same object web reads, so the two
  * can't drift.
  */

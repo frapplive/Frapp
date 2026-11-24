@@ -8,7 +8,7 @@ import { MESSAGE_RENDER_ELEMENTS } from "./markdown";
 import { flattenMessageMarkdown } from "./reply-preview";
 
 /**
- * Ask Frapp's answer drawn as markdown, on the phone and on web (#5429; Paul,
+ * Frapp Intelligence's answer drawn as markdown, on the phone and on web (#5429; Paul,
  * 2026-11-17: "We should process the raw markdown? Packages exist for this.").
  *
  * An answer goes through chat's own pipeline (`parseMessageMarkdown` on the

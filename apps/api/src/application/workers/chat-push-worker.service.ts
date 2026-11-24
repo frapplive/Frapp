@@ -414,7 +414,7 @@ export class ChatPushWorkerService
     // a reader auditing the rules will find), but nothing should ever reach it.
     if (row.kind === 'imported') return;
 
-    // An Ask Frapp answer its asker posted to the channel (#4713) notifies
+    // A Frapp Intelligence answer its asker posted to the channel (#4713) notifies
     // nobody: no push and no notification row. Nothing downstream is needed
     // to decide that, so it leaves here, before the roster is loaded.
     if (row.kind === 'ask_answer') return;

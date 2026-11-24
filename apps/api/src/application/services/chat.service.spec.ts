@@ -3744,7 +3744,7 @@ describe('ChatService', () => {
       });
     });
 
-    it('refuses a client that sends an Ask Frapp answer of its own (#4713)', async () => {
+    it('refuses a client that sends a Frapp Intelligence answer of its own (#4713)', async () => {
       // Only `AskPostService` writes the kind, from an answer the server
       // sealed. A member who could send one would be writing as Frapp.
       mockChannelRepo.findById.mockResolvedValue(baseChannel);
@@ -4375,7 +4375,7 @@ describe('ChatService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    describe('an Ask Frapp answer posted to the channel (#4713)', () => {
+    describe('a Frapp Intelligence answer posted to the channel (#4713)', () => {
       const posted = {
         ...baseMessage,
         sender_id: '00000000-0000-0000-0000-000000000000',
