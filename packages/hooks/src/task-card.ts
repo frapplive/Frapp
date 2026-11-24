@@ -395,9 +395,10 @@ export function canReadCardTask(input: {
  *   task that is already in progress or done, and the server would refuse it.
  * - **The assignee** walks `TODO → IN_PROGRESS → COMPLETED`, keyed off the
  *   stored status (`actionStatus`).
- * - **A `tasks:manage` holder** confirms or sends back a completion. Not on
- *   their own task: the server refuses self-confirm (#1056), so the assignee
- *   gets Send back only. Once points are awarded, the only control left is
+ * - **A `tasks:manage` holder** confirms or sends back someone else's
+ *   completion. Never their own: the server refuses a self-confirm (#1056)
+ *   and a self-send-back (#5917), and the assignee's own way back is Mark
+ *   not done. Once points are awarded, the only control left is
  *   the Confirmed indicator, except on a task that needed no sign-off
  *   (#4635): it is Done with nothing to confirm, and Send back stays.
  */
@@ -415,8 +416,9 @@ export function taskCardControls(input: {
   if (!taskSendBackOpen({ ...live, stored_status: stored })) {
     return ["confirmed"];
   }
+  if (isAssignee) return [];
   if (live.points_awarded || !taskNeedsSignOff(live)) return ["reject"];
-  return isAssignee ? ["reject"] : ["confirm", "reject"];
+  return ["confirm", "reject"];
 }
 
 /**

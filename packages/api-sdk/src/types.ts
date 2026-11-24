@@ -3757,6 +3757,23 @@ export interface paths {
         patch: operations["TaskController_updateSubtask_v1"];
         trace?: never;
     };
+    "/v1/tasks/{id}/group/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add members to a group task: each gets a To do copy of it (#5905) */
+        post: operations["TaskController_addToGroup_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tasks/{id}/group/remove": {
         parameters: {
             query?: never;
@@ -10553,6 +10570,15 @@ export interface components {
         UpdateTaskSubtaskDto: {
             /** @description True to check it off, false to uncheck it. */
             done: boolean;
+        };
+        AddToTaskGroupDto: {
+            /** @description The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped. */
+            assignee_ids: string[];
+        };
+        AddToTaskGroupResponseDto: {
+            /** @description The members who got a copy; anyone who already had one is left out. */
+            added: string[];
+            group: components["schemas"]["TaskGroupSummaryDto"];
         };
         RemoveFromTaskGroupDto: {
             /** @description The members whose copy goes, 1 to 1000. A member with no copy is skipped; a confirmed copy, or every copy, is a 400. */
@@ -22462,6 +22488,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskSubtaskDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_addToGroup_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddToTaskGroupDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddToTaskGroupResponseDto"];
                 };
             };
             /** @description Error */

@@ -6,7 +6,9 @@ import { MemberAvatar } from "@/components/member-avatar";
 import { StatusChip } from "@/components/status-chip";
 import { PressableRow } from "@/components/list-section";
 import { eyebrowStyle } from "@/components/eyebrow";
-import { DisclosureGlyph } from "@/components/control-glyphs";
+import { DisclosureGlyph, PlusGlyph } from "@/components/control-glyphs";
+import { IconButton } from "@/components/icon-button";
+import { TASK_AUDIENCE_COPY } from "@repo/validation";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
 import { GroupProgress } from "@/components/tasks/group-progress";
 import { initialsFor } from "@/lib/more/narrow";
@@ -33,6 +35,9 @@ export interface WhoHasItPeople {
  * In select mode (Remove people) every member is listed with a circle to
  * pick, as Apple Mail's Edit puts a circle on each message; a confirmed copy
  * is dimmed and can't be picked, since its points were paid on it.
+ *
+ * Add people (#5905): a plus beside the heading, for an officer, opens the
+ * Who picker for people only; it is hidden in select mode.
  */
 export function WhoHasIt({
   copies,
@@ -44,6 +49,8 @@ export function WhoHasIt({
   picked,
   onPick,
   note,
+  onAdd,
+  addDisabled = false,
 }: {
   /** Already in order (`sortCopies`). */
   copies: readonly TaskRowModel[];
@@ -57,6 +64,9 @@ export function WhoHasIt({
   onPick: (userId: string) => void;
   /** A line under the rows: what Remove did, or why it can't. */
   note?: string | null;
+  /** Add people, for an officer; left out, there is no plus. */
+  onAdd?: () => void;
+  addDisabled?: boolean;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -67,9 +77,21 @@ export function WhoHasIt({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.label} accessibilityRole="header">
-        WHO HAS IT
-      </Text>
+      <View style={styles.heading}>
+        <Text style={styles.label} accessibilityRole="header">
+          WHO HAS IT
+        </Text>
+        {onAdd && !selecting ? (
+          <IconButton
+            label={TASK_AUDIENCE_COPY.addPeople}
+            hint="Pick members to give this task to."
+            onPress={onAdd}
+            disabled={addDisabled}
+          >
+            <PlusGlyph color={tokens.color.text.foreground} />
+          </IconButton>
+        ) : null}
+      </View>
       <GroupProgress who={who} done={progress.done} total={progress.total} />
       <View>
         {shown.map((copy, index) => (
@@ -208,6 +230,11 @@ function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
     section: {
       gap: tokens.spacing.xs,
+    },
+    heading: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
     },
     label: {
       ...eyebrowStyle(tokens),
