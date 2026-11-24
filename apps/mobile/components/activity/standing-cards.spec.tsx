@@ -244,7 +244,8 @@ describe("This semester (the gauges)", () => {
     act(() => gauge(tree, "service").props.onPress());
     expect(push).toHaveBeenLastCalledWith("/service-hours");
     act(() => gauge(tree, "points").props.onPress());
-    expect(push).toHaveBeenLastCalledWith("/tasks");
+    // The member's own points (#5950; the task board until then).
+    expect(push).toHaveBeenLastCalledWith("/points");
   });
 
   it("holds its place while it loads, and draws nothing when its read fails", () => {
