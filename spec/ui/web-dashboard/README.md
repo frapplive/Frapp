@@ -934,6 +934,9 @@ Flushed together on 2026-11-05 (with `/polls`, since retired, #3871); the board 
     A desktop has the room to show every field editable at once, as Slack's and LinkedIn's web profile editors do, while the phone keeps a readable profile and edits on demand.
   - The email stays in the header, under the major · company · year line; the phone moved it to its Details rows.
     Web has no Details list: its form holds only fields the member edits, and the email is not one of them, so the header, where web shows who you are read-only, is its only place.
+- **More details** follows the Directory profile form (#581, `components/profile/own-custom-fields-section.tsx`): the chapter's custom fields, every tier, each with a line of who else sees it, and its own Save details button, which sends only what changed.
+  A `select` is a `Select` with Not set first (gone once a required field has a value), a `boolean` a `Switch` at the row's end, a `phone` a phone field formatted on leaving it, the rest text fields; a refused value says why under its field on Save.
+  Nothing draws for a chapter with no fields or a viewer without `members:view`. The phone draws the same fields, words and order under Details ([`../mobile/screens.md`](../mobile/screens.md) s15); the rules are [`members.md` § Custom Fields](../../behavior/members.md#custom-fields).
 
 ### Two doors: Chapter settings and your Settings
 

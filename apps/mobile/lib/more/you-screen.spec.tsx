@@ -117,6 +117,11 @@ vi.mock("@/components/profile/edit-profile-sheet", async () => {
   };
 });
 
+// More details is its own spec's business (#581, `lib/more/own-custom-fields.spec.ts`).
+vi.mock("@/components/you/own-custom-fields", () => ({
+  OwnCustomFieldsSection: () => null,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   // The Edit sheet's Major suggestions (#5778) are its own spec's business.

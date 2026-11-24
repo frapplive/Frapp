@@ -724,6 +724,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/members/me/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your own custom-field values */
+        get: operations["MemberController_getOwnCustomFields_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set your own custom-field values
+         * @description Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.
+         */
+        patch: operations["MemberController_updateOwnCustomFields_v1"];
+        trace?: never;
+    };
     "/v1/members/by-user/{userId}": {
         parameters: {
             query?: never;
@@ -7659,6 +7680,30 @@ export interface components {
              */
             scope: "chapter" | "self";
             members: components["schemas"]["MemberPhoneReachDto"][];
+        };
+        OwnCustomFieldDto: {
+            field_id: string;
+            key: string;
+            label: string;
+            /** @enum {string} */
+            type: "text" | "number" | "decimal" | "phone" | "select" | "boolean";
+            /** @enum {string} */
+            visibility: "self" | "chapter" | "exec" | "president";
+            required: boolean;
+            /** @description A select field's choices; null for every other type */
+            choices: string[] | null;
+            /** @description A text field's own length cap, when it sets one */
+            max_length: number | null;
+            value: string | null;
+        };
+        OwnCustomFieldValueDto: {
+            /** Format: uuid */
+            field_id: string;
+            /** @description The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or "true"/"false". null or an empty string clears it; a required field with a value cannot be cleared. */
+            value: string | null;
+        };
+        UpdateOwnCustomFieldsDto: {
+            values: components["schemas"]["OwnCustomFieldValueDto"][];
         };
         UpdateMemberRolesDto: {
             role_ids: string[];
@@ -15292,6 +15337,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberPhoneReachListDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemberController_getOwnCustomFields_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnCustomFieldDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemberController_updateOwnCustomFields_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOwnCustomFieldsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnCustomFieldDto"][];
                 };
             };
             /** @description Error */
