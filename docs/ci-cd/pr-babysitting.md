@@ -682,3 +682,34 @@ So "only reviewed code runs with the App token" is really "only code merged by s
 write access" — fine for a single-maintainer repo, and the thing to revisit first if
 collaborators are ever added. Note this is about the App token, not about what ships: the
 production deploy still requires a human to approve the `production` environment.
+
+## Recheck after a deploy (`scripts/ci/pr-recheck-after-deploy.mjs`)
+
+The base-sync bot's second half (Paul, 2026-11-24). When staging gets stuck, for example on a
+migration-order race (#4795, #5958), the Migration drift gate goes red on every open PR, and before
+this nothing turned it green again after staging recovered except each PR's next push.
+`pr-recheck-after-deploy.yml` re-runs those gate runs once fresh state is published.
+
+- **Only the Migration drift gate.** A re-run keeps its run's commit, which for a pull request is
+  GitHub's test merge with `main` as `main` stood when the run started. So re-running CI can't pick
+  up a fix that has since landed on `main`; a PR whose CI broke because `main` was broken still needs
+  `npm run merge:main` from its session. The gate's three jobs (`migration-drift`, `migration-order`,
+  `migration-replay`) are the PR checks that read live state when they run: `origin/main` and the
+  published migration snapshot. Paul chose this scope over also merging `main` into red PRs, or
+  re-running failed CI jobs once (2026-11-24).
+- **When.** On each successful Migration snapshot run that a deploy started. The gate reads staging
+  through that snapshot, so a re-run fired by the deploy itself would read the state from before it.
+  The sweep does nothing unless the newest Deploy staging run that ran (not skipped or superseded)
+  succeeded.
+- **What.** Open, non-draft PRs from this repo, most recently updated first, at most 30 a sweep (the
+  rest are logged). For each, the newest `pull_request` run of the gate on its head gets
+  `rerun-failed-jobs` when it concluded `failure`, finished before the snapshot was published, and
+  is below attempt 3. Merge queue runs are never touched, and a queued PR is already green.
+- **Bounds.** The finished-before rule means a run is re-run at most once per publish. The attempt
+  cap means a gate that is red for the PR's own reason (its migration fails replay) costs at most two
+  bot re-runs per head. A re-run starts nothing that triggers this workflow again.
+- **Signals.** It posts no comment. The re-run's completion reaches a subscribed session through the
+  PR-activity webhook like any other run, and the run's summary lists each PR and why it was or wasn't
+  re-run.
+- **Token.** `GITHUB_TOKEN` with `actions: write`. It holds neither the base-sync App token nor the
+  `automation` environment, which is why it is its own workflow beside `pr-base-sync.yml`.

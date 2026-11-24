@@ -1,0 +1,72 @@
+name: PR recheck after deploy
+
+# The base-sync bot's second half (Paul, 2026-11-24): once a deploy has published
+# fresh database state, re-run the failed jobs of each open PR's Migration drift
+# gate, so a gate that went red while staging was stuck (a migration-order race,
+# #4795, #5958) turns green without waiting for the PR's next push. Behaviour:
+# docs/ci-cd/pr-babysitting.md § Recheck after a deploy; logic and the rules on
+# which runs it touches: scripts/ci/pr-recheck-after-deploy.mjs.
+#
+# ── Why only the Migration drift gate ───────────────────────────────────────
+# A re-run keeps its run's commit, which for a pull request is the test merge
+# with `main` as it stood when the run started, so re-running CI can't pick up a
+# fix that landed on `main` since. The gate's three jobs read `origin/main` and
+# the published migration snapshot when they run, so a re-run sees the new state.
+#
+# ── Why it fires on Migration snapshot, not on Deploy staging ───────────────
+# The gate reads staging through the snapshot, which `migration-snapshot.yml`
+# publishes after each deploy finishes. Fired by the deploy itself, a re-run
+# would read the snapshot from before it and go red again. Only a snapshot run a
+# deploy started (`event == 'workflow_run'`) counts; the script also checks that
+# the newest Deploy staging run succeeded.
+#
+# ── Why its own workflow and not a job in pr-base-sync.yml ──────────────────
+# It needs `actions: write`, which base sync doesn't hold, and none of base
+# sync's App token or `automation` environment: a re-run by GITHUB_TOKEN starts
+# the jobs like any re-run. It also has its own trigger, and base sync's
+# concurrency groups are keyed by event, so a fourth trigger there would share
+# or cancel their groups.
+#
+# This runs the default branch's copy of this file and the script (workflow_run
+# semantics), so a change takes effect only after it merges. No secrets beyond
+# GITHUB_TOKEN, no npm ci: the script is dependency-free.
+
+on:
+  workflow_run:
+    workflows: ["Migration snapshot"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: write # list runs and re-run failed jobs
+  pull-requests: read # list open PRs
+  contents: read
+
+# The newest publish supersedes an older one: a sweep reads every open PR afresh
+# and writes nothing a cancelled one would have needed.
+concurrency:
+  group: pr-recheck-after-deploy
+  cancel-in-progress: true
+
+jobs:
+  recheck:
+    # A deploy-driven publish that succeeded, in this repository. The scheduled
+    # and hand-dispatched publishes are not "after a deploy".
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_run' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Re-run stale Migration drift gate runs on open PRs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SNAPSHOT_RUN_ID: ${{ github.event.workflow_run.id }}
+          SNAPSHOT_RUN_COMPLETED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: node scripts/ci/pr-recheck-after-deploy.mjs
