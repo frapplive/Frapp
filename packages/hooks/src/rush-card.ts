@@ -1,5 +1,6 @@
 import { serverMessageOf, statusOf } from "@repo/api-sdk";
 import {
+  can,
   moduleRefusalFromServerMessage,
   subscriptionRefusalFromServerMessage,
 } from "@repo/validation";
@@ -21,7 +22,11 @@ import {
 export interface LiveRushCandidate {
   id: string;
   display_name: string;
-  vote_count: number;
+  /**
+   * `null` when the server left the count out: the viewer lacks
+   * `rush:view_results` (#4084). Never read as 0.
+   */
+  vote_count: number | null;
   viewer_has_voted: boolean;
   bid_extended: boolean;
 }
@@ -29,47 +34,65 @@ export interface LiveRushCandidate {
 /**
  * `useRushCandidate`'s data as a `LiveRushCandidate`, or `null` when there is
  * none (loading, a read the hook resolved to no candidate, or a shape without
- * an id or a finite count).
+ * an id, or with a count that isn't a finite number). An absent count is a
+ * hidden one (`rush:view_results`), not a malformed read.
  */
 export function readLiveRushCandidate(data: unknown): LiveRushCandidate | null {
   if (!data || typeof data !== "object") return null;
   const r = data as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.display_name !== "string") {
+    return null;
+  }
+  const counted = r.vote_count !== undefined && r.vote_count !== null;
   if (
-    typeof r.id !== "string" ||
-    typeof r.display_name !== "string" ||
-    typeof r.vote_count !== "number" ||
-    !Number.isFinite(r.vote_count)
+    counted &&
+    (typeof r.vote_count !== "number" || !Number.isFinite(r.vote_count))
   ) {
     return null;
   }
   return {
     id: r.id,
     display_name: r.display_name,
-    vote_count: r.vote_count,
+    vote_count: counted ? (r.vote_count as number) : null,
     viewer_has_voted: r.viewer_has_voted === true,
     bid_extended: r.bid_status === "extended",
   };
 }
 
 /**
- * Whether the card should read its candidate. The rush routes need
- * `members:view` and nothing else (there are no rush permissions), so a
- * viewer known not to hold it isn't asked for: for them it is a guaranteed
- * 403, and the card shows no tally.
- *
- * Until the viewer's permissions are known (still loading, or that read
- * failed) the card asks anyway. Every seeded role holds `members:view`, and a
- * 403 resolves to no tally (`useRushCandidate`), so asking costs at most one
- * request; waiting would leave a member's card without its tally, Vote and
- * Extend bid for as long as the permissions read kept failing. The reads also
- * answer while Recruitment is off; only the writes are refused then.
+ * Whether the viewer may do what `permission` gates, as a rush card judges
+ * it: `can` once the viewer's permissions are read, and yes until then
+ * (still loading, or that read failed). The server is the gate; this only
+ * hides what it would refuse. Every seeded member role holds the member keys
+ * (`RUSH_MEMBER_PERMISSIONS`), and a refusal is handled where it lands, so
+ * offering a control early costs at most one 403. Waiting would leave a
+ * member's card without its tally, Vote and Extend bid for as long as the
+ * permissions read kept failing.
  */
-export function canReadCardRushCandidate(input: {
-  canViewMembers: boolean;
-  /** Whether the viewer's permissions have been read. */
-  permissionsKnown: boolean;
-}): boolean {
-  return !input.permissionsKnown || input.canViewMembers;
+function rushCardMay(
+  permission: string,
+  permissions: readonly string[] | null | undefined,
+): boolean {
+  return !Array.isArray(permissions) || can(permission, permissions);
+}
+
+/**
+ * Whether the card should read its candidate. The read needs `members:view`
+ * and `rush:view` (#4070), so a viewer known not to hold both isn't asked
+ * for: for them it is a guaranteed 403, and the card shows no tally. A 403
+ * resolves to no tally anyway (`useRushCandidate`). The reads also answer
+ * while Recruitment is off; only the writes are refused then.
+ *
+ * `permissions` is `useMyPermissions().data?.permissions`: `undefined` until
+ * it is read, which this treats as may (`rushCardMay`).
+ */
+export function canReadCardRushCandidate(
+  permissions: readonly string[] | null | undefined,
+): boolean {
+  return (
+    rushCardMay("members:view", permissions) &&
+    rushCardMay("rush:view", permissions)
+  );
 }
 
 /**
@@ -87,21 +110,30 @@ export type RushCardControl = "vote" | "voted" | "bid";
  * - **Nothing while Recruitment is known to be off.** The server refuses both
  *   writes then, and a timeline of cards each saying so would be noise. The
  *   tally stays: the reads still answer.
- * - **Vote, or Voted** once the viewer has, for every member.
- * - **Extend bid** until a bid is out, for every member: the bid route has no
- *   permission of its own. Once it is out the badge says so and the control
- *   goes, since a repeat bid changes nothing.
+ * - **Voted** once the viewer has, whatever they hold now: it records what
+ *   they did, not something they may do.
+ * - **Vote** before that, for a viewer who may (`rush:vote`).
+ * - **Extend bid** until a bid is out, for a viewer who may (`rush:bid`).
+ *   Once it is out the badge says so and the control goes, since a repeat
+ *   bid changes nothing.
+ *
+ * A control the viewer's role can't use is left out, not disabled (#4084):
+ * a role without the key has nothing to wait for. `permissions` is read as
+ * `canReadCardRushCandidate` reads it.
  */
 export function rushCardControls(input: {
   live: LiveRushCandidate | null;
   recruitmentOff: boolean;
+  permissions: readonly string[] | null | undefined;
 }): RushCardControl[] {
-  const { live, recruitmentOff } = input;
+  const { live, recruitmentOff, permissions } = input;
   if (!live || recruitmentOff) return [];
-  const controls: RushCardControl[] = [
-    live.viewer_has_voted ? "voted" : "vote",
-  ];
-  if (!live.bid_extended) controls.push("bid");
+  const controls: RushCardControl[] = [];
+  if (live.viewer_has_voted) controls.push("voted");
+  else if (rushCardMay("rush:vote", permissions)) controls.push("vote");
+  if (!live.bid_extended && rushCardMay("rush:bid", permissions)) {
+    controls.push("bid");
+  }
   return controls;
 }
 
@@ -110,8 +142,15 @@ export function rushCardBadgeLabel(live: LiveRushCandidate): string {
   return live.bid_extended ? "Bid extended" : "Open";
 }
 
-/** The tally line: "1 vote", "3 votes · you voted". Voter names never. */
-export function rushCardTally(live: LiveRushCandidate): string {
+/**
+ * The tally line: "1 vote", "3 votes · you voted". Voter names never. For a
+ * viewer the count is hidden from (`rush:view_results`, #4084), only their
+ * own vote: "You voted", or no line at all.
+ */
+export function rushCardTally(live: LiveRushCandidate): string | null {
+  if (live.vote_count === null) {
+    return live.viewer_has_voted ? "You voted" : null;
+  }
   const count = live.vote_count === 1 ? "1 vote" : `${live.vote_count} votes`;
   return live.viewer_has_voted ? `${count} · you voted` : count;
 }
@@ -139,7 +178,7 @@ export const RUSH_CARD_REFUSAL_COPY = {
 /**
  * `RUSH_CARD_REFUSAL_COPY` for a gate's refusal, or `null` for any other
  * failure, which the card relays as the server words it. A 403 alone is not a
- * gate: the routes also 403 a missing `members:view` and the
+ * gate: the routes also 403 a missing `members:view` or `rush:*` key and the
  * `chapter.context.*` family, which recover by themselves.
  */
 export function rushCardGateRefusal(error: unknown): string | null {

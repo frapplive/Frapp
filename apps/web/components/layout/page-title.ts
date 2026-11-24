@@ -1,7 +1,9 @@
 import { CHAPTER_AFFILIATIONS_COPY, type TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
+import type { VocabConfig } from "@repo/org-archetypes";
 import {
   DASHBOARD_NAV_ITEMS,
+  navItemLabel,
   type NavItem,
 } from "@/components/layout/nav-config";
 
@@ -89,12 +91,15 @@ function matchesRoute(pathname: string, href: string): boolean {
  * @param isNavItemVisible whether the nav shows a row to this viewer
  *   (`isNavItemVisible` in `protected-nav-item.tsx`, bound to their
  *   permissions and modules). Omitted, every parent shows.
+ * @param vocabulary the chapter's words, for a row named by them
+ *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
  * @param tenantKind the active tenant's kind: a council's Settings reads
  *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
+  vocabulary?: VocabConfig,
   tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
@@ -117,11 +122,14 @@ export function resolvePageTitle(
     return isNavItemVisible(navItem)
       ? {
           title: subPage[1],
-          parent: { label: navItem.label, href: navItem.href },
+          parent: {
+            label: navItemLabel(navItem, vocabulary),
+            href: navItem.href,
+          },
         }
       : { title: subPage[1] };
   }
-  if (navItem) return { title: navItem.label };
+  if (navItem) return { title: navItemLabel(navItem, vocabulary) };
 
   const offNav = Object.entries(OFF_NAV_TITLES).find(([href]) =>
     matchesRoute(pathname, href),

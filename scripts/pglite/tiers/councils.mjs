@@ -1,6 +1,6 @@
 import { db, miss } from "../harness.mjs";
 
-// ─── Functional: councils (20261124010605, #5933) ───────────────────────────
+// ─── Functional: councils (20261124203152, #5933) ───────────────────────────
 //
 // What the database holds about a council, proven here:
 //
@@ -17,7 +17,7 @@ import { db, miss } from "../harness.mjs";
 //   - existing chapters keep `kind = 'chapter'` with every council field null.
 //
 // The rows are deleted at the end.
-console.log("\n=== Functional: councils (20261124010605) ===");
+console.log("\n=== Functional: councils (20261124203152) ===");
 try {
   const SCHOOL = "c5933000-0000-4000-8000-0000000000a1";
   const SCHOOL_2 = "c5933000-0000-4000-8000-0000000000a2";

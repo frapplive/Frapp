@@ -52,6 +52,7 @@ import { NotificationsPopover } from "@/components/layout/notifications-popover"
 import { AccountMenu } from "@/components/layout/account-menu";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
 import { resolvePageTitle } from "@/components/layout/page-title";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
 import { useChapterTheme } from "@/lib/hooks/use-chapter-theme";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -68,6 +69,7 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
+import { DesktopRuntime } from "@/components/layout/desktop-runtime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -291,6 +293,10 @@ export function DashboardShell({
   // actions render there at every width.
   const [headerActionSlot, setHeaderActionSlot] =
     useState<HTMLDivElement | null>(null);
+  // Its view slot, beside the title (`PageViews`).
+  const [headerViewSlot, setHeaderViewSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const closeChatPanel = useCallback(() => {
     if (!chatOpen) return;
     toggleChat();
@@ -405,6 +411,8 @@ export function DashboardShell({
   const isModuleEnabled = useChapterModuleGate();
   // A council's rows and titles (#5933).
   const tenantKind = useTenantKind();
+  // A title named in the chapter's own word (Recruitment's Rush / Intake).
+  const chapterVocabulary = useChapterVocabulary();
   // The crumb's parent link follows its nav row's gates, so the top bar never
   // offers a member the Settings door the nav hides from them.
   // `/chat` is titled for the list on screen: the Direct messages row's
@@ -423,9 +431,18 @@ export function DashboardShell({
                 undefined,
                 tenantKind,
               ),
+            chapterVocabulary,
             tenantKind,
           ),
-    [onChatRoute, chatView, pathname, permissions, isModuleEnabled, tenantKind],
+    [
+      onChatRoute,
+      chatView,
+      pathname,
+      permissions,
+      isModuleEnabled,
+      chapterVocabulary,
+      tenantKind,
+    ],
   );
 
   const { data: notificationsData } = useNotifications();
@@ -520,6 +537,8 @@ export function DashboardShell({
       <WelcomeGate />
       {/* What's new, by itself once after an update (#3943). */}
       <WhatsNewHost />
+      {/* Inside the desktop app only: the icon's count and system notifications (#4842). */}
+      <DesktopRuntime />
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*
@@ -663,6 +682,7 @@ export function DashboardShell({
                 titleIsHeading={split === true}
                 onClose={closeTool}
                 actionSlotRef={setHeaderActionSlot}
+                viewSlotRef={setHeaderViewSlot}
               />
               <div
                 data-tool-page=""
@@ -677,7 +697,10 @@ export function DashboardShell({
                   askBar && "max-lg:pb-24 max-lg:[--ask-bar-room:4.5rem]",
                 )}
               >
-                <PageHeaderSlotProvider slot={headerActionSlot}>
+                <PageHeaderSlotProvider
+                  slot={headerActionSlot}
+                  viewSlot={headerViewSlot}
+                >
                   {children}
                 </PageHeaderSlotProvider>
               </div>

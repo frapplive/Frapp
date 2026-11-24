@@ -1,6 +1,6 @@
 /**
  * The school layer's rows (`spec/architecture/school-layer.md` § 2.1, § 2.2
- * and a minimal § 2.4; `20261123220535_school_layer_schools_and_membership.sql`,
+ * and a minimal § 2.4; `20261124182353_school_layer_schools_and_membership.sql`,
  * #5929). Every table is RLS on with no policies, reached only through the
  * service-role client.
  */

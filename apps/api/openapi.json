@@ -2544,6 +2544,95 @@
         ]
       }
     },
+    "/v1/members/me/custom-fields": {
+      "get": {
+        "operationId": "MemberController_getOwnCustomFields_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      },
+      "patch": {
+        "description": "Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.",
+        "operationId": "MemberController_updateOwnCustomFields_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnCustomFieldsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnCustomFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set your own custom-field values",
+        "tags": [
+          "Members"
+        ]
+      }
+    },
     "/v1/members/by-user/{userId}": {
       "get": {
         "operationId": "MemberController_getByUser_v1",
@@ -12950,6 +13039,62 @@
         ]
       }
     },
+    "/v1/tasks/{id}/group/add": {
+      "post": {
+        "operationId": "TaskController_addToGroup_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddToTaskGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddToTaskGroupResponseDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add members to a group task: each gets a To do copy of it (#5905)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
     "/v1/tasks/{id}/group/remove": {
       "post": {
         "operationId": "TaskController_removeFromGroup_v1",
@@ -14878,6 +15023,644 @@
           }
         ],
         "summary": "Extend a bid (idempotent; a repeat bid returns 201 again, not a conflict)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/pipeline": {
+      "get": {
+        "operationId": "RushPipelineController_pipeline_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushPipelineDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, tags and candidates, for the pipeline",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/stages": {
+      "get": {
+        "operationId": "RushPipelineController_stages_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's stages, in board order (written on first read)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "put": {
+        "operationId": "RushPipelineController_saveStages_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRushStagesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushStageDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the stage list: rename, reorder, hide and add stages",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/stage": {
+      "patch": {
+        "operationId": "RushPipelineController_moveStage_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRushCandidateStageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateStageDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a candidate to a stage (a Closed stage needs a reason)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags": {
+      "post": {
+        "operationId": "RushPipelineController_createTag_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a tag to the chapter’s list",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/tags/{tagId}": {
+      "patch": {
+        "operationId": "RushPipelineController_renameTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushTagInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushTagDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename a tag",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteTag_v1",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a tag, taking it off every candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/tags": {
+      "put": {
+        "operationId": "RushPipelineController_setTags_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRushCandidateTagsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushCandidateTagsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set a candidate's tags",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/rating": {
+      "put": {
+        "operationId": "RushPipelineController_rate_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateRushCandidateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the caller's 1-to-5 rating of a candidate (replaces it)",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes": {
+      "get": {
+        "operationId": "RushPipelineController_notes_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushNoteDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's notes, newest first (empty for a candidate linked to the caller)",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "post": {
+        "operationId": "RushPipelineController_addNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Write a note on a candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/notes/{noteId}": {
+      "patch": {
+        "operationId": "RushPipelineController_editNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushNoteInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushNoteDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit your own note",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "delete": {
+        "operationId": "RushPipelineController_deleteNote_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a note: your own, or any with `rush:manage`",
         "tags": [
           "Rush"
         ]
@@ -26504,6 +27287,105 @@
           "members"
         ]
       },
+      "OwnCustomFieldDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "decimal",
+              "phone",
+              "select",
+              "boolean"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "self",
+              "chapter",
+              "exec",
+              "president"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "choices": {
+            "nullable": true,
+            "description": "A select field's choices; null for every other type",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_length": {
+            "type": "number",
+            "nullable": true,
+            "description": "A text field's own length cap, when it sets one"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "field_id",
+          "key",
+          "label",
+          "type",
+          "visibility",
+          "required",
+          "choices",
+          "max_length",
+          "value"
+        ]
+      },
+      "OwnCustomFieldValueDto": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or \"true\"/\"false\". null or an empty string clears it; a required field with a value cannot be cleared."
+          }
+        },
+        "required": [
+          "field_id",
+          "value"
+        ]
+      },
+      "UpdateOwnCustomFieldsDto": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnCustomFieldValueDto"
+            }
+          }
+        },
+        "required": [
+          "values"
+        ]
+      },
       "UpdateMemberRolesDto": {
         "type": "object",
         "properties": {
@@ -34311,6 +35193,44 @@
           "done"
         ]
       },
+      "AddToTaskGroupDto": {
+        "type": "object",
+        "properties": {
+          "assignee_ids": {
+            "description": "The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.",
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "assignee_ids"
+        ]
+      },
+      "AddToTaskGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "description": "The members who got a copy; anyone who already had one is left out.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "group": {
+            "$ref": "#/components/schemas/TaskGroupSummaryDto"
+          }
+        },
+        "required": [
+          "added",
+          "group"
+        ]
+      },
       "RemoveFromTaskGroupDto": {
         "type": "object",
         "properties": {
@@ -36111,6 +37031,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -36128,7 +37062,7 @@
           },
           "vote_count": {
             "type": "number",
-            "description": "Ballot count. Voter names are never returned."
+            "description": "Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0."
           },
           "viewer_has_voted": {
             "type": "boolean",
@@ -36142,10 +37076,10 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at",
-          "vote_count",
           "viewer_has_voted"
         ]
       },
@@ -36198,6 +37132,20 @@
           "stage": {
             "type": "string"
           },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true,
+            "description": "Why the candidate is in a Closed stage; null in any other."
+          },
           "bid_status": {
             "type": "string",
             "enum": [
@@ -36225,9 +37173,428 @@
           "name_key",
           "user_id",
           "stage",
+          "closed_reason",
           "bid_status",
           "created_by",
           "created_at"
+        ]
+      },
+      "RushStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "What a candidate's `stage` holds. Fixed once made; a rename changes `label` only."
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ]
+          },
+          "position": {
+            "type": "number",
+            "description": "Order within its category."
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "key",
+          "label",
+          "category",
+          "position",
+          "hidden",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushTagDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "chapter_id",
+          "label",
+          "created_at"
+        ]
+      },
+      "RushPipelineCandidateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          },
+          "bid_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended"
+            ]
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_by_name": {
+            "type": "string",
+            "description": "Who added the candidate, by current name."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "rating_average": {
+            "type": "number",
+            "nullable": true,
+            "description": "Average 1-to-5 rating; null when nobody has rated. Absent without `rush:view_results`."
+          },
+          "rating_count": {
+            "type": "number",
+            "description": "How many members rated. Absent without `rush:view_results`."
+          },
+          "viewer_rating": {
+            "type": "number",
+            "nullable": true,
+            "description": "The caller's own rating, or null."
+          },
+          "vote_count": {
+            "type": "number",
+            "description": "Ballot count. Absent without `rush:view_results`."
+          },
+          "viewer_has_voted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "user_id",
+          "stage",
+          "closed_reason",
+          "bid_status",
+          "created_by",
+          "created_by_name",
+          "created_at",
+          "tag_ids",
+          "viewer_rating",
+          "viewer_has_voted"
+        ]
+      },
+      "RushPipelineDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "description": "In board order: by category, then position.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageDto"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushTagDto"
+            }
+          },
+          "candidates": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushPipelineCandidateDto"
+            }
+          }
+        },
+        "required": [
+          "stages",
+          "tags",
+          "candidates"
+        ]
+      },
+      "RushStageInputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "An existing stage. Omit to add a new one."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "met",
+              "engaged",
+              "bid_ready",
+              "closed"
+            ],
+            "description": "An existing stage's category can't change."
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "category",
+          "hidden"
+        ]
+      },
+      "SaveRushStagesDto": {
+        "type": "object",
+        "properties": {
+          "stages": {
+            "maxItems": 30,
+            "description": "Every stage, in order. Each existing stage must be included: stages are hidden, never removed. New and Closed each keep a visible stage.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushStageInputDto"
+            }
+          }
+        },
+        "required": [
+          "stages"
+        ]
+      },
+      "MoveRushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "The key of one of the chapter's visible stages."
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response"
+            ],
+            "description": "Required for a Closed stage, refused for any other."
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "RushCandidateStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "closed_reason": {
+            "type": "string",
+            "enum": [
+              "not_interested",
+              "not_eligible",
+              "chapter_passed",
+              "no_response",
+              "accepted_elsewhere",
+              "withdrew",
+              "deleted_info"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "closed_reason"
+        ]
+      },
+      "RushTagInputDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "SetRushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "description": "The candidate's tags after the call, replacing what it had.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RushCandidateTagsDto": {
+        "type": "object",
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "RateRushCandidateDto": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "rating"
+        ]
+      },
+      "RushNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "author_id",
+          "author_name",
+          "body",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RushNoteInputDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "body"
         ]
       },
       "GeofenceCircleDto": {

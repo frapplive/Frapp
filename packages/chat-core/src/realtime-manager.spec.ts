@@ -60,6 +60,7 @@ interface FakeChannel {
   unsubscribe: ReturnType<typeof vi.fn> & (() => Promise<string>);
   teardown: ReturnType<typeof vi.fn> & (() => void);
   track: ReturnType<typeof vi.fn>;
+  untrack: ReturnType<typeof vi.fn>;
   /** Prefixed `realtime:` exactly as the real client does. */
   topic: string;
   state: FakeChannelState;
@@ -137,6 +138,7 @@ function makeFakeChannel(topic: string, onTeardown: () => void): FakeChannel {
     ),
     send: vi.fn(),
     track: vi.fn(),
+    untrack: vi.fn(async () => "ok"),
     unsubscribe: vi.fn(async () => {
       channel.state = "leaving";
       return "ok";
@@ -1708,6 +1710,33 @@ describe("ChatRealtimeManager — configure attaches waiting channels and follow
       expect.objectContaining({ userId: VIEWER }),
     );
     expect(backfill).toHaveBeenCalledTimes(1);
+  });
+
+  test("a viewer whose page is hidden leaves presence on every joined channel, and returns to it (#4842)", () => {
+    // A hidden tab, or the desktop app closed to its tray, stays subscribed.
+    // Left in presence, the push worker would hold every push for that channel.
+    chatRealtime.configure(ctx(VIEWER));
+    chatRealtime.subscribe("c1");
+    const ch = current("c1")!;
+    ch.trigger("SUBSCRIBED");
+    expect(ch.track).toHaveBeenCalledTimes(1);
+
+    chatRealtime.setViewerAway(true);
+    expect(ch.untrack).toHaveBeenCalledTimes(1);
+    chatRealtime.setViewerAway(true);
+    expect(ch.untrack).toHaveBeenCalledTimes(1);
+
+    // A channel that joins while away tracks nobody.
+    chatRealtime.subscribe("c2");
+    const second = current("c2")!;
+    second.trigger("SUBSCRIBED");
+    expect(second.track).not.toHaveBeenCalled();
+
+    chatRealtime.setViewerAway(false);
+    expect(ch.track).toHaveBeenCalledTimes(2);
+    expect(second.track).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: VIEWER }),
+    );
   });
 
   test("a viewer that resolves while the join is in flight is tracked when it lands", () => {

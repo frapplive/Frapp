@@ -404,6 +404,7 @@ Provider client ids and secrets live in the **Supabase dashboard** (Authenticati
 | --- | --- |
 | Web staging | `https://app.staging.frapp.live/auth/callback?next=<guarded path>` (the sign-in screen's OAuth adds `&intent=sign-in`, #3786) |
 | Web production | `https://app.frapp.live/auth/callback?next=<guarded path>` (same) |
+| Desktop app (Google and Apple only) | `https://app.frapp.live/auth/desktop?next=<guarded path>&flow=<random>`, or the staging origin when the app was launched on staging. It is a route of the web app, opened in the member's browser, so the web origin's `/**` covers it and the allow list needs no `frapp-desktop://` entry (#4841) |
 | Mobile (release / dev-client) | `frapp:///?` (`Linking.createURL("/")` plus a trailing `?`) |
 | Mobile Expo Go | `exp://<host>:8081/--/?` — same per-machine gap as magic-link (#765) |
 
