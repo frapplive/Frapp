@@ -733,7 +733,7 @@ export interface Database {
         Args: { p_import_id: string; p_chapter_id: string };
         Returns: string[];
       };
-      /** `20261124082248` (#5974) — deletes a PNM and its cascade; returns the count. */
+      /** `20261124205834` (#5974) — deletes a PNM and its cascade; returns the count. */
       delete_pnm: {
         Args: { p_pnm_id: string };
         Returns: number;
@@ -1120,7 +1120,7 @@ export interface Database {
         };
         Returns: Task[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb`: `PnmMergeResult`. */
+      /** `20261124205834` (#5974) — `returns jsonb`: `PnmMergeResult`. */
       merge_pnms: {
         Args: {
           p_council_id: string;
@@ -1154,7 +1154,7 @@ export interface Database {
         };
         Returns: PredictionStake;
       };
-      /** `20261124082248` (#5974) — the PNM retention sweep; returns the count. */
+      /** `20261124205834` (#5974) — the PNM retention sweep; returns the count. */
       purge_expired_pnms: {
         Args: { p_now: string };
         Returns: number;
@@ -1206,7 +1206,7 @@ export interface Database {
           chunk_count: number;
         }[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
       record_pnm_interest: {
         Args: {
           p_pnm_id: string;
@@ -1529,7 +1529,7 @@ export interface Database {
         };
         Returns: ChatSidebarPreferences[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
+      /** `20261124205834` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
       set_council_chapter_status: {
         Args: {
           p_council_id: string;
@@ -1555,7 +1555,7 @@ export interface Database {
         };
         Returns: Member[];
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
       set_school_chapter_status: {
         Args: {
           p_link_id: string;
@@ -1639,7 +1639,7 @@ export interface Database {
         Args: { p_chapter_id: string; p_user_id: string };
         Returns: number | null;
       };
-      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
+      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
       upsert_verified_pnm: {
         Args: {
           p_school_id: string;
