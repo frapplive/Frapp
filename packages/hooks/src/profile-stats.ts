@@ -151,8 +151,8 @@ export interface ProfileStats {
 export function useMyProfileStats(
   /**
    * Which numbers the screen draws. One it leaves out (its module is off)
-   * sends no read: the route is module-guarded and would answer 403, which
-   * would read as a failure nobody can retry.
+   * sends no read: the screen hides that number (P5.8), so reading it would
+   * only spend a request on a figure nobody sees.
    */
   wanted: { points?: boolean; service?: boolean } = {},
 ): ProfileStats {

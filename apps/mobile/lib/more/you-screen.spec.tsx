@@ -470,7 +470,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
   });
 
   it("drops Documents while nobody has set it up for this member", () => {
-    hiddenFeatures = new Set(["study", "documents"]);
+    hiddenFeatures = new Set(["documents"]);
     try {
       const labels = render()
         .root.findAllByType(ListRow)

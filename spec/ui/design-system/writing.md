@@ -568,16 +568,17 @@ Changed in #3977 by shawnatomklein-eng, 2026-11-10: the Truncated description sa
 | Error | `Couldn't load backwork` | the load-failure line (§ copy rules) |
 | Offline | `Backwork unavailable offline` | `Reconnect to browse the coursework archive and download a resource.` |
 
-### Study session (dashboard)
+### Study sessions (web, Profile panel)
+
+Read-only since #5950: a session starts on the phone, so web lists a member's sessions from the Study door on their Profile and never offers to start one, or explains how.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading study zones...` |
-| Empty zones | — | `No study zones yet.` then, for a viewer with `geofences:manage`, an **Add a study zone** link to `/settings?tab=geofences`, and for everyone else `An officer adds them.` (one line; the nav hides Study until a zone is active, so a saved link is the way here) |
-| Empty history | — | `No sessions yet. Start one inside a study zone to earn study points.` (one line) |
-| Error | `Couldn't load study data` | the load-failure line (§ copy rules) |
-| Offline | `Study hours unavailable offline` | `Reconnect to start a session. Tracking needs a live location check.` |
-| Paused (tab hidden) | `Paused (tab hidden)` (badge) | Surfaced live while the timer is paused by the Page Visibility API. |
+| Loading | — | Skeleton rows; no visible copy, and `Loading your study sessions` as its accessible name. |
+| Empty | — | `No study sessions yet.` (one line). Reached only by a saved link: the Profile's Study door appears once a member has a session. |
+| Error | `Couldn't load your study sessions` | the load-failure line (§ copy rules) |
+
+*(Corrected 2026-11-24: this was the dashboard's Study session page's table, with a Start flow, an offline row and a tab-hidden pause, until #5950 removed that page.)*
 
 ### Subscription refused (mobile, cross-surface)
 
@@ -632,9 +633,9 @@ Both clients derive the state with `pollsGateOf` in `@repo/chat-core/polls`.
 
 ### Study session (mobile, s10)
 
-The member's study screen has states the dashboard's *Study session* rows above don't cover (a session running on a phone, a pause, the location check, a refused write), and its error rows say which read failed rather than the dashboard's load-failure line (§ copy rules).
+The phone's study screen is where a session starts and runs, so it has states web's read-only panel above doesn't (a session running, a pause, the location check, a refused write), and its error rows say which read failed rather than the load-failure line (§ copy rules).
 Per §"Do not rewrite equivalent state text ad hoc per screen unless the workflow intent is materially different", the member surface gets its own rows rather than inline strings.
-Where a state is the same for both, the row says so and uses web's line, as *No zones* does.
+Where a state is the same as web's, the row says so and uses web's line, as *No zones* uses the web Study zones tool's.
 
 | State | Title | Description |
 |---|---|---|

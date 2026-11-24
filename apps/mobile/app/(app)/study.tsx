@@ -325,9 +325,8 @@ export default function StudyScreen() {
   /**
    * `useMutation` hands back a fresh object every render, so an effect keying on
    * `mutateAsync` would tear down and rebuild the heartbeat interval constantly.
-   * Holding the callables in a ref lets the effects key on real state instead —
-   * the pattern `apps/web/components/study/study-page.tsx` records for the same
-   * reason.
+   * Holding the callables in a ref lets the effects key on real state instead,
+   * as web's study page did for the same reason until #5950 removed it.
    */
   const apiRef = useRef({
     start: startSession.mutateAsync,

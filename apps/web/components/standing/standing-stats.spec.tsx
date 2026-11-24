@@ -43,10 +43,10 @@ vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
 
 import { StandingStats } from "./standing-stats";
 
-const session = (minutes: number) => ({
+const session = (minutes: number, status = "COMPLETED") => ({
   id: `s-${minutes}`,
   geofence_id: "z-1",
-  status: "COMPLETED",
+  status,
   start_time: "2026-11-20T18:00:00Z",
   end_time: "2026-11-20T19:00:00Z",
   total_foreground_minutes: minutes,
@@ -107,6 +107,27 @@ describe("StandingStats: your numbers on your Profile, each a door (#5950)", () 
     expect(screen.queryByTestId("profile-standing-points")).toBeNull();
     expect(screen.getByTestId("profile-standing-service")).toBeInTheDocument();
     expect(mocks.wanted.at(-1)).toEqual({ points: false, service: true });
+  });
+
+  it("counts ended sessions only, as the server and the phone do", () => {
+    mocks.sessions = [session(90), session(30, "ACTIVE")];
+    render(<StandingStats />);
+    expect(screen.getByTestId("profile-standing-study")).toHaveTextContent(
+      "1.5",
+    );
+  });
+
+  it("shows no module's figure once the chapter's modules couldn't be read", () => {
+    mocks.modules.status = "error";
+    const { container } = render(<StandingStats />);
+    expect(container).toBeEmptyDOMElement();
+    expect(mocks.wanted.at(-1)).toEqual({ points: false, service: false });
+  });
+
+  it("keeps the doors while the chapter's modules are first read", () => {
+    mocks.modules.status = "loading";
+    render(<StandingStats />);
+    expect(screen.getByTestId("profile-standing-points")).toBeInTheDocument();
   });
 
   it("draws nothing at all with Points and Hours both off", () => {

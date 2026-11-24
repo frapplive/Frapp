@@ -229,11 +229,17 @@ export const ASK_SOURCE_KINDS = [
 ] as const;
 export type AskSourceKind = (typeof ASK_SOURCE_KINDS)[number];
 
-/** The live-data pages a source can open. */
+/**
+ * The live-data pages a source can open. `points` is the asker's own points;
+ * `standings` is the chapter ranked by points (#5950: the two were one page
+ * until standings moved into the Directory). A build that predates a page
+ * shows its source without a link (`askSourceTarget`).
+ */
 export const ASK_SOURCE_PAGES = [
   "members",
   "events",
   "points",
+  "standings",
   "dues",
   "tasks",
 ] as const;

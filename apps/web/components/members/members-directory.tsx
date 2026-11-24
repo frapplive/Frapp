@@ -276,10 +276,17 @@ export function MembersDirectory() {
   );
   // A link to the standings ("#2 of 23 · Standings" on a member's own points)
   // arrives as `?sort=points`; the sort is the member's to change from there.
+  // A query-only navigation keeps this page mounted, so a later link (a
+  // standings link followed from chat beside the Directory, or the sidebar's
+  // plain `/members`) sets the sort again when the param changes.
   const sortParam = useSearchParams().get(STANDINGS_SORT_PARAM);
-  const [sort, setSort] = useState<SortValue>(
-    () => SORT_FROM_PARAM[sortParam ?? ""] ?? DEFAULT_SORT,
-  );
+  const sortFromParam = SORT_FROM_PARAM[sortParam ?? ""] ?? DEFAULT_SORT;
+  const [sort, setSort] = useState<SortValue>(sortFromParam);
+  const [sortParamSeen, setSortParamSeen] = useState(sortParam);
+  if (sortParam !== sortParamSeen) {
+    setSortParamSeen(sortParam);
+    setSort(sortFromParam);
+  }
   const [standingsWindow, setStandingsWindow] = useState<string>(
     DEFAULT_STANDINGS_WINDOW,
   );
@@ -663,12 +670,20 @@ export function MembersDirectory() {
     return [...filteredMembers].sort((a, b) => {
       switch (sortKey) {
         case "points":
-        case "service":
-          // Ties fall back to the name, so a board tied at 0 reads in order.
+        case "service": {
+          // A member at 0 or less has no place (`rankOf`) and lists after
+          // the ranked ones in both directions, as roleless members do under
+          // Role, so Fewest points opens on the lowest place, not on rows
+          // without one. Ties fall back to the name.
+          const totalA = standingTotalOf(a);
+          const totalB = standingTotalOf(b);
+          const placedA = totalA > 0;
+          if (placedA !== totalB > 0) return placedA ? -1 : 1;
           return (
-            (standingTotalOf(a) - standingTotalOf(b)) * factor ||
+            (totalA - totalB) * factor ||
             displayNameOf(a).localeCompare(displayNameOf(b))
           );
+        }
         case "order":
           return byFraternalOrder(a, b);
         case "role": {
@@ -738,11 +753,12 @@ export function MembersDirectory() {
   ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Re-sorting keeps the same population; just return to the first page.
+  // Re-sorting keeps the same population; just return to the first page. A
+  // new standings period re-ranks the list, so it does too.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- return to page 1 when sort identity changes
     setPage(1);
-  }, [effectiveSort]);
+  }, [effectiveSort, standingsWindow]);
 
   const pageMemberIds = pageMembers.map(memberId);
   const allPageSelected =

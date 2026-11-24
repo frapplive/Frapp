@@ -49,14 +49,18 @@ export function useMyStudySessions(options: { enabled?: boolean } = {}) {
       ),
     [query.data],
   );
+  // Ended sessions only, as the server counts study time (`endedStudyMinutes`)
+  // and the phone totals its history: a running session's banked minutes
+  // join the total when it ends, so Profile never says more than the week
+  // gauge beside it. `ACTIVE` (paused or not) is the only status not ended.
   const totalMinutes = useMemo(
     () =>
       sessions.reduce(
         (sum, session) =>
-          sum +
-          (Number.isFinite(session.total_foreground_minutes)
-            ? session.total_foreground_minutes
-            : 0),
+          session.status === "ACTIVE" ||
+          !Number.isFinite(session.total_foreground_minutes)
+            ? sum
+            : sum + session.total_foreground_minutes,
         0,
       ),
     [sessions],

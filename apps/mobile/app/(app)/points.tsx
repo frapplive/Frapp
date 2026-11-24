@@ -10,7 +10,12 @@ import {
   useSemesters,
   type SemesterArchive,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import {
+  can,
+  isLivePointsPeriod,
+  pointsPeriodOptions,
+  signedPoints,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { useRefetchAll } from "@/components/pull-to-refresh";
@@ -20,12 +25,7 @@ import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import { OptionSheet } from "@/components/option-sheet";
 import { InlineNote } from "@/components/inline-note";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
-import {
-  POINTS_PERIODS,
-  isLivePointsPeriod,
-  selectPointRows,
-  signedPoints,
-} from "@/lib/more/points";
+import { selectPointRows } from "@/lib/more/points";
 import { MONO_FONT_FAMILY, typeRole, useFrappTheme } from "@/lib/theme";
 import { pageSurfaces } from "@/lib/surfaces";
 
@@ -63,15 +63,12 @@ export default function PointsScreen() {
   const canSeeDirectory = can("members:view", usePermissionList());
 
   const periodOptions = useMemo(
-    () => [
-      ...POINTS_PERIODS,
-      ...(Array.isArray(semestersQuery.data)
-        ? (semestersQuery.data as SemesterArchive[]).map((archive) => ({
-            value: archive.id,
-            label: archive.label,
-          }))
-        : []),
-    ],
+    () =>
+      pointsPeriodOptions(
+        Array.isArray(semestersQuery.data)
+          ? (semestersQuery.data as SemesterArchive[])
+          : [],
+      ),
     [semestersQuery.data],
   );
   const periodLabel =

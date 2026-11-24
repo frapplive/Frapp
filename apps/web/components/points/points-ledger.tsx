@@ -344,7 +344,11 @@ export function PointsLedger({
               onRetry={() => void transactionsQuery.refetch()}
             />
           ) : rows.length === 0 ? (
-            flaggedOnly ? (
+            canGoNewer ? (
+              // An older page past the last full one: the chapter has
+              // points, just none further back.
+              <InlineNote>No older transactions.</InlineNote>
+            ) : flaggedOnly ? (
               <InlineNote>
                 {policyKnown
                   ? `Nothing flagged in this window. Single adjustments of |amount| ≥ ${pointsPolicy.anomaly_threshold} land here.`

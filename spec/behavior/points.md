@@ -64,20 +64,20 @@ When a user checks into an event:
   they can't earn points themselves ([`alumni.md`](alumni.md)). An
   **archived semester** is not padded: today's roster says nothing about who
   was in the chapter then, so that board is only the members whose points moved
-  in it (2026-11-06). The web dashboard
-  resolves each row at render from the display roster, whose payload is owned by
-  [`chat/README.md`](chat/README.md) — deliberately not the full member profile.
-- A row whose `user_id` does not resolve renders the shared `Member <first six
-  hex>` label (`memberFallbackLabel`, `packages/hooks/src/display-names.ts`)
-  rather than a bare uuid or a blank cell. Two cases reach it: a member who has
-  left the chapter (see *Edge Cases*), and one who has never set a display name
-  — `users.display_name` is `NOT NULL DEFAULT ''`, so an empty string means "no
-  name set" and counts as unresolved.
+  in it (2026-11-06).
+- **The board is drawn as the Directory's standings** ([§ Standings](#standings)),
+  so each row is a member row of the Directory and draws only for someone on
+  the list in view. A board row with no Directory row (a member who has left
+  the chapter, see *Edge Cases*, or an alumnus with points while Actives is in
+  view) keeps its place but isn't drawn, so the places on screen can skip a
+  number. *(Corrected 2026-11-24, #5950: until then the board was the Points
+  page's own list, which drew such a row with the shared `Member <first six
+  hex>` label and could be filtered by a pasted user id.)*
 - The **chapter points ledger** is the exception and keeps the full `user_id`
   on an unresolved row: it is a record officers read ids out of, not a name
   slot.
 - Rank is the member's position on the **whole** board for the selected window.
-  Filtering the view — by name or by pasted user id — never renumbers it.
+  Filtering the view never renumbers it.
   **Equal totals share a rank** (1, 1, 3), in the Directory's standings and on
   the mobile task board's points line alike, so a roster tied at 0 is everyone
   at `#1` (2026-11-06).
@@ -111,8 +111,9 @@ Which sorts each app offers and how a row draws are [`members.md` § Directory](
 
 - **A standing counts over a period**, picked beside the sort: This semester (the default), This month or All time, and for points each archived semester after them.
   The service board takes a date range and has no archive, so it offers the three live periods only; its This semester starts the day after the latest archive ends, as the Activity standing's does ([`activity.md` § Standing](activity.md#standing)).
+  This month is the rolling month for both measures, from the same day one calendar month back, as every points "This month" is (`resolveWindowSince('month')`), so one label never means two periods in the same sort.
 - **Each row leads with the member's place** and ends with their total for the period ("45 points", "2.5 hours").
-  Places are ranked as above: equal totals share a place, and a search or filter never renumbers them. A member with nothing in the period (0 or less) has no place; their row comes after the ranked ones, unnumbered, its total muted.
+  Places are ranked as above: equal totals share a place, and a search or filter never renumbers them. A member with nothing in the period (0 or less) has no place; their row comes after the ranked ones in either direction (Fewest points opens on the lowest place), unnumbered, its total muted.
 - **A standing that can't be read ranks nobody.** Its rows are replaced by an error with Try again; ranking the chapter at 0 would be a wrong answer, not a missing one.
 - **A module that is off offers no standing** and its board is never read.
 
@@ -123,7 +124,7 @@ Since #5950 (Paul's pick, 2026-11-24) points have no page in the web sidebar and
 - **Your own points** open from your own profile.
   On web the Points door in Profile's **All time** frame opens a panel docked in place of the page (`/profile?open=points`; `/points` redirects there): the balance for a period (All time, This semester, This month, or an archived semester), your place this semester with a **Standings** link to the Directory's points standing (for a viewer who can open the Directory), and every transaction behind the number, newest first, with category and amount (earned or taken away) filters, a search field once it holds 15 rows, and Export.
   On the phone the points figure at the top right of You, and the This semester Points gauge, push the **Points** screen ([`../ui/mobile/screens.md` § Points](../ui/mobile/screens.md#points)), with the same periods, rank and rows.
-  A points notification and the assistant's "your points" source open them on both apps.
+  A points notification and the assistant's "your points" source open them on both apps; its "Points standings" source opens the Directory's points standing (the source page `standings`, apart from `points` since #5950).
 - **Standings** are the Directory's sorts ([§ Standings](#standings)).
 - **The chapter ledger** is on the Points page of Chapter settings, the `points-ledger` tool, for `points:view_all` ([`settings/README.md` § Who sees what](settings/README.md#who-sees-what)): every transaction in the chapter, newest first, a page at a time, filtered by category, by member, or to flagged ones only, with Export and Refresh ([§ Chapter-wide transaction list](#chapter-wide-transaction-list)).
   A `points:view_all` holder reaches it on one member from the Points row of that member's card (`/settings?tab=points&member=<user id>`).
@@ -147,7 +148,7 @@ Since #5950 (Paul's pick, 2026-11-24) points have no page in the web sidebar and
 ## Edge Cases
 
 - Negative balances are allowed. The system does not block fines even if the balance would go negative.
-- If a member is removed from a chapter, their point history is preserved for audit purposes **and they keep their leaderboard row**. `get_points_leaderboard` aggregates `point_transactions` by chapter and does not join `members` (the roster only adds members at 0), so removing someone does not silently move everyone ranked below them. They are no longer on the roster, so their row resolves no name and renders the `Member <first six hex>` label described under *Leaderboard*. They also can't be adjusted any more (*Admin Adjustments*). That includes a retry of an adjustment that committed before they left: the retry gets the 404 rather than the original row, which stays in the ledger.
+- If a member is removed from a chapter, their point history is preserved for audit purposes **and they keep their leaderboard row**. `get_points_leaderboard` aggregates `point_transactions` by chapter and does not join `members` (the roster only adds members at 0), so removing someone does not silently move everyone ranked below them. They are no longer on the roster, so the Directory's standings hold their place without drawing a row for it (*Leaderboard*). They also can't be adjusted any more (*Admin Adjustments*). That includes a retry of an adjustment that committed before they left: the retry gets the 404 rather than the original row, which stays in the ledger.
 - Points awarded for study sessions and events cannot be manually reversed by the recipient; only admins can create offsetting transactions.
 
 ## Chat Integration

@@ -38,9 +38,13 @@ type Cell = {
  */
 export function StandingStats() {
   const gate = useChapterModuleGateState();
-  // On until the chapter's modules answer, so nothing vanishes on a slow read.
+  // On while the chapter's modules are first read, so nothing vanishes on a
+  // slow read; closed once that read failed or can't run (the gate's own
+  // rule), so a chapter with a module off never shows its figure (P5.8).
   const moduleOn = (key: string) =>
-    gate.status === "ready" ? gate.isModuleEnabled(key) : true;
+    gate.status === "ready"
+      ? gate.isModuleEnabled(key)
+      : gate.status === "loading";
   const pointsOn = moduleOn("points");
   const hoursOn = moduleOn("hours");
   const stats = useMyProfileStats({ points: pointsOn, service: hoursOn });

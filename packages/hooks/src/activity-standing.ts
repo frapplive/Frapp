@@ -203,17 +203,21 @@ export function activityStandingRows(
  * The standing as gauges, for the This semester strip (#4766; on You and
  * web's profile since #5779): the rows, less the ones with nothing yet and
  * nothing to aim at, and less any in `omit`, a number the screen already
- * shows elsewhere (You's points in its title row and its Study and Service
- * rows), so no screen says it twice. A part that couldn't be read stays, so
- * a failed read never looks like nothing. Empty when no gauge is left, and
- * the strip is not drawn at all.
+ * shows elsewhere, so no screen says it twice. A row in `keep` stays even
+ * at zero: on the phone's You the points and service gauges are the only
+ * doors to the member's own Points and Service hours screens (#5950), so
+ * they stay where a first point or hour will show, as web's Profile keeps
+ * its doors at zero. A part that couldn't be read stays, so a failed read
+ * never looks like nothing. Empty when no gauge is left, and the strip is
+ * not drawn at all.
  */
 export function activityStandingGauges(
   standing: ActivityStanding,
   omit: readonly StandingRow["id"][] = [],
+  keep: readonly StandingRow["id"][] = [],
 ): StandingRow[] {
   return activityStandingRows(standing).filter(
-    (row) => !row.empty && !omit.includes(row.id),
+    (row) => (!row.empty || keep.includes(row.id)) && !omit.includes(row.id),
   );
 }
 

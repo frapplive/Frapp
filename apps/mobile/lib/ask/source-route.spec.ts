@@ -69,6 +69,15 @@ describe("askSourceOpening", () => {
     });
   });
 
+  it("opens the standings in the Directory, not the asker's own points (#5950)", () => {
+    expect(
+      askSourceOpening(source({ type: "page", page: "standings" })),
+    ).toEqual({
+      kind: "route",
+      target: { pathname: "/directory", params: { sort: "points" } },
+    });
+  });
+
   it("has no link to Dues while Dues is off for the beta", () => {
     expect(askSourceOpening(source({ type: "page", page: "dues" }))).toBeNull();
     betaOff.keys = [];

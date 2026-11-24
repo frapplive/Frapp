@@ -222,6 +222,7 @@ export * from "./phone-reach";
 // What each points category is called, and the officer action's one name,
 // on web and phone (#5950).
 export * from "./point-category";
+export * from "./point-history";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";

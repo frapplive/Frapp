@@ -208,7 +208,7 @@ describe("This semester (the gauges)", () => {
     ]);
   });
 
-  it("leaves out a zero with nothing to aim at, and the whole strip with none left", () => {
+  it("leaves out a zero with nothing to aim at, but keeps the points and service doors", () => {
     standing.value = { ...standing.value, data: standingRead };
     const tree = render();
     // No study this week and no study goal: no gauge, not a zero.
@@ -227,6 +227,33 @@ describe("This semester (the gauges)", () => {
           pending_minutes: 0,
           goal_minutes: null,
         },
+        study: standingRead.study,
+        unavailable: [],
+      },
+    };
+    // The points and service gauges are the only doors on You to the
+    // member's own Points and Service hours screens (#5950), so they stay
+    // at zero; required events and study, at zero, don't.
+    const zero = render();
+    for (const id of ["points", "service"]) {
+      expect(gauge(zero, id)).toBeTruthy();
+    }
+    for (const id of ["required_events", "study"]) {
+      expect(
+        zero.root.findAll(
+          (node) => node.props.testID === `activity-standing-${id}`,
+        ),
+      ).toHaveLength(0);
+    }
+  });
+
+  it("draws no strip when nothing is left, as with Points and Hours off", () => {
+    standing.value = {
+      ...standing.value,
+      data: {
+        points: null,
+        required_events: { required: 0, attended: 0, excused: 0 },
+        service: null,
         study: standingRead.study,
         unavailable: [],
       },

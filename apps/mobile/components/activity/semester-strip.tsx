@@ -54,24 +54,28 @@ const GAUGE_STROKE = 5;
  * always; points and hours when the chapter sets the member a goal, #1062):
  * a ring with an invented end would read as a rule. Without one the number
  * stands alone. A number that is zero with nothing to aim at is left out
- * (`activityStandingGauges`), which is the zero tile's fix (#4679), and with
- * none left the strip isn't drawn. Each gauge opens the screen that owns its
+ * (`activityStandingGauges`), which is the zero tile's fix (#4679), unless
+ * the screen keeps it as a door (`keep`), and with none left the strip isn't
+ * drawn. Each gauge opens the screen that owns its
  * number.
  */
 export function SemesterStrip({
   standing,
   onOpen,
   omit,
+  keep,
 }: {
   standing: ActivityStanding;
   onOpen: (destination: StandingDestination) => void;
   /** Numbers the screen already shows elsewhere (#5779). */
   omit?: readonly ActivityStandingSection[];
+  /** Gauges drawn even at zero, being a screen's only door (#5950). */
+  keep?: readonly ActivityStandingSection[];
 }) {
   const { tokens } = useFrappTheme();
   const { accentPrimary } = useChapterBranding();
   const styles = createStyles(tokens);
-  const gauges = activityStandingGauges(standing, omit);
+  const gauges = activityStandingGauges(standing, omit, keep);
   if (gauges.length === 0) return null;
   return (
     <View style={styles.block}>

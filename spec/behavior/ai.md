@@ -832,7 +832,7 @@ Built 2026-11-12 on web (#718) and on the phone (#718, the mobile half, 2026-11-
   Two things differ, both because of the size of the screen.
   A member is added to a points change from the chapter's roster in a tall sheet with a search field, which is how the phone picks a member everywhere else.
   A task's who and when are changed in the ordinary New task form opened on the proposal, where web changes them on the card; Confirm on a task missing either opens that form.
-  A finished task links to Tasks and a finished event to that event; a finished points change links nowhere on the phone, where web's links to the chapter ledger ("Open the ledger") for a `points:view_all` holder and to the Directory's points standing ("See standings") for anyone else (#5950).
+  A finished task links to Tasks and a finished event to that event; a finished points change links to the Directory's points standing ("See standings") on the phone, which has no chapter ledger, while web's links to the chapter ledger ("Open the ledger") for a `points:view_all` holder and to the standing for anyone else (#5950).
 - **Every card has Edit beside Cancel and Confirm** (Paul, 2026-11-15, #5117).
   _(Changed in #5148 by pdcarlson, 2026-11-16: Cancel is now Dismiss in the card's ··· menu, and Confirm is named for the action; see How a card reads below.)_
   An event's Edit opens the ordinary New event form filled in from the card, every row showing what it holds (who's coming by role, the end, notes, the repeat; More options until #5561), and Create in that form is the confirm: the event is made through the event route and the proposal records it, without making a second.

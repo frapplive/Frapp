@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { formatPoints } from "@repo/formatting";
+import { formatPoints, localIsoDate } from "@repo/formatting";
+import { POINTS_PERIOD_LABELS } from "@repo/validation";
 import { formatServiceHours } from "./profile-stats";
 import { useLeaderboard } from "./use-points";
 import { useSemesters, type SemesterArchive } from "./use-semesters";
@@ -47,12 +48,13 @@ export function useServiceSemesterStart(): {
 /** What a standings sort ranks the chapter by. */
 export type StandingsMetric = "points" | "service";
 
-/** The live periods a standings sort can count over. */
-export const STANDINGS_WINDOWS = [
-  { value: "semester", label: "This semester" },
-  { value: "month", label: "This month" },
-  { value: "all", label: "All time" },
-] as const;
+/**
+ * The live periods a standings sort can count over, the current one first;
+ * their words are the member's own points periods' (`POINTS_PERIOD_LABELS`).
+ */
+export const STANDINGS_WINDOWS = (["semester", "month", "all"] as const).map(
+  (value) => ({ value, label: POINTS_PERIOD_LABELS[value] }),
+);
 
 type LiveWindow = (typeof STANDINGS_WINDOWS)[number]["value"];
 
@@ -62,10 +64,16 @@ export const DEFAULT_STANDINGS_WINDOW: LiveWindow = "semester";
 const isLiveWindow = (value: string): value is LiveWindow =>
   STANDINGS_WINDOWS.some((window) => window.value === value);
 
-/** The first day of this month, `YYYY-MM-DD`, in the viewer's own zone. */
-function monthStart(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-01`;
+/**
+ * Where "This month" starts for the service board, `YYYY-MM-DD` in the
+ * viewer's zone: the same day one calendar month back, the rolling month the
+ * points board counts on the server (`resolveWindowSince('month')`), so one
+ * label never means two periods in the same sort.
+ */
+export function rollingMonthStart(now: Date): string {
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - 1);
+  return localIsoDate(start);
 }
 
 /**
@@ -97,8 +105,9 @@ export type Standings = {
   /**
    * A member's place in the chapter, never renumbered by a search or a
    * filter: rank belongs to the board, not to the rows on screen. `null` for
-   * a member with nothing in the period: a place tied for last says nothing
-   * a member can act on, so their row lists after the ranked ones, unnumbered.
+   * a member at 0 or less in the period: a place tied for last says nothing
+   * a member can act on, and a fined member isn't numbered below the ones
+   * who haven't started, so their row lists after the ranked ones, unnumbered.
    */
   rankOf: (userId: string) => number | null;
   /** The total as the row prints it: "45 points", "2.5 hours". */
@@ -162,7 +171,7 @@ export function useStandings(
         ? { start_date: semester.start }
         : {}
       : window === "month"
-        ? { start_date: monthStart(new Date()) }
+        ? { start_date: rollingMonthStart(new Date()) }
         : {};
   const serviceQuery = useServiceLeaderboard(range, {
     enabled: metric === "service" && !waitingOnSemester,

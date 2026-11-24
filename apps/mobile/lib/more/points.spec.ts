@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLivePointsPeriod, selectPointRows, signedPoints } from "./points";
+import { selectPointRows } from "./points";
 
 const NOW = new Date(2026, 10, 24, 12, 0, 0);
 
@@ -34,25 +34,16 @@ describe("selectPointRows", () => {
     expect(row!.meta).toBeNull();
   });
 
+  it("treats a blank reason as none, as web does", () => {
+    const [row] = selectPointRows(
+      [{ id: "t-4", amount: 3, category: "MANUAL", description: "   " }],
+      NOW,
+    );
+    expect(row!.title).toBe("Manual");
+  });
+
   it("skips a row without an id or an amount, and anything that isn't a list", () => {
     expect(selectPointRows([{ id: "t-3" }, { amount: 4 }], NOW)).toEqual([]);
     expect(selectPointRows(undefined, NOW)).toEqual([]);
-  });
-});
-
-describe("signedPoints", () => {
-  it("writes an award with its plus and a fine with its minus", () => {
-    expect(signedPoints(10)).toBe("+10");
-    expect(signedPoints(0)).toBe("+0");
-    expect(signedPoints(-5)).toBe("-5");
-  });
-});
-
-describe("isLivePointsPeriod", () => {
-  it("tells the live periods from an archived semester's id", () => {
-    expect(isLivePointsPeriod("semester")).toBe(true);
-    expect(isLivePointsPeriod("4b8f2c1e-0000-0000-0000-000000000000")).toBe(
-      false,
-    );
   });
 });

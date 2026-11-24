@@ -196,6 +196,22 @@ describe("PointsLedger pagination", () => {
     expect(fixtures.lastOptions?.before).toBeUndefined();
   });
 
+  it("says there's nothing older, not that nothing was ever recorded, on an empty older page", async () => {
+    const user = userEvent.setup();
+    fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);
+    const view = render(<PointsLedger />);
+    await user.click(
+      screen.getByRole("button", { name: "Older transactions" }),
+    );
+    fixtures.data = [];
+    view.rerender(<PointsLedger />);
+    expect(screen.getByText("No older transactions.")).toBeInTheDocument();
+    expect(screen.queryByText("No points have been recorded yet.")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Newer transactions" }),
+    ).toBeEnabled();
+  });
+
   it("keeps Newer available when an older page fails to load", async () => {
     const user = userEvent.setup();
     fixtures.data = page(AUDIT_PAGE_SIZE, MICROSECOND_CURSOR);

@@ -78,10 +78,9 @@ import { SECTION_NAMES } from "@repo/validation";
  * - `hiddenUntilSetUp` — a feature that is on but that nobody has set up yet
  *   hides, since its page could only say so (`useHiddenUnsetFeatures` in
  *   `@repo/hooks`; `spec/product/modules.md` § Not-set-up features).
- *   Documents with nothing in it hides from a viewer who can't upload; Study
- *   hours with no active zone hides from everyone, because zones are made in
- *   the Study zones tool, not on its page. Nothing hides while permissions,
- *   modules or the list are still loading, or after the list's read fails.
+ *   Documents with nothing in it hides from a viewer who can't upload.
+ *   Nothing hides while permissions, modules or the list are still loading,
+ *   or after the list's read fails.
  *
  * Section gating is derived, never declared: a section renders only when at
  * least one of its items survives every gate (`isNavItemVisible` in

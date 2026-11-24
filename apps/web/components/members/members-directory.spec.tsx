@@ -1455,6 +1455,36 @@ describe("MembersDirectory standings (#5950)", () => {
     ).toHaveTextContent("0 points");
   });
 
+  it("lists the unnumbered after the ranked under Fewest points too", async () => {
+    const user = userEvent.setup();
+    standings.boards.points = { "u-2": 30 };
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Fewest points");
+    const rows = screen.getAllByRole("button", {
+      name: /^(ranked \d+, )?(Ada Lovelace|Grace Hopper)/,
+    });
+    expect(rows[0]).toHaveAccessibleName(/^ranked 1, Grace Hopper/);
+    expect(rows[1]).toHaveAccessibleName(/^Ada Lovelace/);
+  });
+
+  it("follows a later link's sort, since the page stays mounted", () => {
+    const { rerender } = render(<MembersDirectory />);
+    expect(
+      screen.getByRole("button", { name: "Sort: Name A to Z" }),
+    ).toBeInTheDocument();
+    search.value = "sort=points";
+    rerender(<MembersDirectory />);
+    expect(
+      screen.getByRole("button", { name: "Sort: Most points · This semester" }),
+    ).toBeInTheDocument();
+    // The sidebar's plain Directory link drops the param, and the sort with it.
+    search.value = "";
+    rerender(<MembersDirectory />);
+    expect(
+      screen.getByRole("button", { name: "Sort: Name A to Z" }),
+    ).toBeInTheDocument();
+  });
+
   it("says the standings didn't load rather than ranking everyone at 0", async () => {
     const user = userEvent.setup();
     standings.isError = true;

@@ -340,7 +340,9 @@ describe("a proposal in the Ask conversation", () => {
     expect(after).toContain("Came to chapter");
     expect(after).toContain(actPointsDoneLine(5, 2, 0));
     expect(byLabel(tree, CONFIRM)).toBeUndefined();
-    // The phone has no points page to open.
+    // The phone has no chapter ledger, so a finished points change links to
+    // the standings in the Directory (#5950), and opens nothing by itself.
+    expect(after).toContain(ACT_COPY.open_standings);
     expect(onOpen).not.toHaveBeenCalled();
   });
 

@@ -10,7 +10,15 @@ import {
   useSemesters,
   type SemesterArchive,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import {
+  can,
+  isLivePointsPeriod,
+  POINT_CATEGORIES,
+  pointCategoryLabel,
+  pointRowText,
+  pointsPeriodOptions,
+  signedPoints,
+} from "@repo/validation";
 import { formatDay, formatTimestampFull } from "@repo/formatting";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,10 +38,6 @@ import {
 } from "@/components/shared/table-controls";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { amountToneClassName } from "@/components/points/amount-tone";
-import {
-  POINT_CATEGORIES,
-  pointCategoryLabel,
-} from "@repo/validation";
 import { SearchGlyph } from "@/components/points/points-glyphs";
 import { stateMicrocopy } from "@/lib/state-microcopy";
 import { asArray, cn } from "@/lib/utils";
@@ -47,17 +51,6 @@ type PointTransactionRow = {
   description: string;
   created_at: string;
 };
-
-/** The live windows `GET /v1/points/me` takes; any other value is an archive id. */
-const WINDOWS = [
-  { value: "all", label: "All time" },
-  { value: "semester", label: "This semester" },
-  { value: "month", label: "This month" },
-] as const;
-type LiveWindow = (typeof WINDOWS)[number]["value"];
-
-const isLiveWindow = (value: string): value is LiveWindow =>
-  WINDOWS.some((window) => window.value === value);
 
 /** A list this long gets a search field (rulebook § 3, real scale). */
 const SEARCH_FROM = 15;
@@ -79,7 +72,7 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState("all");
   const [amount, setAmount] = useState("all");
 
-  const live = isLiveWindow(period);
+  const live = isLivePointsPeriod(period);
   const summaryQuery = useMyPoints(
     live ? period : "all",
     live ? undefined : period,
@@ -122,10 +115,7 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
     });
   }, [transactions, search, category, amount]);
 
-  const periodOptions = [
-    ...WINDOWS,
-    ...archives.map((archive) => ({ value: archive.id, label: archive.label })),
-  ];
+  const periodOptions = pointsPeriodOptions(archives);
   const filters: FilterMenuFilter[] = [
     {
       key: "period",
@@ -170,6 +160,28 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
   const failed = summaryQuery.isError && summaryQuery.data === undefined;
   const loading = summaryQuery.isPending;
   const searching = search.trim() !== "" || category !== "all" || amount !== "all";
+  const showSearch = transactions.length >= SEARCH_FROM || search !== "";
+
+  // A render function, not a component: a component declared here would be
+  // a new type each render, remounting the field and dropping its focus.
+  function searchField(id: string, className: string) {
+    return (
+      <div className={cn("relative", className)}>
+        <Label htmlFor={id} className="sr-only">
+          Search your points
+        </Label>
+        <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
+        <Input
+          id={id}
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search"
+          className={dashboardToolbarSearchClassName}
+        />
+      </div>
+    );
+  }
 
   function exportRowsNow() {
     return filtered.map((transaction) => ({
@@ -189,21 +201,8 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       actions={
         <div className="flex items-center gap-2">
-          {transactions.length >= SEARCH_FROM || search ? (
-            <div className="relative hidden w-44 sm:block">
-              <Label htmlFor="my-points-search" className="sr-only">
-                Search your points
-              </Label>
-              <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-              <Input
-                id="my-points-search"
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search"
-                className={dashboardToolbarSearchClassName}
-              />
-            </div>
+          {showSearch ? (
+            searchField("my-points-search", "hidden w-44 sm:block")
           ) : null}
           <FilterMenu filters={filters} thing="your points" />
           {transactions.length > 0 ? (
@@ -217,6 +216,10 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
+      {/* Below `sm` the header has no room for it, so it leads the list. */}
+      {showSearch ? (
+        searchField("my-points-search-narrow", "sm:hidden")
+      ) : null}
       <ActiveFilterChips filters={filters} />
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-4">
         <StandingStat
@@ -288,26 +291,16 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
           // and WebKit then stops exposing the list and its item count.
           <ul role="list" className={denseListClassName}>
             {filtered.map((transaction) => {
-              const categoryLabel = pointCategoryLabel(transaction.category);
               const day = formatDay(transaction.created_at);
-              // The reason is the row's title; a transaction without one is
-              // titled by its category, and the meta line then drops the
-              // category rather than saying it twice.
-              const title = transaction.description || categoryLabel;
-              const metaCategory = transaction.description
-                ? categoryLabel
-                : null;
+              // The phone's Points screen titles a row the same way.
+              const { title, metaCategory } = pointRowText(transaction);
               return (
                 <li
                   key={transaction.id}
                   className="flex min-h-11 items-center gap-3 py-1.5"
                 >
                   <div className="min-w-0 flex-1">
-                    {title ? (
-                      <p className="truncate text-sm text-foreground">
-                        {title}
-                      </p>
-                    ) : null}
+                    <p className="truncate text-sm text-foreground">{title}</p>
                     {metaCategory || day ? (
                       <p className="truncate text-caption text-muted-foreground">
                         {metaCategory}
@@ -332,9 +325,7 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
                       "shrink-0 text-right",
                     )}
                   >
-                    {transaction.amount >= 0
-                      ? `+${transaction.amount}`
-                      : `${transaction.amount}`}
+                    {signedPoints(transaction.amount)}
                     <span className="sr-only"> points</span>
                   </span>
                 </li>

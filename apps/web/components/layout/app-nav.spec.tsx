@@ -174,7 +174,7 @@ describe("AppNav", () => {
   });
 
   it("drops a row nobody has set up, from a member who can't set it up", () => {
-    hidden.features = new Set(["study", "documents"]);
+    hidden.features = new Set(["documents"]);
     try {
       renderNav({ permissions: ["members:view", "backwork:upload"] });
       const rows = Array.from(document.querySelectorAll("nav a")).map(

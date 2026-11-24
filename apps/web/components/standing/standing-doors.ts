@@ -33,4 +33,3 @@ export function standingDoorFrom(value: string | null): StandingDoor | null {
  */
 export const STANDINGS_SORT_PARAM = "sort";
 export const POINTS_STANDINGS_HREF = `/members?${STANDINGS_SORT_PARAM}=points`;
-export const SERVICE_STANDINGS_HREF = `/members?${STANDINGS_SORT_PARAM}=service`;
