@@ -131,6 +131,12 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Officers no longer see Send back on a task they completed themselves, and Mark not done takes it back instead.",
       "Recruitment cards now offer Vote and Extend bid only to roles your chapter lets do them, and show a candidate's vote count only to roles allowed to see results.",
       "Officers can now add more people to a task they already sent to a group, and each new person gets their own copy.",
+      "Your phone now gets chat notifications when Frapp is open in a browser tab you aren't looking at.",
+      "Add your T-shirt size, allergies, an emergency contact and your chapter's other details under More details on your profile, and see who can read each one.",
+      "Recruitment has its own page, with your prospects on a board or in a list, stages your chapter can rename and reorder, tags, star ratings and notes only the chapter sees.",
+    ],
+    web: [
+      "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
