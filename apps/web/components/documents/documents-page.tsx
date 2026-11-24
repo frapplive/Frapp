@@ -68,6 +68,7 @@ import {
 } from "@/components/documents/document-access";
 import { FolderMenu, FolderRail } from "@/components/documents/folder-rail";
 import { UploadMenu } from "@/components/documents/upload-menu";
+import { ResourcesViews } from "@/components/documents/resources-views";
 import { MarkedStrip } from "@/components/documents/marked-strip";
 import { useDocumentMarks } from "@/components/documents/use-document-marks";
 import {
@@ -482,6 +483,8 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     // A container (#4022): beside chat (#3779) the page is narrow while the
     // window is wide, so the folder rail counts the page's own width.
     <div className="@container/docs space-y-6">
+      {/* Documents and Backwork, the two views of Resources (#5949). */}
+      <ResourcesViews />
       <PageActions>
         <UploadMenu
           gate={gate}

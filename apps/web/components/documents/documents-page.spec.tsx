@@ -211,6 +211,7 @@ vi.mock("next/navigation", () => ({
       ...(linkedType.current ? { type: linkedType.current } : {}),
     }),
   useRouter: () => router,
+  usePathname: () => "/documents",
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 

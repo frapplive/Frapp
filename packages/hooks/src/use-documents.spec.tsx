@@ -43,7 +43,7 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: "finance", search: undefined } },
+      params: { query: { folder: "finance", search: undefined, minutes: "true" } },
     });
   });
 
@@ -64,7 +64,7 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: "bylaws" } },
+      params: { query: { folder: undefined, search: "bylaws", minutes: "true" } },
     });
   });
 
@@ -85,7 +85,7 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: undefined } },
+      params: { query: { folder: undefined, search: undefined, minutes: "true" } },
     });
   });
 });

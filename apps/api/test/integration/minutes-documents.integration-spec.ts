@@ -360,18 +360,14 @@ describeIntegration('Posted minutes filed as documents (#5949)', () => {
     expect(await repo.fileUnfiledMinutes(500)).toBeGreaterThanOrEqual(1);
     expect(await rowsOf(meetingId)).toHaveLength(1);
     // Every posted set in these two chapters is filed now.
-    const { data: unfiled, error } = await supabase
+    const { data: posted, error } = await supabase
       .from('meetings')
-      .select('id, chapter_documents!left(id)')
+      .select('id')
       .in('chapter_id', [chapterId, otherChapterId])
       .eq('status', 'posted');
     if (error) throw error;
-    expect(
-      (unfiled ?? []).filter(
-        (row) =>
-          ((row as { chapter_documents: unknown[] }).chapter_documents ?? [])
-            .length === 0,
-      ),
-    ).toEqual([]);
+    for (const row of posted ?? []) {
+      expect(await rowsOf(row.id)).toHaveLength(1);
+    }
   });
 });
