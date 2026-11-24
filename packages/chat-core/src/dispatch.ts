@@ -622,7 +622,7 @@ const EVENT_CARD_LOST_WARNING =
   "Event was created, but the chat card couldn't be posted. Check the events calendar to confirm — don't run the command again.";
 
 const HOURS_CARD_LOST_WARNING =
-  "Hours were logged, but the chat card couldn't be posted. Check the service hours page to confirm — don't run the command again.";
+  "Hours were logged, but the chat card couldn't be posted. Check your service hours on your profile to confirm — don't run the command again.";
 
 const POINTS_RECORDED_ROW_NOTE =
   "Points recorded — the chat card didn't post. Don't run this command again.";
@@ -640,7 +640,7 @@ const TASK_UNCONFIRMED_WARNING =
   "Couldn't confirm the task was created. Check the task board before you create it again.";
 
 const HOURS_UNCONFIRMED_WARNING =
-  "Couldn't confirm the hours were logged. Check the service hours page before you log them again.";
+  "Couldn't confirm the hours were logged. Check your service hours on your profile before you log them again.";
 
 /**
  * A `/task` or `/hours` write whose answer never arrived: a transport failure,

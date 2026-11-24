@@ -799,7 +799,10 @@ export function MembersDirectory() {
       : null;
     // The row's figure: the period's total and the member's place under a
     // standings sort, else all-time points; nothing while Points is off.
-    const rank = standingsMetric ? standings.rankOf(member.user_id) : null;
+    // Under a standing every row is part of it; only a member with something
+    // in the period has a place.
+    const standing = standingsMetric !== null;
+    const rank = standing ? standings.rankOf(member.user_id) : null;
     const figure = standingsMetric
       ? standings.figure(standingTotalOf(member))
       : pointsOn
@@ -818,10 +821,10 @@ export function MembersDirectory() {
     const reachNote = reach ? phoneReachStaleNote(reach) : null;
     const label = [
       rank === null ? null : `ranked ${rank}`,
-      isViewer && rank !== null ? `${name}, you` : name,
+      isViewer && standing ? `${name}, you` : name,
       roleName,
       className,
-      rank === null || !figure
+      !standing || !figure
         ? figure
         : `${figure}, ${standingsPeriodLabel.toLowerCase()}`,
       joined ? `joined ${joined}` : null,
@@ -840,6 +843,7 @@ export function MembersDirectory() {
       className,
       figure,
       rank,
+      standing,
       isViewer,
       status,
       customLine,
@@ -1352,6 +1356,7 @@ export function MembersDirectory() {
                   className,
                   figure,
                   rank,
+                  standing,
                   isViewer,
                   status,
                   customLine,
@@ -1432,9 +1437,9 @@ export function MembersDirectory() {
                       )}
                     >
                       {/* The member's place leads the row on a standing. */}
-                      {rank !== null ? (
+                      {standing ? (
                         <span className="w-8 shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
-                          {`#${rank}`}
+                          {rank === null ? null : `#${rank}`}
                         </span>
                       ) : null}
                       <div className="relative shrink-0">
@@ -1478,7 +1483,7 @@ export function MembersDirectory() {
                             {/* Your own row on a standing, so your place is
                                 found at a glance (Strava's and Duolingo's
                                 boards mark it the same way). */}
-                            {isViewer && rank !== null ? (
+                            {isViewer && standing ? (
                               <Badge variant="outline" className="shrink-0">
                                 You
                               </Badge>
@@ -1529,9 +1534,9 @@ export function MembersDirectory() {
                             "shrink-0 text-caption tabular-nums",
                             // The number is the point of a standing; under
                             // any other sort it is one more muted fact.
-                            rank === null
-                              ? "text-muted"
-                              : "font-semibold text-foreground",
+                            standing && rank !== null
+                              ? "font-semibold text-foreground"
+                              : "text-muted",
                           )}
                         >
                           {figure}

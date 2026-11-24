@@ -194,7 +194,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       window,
       totalOf: (id: string) => board[id] ?? 0,
       rankOf: (id: string) =>
-        totals.filter((total) => total > (board[id] ?? 0)).length + 1,
+        (board[id] ?? 0) > 0
+          ? totals.filter((total) => total > (board[id] ?? 0)).length + 1
+          : null,
       figure: (total: number) => `${total} points`,
       isLoading: false,
       isError: state.standingsError,

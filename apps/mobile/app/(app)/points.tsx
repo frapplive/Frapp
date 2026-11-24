@@ -147,7 +147,9 @@ export default function PointsScreen() {
         >
           {balance === null ? "—" : balance.toLocaleString()}
         </Text>
-        {place && place.rank !== null ? (
+        {/* A place only once there is something to place: "#24 of 24" for a
+            new member at zero says nothing they can act on. */}
+        {place && place.rank !== null && place.total > 0 ? (
           <Text style={styles.summaryDetail}>
             {`#${place.rank} of ${place.ranked} this semester`}
           </Text>

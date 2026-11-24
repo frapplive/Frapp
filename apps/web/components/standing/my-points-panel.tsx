@@ -226,7 +226,9 @@ export function MyPointsPanel({ onClose }: { onClose: () => void }) {
             balance === null ? null : balance === 1 ? "point" : "points"
           }
         />
-        {place && place.rank !== null ? (
+        {/* A place only once there is something to place: "#24 of 24" for a
+            new member at zero says nothing they can act on. */}
+        {place && place.rank !== null && place.total > 0 ? (
           <StandingStat
             label="This semester"
             value={`#${place.rank}`}

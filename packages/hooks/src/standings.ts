@@ -96,10 +96,11 @@ export type Standings = {
   totalOf: (userId: string) => number;
   /**
    * A member's place in the chapter, never renumbered by a search or a
-   * filter: rank belongs to the board, not to the rows on screen. One who
-   * isn't on the board ranks after everyone who is.
+   * filter: rank belongs to the board, not to the rows on screen. `null` for
+   * a member with nothing in the period: a place tied for last says nothing
+   * a member can act on, so their row lists after the ranked ones, unnumbered.
    */
-  rankOf: (userId: string) => number;
+  rankOf: (userId: string) => number | null;
   /** The total as the row prints it: "45 points", "2.5 hours". */
   figure: (total: number) => string;
   isLoading: boolean;
@@ -188,14 +189,6 @@ export function useStandings(
     return new Map<string, { rank: number; total: number }>();
   }, [metric, pointsQuery.data, serviceQuery.data]);
 
-  // Everyone with nothing in the period shares the place after the last
-  // member who has something.
-  const unranked = useMemo(() => {
-    let withTotal = 0;
-    for (const place of places.values()) if (place.total > 0) withTotal += 1;
-    return withTotal + 1;
-  }, [places]);
-
   // Stable while the board is: the list memoises its order on these.
   const totalOf = useCallback(
     (userId: string) => places.get(userId)?.total ?? 0,
@@ -204,9 +197,9 @@ export function useStandings(
   const rankOf = useCallback(
     (userId: string) => {
       const place = places.get(userId);
-      return place && place.total > 0 ? place.rank : unranked;
+      return place && place.total > 0 ? place.rank : null;
     },
-    [places, unranked],
+    [places],
   );
   const figure = useCallback(
     (total: number) =>

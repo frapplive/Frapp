@@ -27,8 +27,10 @@ export interface MemberFacts {
    * the period's total ("45 points", "2.5 hours"). `null` while Points is off.
    */
   figure: string | null;
-  /** The member's place under a standings sort, else `null`. */
+  /** The member's place under a standings sort; `null` with nothing in it. */
   rank: number | null;
+  /** Whether the list is a standing (a points or service hours sort). */
+  standing: boolean;
   /** The viewer's own tile, marked on a standing. */
   isViewer: boolean;
   status: PresenceStatus | null;
@@ -170,10 +172,10 @@ export function MemberGrid({
                 {[
                   facts.rank === null ? null : `#${facts.rank}`,
                   facts.figure,
-                  facts.rank === null && facts.joined
+                  !facts.standing && facts.joined
                     ? `joined ${facts.joined}`
                     : null,
-                  facts.isViewer && facts.rank !== null ? "You" : null,
+                  facts.isViewer && facts.standing ? "You" : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

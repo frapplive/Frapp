@@ -146,7 +146,6 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       standings.asked.push([metric, window]);
       const board = metric ? (standings.boards[metric] ?? {}) : {};
       const totals = Object.values(board);
-      const unranked = totals.filter((total) => total > 0).length + 1;
       return {
         windowOptions: [
           { value: "semester", label: "This semester" },
@@ -158,7 +157,7 @@ vi.mock("@repo/hooks", async (importOriginal) => {
         rankOf: (id: string) =>
           (board[id] ?? 0) > 0
             ? totals.filter((total) => total > (board[id] ?? 0)).length + 1
-            : unranked,
+            : null,
         figure: (total: number) =>
           metric === "service" ? `${total / 60} hours` : `${total} points`,
         isLoading: false,
@@ -1443,6 +1442,17 @@ describe("MembersDirectory standings (#5950)", () => {
     expect(items).not.toContain("Most service hours");
     await user.keyboard("{Escape}");
     expect(screen.queryByText(/42 points/)).toBeNull();
+  });
+
+  it("leaves a member with nothing in the period unnumbered, after the ranked ones", async () => {
+    const user = userEvent.setup();
+    standings.boards.points = { "u-2": 30 };
+    render(<MembersDirectory />);
+    await pick(user, /^Sort:/, "Most points");
+    expect(screen.getAllByRole("button", { name: /^ranked / })).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: /^Ada Lovelace, you|^Ada Lovelace/ }),
+    ).toHaveTextContent("0 points");
   });
 
   it("says the standings didn't load rather than ranking everyone at 0", async () => {

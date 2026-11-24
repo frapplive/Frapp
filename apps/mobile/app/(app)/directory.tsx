@@ -179,7 +179,8 @@ type DirectorySort = "name" | "order" | "points" | "service";
 
 /** A row's place under a standings sort (#5950). */
 export interface RowStanding {
-  rank: number;
+  /** `null` for a member with nothing in the period: unnumbered. */
+  rank: number | null;
   /** The period's total, as text: "45 points", "2.5 hours". */
   figure: string;
   /** The period, for a screen reader: "This semester". */
@@ -847,7 +848,7 @@ export function memberPressLabel(
   standing?: RowStanding,
 ): string {
   return [
-    standing ? `Ranked ${standing.rank}` : null,
+    standing?.rank ? `Ranked ${standing.rank}` : null,
     `View ${row.displayName}'s profile${standing?.isViewer ? ", you" : ""}`,
     standing ? `${standing.figure}, ${standing.period.toLowerCase()}` : null,
     presence.status ? presenceLabel(presence.status) : null,
@@ -909,7 +910,9 @@ export function MemberRow({
       ]}
     >
       {standing ? (
-        <Text style={styles.rowRank}>{`#${standing.rank}`}</Text>
+        <Text style={styles.rowRank}>
+          {standing.rank === null ? "" : `#${standing.rank}`}
+        </Text>
       ) : null}
       <AvatarWithPresence
         status={presence.status}
@@ -946,7 +949,15 @@ export function MemberRow({
         ) : null}
       </View>
       {standing ? (
-        <Text style={styles.rowFigure}>{standing.figure}</Text>
+        <Text
+          style={[
+            styles.rowFigure,
+            // Nothing in the period is one more muted fact, not a standing.
+            standing.rank === null ? styles.rowFigureNone : null,
+          ]}
+        >
+          {standing.figure}
+        </Text>
       ) : null}
       {reach ? (
         <Text
@@ -1115,6 +1126,10 @@ function createStyles(tokens: SignetTokens) {
       color: tokens.color.text.foreground,
       flexShrink: 0,
       fontVariant: ["tabular-nums"],
+    },
+    rowFigureNone: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.muted,
     },
     // The status line reads before the meta line: mutedForeground, one
     // step up the ladder, as the member profile and web draw it.
