@@ -948,6 +948,9 @@ Added in #5924 by `gampheadband`, 2026-11-23, from Winston's UI design v8 § 3b.
     A desktop has the room to show every field editable at once, as Slack's and LinkedIn's web profile editors do, while the phone keeps a readable profile and edits on demand.
   - The email stays in the header, under the major · company · year line; the phone moved it to its Details rows.
     Web has no Details list: its form holds only fields the member edits, and the email is not one of them, so the header, where web shows who you are read-only, is its only place.
+- **More details** follows the Directory profile form (#581, `components/profile/own-custom-fields-section.tsx`): the chapter's custom fields, every tier, each with a line of who else sees it, and its own Save details button, which sends only what changed.
+  A `select` is a `Select` with Not set first (gone once a required field has a value), a `boolean` a `Switch` at the row's end, a `phone` a phone field formatted on leaving it, the rest text fields; a refused value says why under its field on Save.
+  Nothing draws for a chapter with no fields or a viewer without `members:view`. The phone draws the same fields, words and order under Details ([`../mobile/screens.md`](../mobile/screens.md) s15); the rules are [`members.md` § Custom Fields](../../behavior/members.md#custom-fields).
 
 ### Council and school links
 
@@ -1131,7 +1134,7 @@ These are the places it departs from the board, recorded here so they read as de
 - **Unauthenticated deep links keep their destination.**
   [`apps/web/proxy.ts`](../../../apps/web/proxy.ts) guards every protected prefix: with no Supabase session it redirects to `/sign-in?redirectTo=<pathname + search>`, and once a session exists the same proxy returns the caller there instead of the `/chat` default.
   The value must start with `/` or it falls back to `/chat` — the open-redirect guard, applied in the proxy and again in `resolveRedirectPath` ([`apps/web/lib/auth/redirect.ts`](../../../apps/web/lib/auth/redirect.ts)) — and it survives the sign-in ↔ sign-up hop.
-  Email links — the magic link and the sign-up confirmation — **and Google / Apple OAuth** carry it as the `next` of `/auth/callback` ([`apps/web/app/auth/callback/route.ts`](../../../apps/web/app/auth/callback/route.ts)), the one route outside the proxy's matcher.
+  Email links — the magic link and the sign-up confirmation — **and Google / Apple OAuth** carry it as the `next` of `/auth/callback` ([`apps/web/app/auth/callback/route.ts`](../../../apps/web/app/auth/callback/route.ts)), a route outside the proxy's matcher. A Google or Apple sign-in started in the desktop app returns to `/auth/desktop` instead ([`apps/web/app/auth/desktop/route.ts`](../../../apps/web/app/auth/desktop/route.ts)), also outside the matcher, which hands the code and the same `next` back to the app ([architecture § 3.4a](../../architecture/README.md)).
   The hosted Magic Link template should href `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink` so the click stays on `app.{staging.}frapp.live` (or `frapp:///?` on mobile) instead of `*.supabase.co/auth/v1/verify` — Gmail treats a `frapp.live` From plus that Auth hostname as the default Supabase phishing shape.
   Web's `emailRedirectTo` already has `?next=`; mobile's ends with `?` so the `&` is valid.
   The callback calls `verifyOtp` with that hash; that path does not need the PKCE cookie, so the link works in a different browser than the one that requested it.

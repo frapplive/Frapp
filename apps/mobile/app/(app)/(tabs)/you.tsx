@@ -56,6 +56,7 @@ import {
   ProfileHead,
   ProfileSkeleton,
 } from "@/components/you/profile-sections";
+import { OwnCustomFieldsSection } from "@/components/you/own-custom-fields";
 import { useOwnStatus } from "@/lib/account/own-status";
 import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
 import { useIsCouncil } from "@/lib/tenant-kind";
@@ -599,7 +600,11 @@ function YouFoot({ you }: { you: YouProfile }) {
   return (
     <>
       {profileLoaded ? (
-        <ProfileDetails profile={profile} onEdit={openEditor} />
+        <>
+          <ProfileDetails profile={profile} onEdit={openEditor} />
+          {/* The chapter's own fields, every tier, with who sees each (#581). */}
+          <OwnCustomFieldsSection />
+        </>
       ) : null}
 
       {profileLoaded ? (

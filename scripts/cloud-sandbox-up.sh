@@ -5,7 +5,8 @@
 #   1. start the Docker daemon (does not persist across sessions)
 #   2. supabase start (fast — images were cached by cloud-sandbox-setup.sh)
 #   3. supabase db push --local
-#   4. write apps/api/.env.local and apps/web/.env.local from `supabase status`
+#   4. write apps/api/.env.local, apps/web/.env.local and apps/mobile/.env.local from
+#      `supabase status`
 #      (+ Stripe env vars for the API)
 #   5. repair the local Postgres default ACLs (the image ships them without DML grants)
 #   6. load the chapter directory seed (non-fatal)
@@ -253,24 +254,25 @@ else
   cs_log "Skipping the workspace package build: node_modules/.bin/turbo does not run (the toolchain check at the end says what to do)."
 fi
 
-# Write apps/api/.env.local and apps/web/.env.local from the live local Supabase status
-# (plus Stripe env vars for the API). Real Stripe test keys are used when present;
-# otherwise clearly-marked placeholders that satisfy the non-empty check in
+# Write apps/api/.env.local, apps/web/.env.local and apps/mobile/.env.local from the live
+# local Supabase status (plus Stripe env vars for the API). Real Stripe test keys are used
+# when present; otherwise clearly-marked placeholders that satisfy the non-empty check in
 # apps/api/src/config/env.validation.ts (the API boots; billing endpoints that call
-# Stripe will not work). Both files are gitignored.
+# Stripe will not work). All three files are gitignored.
 #
-# Both are written from ONE `supabase status` read. A second call would be a second
-# chance to disagree with the first — and the web file's values are the same two the API
-# file already validated, so re-deriving them independently buys nothing.
+# All are written from ONE `supabase status` read. A second call would be a second
+# chance to disagree with the first — and the web and mobile files' values are the same
+# two the API file already validated, so re-deriving them independently buys nothing.
 #
 # apps/landing gets no file: its only NEXT_PUBLIC_* var (NEXT_PUBLIC_APP_URL) defaults to
 # the production origin in apps/landing/lib/auth-urls.ts, so it builds unconfigured.
 write_env_files() {
   local envfile="$ROOT/apps/api/.env.local"
   local webenvfile="$ROOT/apps/web/.env.local"
+  local mobileenvfile="$ROOT/apps/mobile/.env.local"
   local supa
 
-  # Preferred: map Supabase's status output onto the names the two generated .env.local
+  # Preferred: map Supabase's status output onto the names the generated .env.local
   # files use. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are the API's; SUPABASE_ANON_KEY
   # is fetched for apps/web, which consumes it as NEXT_PUBLIC_SUPABASE_ANON_KEY below. The
   # API does not read the anon key and does not require it
@@ -290,7 +292,7 @@ write_env_files() {
       | grep -E '^SUPABASE_(URL|ANON_KEY|SERVICE_ROLE_KEY)=')
   fi
 
-  # Validate every variable the two generated .env.local files need, not just the URL.
+  # Validate every variable the generated .env.local files need, not just the URL.
   # `supabase status` omits the auth keys when gotrue is stopped or excluded (e.g. a
   # FRAPP_SUPABASE_START_ARGS override adding `-x gotrue`), and checking only SUPABASE_URL
   # let that write env files missing a key their consumer hard-requires — while still
@@ -300,7 +302,9 @@ write_env_files() {
   # Check each name for the consumer that needs it, never for the list it appears on:
   #   - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  the API requires both at boot
   #                                              (apps/api/src/config/env.validation.ts).
-  #   - SUPABASE_ANON_KEY                        apps/web requires it. It is NOT an API
+  #   - SUPABASE_ANON_KEY                        apps/web requires it, and apps/mobile's
+  #                                              EXPO_PUBLIC_ write derives from it the
+  #                                              same way. It is NOT an API
   #                                              variable and env.validation.ts does not
   #                                              ask for it, so do not drop it from this
   #                                              loop on the strength of that list: the
@@ -329,6 +333,11 @@ write_env_files() {
     echo "STRIPE_PRICE_ID=${STRIPE_PRICE_ID:-price_placeholder_cloud_sandbox}"
     echo "PORT=3001"
     echo "NODE_ENV=development"
+    # Unset, `GET /v1/events/:eventId/attendance/check-in-token` answers 503 and the host check-in
+    # screen draws "Code unavailable" instead of a QR, so a capture of it times out
+    # (docs/guides/demo-data.md § Mobile setup). Any non-empty string works locally;
+    # this one signs nothing outside this container.
+    echo "EVENT_CHECK_IN_TOKEN_SECRET=${EVENT_CHECK_IN_TOKEN_SECRET:-local-cloud-sandbox-check-in-secret}"
   } >"$envfile" || {
     # Without this the redirect's failure is swallowed and the trailing `if` below resets
     # $?, so the function returns 0 — landing the .cloud-sandbox-up.done success sentinel
@@ -381,12 +390,47 @@ write_env_files() {
     # actually talk to the sandbox's API instead of silently polling nothing.
     echo "NEXT_PUBLIC_API_URL=http://127.0.0.1:3001"
   } >"$webenvfile"; then
+    :
+  else
+    cs_log "WARN: could not write $webenvfile (permissions?)."
+    cs_log "      The stack is fine; 'npm run build -w apps/web' will fail on the missing"
+    cs_log "      NEXT_PUBLIC_SUPABASE_* vars until it exists (#1156)."
+  fi
+
+  # apps/mobile, for the one way a sandbox can run it: Expo's web build, which the
+  # capture scripts drive to shoot the phone's screens (docs/guides/demo-data.md
+  # § Mobile setup). Until 2026-11-24 this file was written by hand, and a session
+  # that skipped it got a sign-in screen that never signs in and no phone captures,
+  # with nothing saying why (#5943's proposal page went out with none).
+  #
+  # The same grep boundary as the web write above, for the same reason: EXPO_PUBLIC_*
+  # is inlined into the bundle, so SUPABASE_SERVICE_ROLE_KEY must never be prefixed
+  # along with the two public values.
+  #
+  # EXPO_PUBLIC_WEB_SECURE_STORE=1 swaps the phone's keychain for localStorage on
+  # the web build (apps/mobile/lib/secure-store.web.ts), without which no session
+  # persists there. It is a demo-stack affordance and must never reach a hosted
+  # build; this file is gitignored (a laptop writes its own by hand), store builds
+  # run from a fresh checkout that has no such file, and nothing ships the phone
+  # app as a web build.
+  #
+  # The API is named by `localhost`, as the web capture names the dashboard: the
+  # API's CORS allowlist names http://localhost:3002, the port Expo's web build is
+  # run on. Non-fatal for the reason the web write is.
+  if {
+    echo "# Generated by scripts/cloud-sandbox-up.sh — DO NOT COMMIT (gitignored)."
+    echo "# Local Supabase values are regenerated each session from 'supabase status'."
+    echo "# These are the local demo keys the Supabase CLI prints; they are not secrets."
+    printf '%s\n' "$supa" | grep -E '^SUPABASE_(URL|ANON_KEY)=' | sed 's/^/EXPO_PUBLIC_/'
+    echo "EXPO_PUBLIC_API_URL=http://localhost:3001"
+    echo "EXPO_PUBLIC_WEB_SECURE_STORE=1"
+  } >"$mobileenvfile"; then
     return 0
   fi
 
-  cs_log "WARN: could not write $webenvfile (permissions?)."
-  cs_log "      The stack is fine; 'npm run build -w apps/web' will fail on the missing"
-  cs_log "      NEXT_PUBLIC_SUPABASE_* vars until it exists (#1156)."
+  cs_log "WARN: could not write $mobileenvfile (permissions?)."
+  cs_log "      The stack is fine; the phone app's web build ('npx expo start --web' in"
+  cs_log "      apps/mobile) cannot sign in until it exists, so phone captures fail."
 }
 
 cs_ensure_docker_daemon || fail "Docker daemon did not start."
@@ -420,7 +464,7 @@ cs_retry "'supabase start'" "cs_supabase stop" cs_supabase start $CS_SUPABASE_ST
 cs_log "Applying local migrations..."
 cs_supabase db push --local || fail "'supabase db push --local' failed."
 
-cs_log "Writing apps/api/.env.local and apps/web/.env.local..."
+cs_log "Writing apps/api/.env.local, apps/web/.env.local and apps/mobile/.env.local..."
 write_env_files || fail "Could not write the app .env.local files from 'supabase status'."
 
 # Ordering is deliberate on both sides.

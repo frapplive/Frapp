@@ -169,24 +169,42 @@ export function ListRowSkeleton({
   );
 }
 
-/** A rounded container whose children are separated by inset hairlines. */
-export function ListSection({ children }: { children: ReactNode }) {
+/**
+ * A rounded container whose children are separated by inset hairlines, and
+ * at most one muted line under it (`footnote`) saying what its rows have in
+ * common, as Discord's channel settings and iOS Settings' group footers do.
+ * Web's `SettingsGroup` takes the same `footnote`.
+ */
+export function ListSection({
+  children,
+  footnote,
+}: {
+  children: ReactNode;
+  footnote?: string | null;
+}) {
   const { tokens } = useFrappTheme();
   const surfaces = useRaisedSurfaces();
   const styles = createStyles(tokens);
   const items = Array.isArray(children) ? children.flat() : [children];
   const visible = items.filter(Boolean);
 
-  return (
+  const section = (
     <View style={[styles.section, { backgroundColor: surfaces.card }]}>
       {/* Keyed by position: these rows are a fixed, ordered list declared per
-          screen, never reordered at runtime, and carry no id of their own. */}
+            screen, never reordered at runtime, and carry no id of their own. */}
       {visible.map((child, index) => (
         <View key={index}>
           {index > 0 ? <View style={styles.divider} /> : null}
           {child}
         </View>
       ))}
+    </View>
+  );
+  if (!footnote) return section;
+  return (
+    <View>
+      {section}
+      <Text style={styles.footnote}>{footnote}</Text>
     </View>
   );
 }
@@ -665,6 +683,14 @@ function createStyles(tokens: SignetTokens) {
       paddingHorizontal: tokens.spacing.lg,
       paddingVertical: tokens.spacing.md,
       gap: tokens.spacing.xs,
+    },
+    // A group footer: caption in the muted tone, under the section, inset to
+    // the rows' text, as web's `SettingsGroup` footnote is.
+    footnote: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+      marginTop: tokens.spacing.sm,
+      paddingHorizontal: tokens.spacing.xs,
     },
     divider: {
       height: StyleSheet.hairlineWidth,

@@ -277,6 +277,8 @@ Custom member fields declare a `visibility` of `self` / `chapter` / `exec` / `pr
 
 `sensitive` fields follow the same gate: a field outside the allowed set is never selected, so its value never enters the response (enforcement is server-side, never client-only).
 
+A member's own values are the exception that reads every tier: `GET /v1/members/me/custom-fields` returns the caller's own values in `self`, `chapter`, `exec` and `president` fields alike, so they can see and correct what they entered (#581). It takes no member id, so it is never a path to anyone else's values; writing is the caller's own values only ([`members.md`](members.md#custom-fields)).
+
 ## Edge Cases
 
 - If a role is deleted while members still hold it, those members lose the permissions from that role on their next request (no stale cached permissions).
