@@ -1,4 +1,4 @@
-import type { Activity } from "@repo/hooks";
+import type { Activity } from "./activity-rows";
 
 /** The sections `needs_you_count` is summed from. */
 const COUNTED_SECTIONS: ReadonlySet<Activity["unavailable"][number]> = new Set([
@@ -12,8 +12,12 @@ const COUNTED_SECTIONS: ReadonlySet<Activity["unavailable"][number]> = new Set([
 ]);
 
 /**
- * Activity's tab badge (More's Activity row until #4610): the count of things waiting on the member,
- * or `null` for no chip (the read has not answered, or nothing waits).
+ * Activity's count, on the phone's Activity tab and on web's Activity row in
+ * the sidebar (#5946): the number of things waiting on the member, or `null`
+ * for no chip (the read has not answered, or nothing waits). One rule for
+ * both apps, so the two never show different numbers for the same member.
+ *
+ * It stops at 99+ (`foundations.md` § 9).
  *
  * A section the server could not read is served empty and named in
  * `unavailable`, so the count then leaves it out. The chip says so with a
@@ -29,6 +33,9 @@ export function activityCountChip(
   const partial = activity.unavailable.some((section) =>
     COUNTED_SECTIONS.has(section),
   );
+  if (count > 99) {
+    return { label: "99+", spoken: "more than 99 waiting on you" };
+  }
   return partial
     ? { label: `${count}+`, spoken: `at least ${count} waiting on you` }
     : { label: String(count), spoken: `${count} waiting on you` };

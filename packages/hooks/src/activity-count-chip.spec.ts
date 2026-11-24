@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityCountChip } from "./count-chip";
+import { activityCountChip } from "./activity-count-chip";
 
 describe("activityCountChip (#3897)", () => {
   it("draws no chip before the read answers or while nothing waits", () => {
@@ -46,5 +46,11 @@ describe("activityCountChip (#3897)", () => {
     expect(
       activityCountChip({ needs_you_count: 0, unavailable: ["polls"] }),
     ).toBeNull();
+  });
+
+  it("stops at 99+", () => {
+    expect(
+      activityCountChip({ needs_you_count: 140, unavailable: [] }),
+    ).toEqual({ label: "99+", spoken: "more than 99 waiting on you" });
   });
 });

@@ -9,8 +9,8 @@
  * route here, and every suite in this directory picks it up.
  *
  * Not derived from `nav-config.ts`: that list deliberately omits `/profile` and
- * `/preferences`, and Chapter settings, which opens from the chapter menu, so it answers a
- * different question again.
+ * `/preferences`, and Chapter settings, which open from the member's menu at the
+ * sidebar's foot, so it answers a different question again.
  */
 
 export const DASHBOARD_ROUTES = [
@@ -33,6 +33,8 @@ export const DASHBOARD_ROUTES = [
   "/backwork",
   "/study",
   "/chat",
+  // The Messages page (#5946): chat's panel with the conversation list.
+  "/messages",
   "/points",
   "/profile",
   "/preferences",

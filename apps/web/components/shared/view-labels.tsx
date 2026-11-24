@@ -35,11 +35,11 @@ import { FOCUS_RING } from "@/components/ui/focus";
 /**
  * The first word's inset from its line's edge: a label's 6px of padding and
  * its 1px border, which `flush` takes back. Exported for the page header,
- * which lines its views up with the page gutter below 1056px. Spelled out
+ * which lines its views up with the page gutter below `lg`. Spelled out
  * whole, so Tailwind finds each class in this file.
  */
 export const VIEW_LABELS_FLUSH = "-ml-[7px]";
-export const VIEW_LABELS_FLUSH_NARROW = "max-[1055px]:-ml-[7px]";
+export const VIEW_LABELS_FLUSH_NARROW = "max-lg:-ml-[7px]";
 
 export type ViewOption<T extends string> = {
   value: T;

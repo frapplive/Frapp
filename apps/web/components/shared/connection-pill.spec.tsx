@@ -47,7 +47,7 @@ describe("ConnectionPill", () => {
 
   it("draws a short label and announces the whole sentence when offline", () => {
     mockNetwork("OFFLINE");
-    render(<ConnectionPill placement="top-bar" />);
+    render(<ConnectionPill placement="inline" />);
 
     const pill = screen.getByRole("button", {
       name: "You're offline. Showing cached data.",
@@ -67,7 +67,7 @@ describe("ConnectionPill", () => {
 
   it("says Slow connection when DEGRADED", () => {
     mockNetwork("DEGRADED");
-    render(<ConnectionPill placement="top-bar" />);
+    render(<ConnectionPill placement="inline" />);
     expect(screen.getByText("Slow connection")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Slow connection. Some features may be delayed.",
@@ -76,7 +76,7 @@ describe("ConnectionPill", () => {
 
   it("opens the sentence on a click, for touch screens with no hover title", async () => {
     mockNetwork("DEGRADED");
-    render(<ConnectionPill placement="top-bar" />);
+    render(<ConnectionPill placement="inline" />);
     await userEvent.click(screen.getByRole("button"));
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "Slow connection. Some features may be delayed.",
@@ -94,7 +94,7 @@ describe("ConnectionPill", () => {
       render(
         <>
           <OpenChat status="offline" />
-          <ConnectionPill placement="top-bar" />
+          <ConnectionPill placement="inline" />
         </>,
       );
       expect(screen.getAllByRole("alert")).toHaveLength(1);
@@ -108,7 +108,7 @@ describe("ConnectionPill", () => {
       render(
         <>
           <OpenChat status="reconnecting" />
-          <ConnectionPill placement="top-bar" />
+          <ConnectionPill placement="inline" />
         </>,
       );
       expect(screen.getByText("Slow connection")).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("ConnectionPill", () => {
       render(
         <>
           <OpenChat status="polling" />
-          <ConnectionPill placement="top-bar" />
+          <ConnectionPill placement="inline" />
         </>,
       );
       expect(screen.getByText("Live updates paused")).toBeInTheDocument();
@@ -134,11 +134,11 @@ describe("ConnectionPill", () => {
       const { rerender } = render(
         <>
           <OpenChat status="reconnecting" />
-          <ConnectionPill placement="top-bar" />
+          <ConnectionPill placement="inline" />
         </>,
       );
       expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
-      rerender(<ConnectionPill placement="top-bar" />);
+      rerender(<ConnectionPill placement="inline" />);
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
@@ -159,7 +159,7 @@ describe("ConnectionPill", () => {
 
   it("sits in the flow of the top bar, with no dismiss control", () => {
     mockNetwork("OFFLINE");
-    const { container } = render(<ConnectionPill placement="top-bar" />);
+    const { container } = render(<ConnectionPill placement="inline" />);
     expect(container.innerHTML).not.toMatch(/\bfixed\b/);
     // The pill itself is the only control: it opens the sentence.
     expect(screen.getAllByRole("button")).toHaveLength(1);

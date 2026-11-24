@@ -1,24 +1,23 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { NewButton } from "@/components/ui/new-button";
-import { hydrateRoot } from "react-dom/client";
 
 /*
- * The assembled shell had no unit coverage at all before this lane — the
- * header, breadcrumb, <h1>, sidebar and ⌘K wiring were pinned only indirectly,
- * which made replacing them feel deceptively safe because almost nothing went
- * red. These tests pin the three acceptance criteria #2141 states:
- *
- *   1. every dashboard route sits in the new shell
- *   2. ⌘K is gone from the shell
- *   3. titles are not in the top bar
- *
- * Criterion 3 was reversed on 2026-11-05: the owner asked for the page title
- * back in the top bar (`top-bar.tsx`, `page-title.ts`), so those tests now pin
- * the title there instead.
+ * The assembled shell (#5946): one sidebar holding the rows, the chapter's
+ * channels and the member; no top bar from `lg` up; the page and the docked
+ * conversation in `<main>`. Chat's panel and the sidebar's channel list have
+ * their own specs (`chat-shell.spec.tsx`); here chat is a stub that reports
+ * what the shell hands it.
  */
 
 const {
@@ -29,7 +28,9 @@ const {
   mockLevels,
   mockChannels,
   unreadReads,
+  mockActivity,
 } = vi.hoisted(() => ({
+  mockActivity: { value: undefined as unknown },
   mockPathname: { value: "/events" },
   unreadReads: { count: 0 },
   mockUnread: {
@@ -74,6 +75,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush, replace: routerReplace }),
   useSearchParams: () => new URLSearchParams(mockSearch.value),
 }));
+// Find's dialog has its own spec (`find-bar.spec.tsx`).
+vi.mock("@/components/layout/find-dialog", () => ({
+  FIND_PLACEHOLDER: "Search",
+  COUNCIL_FIND_PLACEHOLDER: "Find channels",
+  FindDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Find" /> : null,
+}));
 // Chat's panel has its own specs (`chat-shell.spec.tsx`); here it is a stub
 // that reports what the shell hands it.
 vi.mock("@/components/chat/chat-page", () => ({
@@ -82,17 +90,28 @@ vi.mock("@/components/chat/chat-page", () => ({
     onClose,
     view,
     onViewChange,
+    onPick,
+    shown,
   }: {
     toolBeside?: boolean;
     onClose?: () => void;
     view?: string;
     onViewChange?: (view: "channels" | "direct") => void;
+    onPick?: (view: "channels" | "direct", channelId: string) => void;
+    shown?: boolean;
   }) => (
     <>
       <p data-testid="chat-stub">{toolBeside ? "beside a tool" : "alone"}</p>
       <p data-testid="chat-view">{view}</p>
+      <p data-testid="chat-shown">{shown ? "shown" : "out of sight"}</p>
       <button type="button" onClick={() => onViewChange?.("direct")}>
         Open a DM link
+      </button>
+      <button type="button" onClick={() => onViewChange?.("channels")}>
+        Open a channel link
+      </button>
+      <button type="button" onClick={() => onPick?.("channels", "c-general")}>
+        Pick a channel
       </button>
       {onClose ? (
         <button type="button" onClick={onClose}>
@@ -130,6 +149,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       fetchStatus: mockPermissions.value === undefined ? "fetching" : "idle",
     }),
     useHiddenUnsetFeatures: () => new Set(),
+    // Activity's count (#5946): the real rule over a stubbed read.
+    activityCountChip: actual.activityCountChip,
+    useActivity: () => ({ data: mockActivity.value }),
     // A server with no AI, the default. Ask's entry is in the chat composer
     // (`ask/ask-host.tsx`), and the bar never carries one (#4702).
     aiAvailableFrom: actual.aiAvailableFrom,
@@ -207,9 +229,14 @@ const askEntry = vi.hoisted(() => ({
 }));
 vi.mock("@/components/ask/ask-host", () => ({
   useAskEntry: () => askEntry.current,
+  useAskPending: () => false,
 }));
+const notificationsLive = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("@/components/layout/notifications-popover", () => ({
   NotificationsPopover: ({ children }: { children: unknown }) => children,
+  useNotificationsLive: () => {
+    notificationsLive.calls += 1;
+  },
 }));
 // The binding has its own spec (`use-chat-realtime-binding.spec.tsx`); this
 // one pins only that the shell mounts it, on every route (#3745).
@@ -220,7 +247,6 @@ vi.mock("@/lib/chat/use-chat-realtime-binding", () => ({
   },
 }));
 
-import { signetDarkTokens } from "@repo/theme/signet";
 import { DashboardShell } from "./dashboard-shell";
 import {
   CONNECTION_PILL_ATTR,
@@ -235,14 +261,15 @@ afterEach(() => {
   mockLevels.value = [];
   mockChannels.value = [];
   mockChapter.value = undefined;
+  mockActivity.value = undefined;
   unreadReads.count = 0;
+  network.state = "ONLINE";
   routerPush.mockClear();
   routerReplace.mockClear();
   mockSearch.value = "";
   setWindowWidth(null);
   document.cookie = "frapp_chat_open=; Max-Age=0; Path=/";
   document.cookie = "frapp_chat_width=; Max-Age=0; Path=/";
-  document.cookie = "frapp_chat_view=; Max-Age=0; Path=/";
 });
 
 /**
@@ -264,439 +291,51 @@ function setWindowWidth(px: number | null) {
   })) as unknown as typeof window.matchMedia;
 }
 
+const shell = (children: React.ReactNode = <p>route content</p>, props = {}) =>
+  render(<DashboardShell {...props}>{children}</DashboardShell>);
+const sidebar = (container: HTMLElement) =>
+  container.querySelector("[data-sidebar]") as HTMLElement;
+const primary = () => screen.getByRole("navigation", { name: "Primary" });
+const chatPanel = (container: HTMLElement) =>
+  container.querySelector("[data-chat-panel]") as HTMLElement | null;
+
 describe("DashboardShell", () => {
-  it("hides a switched-off module's row from a member who cannot read chapter config", () => {
-    // #1982: the gate used to come from the config read, which errors for
-    // every seeded role below President, so the sidebar kept offering members
-    // modules their chapter had turned off. It reads the member view now.
-    mockPermissions.value = ["members:view", "backwork:upload"];
-    mockChapter.value = {
-      name: "Alpha Beta Gamma",
-      enabled_modules: { backwork: false },
-    };
-    try {
-      render(
-        <DashboardShell>
-          <p>route content</p>
-        </DashboardShell>,
-      );
-      const nav = screen.getByRole("navigation", { name: "Primary" });
-      expect(
-        within(nav).queryByRole("link", { name: "Backwork" }),
-      ).not.toBeInTheDocument();
-      expect(
-        within(nav).getByRole("link", { name: "Documents" }),
-      ).toBeInTheDocument();
-    } finally {
-      mockPermissions.value = [];
-      mockChapter.value = undefined;
-    }
-  });
-
-  it("points a phone at the app above main, and nothing else at it (#4002)", () => {
-    device.phone = "ios";
-    try {
-      const { unmount } = render(
-        <DashboardShell>
-          <p>route content</p>
-        </DashboardShell>,
-      );
-      expect(
-        screen.getByRole("region", { name: "Frapp works best in the app" }),
-      ).toBeInTheDocument();
-      unmount();
-      device.phone = null;
-      render(
-        <DashboardShell>
-          <p>route content</p>
-        </DashboardShell>,
-      );
-      expect(
-        screen.queryByRole("region", { name: "Frapp works best in the app" }),
-      ).toBeNull();
-    } finally {
-      device.phone = null;
-      window.localStorage.removeItem("frapp.web.get-the-app-dismissed");
-    }
-  });
-
   it("mounts the desktop app's runtime, which decides for itself where it runs (#4842)", () => {
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
+    shell();
     expect(screen.getByTestId("desktop-runtime")).toBeInTheDocument();
   });
 
-  it("renders the route inside a main landmark", () => {
-    // The floor gate measures `main`'s computed padding, so its presence is a
-    // contract, not an implementation detail.
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByText("route content")).toBeInTheDocument();
-  });
-
-  it("never lets main scroll its page's header away (overflow clip, not hidden)", () => {
-    // A `hidden` box is a scroll container: a jump or a focus deep in long
-    // minutes scrolled `main` and hid the page's title and X (2026-11-20).
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
+  it("renders the route inside one main landmark that never scrolls its header away", () => {
+    // The floor gate measures `main`, so its presence is a contract. A
+    // `hidden` box is a scroll container: a jump deep in long minutes
+    // scrolled `main` and hid the page's title and X (2026-11-20).
+    shell();
     const main = screen.getByRole("main");
+    expect(main).toHaveAttribute("id", "main-content");
     expect(main.className).toContain("overflow-clip");
-    expect(main.className).not.toContain("overflow-hidden");
-  });
-
-  it("clips the chat panel too, rather than letting it scroll", () => {
-    mockPathname.value = "/chat";
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const chat = document.getElementById("chat-panel");
-    expect(chat?.className).toContain("overflow-clip");
-    expect(chat?.className).not.toContain("overflow-hidden");
-  });
-
-  it("titles the open route in the top bar, as its only h1", () => {
-    // 2026-11-05: the title moved from each page's toolbar row into the top
-    // bar, derived from the route so every path (loading, offline, error) has
-    // it. The words are the nav row's label.
-    mockPathname.value = "/study";
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    const headings = screen.getAllByRole("heading", { level: 1 });
-    expect(headings).toHaveLength(1);
-    expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Study hours",
-    );
-    // A top-level route has no parent link: no chapter-name prefix.
-    expect(
-      within(banner).queryByRole("link", { name: "Chapter settings" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("gives a page under a nav row its parent as a link back", () => {
-    mockPathname.value = "/backwork/upload";
-    mockPermissions.value = ["members:view", "backwork:admin"];
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Bulk upload",
-    );
-    expect(
-      within(banner).getByRole("link", { name: "Backwork" }),
-    ).toHaveAttribute("href", "/backwork");
-  });
-
-  it("offers no crumb to a member the nav hides the parent row from", () => {
-    // The parent follows its row's own gates: a member holding none of its
-    // permissions sees the page's title, and no door the nav closed.
-    mockPathname.value = "/backwork/upload";
-    mockPermissions.value = ["members:view"];
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Bulk upload",
-    );
-    expect(
-      within(banner).queryByRole("link", { name: "Backwork" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("offers no crumb while permissions are still loading (#3854)", () => {
-    // An officer's crumb arrives with the answer; a member must never get a
-    // door to click before it.
-    mockPathname.value = "/backwork/upload";
-    mockPermissions.value = undefined;
-    const { rerender } = render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    expect(
-      within(banner).queryByRole("link", { name: "Backwork" }),
-    ).not.toBeInTheDocument();
-    mockPermissions.value = ["members:view", "backwork:admin"];
-    rerender(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(
-      within(screen.getByRole("banner")).getByRole("link", {
-        name: "Backwork",
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("leaves the title cell empty on a route it does not know", () => {
-    // No invented title: the old shell called every unmapped route
-    // "Dashboard", which was the defect #2141 retired.
-    mockPathname.value = "/somewhere-new";
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
-    expect(screen.getByRole("banner")).not.toHaveTextContent("Dashboard");
-  });
-
-  it("hides the title below sm without taking it out of the accessibility tree", () => {
-    // jsdom applies no CSS, so this pins the classes: `sr-only` keeps the h1
-    // in the tree on a phone, where `hidden` (display: none) would drop the
-    // route's only level-1 heading. It sits on the wrapper so `not-sr-only`
-    // cannot undo the h1's own `truncate`.
-    mockPathname.value = "/study";
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const h1 = within(screen.getByRole("banner")).getByRole("heading", {
-      level: 1,
-    });
-    const wrapper = h1.parentElement as HTMLElement;
-    expect(wrapper.className).toMatch(/(^|\s)sr-only(\s|$)/);
-    expect(wrapper.className).toMatch(/\bsm:not-sr-only\b/);
-    expect(`${wrapper.className} ${h1.className}`).not.toMatch(
-      /(^|\s)hidden(\s|$)/,
-    );
-    expect(h1.className).toMatch(/\btruncate\b/);
-  });
-
-  it("keeps the find field centered at lg: both side cells flex-1", () => {
-    // The find field is centered only because the two side cells grow equally.
-    // Below sm the left cell is only the drawer trigger, so the field keeps
-    // the rest of a phone-width bar.
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const cells = Array.from(screen.getByRole("banner").children);
-    const left = cells[0] as HTMLElement;
-    const right = cells[cells.length - 1] as HTMLElement;
-    expect(left.className).toMatch(/\bsm:flex-1\b/);
-    expect(left.className).toMatch(/\bshrink-0\b/);
-    expect(right.className).toMatch(/\blg:flex-1\b/);
-  });
-
-  it("advertises no ⌘K affordance", () => {
-    // #2141: kill the palette and the "Search (⌘K)" button.
-    const { container } = render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(container.textContent).not.toContain("⌘K");
-    expect(screen.queryByText(/Search \(/)).not.toBeInTheDocument();
-  });
-
-  it("does not answer Cmd+K", () => {
-    // There was exactly one global keydown listener in the app and it toggled
-    // the palette. Nothing may open on the chord now.
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const event = new KeyboardEvent("keydown", {
-      key: "k",
-      metaKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("carries the find field and the account avatar in the bar, and no Ask button (#4702)", () => {
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const banner = screen.getByRole("banner");
-    // The field-shaped button that opens the Find dialog.
-    expect(banner).toContainElement(
-      screen.getByRole("button", { name: /^Find channels/ }),
-    );
-    expect(
-      screen.getByRole("button", { name: /account menu/i }),
-    ).toBeInTheDocument();
-    // Paul, 2026-11-13: no Ask button in the corner of the top bar, and
-    // since #5476 (2026-11-18) not in the field either: Ask floats at the
-    // bottom of the page (the next test).
-    expect(
-      within(banner)
-        .queryAllByRole("button", {
-          name: /ask|frapp intelligence|what do you need/i,
-        })
-        .filter((button) => !/^(Find|Search)/.test(button.textContent ?? "")),
-    ).toHaveLength(0);
-  });
-
-  it("keeps the skip link ahead of the content", () => {
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
+    expect(screen.getByText("route content")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /skip to main content/i }),
     ).toHaveAttribute("href", "#main-content");
   });
 
   it("takes the full viewport and marks itself for the connection pill", () => {
-    // The connection pill takes no row of its own, so the shell makes no room
-    // for it. The shell used to subtract `--offline-banner-height`, which is
-    // what moved the whole shell down every time the app left ONLINE. The
-    // attribute is how the root layout's floating pill knows to stand down
-    // while the top bar carries one.
-    const { container } = render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
+    const { container } = shell();
     const root = container.firstElementChild;
-    // `dvh`: `100vh` on a phone is the viewport with the toolbar hidden, which
-    // puts the bottom of a clipped shell under the toolbar while it shows.
     expect(root).toHaveClass("h-dvh");
-    expect(root?.className).not.toContain("h-screen");
-    expect(root?.className).not.toContain("offline-banner-height");
     expect(root).toHaveAttribute(DASHBOARD_SHELL_ATTR);
   });
 
-  it("carries the connection pill in the top bar", () => {
-    network.state = "OFFLINE";
-    render(
-      <DashboardShell>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    const bar = screen.getByRole("banner");
-    expect(
-      within(bar).getByRole("button", { name: /You're offline/ }),
-    ).toHaveAttribute(CONNECTION_PILL_ATTR);
-    network.state = "ONLINE";
-  });
-
-  /*
-   * The full-bleed contract, added by #2142. Chat is drawn as three flush
-   * columns at 100vh with a composer pinned to the bottom of the viewport
-   * (`1b`), which it cannot be while `<main>` insets it and scrolls it. These
-   * pin both halves, because getting either wrong is invisible in a unit test
-   * of chat itself: the padding just reappears around a layout that still
-   * "works".
-   */
-  it("floats Frapp Intelligence's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
-    mockPathname.value = "/events";
-    const view = render(<DashboardShell>content</DashboardShell>);
-    // Neither bar: the sidebar's reads the name, the floating one its words.
-    expect(
-      screen.queryByRole("button", {
-        name: /^(Frapp Intelligence|What do you need)/,
-      }),
-    ).toBeNull();
-    let page = view.container.querySelector("[data-tool-page]") as HTMLElement;
-    expect(page.className).not.toContain("pb-24");
-    view.unmount();
-
-    askEntry.current = { open: false, openAsk: vi.fn() };
-    const { container } = render(<DashboardShell>content</DashboardShell>);
-    // Named by its own words (WCAG 2.5.3).
-    const bar = screen.getByRole("button", { name: "What do you need?" });
-    expect(screen.getByRole("banner")).not.toContainElement(bar);
-    const column = container.querySelector("[data-tool-column]") as HTMLElement;
-    expect(column).toContainElement(bar);
-    // Below `lg`, where it floats, the page reserves room so its last row
-    // scrolls clear of the bar; from `lg` up it sits in the sidebar (#5560).
-    expect(bar.parentElement!.className).toContain("lg:hidden");
-    page = container.querySelector("[data-tool-page]") as HTMLElement;
-    expect(page.className).toContain("max-lg:pb-24");
-    // And tells a control it pins to its own bottom how far to rise.
-    expect(page.className).toContain("max-lg:[--ask-bar-room:4.5rem]");
-    expect(page).not.toContainElement(bar);
-  });
-
-  it("floats no Ask bar over the Ask page, whose own field is at its foot (Paul, 2026-11-22)", () => {
-    mockPathname.value = "/ask";
-    askEntry.current = { open: true, openAsk: vi.fn() };
-    const { container } = render(<DashboardShell>content</DashboardShell>);
-    const column = container.querySelector("[data-tool-column]") as HTMLElement;
-    expect(
-      within(column).queryByRole("button", { name: "What do you need?" }),
-    ).toBeNull();
-    const page = container.querySelector("[data-tool-page]") as HTMLElement;
-    expect(page.className).not.toContain("pb-24");
-  });
-
-  it("insets and scrolls a tool page, inside the one main landmark", () => {
-    mockPathname.value = "/events";
-    const { container } = render(<DashboardShell>content</DashboardShell>);
-
-    const page = container.querySelector("[data-tool-page]") as HTMLElement;
-    expect(page.className).toContain("overflow-y-auto");
-    expect(page.className).toContain("px-4");
-    // `<main>` is the whole row (chat, divider, page), flush and unscrolled.
-    const main = screen.getByRole("main");
-    expect(main).toHaveAttribute("id", "main-content");
-    expect(main).toContainElement(page);
-    expect(main.className).not.toContain("px-4");
-  });
-
-  it("puts a page's actions in its own header beside the X, at every width (Paul, 2026-11-19)", () => {
-    mockPathname.value = "/events";
-    for (const width of [1440, 800]) {
-      setWindowWidth(width);
-      const { container, unmount } = render(
-        <DashboardShell>
-          <PageActions>
-            <NewButton thing="event" />
-          </PageActions>
-          <p>list</p>
-        </DashboardShell>,
-      );
-      const header = container.querySelector(
-        "[data-tool-page-header]",
-      ) as HTMLElement;
-      const page = container.querySelector("[data-tool-page]") as HTMLElement;
+  it("points a phone at the app above main, and nothing else at it (#4002)", () => {
+    device.phone = "ios";
+    try {
+      shell();
       expect(
-        within(header).getByRole("button", { name: "New event" }),
+        screen.getByRole("region", { name: "Frapp works best in the app" }),
       ).toBeInTheDocument();
-      expect(
-        within(page).queryByRole("button", { name: "New event" }),
-      ).toBeNull();
-      // Below the side-by-side width the header shows only while it holds
-      // actions: the CSS rule that does it.
-      expect(header.className).toContain(
-        "has-[[data-page-actions]:not(:empty)]:flex",
-      );
-      unmount();
+    } finally {
+      device.phone = null;
+      window.localStorage.removeItem("frapp.web.get-the-app-dismissed");
     }
   });
 
@@ -748,860 +387,481 @@ describe("DashboardShell", () => {
     }
   });
 
-  it("honours the server-read collapse preference on first render", () => {
-    // Read from a cookie by the dashboard layout so the first paint is already
-    // the right width. If this regressed to a client-side read, the nav would
-    // render at 240px and snap to 56px after hydration on every route.
-    render(
-      <DashboardShell defaultNavCollapsed>
-        <p>route content</p>
-      </DashboardShell>,
-    );
-    expect(
-      screen.getByRole("button", { name: /expand sidebar/i }),
-    ).toBeInTheDocument();
+  it("binds chat's inbox and notifications' live reads on every route, once (#3745)", () => {
+    realtimeBinding.calls = 0;
+    notificationsLive.calls = 0;
+    shell();
+    expect(realtimeBinding.calls).toBeGreaterThan(0);
+    expect(notificationsLive.calls).toBeGreaterThan(0);
   });
 
-  describe("chat beside the chapter tools (#3779)", () => {
-    const nav = () => screen.getByRole("navigation", { name: "Primary" });
-    const column = (container: HTMLElement) =>
-      container.querySelector("[data-nav-column]") as HTMLElement;
-    const chatPanel = (container: HTMLElement) =>
-      container.querySelector("[data-chat-panel]") as HTMLElement | null;
+  it("does not answer Cmd+K, and advertises no ⌘K", () => {
+    shell();
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByText(/⌘K/)).toBeNull();
+  });
 
-    it("hosts chat alone on /chat, inside main, so the skip link, focus fallback and floor suite reach it", () => {
-      mockPathname.value = "/chat";
-      const { container } = render(<DashboardShell>{null}</DashboardShell>);
-      expect(chatPanel(container)).not.toBeNull();
-      expect(screen.getByTestId("chat-stub")).toHaveTextContent("alone");
-      const main = screen.getByRole("main");
-      expect(main).toContainElement(chatPanel(container));
-      expect(main.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  describe("the sidebar (#5946)", () => {
+    it("holds New, Search, then the five homes and More, the same for every role", () => {
+      mockPermissions.value = ["*"];
+      setWindowWidth(1440);
+      shell();
+      const rows = Array.from(primary().querySelectorAll("a, button")).map(
+        (el) => el.getAttribute("aria-label") ?? el.textContent?.trim(),
+      );
+      expect(rows).toEqual([
+        "New",
+        "Search",
+        "Activity",
+        "Messages",
+        "Calendar",
+        "Resources",
+        "Directory",
+        "More",
+      ]);
+    });
+
+    it("is 264px wide, or the 56px rail by the member's own preference", () => {
+      setWindowWidth(1440);
+      const { container, unmount } = shell();
+      expect(sidebar(container)).toHaveClass("w-[264px]");
+      unmount();
+      const rail = shell(undefined, { defaultNavCollapsed: true });
+      expect(sidebar(rail.container)).toHaveClass("w-14");
       expect(
-        screen.getByRole("link", { name: "Skip to main content" }),
-      ).toHaveAttribute("href", "#main-content");
-      expect(container.querySelector("[data-tool-page]")).toBeNull();
+        screen.getByRole("button", { name: /expand sidebar/i }),
+      ).toBeInTheDocument();
+      // The rail keeps the channels a click away.
+      expect(
+        screen.getByRole("button", { name: /^Channels/ }),
+      ).toBeInTheDocument();
     });
 
-    it("opens chat on a fresh load of a chat deep link, even with the cookie closed", () => {
+    it("opens the channel list beside the rail's Channels button", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/chat";
-      mockSearch.value = "channel=c1";
-      const { container } = render(
-        <DashboardShell defaultChatOpen={false}>{null}</DashboardShell>,
-      );
-      expect(chatPanel(container)).not.toBeNull();
-      expect(container.querySelector("[data-chapter-home]")).toBeNull();
+      shell(undefined, { defaultNavCollapsed: true });
+      fireEvent.click(screen.getByRole("button", { name: /^Channels/ }));
+      const popover = screen.getByRole("dialog", { name: "Channels" });
+      expect(popover.querySelector("[data-channel-list-slot]")).not.toBeNull();
     });
 
-    it("keeps /chat the chat page below the side-by-side width, whatever the cookie says", () => {
-      setWindowWidth(1024);
-      mockPathname.value = "/chat";
-      const { container } = render(
-        <DashboardShell defaultChatOpen={false}>{null}</DashboardShell>,
-      );
-      expect(chatPanel(container)).not.toBeNull();
-      // Below the width the Chat row is the link it always was.
-      expect(within(nav()).getByRole("link", { name: "Chat" })).toHaveAttribute(
-        "href",
-        "/chat",
-      );
+    it("holds a gated row's place while permissions are read, so nothing below it moves (#3854)", () => {
+      setWindowWidth(1440);
+      mockPermissions.value = undefined;
+      shell();
+      expect(
+        within(primary()).queryByRole("link", { name: "Directory" }),
+      ).toBeNull();
+      expect(primary().querySelector("[data-nav-placeholder]")).not.toBeNull();
     });
 
-    it("opens chat beside a tool, with the divider, and only from the side-by-side width", () => {
+    it("draws the chapter as a label at the head, with the bell and the collapse control, and no chapter menu", () => {
+      setWindowWidth(1440);
+      mockChapter.value = { name: "Beta Theta Omega", enabled_modules: {} };
+      const { container } = shell();
+      const bar = sidebar(container);
+      expect(within(bar).getByText("Beta Theta Omega")).toBeInTheDocument();
+      expect(
+        within(bar).queryByRole("button", { name: /chapter menu/i }),
+      ).toBeNull();
+      expect(
+        within(bar).getByRole("button", { name: "Notifications" }),
+      ).toBeInTheDocument();
+      expect(
+        within(bar).getByRole("button", { name: "Collapse sidebar" }),
+      ).toBeInTheDocument();
+    });
+
+    it("puts the member at the foot, with the one menu", () => {
+      setWindowWidth(1440);
+      const { container } = shell();
+      expect(
+        within(sidebar(container)).getByRole("button", {
+          name: /account menu for Paul Carlson/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("carries the connection pill in its head when there is a problem, the one indicator", () => {
+      setWindowWidth(1440);
+      network.state = "OFFLINE";
+      const { container } = shell();
+      const pills = container.querySelectorAll(`[${CONNECTION_PILL_ATTR}]`);
+      // The top bar's copy is not drawn from `lg` up (`lg:hidden`).
+      const inSidebar = Array.from(pills).filter((pill) =>
+        sidebar(container).contains(pill),
+      );
+      expect(inSidebar).toHaveLength(1);
+    });
+
+    it("lights a row on its page and makes it close the page there", () => {
+      setWindowWidth(1440);
       mockPathname.value = "/events";
-      const { container } = render(
-        <DashboardShell>
-          <p>events page</p>
-        </DashboardShell>,
-      );
-      // Width unknown (server, hydration): the panel holds its place by CSS
-      // with chat's skeleton, and chat itself waits for a known-wide window,
-      // so a phone never builds a chat it cannot show.
-      expect(chatPanel(container)).toHaveClass("hidden", "min-[1056px]:flex");
-      expect(screen.queryByTestId("chat-stub")).not.toBeInTheDocument();
-      expect(screen.getByRole("separator")).toBeInTheDocument();
-      expect(screen.getByText("events page")).toBeInTheDocument();
-      // Both floors: the page keeps 375px, and so does chat's side panel.
-      const tool = container.querySelector("[data-tool-column]")!;
-      expect(tool).toHaveClass("min-[1056px]:min-w-[375px]");
-      expect(chatPanel(container)!.style.minWidth).toBe("375px");
-      expect(chatPanel(container)!.style.maxWidth).toBe("calc(100% - 375px)");
+      shell();
+      const row = within(primary()).getByRole("button", {
+        name: "Calendar",
+      });
+      expect(row).toHaveAttribute("aria-current", "page");
+      fireEvent.click(row);
+      expect(routerPush).toHaveBeenCalledWith("/chat");
     });
 
-    it("gives the tool the main column and chat a side panel on the right (#5575)", () => {
+    it("lights More on a page it still holds (#5943 folds them later)", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
-      const { container } = render(
-        <DashboardShell defaultChatWidth={420}>tasks</DashboardShell>,
+      mockPathname.value = "/points";
+      shell();
+      expect(
+        within(primary()).getByRole("button", { name: /More/ }),
+      ).toHaveAttribute("aria-current", "true");
+    });
+
+    it("lights New on New's page", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/ask";
+      shell();
+      expect(
+        within(primary()).getByRole("link", { name: "New" }),
+      ).toHaveAttribute("aria-current", "page");
+    });
+
+    it("counts conversations with anything unread on Messages, and stops at 99+", () => {
+      setWindowWidth(1440);
+      mockChannels.value = [
+        { id: "dm-1", type: "DM" },
+        { id: "dm-2", type: "GROUP_DM" },
+      ];
+      mockUnread.value = [
+        { channel_id: "dm-1", unread_count: 2, mention_count: 0 },
+        { channel_id: "dm-2", unread_count: 1, mention_count: 0 },
+      ];
+      shell();
+      const row = within(primary()).getByRole("link", { name: /Messages/ });
+      expect(row).toHaveTextContent("2");
+      expect(row).toHaveAccessibleName(/2 unread conversations/);
+    });
+
+    it("counts what is waiting on the member on Activity, as the phone's tab does", () => {
+      setWindowWidth(1440);
+      mockActivity.value = { needs_you_count: 140, unavailable: [] };
+      shell();
+      const row = within(primary()).getByRole("link", { name: /Activity/ });
+      expect(row).toHaveTextContent("99+");
+    });
+
+    it("opens Find from the Search row", () => {
+      setWindowWidth(1440);
+      shell();
+      fireEvent.click(
+        within(primary()).getByRole("button", { name: "Search" }),
       );
-      const main = screen.getByRole("main");
-      const tool = container.querySelector("[data-tool-column]")!;
-      const panel = chatPanel(container)!;
-      // In order: the tool page, the divider, then chat.
-      expect(Array.from(main.children).indexOf(tool)).toBe(0);
-      expect(main.lastElementChild).toBe(panel);
-      expect(tool).toHaveClass("flex-1");
-      // The panel keeps the member's width; the page takes the rest.
-      expect(panel.style.flex).toBe("0 1 420px");
-      expect(screen.getByTestId("chat-stub")).toHaveTextContent("beside");
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
-    describe("the Direct messages row (#3774)", () => {
-      const row = (name: string) =>
-        within(nav()).getByRole("button", { name: new RegExp(`^${name}`) });
+    it("hides a switched-off module's row from a member who cannot read chapter config (#1982)", () => {
+      mockPermissions.value = ["members:view", "backwork:upload"];
+      mockChapter.value = {
+        name: "Alpha Beta Gamma",
+        enabled_modules: { events: false },
+      };
+      setWindowWidth(1440);
+      shell();
+      expect(
+        within(primary()).queryByRole("link", { name: "Calendar" }),
+      ).toBeNull();
+      expect(
+        within(primary()).getByRole("link", { name: "Activity" }),
+      ).toBeInTheDocument();
+    });
 
-      it("switches the one panel between channels and direct messages, and the open row closes it", () => {
-        vi.useFakeTimers();
-        try {
-          setWindowWidth(1440);
-          mockPathname.value = "/events";
-          const { container } = render(<DashboardShell>events</DashboardShell>);
-          expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-          expect(row("Chat")).toHaveAttribute("aria-pressed", "true");
-          expect(row("Direct messages")).toHaveAttribute(
-            "aria-pressed",
-            "false",
-          );
+    it("keeps a council's sidebar to what its routes serve (#5933)", () => {
+      mockChapter.value = {
+        name: "Westfield IFC",
+        kind: "council",
+        council_type: "ifc",
+        enabled_modules: {},
+      };
+      mockPermissions.value = ["*"];
+      setWindowWidth(1440);
+      shell();
+      const nav = primary();
+      expect(
+        within(nav).getByRole("link", { name: "New" }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("button", { name: "Search" }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("link", { name: /^Messages/ }),
+      ).toBeInTheDocument();
+      expect(
+        within(nav).getByRole("link", { name: "Directory" }),
+      ).toBeInTheDocument();
+      for (const name of [/^Activity/, "Calendar", "Resources"]) {
+        expect(within(nav).queryByRole("link", { name })).toBeNull();
+      }
+      // Every row More holds is a chapter's, so a council has no More.
+      expect(within(nav).queryByRole("button", { name: "More" })).toBeNull();
+    });
+  });
 
-          // Switches in place: still one panel, now on direct messages.
-          fireEvent.click(row("Direct messages"));
-          expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-          expect(chatPanel(container)).toHaveAttribute(
-            "aria-label",
-            "Direct messages",
-          );
-          expect(container.querySelectorAll("[data-chat-panel]")).toHaveLength(
-            1,
-          );
-          expect(row("Direct messages")).toHaveAttribute(
-            "aria-pressed",
-            "true",
-          );
-          expect(row("Direct messages")).toHaveAttribute(
-            "title",
-            "Close direct messages",
-          );
-          expect(row("Chat")).toHaveAttribute("aria-pressed", "false");
-          expect(document.cookie).toMatch(/frapp_chat_view=direct/);
+  describe("no top bar from lg (#5946)", () => {
+    it("draws the bar only below lg", () => {
+      const { container } = shell();
+      expect(container.querySelector("[data-top-bar]")).toHaveClass(
+        "lg:hidden",
+      );
+    });
 
-          // The open row closes the panel.
-          fireEvent.click(row("Direct messages"));
-          act(() => {
-            vi.runAllTimers();
-          });
-          expect(chatPanel(container)).toBeNull();
+    it("titles a page in its own header from lg up, as the route's only h1", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/study";
+      const { container } = shell();
+      const headings = screen.getAllByRole("heading", { level: 1 });
+      expect(headings).toHaveLength(1);
+      expect(headings[0]).toHaveTextContent("Study hours");
+      expect(
+        container.querySelector("[data-tool-page-header]"),
+      ).toContainElement(headings[0]!);
+    });
 
-          // Chat opens it again, on channels.
-          fireEvent.click(row("Chat"));
-          expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-          expect(routerPush).not.toHaveBeenCalled();
-        } finally {
-          vi.useRealTimers();
-        }
-      });
+    it("titles the conversation alone for a screen reader, as the route's only h1", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/chat";
+      shell();
+      const headings = screen.getAllByRole("heading", { level: 1 });
+      expect(headings).toHaveLength(1);
+      expect(headings[0]).toHaveTextContent("Chat");
+      expect(headings[0]).toHaveClass("sr-only");
+    });
 
-      it("opens on the list the cookie remembers", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/events";
-        render(
-          <DashboardShell defaultChatView="direct">events</DashboardShell>,
+    it("titles the page in the top bar below lg, as its only h1", () => {
+      setWindowWidth(800);
+      mockPathname.value = "/study";
+      const { container } = shell();
+      const headings = screen.getAllByRole("heading", { level: 1 });
+      expect(headings).toHaveLength(1);
+      expect(container.querySelector("[data-top-bar]")).toContainElement(
+        headings[0]!,
+      );
+    });
+
+    it("gives a page under a row its parent as a link back", () => {
+      setWindowWidth(1440);
+      mockPermissions.value = ["*"];
+      mockPathname.value = "/backwork/upload";
+      const { container } = shell();
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      expect(
+        within(header).getByRole("link", { name: "Backwork" }),
+      ).toHaveAttribute("href", "/backwork");
+    });
+
+    it("titles New for a member without Frapp Intelligence by what it is", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/ask";
+      shell();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        "New",
+      );
+      askEntry.current = { open: true, openAsk: () => {} };
+      mockPathname.value = "/ask";
+    });
+
+    it("puts a page's actions in its own header beside the X, at every width (Paul, 2026-11-19)", () => {
+      mockPathname.value = "/events";
+      for (const width of [1440, 800]) {
+        setWindowWidth(width);
+        const { container, unmount } = shell(
+          <>
+            <PageActions>
+              <NewButton thing="event" />
+            </PageActions>
+            <p>list</p>
+          </>,
         );
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        expect(row("Direct messages")).toHaveAttribute("aria-pressed", "true");
-      });
-
-      it("follows the panel to direct messages when it opens a DM", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/events";
-        render(<DashboardShell>events</DashboardShell>);
-        fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        expect(row("Direct messages")).toHaveAttribute("aria-pressed", "true");
-      });
-
-      it("is a link below the side-by-side width, and the list on screen names the page", () => {
-        setWindowWidth(1024);
-        mockPathname.value = "/chat";
-        mockSearch.value = "view=direct";
-        render(<DashboardShell>{null}</DashboardShell>);
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        const direct = within(nav()).getByRole("link", {
-          name: "Direct messages",
-        });
-        expect(direct).toHaveAttribute("href", "/chat?view=direct");
-        expect(direct).toHaveAttribute("aria-current", "page");
-        // Chat links back to channels, since a bare `/chat` keeps the list.
-        const chat = within(nav()).getByRole("link", { name: "Chat" });
-        expect(chat).toHaveAttribute("href", "/chat?view=channels");
-        expect(chat).not.toHaveAttribute("aria-current");
-        expect(
-          screen.getByRole("heading", { name: "Direct messages" }),
-        ).toBeInTheDocument();
-      });
-
-      it("follows the address below the side-by-side width: a row's link, and Back to a bare /chat", () => {
-        setWindowWidth(1024);
-        mockPathname.value = "/chat";
-        const { rerender } = render(<DashboardShell>{null}</DashboardShell>);
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-        // Following the Direct messages row's link.
-        mockSearch.value = "view=direct";
-        rerender(<DashboardShell>{null}</DashboardShell>);
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        // Back to `/chat`, which is Chat's own link.
-        mockSearch.value = "";
-        rerender(<DashboardShell>{null}</DashboardShell>);
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-      });
-
-      it("keeps the list for a link to a conversation, which names none", () => {
-        setWindowWidth(1024);
-        mockPathname.value = "/chat";
-        mockSearch.value = "view=direct";
-        const { rerender } = render(<DashboardShell>{null}</DashboardShell>);
-        mockSearch.value = "channel=d1";
-        rerender(<DashboardShell>{null}</DashboardShell>);
-        // The panel follows the conversation's kind itself (`ChatShell`).
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-      });
-
-      it("drops a ?view= the panel has left, so the other row's link still works", () => {
-        setWindowWidth(1024);
-        mockPathname.value = "/chat";
-        mockSearch.value = "view=channels";
-        const { rerender } = render(<DashboardShell>{null}</DashboardShell>);
-        // A search hit or a bookmark into a DM, from inside the panel.
-        fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        expect(routerReplace).toHaveBeenCalledWith("/chat");
-        // The shell's own move to `/chat` keeps the list it followed to.
-        mockSearch.value = "";
-        rerender(<DashboardShell>{null}</DashboardShell>);
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
-        expect(
-          within(nav()).getByRole("link", { name: "Chat" }),
-        ).toHaveAttribute("href", "/chat?view=channels");
-      });
-
-      it("drops a stale ?view= from the address when the rows switch lists", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/chat";
-        mockSearch.value = "view=direct";
-        render(<DashboardShell>{null}</DashboardShell>);
-        fireEvent.click(row("Chat"));
-        expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
-        expect(routerReplace).toHaveBeenCalledWith("/chat");
-      });
-    });
-
-    describe("closing chat from chat's own header (#4223)", () => {
-      it("closes chat and leaves the tool page, with focus on the page", () => {
-        vi.useFakeTimers();
-        try {
-          setWindowWidth(1440);
-          mockPathname.value = "/events";
-          const { container } = render(<DashboardShell>events</DashboardShell>);
-          fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
-          // The same exit the Chat row plays, and the page keeps the route.
-          expect(chatPanel(container)).toHaveAttribute("inert");
-          expect(container.querySelector("[data-tool-column]")).toHaveFocus();
-          act(() => {
-            vi.runAllTimers();
-          });
-          expect(chatPanel(container)).toBeNull();
-          expect(routerPush).not.toHaveBeenCalled();
-          expect(document.cookie).toContain("frapp_chat_open=0");
-          // The Chat row still opens it again.
-          const chatRow = within(nav()).getByRole("button", { name: /^Chat/ });
-          expect(chatRow).toHaveAttribute("aria-pressed", "false");
-          fireEvent.click(chatRow);
-          expect(chatPanel(container)).not.toBeNull();
-        } finally {
-          vi.useRealTimers();
-        }
-      });
-
-      it("offers no close with chat alone, or below the side-by-side width", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/chat";
-        const { unmount } = render(<DashboardShell>chat</DashboardShell>);
-        expect(screen.getByTestId("chat-stub")).toBeInTheDocument();
-        expect(
-          screen.queryByRole("button", { name: "Close chat" }),
-        ).not.toBeInTheDocument();
-        unmount();
-
-        setWindowWidth(900);
-        render(<DashboardShell>chat</DashboardShell>);
-        expect(screen.getByTestId("chat-stub")).toBeInTheDocument();
-        expect(
-          screen.queryByRole("button", { name: "Close chat" }),
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    describe("closing the tool page from the page itself (Paul, 2026-11-11)", () => {
-      it("gives every tool page a close button and its title in its own header", () => {
-        setWindowWidth(1440);
-        // Profile has no nav row of its own to click closed.
-        mockPathname.value = "/profile";
-        const { container } = render(<DashboardShell>profile</DashboardShell>);
         const header = container.querySelector(
           "[data-tool-page-header]",
         ) as HTMLElement;
-        expect(header).toHaveClass("hidden", "min-[1056px]:flex");
-        // One h1, and once the window is known to be wide it is the page's.
-        const headings = screen.getAllByRole("heading", { level: 1 });
-        expect(headings).toHaveLength(1);
-        expect(header).toContainElement(headings[0]!);
-        expect(headings[0]).toHaveTextContent("Profile");
-        // The top bar's copy steps aside at the same width, by CSS.
-        const barCopy = within(screen.getByRole("banner")).getByText("Profile");
-        expect(barCopy.tagName).toBe("P");
-        expect(barCopy.parentElement).toHaveClass("min-[1056px]:hidden");
-
-        // 16px from the page's edge: -8px into its 24px gutter (#4223 puts
-        // chat's X in the same place).
-        expect(header).toHaveClass("sm:px-6");
         expect(
-          within(header).getByRole("button", { name: "Close Profile" }),
-        ).toHaveClass("-mr-2");
-        fireEvent.click(
-          within(header).getByRole("button", { name: "Close Profile" }),
-        );
-        expect(routerPush).toHaveBeenCalledWith("/chat");
-      });
-
-      it("keeps the title the top bar's h1 until the window is known to be wide", () => {
-        setWindowWidth(null);
-        mockPathname.value = "/events";
-        render(<DashboardShell>events</DashboardShell>);
-        expect(
-          within(screen.getByRole("banner")).getByRole("heading", { level: 1 }),
-        ).toHaveTextContent("Events");
-        expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-      });
-
-      it("closes on Escape inside the page, but not from a field or below the side-by-side width", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/events";
-        const { rerender } = render(
-          <DashboardShell>
-            <button type="button">page button</button>
-            <input aria-label="page field" />
-          </DashboardShell>,
-        );
-        fireEvent.keyDown(screen.getByRole("textbox", { name: "page field" }), {
-          key: "Escape",
-        });
-        expect(routerPush).not.toHaveBeenCalled();
-        fireEvent.keyDown(screen.getByRole("button", { name: "page button" }), {
-          key: "Escape",
-        });
-        expect(routerPush).toHaveBeenCalledWith("/chat");
-
-        routerPush.mockClear();
-        setWindowWidth(1024);
-        mockPathname.value = "/tasks";
-        rerender(
-          <DashboardShell>
-            <button type="button">page button</button>
-          </DashboardShell>,
-        );
-        fireEvent.keyDown(screen.getByRole("button", { name: "page button" }), {
-          key: "Escape",
-        });
-        expect(routerPush).not.toHaveBeenCalled();
-      });
-
-      it("closes on Escape from a field that leaves Escape to the page: Ask's, while empty (2026-11-22)", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/ask";
-        render(
-          <DashboardShell>
-            <textarea aria-label="Ask field" data-escape-leaves="" />
-          </DashboardShell>,
-        );
-        fireEvent.keyDown(screen.getByRole("textbox", { name: "Ask field" }), {
-          key: "Escape",
-        });
-        expect(routerPush).toHaveBeenCalledWith("/chat");
-      });
-
-      it("closes the page when the divider is let go at the left edge", () => {
-        setWindowWidth(1440);
-        mockPathname.value = "/events";
-        const { container } = render(<DashboardShell>events</DashboardShell>);
-        const main = screen.getByRole("main");
-        main.getBoundingClientRect = () =>
-          ({ width: 1200, left: 240, right: 1440 }) as DOMRect;
-        const divider = screen.getByRole("separator");
-        divider.setPointerCapture = () => {};
-        divider.hasPointerCapture = () => false;
-        fireEvent.pointerDown(divider, {
-          button: 0,
-          pointerId: 1,
-          clientX: 900,
-        });
-        fireEvent.pointerMove(divider, { pointerId: 1, clientX: 250 });
-        // The page fades first, so the release is no surprise.
-        expect(container.querySelector("[data-tool-column]")).toHaveClass(
-          "opacity-40",
-        );
-        fireEvent.pointerUp(divider, { pointerId: 1, clientX: 250 });
-        expect(routerPush).toHaveBeenCalledWith("/chat");
-      });
-    });
-
-    it("mounts chat beside the tool once the window is known to be wide", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/events";
-      render(<DashboardShell>events</DashboardShell>);
-      expect(screen.getByTestId("chat-stub")).toHaveTextContent(
-        "beside a tool",
-      );
-    });
-
-    it("gives Chapter settings the whole width, chat open or not (#4068 decision 3)", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/settings";
-      const { container } = render(
-        <DashboardShell defaultChatOpen>
-          <p>settings page</p>
-        </DashboardShell>,
-      );
-      expect(chatPanel(container)).toBeNull();
-      expect(screen.queryByRole("separator")).not.toBeInTheDocument();
-      expect(container.querySelector("[data-tool-page]")).not.toHaveClass(
-        "min-[1056px]:min-w-[375px]",
-      );
-      // The Chat row goes to chat rather than toggling a panel with no room.
-      expect(within(nav()).getByRole("link", { name: "Chat" })).toHaveAttribute(
-        "href",
-        "/chat",
-      );
-    });
-
-    it("drops chat beside a tool once the window is known to be narrow", () => {
-      setWindowWidth(1024);
-      mockPathname.value = "/events";
-      const { container } = render(<DashboardShell>events</DashboardShell>);
-      expect(chatPanel(container)).toBeNull();
-      expect(screen.queryByRole("separator")).not.toBeInTheDocument();
-    });
-
-    it("toggles chat from its nav row, and the open tool's row closes the tool", () => {
-      vi.useFakeTimers();
-      try {
-        setWindowWidth(1440);
-        mockPathname.value = "/events";
-        const { container } = render(<DashboardShell>events</DashboardShell>);
-        const chatRow = within(nav()).getByRole("button", { name: /^Chat/ });
-        expect(chatRow).toHaveAttribute("aria-pressed", "true");
-
-        // A page load paints chat in place: no entrance.
-        expect(chatPanel(container)!.style.animation).toBe("");
-        fireEvent.click(chatRow);
-        // It plays its exit on Signet's exit ease, inert, then goes.
-        expect(chatPanel(container)).toHaveAttribute("inert");
-        expect(chatPanel(container)!.style.animation).toContain(
-          "shell-panel-out",
-        );
-        expect(chatPanel(container)!.style.animation).toContain(
-          signetDarkTokens.motion.easing.exit,
-        );
-        act(() => {
-          vi.runAllTimers();
-        });
-        expect(chatPanel(container)).toBeNull();
-        expect(
-          within(nav()).getByRole("button", { name: /^Chat/ }),
-        ).toHaveAttribute("aria-pressed", "false");
-        expect(document.cookie).toContain("frapp_chat_open=0");
-
-        // Opening from the row plays the entrance: `context` on the entrance
-        // ease, never the `settle` overshoot (that one needs Paul).
-        fireEvent.click(within(nav()).getByRole("button", { name: /^Chat/ }));
-        const anim = chatPanel(container)!.style.animation;
-        expect(anim).toContain("shell-panel-in");
-        expect(anim).toContain(`${signetDarkTokens.motion.duration.context}ms`);
-        expect(anim).toContain(signetDarkTokens.motion.easing.entrance);
-        expect(anim).not.toContain(signetDarkTokens.motion.easing.settle);
-        // jsdom has no AnimationEvent, so React listens for the prefixed
-        // name; dispatch both.
-        for (const type of ["animationend", "webkitAnimationEnd"]) {
-          fireEvent(chatPanel(container)!, new Event(type, { bubbles: true }));
-        }
-        expect(chatPanel(container)!.style.animation).toBe("");
-        fireEvent.click(within(nav()).getByRole("button", { name: /^Chat/ }));
-        act(() => {
-          vi.runAllTimers();
-        });
-
-        // The open tool's row is a toggle too: it goes to `/chat`, no tool.
-        const events = within(nav()).getByRole("button", { name: "Events" });
-        expect(events).toHaveAttribute("title", "Close Events");
-        fireEvent.click(events);
-        expect(routerPush).toHaveBeenCalledWith("/chat");
-        // Every other tool row still navigates.
-        expect(
-          within(nav()).getByRole("link", { name: "Tasks" }),
-        ).toHaveAttribute("href", "/tasks");
-      } finally {
-        vi.useRealTimers();
+          within(header).getByRole("button", { name: "New event" }),
+        ).toBeInTheDocument();
+        unmount();
       }
-    });
-
-    it("shows the home view when closing a tool leaves nothing open, and opens chat on any other arrival at /chat", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/events";
-      const { container, rerender } = render(
-        <DashboardShell defaultChatOpen={false}>events</DashboardShell>,
-      );
-      fireEvent.click(within(nav()).getByRole("button", { name: "Events" }));
-      mockPathname.value = "/chat";
-      rerender(<DashboardShell defaultChatOpen={false}>{null}</DashboardShell>);
-      expect(chatPanel(container)).toBeNull();
-      expect(
-        container.querySelector("[data-chapter-home]"),
-      ).toBeInTheDocument();
-
-      // A link to Chat from anywhere else opens it.
-      mockPathname.value = "/tasks";
-      rerender(<DashboardShell defaultChatOpen={false}>tasks</DashboardShell>);
-      mockPathname.value = "/chat";
-      rerender(<DashboardShell defaultChatOpen={false}>{null}</DashboardShell>);
-      expect(chatPanel(container)).not.toBeNull();
-    });
-
-    it("keeps the full nav beside chat and a tool, with no rail forced (#5575)", () => {
-      // Chat's one-pane side panel leaves room for the full nav beside both
-      // 375px floors from the side-by-side width up.
-      setWindowWidth(1100);
-      mockPathname.value = "/events";
-      const { container } = render(
-        <DashboardShell defaultChatOpen={false}>events</DashboardShell>,
-      );
-      const before = column(container);
-      expect(before).toHaveClass("w-60");
-      fireEvent.click(within(nav()).getByRole("button", { name: "Chat" }));
-      expect(column(container)).toBe(before);
-      expect(before).toHaveClass("w-60");
-      expect(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      ).toBeInTheDocument();
-    });
-
-    it("hydrates to the full nav, the same node, where the window has room for it", async () => {
-      mockPathname.value = "/events";
-      const host = document.createElement("div");
-      host.innerHTML = renderToString(<DashboardShell>events</DashboardShell>);
-      document.body.appendChild(host);
-      try {
-        const full = host.querySelector<HTMLElement>("[data-nav-column]");
-        setWindowWidth(1440);
-        const root = await act(async () =>
-          hydrateRoot(host, <DashboardShell>events</DashboardShell>),
-        );
-        const left = host.querySelectorAll<HTMLElement>("[data-nav-column]");
-        expect(left).toHaveLength(1);
-        expect(left[0]).toBe(full);
-        expect(left[0]).toHaveClass("w-60");
-        act(() => root.unmount());
-      } finally {
-        host.remove();
-      }
-    });
-
-    it("draws one nav column on the server, chat beside a tool or not", () => {
-      for (const [path, chatOpen] of [
-        ["/events", true],
-        ["/events", false],
-        ["/chat", true],
-      ] as const) {
-        mockPathname.value = path;
-        const host = document.createElement("div");
-        host.innerHTML = renderToString(
-          <DashboardShell defaultChatOpen={chatOpen}>{null}</DashboardShell>,
-        );
-        const served = host.querySelectorAll("[data-nav-column]");
-        expect(served, path).toHaveLength(1);
-        expect(served[0], path).toHaveClass("w-60");
-      }
-    });
-
-    it("keeps the member's own rail through hydration", async () => {
-      mockPathname.value = "/events";
-      const host = document.createElement("div");
-      const shell = <DashboardShell defaultNavCollapsed>events</DashboardShell>;
-      host.innerHTML = renderToString(shell);
-      document.body.appendChild(host);
-      try {
-        const served = host.querySelector<HTMLElement>("[data-nav-column]");
-        setWindowWidth(1100);
-        const root = await act(async () => hydrateRoot(host, shell));
-        const left = host.querySelectorAll<HTMLElement>("[data-nav-column]");
-        expect(left).toHaveLength(1);
-        expect(left[0]).toBe(served);
-        expect(left[0]).toHaveClass("w-14");
-        act(() => root.unmount());
-      } finally {
-        host.remove();
-      }
-    });
-
-    it("remembers chat's width where the divider was left, in its cookie", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/events";
-      render(<DashboardShell>events</DashboardShell>);
-      fireEvent.keyDown(screen.getByRole("separator"), { key: "Enter" });
-      expect(document.cookie).toContain("frapp_chat_width=375");
-    });
-
-    it("keeps Frapp Intelligence in the sidebar's foot, not over the home view (#5560)", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/chat";
-      askEntry.current = { open: false, openAsk: vi.fn() };
-      const { container } = render(
-        <DashboardShell defaultChatOpen={false}>{null}</DashboardShell>,
-      );
-      const home = container.querySelector("[data-chapter-home]")!;
-      expect(home.parentElement).not.toContainElement(
-        screen.queryByRole("button", { name: "What do you need?" }),
-      );
-      const nav = screen.getByRole("navigation", { name: "Primary" });
-      const sidebarAsk = screen.getByRole("button", {
-        name: "Frapp Intelligence",
-      });
-      expect(nav.parentElement).toContainElement(sidebarAsk);
-    });
-
-    it("draws the chapter mark on the home view", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/chat";
-      mockChapter.value = {
-        id: "chap-1",
-        name: "Alpha Beta",
-        university: "State University",
-        logo_url: null,
-        branding: {},
-        enabled_modules: [],
-      };
-      const { container } = render(
-        <DashboardShell defaultChatOpen={false}>{null}</DashboardShell>,
-      );
-      const home = container.querySelector("[data-chapter-home]")!;
-      expect(home).toBeInTheDocument();
-      expect(
-        within(home as HTMLElement).getByTestId("chapter-mark-text"),
-      ).toHaveClass("h-28", "bg-accent-subtle", "text-accent-text");
-      expect(home).toHaveTextContent("Alpha Beta");
-      expect(home).toHaveTextContent("State University");
-      // The top bar names no page over it.
-      expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
-    });
-
-    it("keeps one nav column across Chat and every other route (Paul, 2026-11-06)", () => {
-      mockPathname.value = "/events";
-      const { container, rerender } = render(
-        <DashboardShell>content</DashboardShell>,
-      );
-      const switcher = () =>
-        screen.getByRole("button", { name: /chapter menu/i });
-      const before = { column: column(container), switcher: switcher() };
-      for (const path of ["/chat", "/tasks"]) {
-        mockPathname.value = path;
-        rerender(<DashboardShell>content</DashboardShell>);
-        // The same nodes: nothing was unmounted, so nothing can jump.
-        expect(column(container)).toBe(before.column);
-        expect(switcher()).toBe(before.switcher);
-        expect(column(container)).toHaveClass("w-60");
-        const band = switcher().closest(".border-b") as HTMLElement;
-        expect(band.className).toMatch(/\bmin-h-12\b/);
-      }
-    });
-
-    it("keeps the chat panel mounted across tool routes, so the conversation survives", () => {
-      setWindowWidth(1440);
-      mockPathname.value = "/events";
-      const { container, rerender } = render(
-        <DashboardShell>events</DashboardShell>,
-      );
-      const panel = chatPanel(container);
-      mockPathname.value = "/tasks";
-      rerender(<DashboardShell>tasks</DashboardShell>);
-      expect(chatPanel(container)).toBe(panel);
     });
   });
 
-  describe("the Chat row's unread highlight (#3824)", () => {
-    const chatRow = () =>
-      within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
-        "link",
-        { name: /^Chat/ },
-      );
-    const directRow = () =>
-      within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
-        "link",
-        { name: /^Direct messages/ },
-      );
-
-    it("marks the Chat row unread only for a channel that isn't muted", () => {
-      mockUnread.value = [
-        { channel_id: "c1", unread_count: 3, mention_count: 0 },
-      ];
-      mockLevels.value = [{ channel_id: "c1", level: "off" }];
-      const { unmount } = render(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).not.toHaveAccessibleName(/unread/);
-      unmount();
-
-      mockLevels.value = [];
-      render(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).toHaveAccessibleName(/unread messages/);
+  describe("the conversation beside a page (#3779, #5575, #5946)", () => {
+    it("has the row to itself on /chat, with no home view, whatever the cookie says", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/chat";
+      const { container } = shell(null, { defaultChatOpen: false });
+      expect(chatPanel(container)).toHaveClass("flex-1");
+      expect(screen.getByTestId("chat-stub")).toHaveTextContent("alone");
+      expect(screen.getByTestId("chat-shown")).toHaveTextContent("shown");
+      expect(container.querySelector("[data-chapter-home]")).toBeNull();
+      expect(container.querySelector("[data-tool-page]")).toBeNull();
     });
 
-    it("lets a mention or a DM through a mute, and lights nothing on unknown levels (a DM on its own row, #3774)", () => {
-      mockUnread.value = [
-        { channel_id: "c1", unread_count: 1, mention_count: 1 },
-      ];
-      mockLevels.value = [{ channel_id: "c1", level: "off" }];
-      const first = render(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).toHaveAccessibleName(/unread messages/);
-      first.unmount();
-
-      mockUnread.value = [
-        { channel_id: "d1", unread_count: 2, mention_count: 0 },
-      ];
-      mockLevels.value = [{ channel_id: "d1", level: "off" }];
-      mockChannels.value = [{ id: "d1", type: "DM" }];
-      const second = render(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).not.toHaveAccessibleName(/unread/);
-      expect(directRow()).toHaveAccessibleName(
-        "Direct messages, 1 unread conversation",
-      );
-      second.unmount();
-
-      mockUnread.value = [
-        { channel_id: "c2", unread_count: 4, mention_count: 0 },
-      ];
-      mockLevels.value = undefined;
-      mockChannels.value = [];
-      render(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).not.toHaveAccessibleName(/unread/);
+    it("docks on the right of a page with the divider, at the member's width", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/tasks";
+      const { container } = shell(<p>tasks</p>, { defaultChatWidth: 420 });
+      const main = screen.getByRole("main");
+      const tool = container.querySelector("[data-tool-column]")!;
+      const panel = chatPanel(container)!;
+      expect(Array.from(main.children).indexOf(tool)).toBe(0);
+      expect(main.lastElementChild).toBe(panel);
+      expect(panel.style.flex).toBe("0 1 420px");
+      expect(panel.style.minWidth).toBe("375px");
+      expect(screen.getByRole("separator")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-stub")).toHaveTextContent("beside");
     });
 
-    it("binds chat's inbox and reads its unread counts on every route (#3745)", () => {
-      realtimeBinding.calls = 0;
-      render(<DashboardShell>content</DashboardShell>);
-      expect(realtimeBinding.calls).toBeGreaterThan(0);
-      expect(unreadReads.count).toBeGreaterThan(0);
+    it("closes with its X, and stays mounted out of sight for the sidebar's list", async () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/tasks";
+      const { container } = shell();
+      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+      // Once its exit has played.
+      await waitFor(() =>
+        expect(screen.getByTestId("chat-shown")).toHaveTextContent(
+          "out of sight",
+        ),
+      );
+      expect(chatPanel(container)).not.toBeNull();
+      expect(document.cookie).toContain("frapp_chat_open=0");
     });
 
-    it("lights the Chat row until the counts clear", () => {
-      mockLevels.value = [];
-      mockChannels.value = [{ id: "c1", type: "PUBLIC" }];
-      mockUnread.value = [
-        { channel_id: "c1", unread_count: 2, mention_count: 0 },
-      ];
-      const { container, rerender } = render(
-        <DashboardShell>content</DashboardShell>,
+    it("comes back when the member picks a channel from the sidebar", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/tasks";
+      shell(undefined, { defaultChatOpen: false });
+      expect(screen.getByTestId("chat-shown")).toHaveTextContent(
+        "out of sight",
       );
-      expect(chatRow()).toHaveAccessibleName(/unread messages/);
-      expect(chatRow()).toHaveClass("font-semibold", "text-foreground");
-      mockUnread.value = [];
-      rerender(<DashboardShell>content</DashboardShell>);
-      expect(chatRow()).not.toHaveAccessibleName(/unread/);
+      fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
+      expect(screen.getByTestId("chat-shown")).toHaveTextContent("shown");
+    });
+
+    it("hides beside Chapter settings, and a pick there goes to the conversation", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/settings";
+      const { container } = shell();
+      expect(chatPanel(container)).toHaveClass("hidden");
+      expect(screen.getByTestId("chat-shown")).toHaveTextContent(
+        "out of sight",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
+      expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
+    });
+
+    it("is not built beside a page below lg, where the shell is one page", () => {
+      setWindowWidth(800);
+      mockPathname.value = "/tasks";
+      const { container } = shell();
+      expect(chatPanel(container)).toBeNull();
+    });
+  });
+
+  it("draws one sidebar on the server, the list's and the docked panel's places held, and no chat built yet", () => {
+    mockPathname.value = "/events";
+    const html = renderToString(<DashboardShell>events</DashboardShell>);
+    expect(html.match(/data-sidebar=""/g)).toHaveLength(1);
+    expect(html).toContain("data-channel-list-slot");
+    // The docked panel holds its place, so the page paints at its final
+    // width; chat itself waits for a known-wide window.
+    expect(html).toContain("data-chat-panel");
+    expect(html).not.toContain('data-testid="chat-stub"');
+  });
+
+  describe("the Messages page (#5946)", () => {
+    it("is the panel with the member's conversations listed, and lights its row", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/messages";
+      shell();
+      expect(screen.getByTestId("chat-view")).toHaveTextContent("direct");
+      expect(screen.getByTestId("chat-stub")).toHaveTextContent("alone");
       expect(
-        container.querySelector("[data-nav-highlight]"),
-      ).not.toBeInTheDocument();
+        within(primary()).getByRole("link", { name: /Messages/ }),
+      ).toHaveAttribute("aria-current", "page");
     });
 
-    it("counts DM conversations on the Direct messages row until they are read (#3774)", () => {
-      mockLevels.value = [];
-      mockChannels.value = [
-        { id: "d1", type: "DM" },
-        { id: "d2", type: "GROUP_DM" },
-        { id: "c1", type: "PUBLIC" },
-      ];
-      mockUnread.value = [
-        { channel_id: "d1", unread_count: 2, mention_count: 0 },
-        { channel_id: "d2", unread_count: 5, mention_count: 0 },
-      ];
-      const { container, rerender } = render(
-        <DashboardShell>content</DashboardShell>,
-      );
-      // Conversations, not messages: two DMs with seven unread between them.
-      expect(directRow()).toHaveAccessibleName(
-        "Direct messages, 2 unread conversations",
-      );
-      const badge = directRow().querySelector("[data-nav-count]");
-      expect(badge).toHaveTextContent("2");
-      // Mention red, never the chapter accent (foundations.md §5).
-      expect(badge).toHaveClass("bg-mention");
-      expect(chatRow()).not.toHaveAccessibleName(/unread/);
-      mockUnread.value = [];
-      rerender(<DashboardShell>content</DashboardShell>);
-      expect(directRow()).toHaveAccessibleName("Direct messages");
-      expect(
-        container.querySelector("[data-nav-count]"),
-      ).not.toBeInTheDocument();
+    it("moves a link into a DM from /chat to Messages, keeping its target", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/chat";
+      mockSearch.value = "channel=dm-1";
+      shell();
+      expect(screen.getByTestId("chat-view")).toHaveTextContent("channels");
+      fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
+      expect(routerReplace).toHaveBeenCalledWith("/messages?channel=dm-1");
     });
 
-    it("lights the Chat row in the collapsed rail and in the drawer too", () => {
-      mockLevels.value = [];
-      mockChannels.value = [
-        { id: "c1", type: "PUBLIC" },
-        { id: "d1", type: "DM" },
-      ];
-      mockUnread.value = [
-        { channel_id: "c1", unread_count: 2, mention_count: 0 },
-        { channel_id: "d1", unread_count: 1, mention_count: 0 },
-      ];
-      render(<DashboardShell defaultNavCollapsed>content</DashboardShell>);
-      const rail = screen.getByRole("navigation", { name: "Primary" });
-      expect(
-        within(rail).getByRole("link", { name: "Chat, unread messages" }),
-      ).toBeInTheDocument();
-      expect(
-        within(rail).getByRole("link", {
-          name: "Direct messages, 1 unread conversation",
-        }),
-      ).toBeInTheDocument();
+    it("moves a channel picked from the sidebar off Messages to that conversation, and nothing replaces the push", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/messages";
+      mockSearch.value = "channel=dm-1";
+      shell();
+      fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
+      expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
+      // The panel then reports a channel open on Messages, in the same click.
       fireEvent.click(
-        screen.getByRole("button", {
-          name: "Open navigation menu, unread messages",
-        }),
+        screen.getByRole("button", { name: "Open a channel link" }),
+      );
+      expect(routerReplace).not.toHaveBeenCalled();
+    });
+
+    it("leaves a docked conversation alone beside a page, whichever kind it is", () => {
+      setWindowWidth(1440);
+      mockPathname.value = "/tasks";
+      shell();
+      fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
+      expect(routerReplace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("below lg (#5946)", () => {
+    it("opens the same sidebar in the drawer, with Channels as a row and the member at the foot", () => {
+      setWindowWidth(800);
+      shell();
+      fireEvent.click(
+        screen.getByRole("button", { name: /open navigation menu/i }),
       );
       const drawer = screen.getByRole("dialog");
       expect(
-        within(drawer).getByRole("link", { name: /^Chat.*unread messages/ }),
+        within(drawer).getByRole("link", { name: "New" }),
+      ).toBeInTheDocument();
+      expect(
+        within(drawer).getByRole("link", { name: "Channels" }),
+      ).toHaveAttribute("href", "/chat");
+      expect(
+        within(drawer).getByRole("button", { name: /account menu/i }),
       ).toBeInTheDocument();
     });
 
-    it("marks the drawer trigger below lg until the counts clear (#3900)", () => {
-      mockLevels.value = [];
-      mockChannels.value = [{ id: "d1", type: "DM" }];
+    it("marks the drawer trigger while anything in chat is unread (#3900)", () => {
+      setWindowWidth(800);
+      mockChannels.value = [{ id: "c1", type: "TEXT" }];
+      mockLevels.value = [{ channel_id: "c1", level: "all" }];
       mockUnread.value = [
-        { channel_id: "d1", unread_count: 2, mention_count: 0 },
+        { channel_id: "c1", unread_count: 3, mention_count: 0 },
       ];
-      const { container, rerender } = render(
-        <DashboardShell>content</DashboardShell>,
-      );
-      const trigger = screen.getByRole("button", {
-        name: "Open navigation menu, unread messages",
-      });
-      expect(trigger).toHaveClass("lg:hidden");
-      expect(trigger.querySelector("[data-menu-unread]")).toBeInTheDocument();
-
-      mockUnread.value = [];
-      rerender(<DashboardShell>content</DashboardShell>);
+      shell();
       expect(
-        screen.getByRole("button", { name: "Open navigation menu" }),
+        screen.getByRole("button", {
+          name: "Open navigation menu, unread messages",
+        }),
       ).toBeInTheDocument();
-      expect(
-        container.querySelector("[data-menu-unread]"),
-      ).not.toBeInTheDocument();
     });
   });
 });

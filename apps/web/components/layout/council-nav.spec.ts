@@ -21,8 +21,10 @@ function visibleIds(kind: "chapter" | "council" | undefined): string[] {
  * chapter route answers a council 403 `chapter.context.invalid`.
  */
 describe("the nav in a council", () => {
-  it("keeps Chat, Direct messages and Directory, and nothing else", () => {
-    expect(visibleIds("council")).toEqual(["chat", "direct", "members"]);
+  it("keeps Messages and Directory, and nothing else", () => {
+    // Beside New, Search and the channel list, which every tenant has
+    // (`sidebar.tsx`, #5946); More's rows are all a chapter's.
+    expect(visibleIds("council")).toEqual(["messages", "members"]);
   });
 
   it("leaves a chapter's nav as it was, and gates nothing while the kind is unknown", () => {
@@ -41,12 +43,18 @@ describe("the nav in a council", () => {
 });
 
 describe("isCouncilRoute", () => {
-  it("serves chat, the Directory and settings, and sends the rest away", () => {
+  it("serves chat, Messages, New, the Directory and settings, and sends the rest away", () => {
     for (const route of COUNCIL_ROUTES) {
       expect(isCouncilRoute(route), route).toBe(true);
       expect(isCouncilRoute(`${route}/x`), route).toBe(true);
     }
-    for (const route of ["/events", "/activity", "/tasks", "/points", "/ask"]) {
+    for (const route of [
+      "/events",
+      "/activity",
+      "/tasks",
+      "/points",
+      "/rush",
+    ]) {
       expect(isCouncilRoute(route), route).toBe(false);
     }
     expect(isCouncilRoute("/chatter")).toBe(false);
@@ -55,10 +63,14 @@ describe("isCouncilRoute", () => {
 
 describe("Settings' title by tenant kind", () => {
   it("reads Council settings in a council and Chapter settings otherwise", () => {
-    expect(resolvePageTitle("/settings", undefined, undefined, "council")).toEqual({
+    expect(
+      resolvePageTitle("/settings", undefined, undefined, "council"),
+    ).toEqual({
       title: "Council settings",
     });
-    expect(resolvePageTitle("/settings", undefined, undefined, "chapter")).toEqual({
+    expect(
+      resolvePageTitle("/settings", undefined, undefined, "chapter"),
+    ).toEqual({
       title: "Chapter settings",
     });
     expect(resolvePageTitle("/settings")).toEqual({

@@ -1,6 +1,7 @@
 export * from "./activity-agenda";
 export * from "./activity-archive";
 export * from "./activity-cards";
+export * from "./activity-count-chip";
 export * from "./activity-faces";
 export * from "./activity-recap";
 export * from "./activity-rows";

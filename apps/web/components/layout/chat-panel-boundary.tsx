@@ -1,7 +1,35 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { SegmentError } from "@/components/shared/segment-error";
+import { useChannelListSlot } from "@/components/layout/channel-list-slot";
+import { Button } from "@/components/ui/button";
+
+/**
+ * The sidebar's channel list is this panel's own (`channel-list-slot.tsx`), so
+ * when the panel is down the list is too. Where the panel can't be seen
+ * (closed beside a page, behind Chapter settings) its card would be the only
+ * word of it, so the sidebar's slot says so too, with its own Retry, instead
+ * of shimmering as if loading.
+ */
+function SlotError({ retry }: { retry: () => void }) {
+  const { slot } = useChannelListSlot();
+  if (!slot) return null;
+  return createPortal(
+    <div
+      data-channel-list-body=""
+      role="status"
+      className="flex flex-col items-start gap-2 px-3 py-3 text-caption text-muted-foreground"
+    >
+      <span>Channels couldn&apos;t load.</span>
+      <Button type="button" variant="secondary" size="sm" onClick={retry}>
+        Try again
+      </Button>
+    </div>,
+    slot,
+  );
+}
 
 /**
  * The chat panel's own error boundary (#3779). Chat used to be the `/chat`
@@ -44,12 +72,11 @@ export class ChatPanelBoundary extends Component<
 
   render() {
     if (this.state.error) {
+      const retry = () => this.setState({ error: null, errorKey: undefined });
       return (
         <div className="w-full max-w-md p-4">
-          <SegmentError
-            error={this.state.error}
-            retry={() => this.setState({ error: null, errorKey: undefined })}
-          />
+          <SegmentError error={this.state.error} retry={retry} />
+          <SlotError retry={retry} />
         </div>
       );
     }
