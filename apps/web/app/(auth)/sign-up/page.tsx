@@ -26,6 +26,7 @@ import {
   isExistingAccountSignUp,
 } from "@repo/hooks/auth-error-copy";
 import {
+  DESKTOP_HANDOFF_COPY,
   describeOAuthKickoffError,
   IDENTITY_COLLISION_COPY,
   startWebOAuth,
@@ -142,13 +143,14 @@ function SignUpPageContent() {
     setPendingOAuth(provider);
     try {
       const supabase = createSupabaseBrowserClient();
-      const { error } = await startWebOAuth(
+      const { error, handedOff } = await startWebOAuth(
         supabase,
         provider,
         window.location.origin,
         redirectTo,
       );
       if (error) throw error;
+      if (handedOff) toast({ title: DESKTOP_HANDOFF_COPY });
     } catch (error) {
       reportAuthFailure({ flow: "oauth_start", screen: "/sign-up", error });
       toast({

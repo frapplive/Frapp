@@ -285,6 +285,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useClaimOpenTask: () => ({ mutateAsync: claimMutate, isPending: false }),
   useAssignOpenTask: () => ({ mutateAsync: assignMutate, isPending: false }),
   useReleaseTask: () => ({ mutateAsync: releaseMutate, isPending: false }),
+  useAddToTaskGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteOpenTask: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -588,10 +589,10 @@ describe("TasksBoard subscription gating", () => {
     expect(liveStatus()).not.toBeInTheDocument();
   });
 
-  it("hides Confirm on your own completed task but keeps Send back (#1056)", () => {
-    // The API refuses a self-confirmation, so offering the control would be a
-    // guaranteed 403 plus an optimistic flip-and-revert. Send back is untouched:
-    // it withholds points rather than awarding them.
+  it("hides Confirm and Send back on your own completed task, keeping Mark not done (#1056, #5917)", () => {
+    // The API refuses a self-confirmation and a self-send-back, so offering
+    // either would be a guaranteed 403. Mark not done takes your own "done"
+    // back.
     chapter.active();
     tasksRef.current = [{ ...TASKS[2], id: "task-mine", assignee_id: ME }];
     render(<TasksBoard />);
@@ -599,7 +600,12 @@ describe("TasksBoard subscription gating", () => {
     expect(
       screen.queryByRole("button", { name: /^confirm$/i }),
     ).not.toBeInTheDocument();
-    expect(sendBackButton()).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /^send back$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^mark not done$/i }),
+    ).toBeEnabled();
     // The missing control is explained on the tile it is missing from.
     expect(
       screen.getByText("You can't confirm your own task."),
@@ -2522,8 +2528,12 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     await user.click(
       within(row).getByRole("button", { name: "Fill out the tabling form" }),
     );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    // The group's Who offers Add people to an officer (#5905).
     expect(
-      await screen.findByRole("dialog", { name: "Fill out the tabling form" }),
+      within(panel).getByRole("button", { name: "Add people" }),
     ).toBeInTheDocument();
   });
 
@@ -2592,6 +2602,44 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
     expect(
       within(panel).getByText("Everyone · 14 of 20 done"),
     ).toBeInTheDocument();
+    // An officer can add people from a copy's For (#5905), and the picker
+    // marks the group's other members, not only this copy's, as having it.
+    await user.click(within(panel).getByRole("button", { name: "Add people" }));
+    expect(
+      await screen.findByRole("checkbox", { name: /Cole Martin\s*has it/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: /Paul Carlson\s*has it/ }),
+    ).toBeDisabled();
+  });
+
+  it("offers no Add people on a copy without tasks:manage (#5905)", async () => {
+    window.localStorage.setItem("frapp.tasks.layout.viewer-1", "list");
+    resetListLayoutForTests();
+    permissionsRef.current = [];
+    const user = userEvent.setup();
+    tasksRef.current = GROUP.map((task) => ({
+      ...task,
+      group: { audience: "everyone", total: 20, done: 14, confirmed: 9 },
+    }));
+    render(<TasksBoard />);
+    const everyone = screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.includes("Fill out the tabling form"))!;
+    await user.click(
+      within(everyone).getByRole("button", {
+        name: "Fill out the tabling form",
+      }),
+    );
+    const panel = await screen.findByRole("dialog", {
+      name: "Fill out the tabling form",
+    });
+    expect(
+      within(panel).getByText("Everyone · 14 of 20 done"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Add people" }),
+    ).toBeNull();
   });
 
   it("says who a copy went to on a My tasks Grid card too (#5699)", () => {

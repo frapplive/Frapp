@@ -25,7 +25,7 @@ A record link stores ids, not a name. A name copied into the list would show to 
   - `hidden`, when the record is there but not theirs to open (a restricted document, minutes they can't read, an event they can't see, a message in a channel they aren't in), or its module is off for the chapter (Chapter Files, Meetings, Events). Its name is never sent;
   - `removed`, when it was deleted or was never this chapter's.
 - **A row** reads the same on both apps (`frappLinkRow`): the live name and its quiet line ("Chapter Files", "Minutes · Nov 16", "Event · Nov 16", "#general · Moiz · Nov 16"); "You don't have access" or "Removed", which don't open; and the kind's word, dimmed, while the resolve is out.
-- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A record entry's title is its kind's word ("Document", "Minutes", "Event", "Message"), never its name, so no copied name reaches a reader who can't open it; the API sets it whatever is sent, and a name an older save stored is replaced on the event's next save. Those builds show a document as "Document". A task's record links keep no title.
+- **An event's entries keep a title** for phone builds from before Frapp links, which read `title` as required on an event's attachments (#4934). A record entry's title is its kind's word ("Document", "Minutes", "Event", "Message"), never its name, so no copied name reaches a reader who can't open it; the API sets it whatever is sent, and the names saved before Frapp links were rewritten once (`20261124034254_scrub_event_attachment_titles`, #5921); any name written later by an older API revision is replaced on the event's next save. Those builds show a document as "Document". A task's record links keep no title.
 - **Older phone builds** read only web links and documents, and save an event's list whole. So a save without `attachments_all_kinds: true` (which this build's hook sends) keeps the stored minutes, event and message links the build couldn't see, after the list it sent.
 
 ## Writing a list
@@ -34,7 +34,7 @@ A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id
 
 - **A group task** (`tasks.md` § Tasks for everyone): every copy holds the same list. A group edit (`scope: "group"`) changes it on every copy, checked once.
 - **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields, checked once and written to the open copy as checked.
-- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261123183858_task_attachments`), as `events.attachments` is.
+- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261124034200_task_attachments`), as `events.attachments` is.
 
 ## Where a link opens
 

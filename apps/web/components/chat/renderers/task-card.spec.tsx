@@ -406,10 +406,9 @@ describe("TaskCard", () => {
     expect(screen.queryByRole("button", { name: /send back/i })).toBeNull();
   });
 
-  it("hides Confirm from a tasks:manage assignee on their own card (#1056)", () => {
-    // The API refuses a self-confirmation, so the assignee gets no confirm
-    // affordance here even holding tasks:manage. Send back survives — it withholds
-    // points rather than awarding them — so the card still shows an action.
+  it("hides Confirm and Send back from a tasks:manage assignee on their own card (#1056, #5917)", () => {
+    // The API refuses a self-confirmation and a self-send-back, so the
+    // assignee gets neither here even holding tasks:manage.
     canManage = true;
     mockUseTask.mockReturnValue({
       data: {
@@ -427,8 +426,8 @@ describe("TaskCard", () => {
       screen.queryByRole("button", { name: /confirm/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /send back/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /send back/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the disabled Confirmed indicator for an assignee-admin", () => {
@@ -463,7 +462,8 @@ describe("TaskCard", () => {
   it("leaves the admin controls to the permission gate, not a plain denial", () => {
     // An assignee's task is read whatever their permissions, so when the check
     // can't run (offline, nothing cached) the gate must get the chance to say
-    // so with its offline chip, rather than the card dropping Send back unseen
+    // so with its offline chip, rather than the card dropping its Confirmed
+    // indicator unseen
     // (design-system README §4, §5 rule 4). Denied here: the row is left
     // empty, and `empty:hidden` keeps it from adding its margin. jsdom applies
     // no Tailwind, so the spec pins the class and the emptiness, not the CSS.
@@ -472,7 +472,11 @@ describe("TaskCard", () => {
     chapter.incomplete();
     gateMounts.length = 0;
     mockUseTask.mockReturnValue(
-      liveTask({ status: "COMPLETED", stored_status: "COMPLETED" }),
+      liveTask({
+        status: "COMPLETED",
+        stored_status: "COMPLETED",
+        points_awarded: true,
+      }),
     );
     const { container } = render(
       <TaskCard message={makeMessage()} viewerId={ASSIGNEE} isConfirmed />,

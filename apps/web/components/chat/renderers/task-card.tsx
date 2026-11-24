@@ -175,7 +175,7 @@ export function TaskCard({ message, viewerId, isConfirmed }: TaskCardProps) {
   // denial (design-system README §4, §5 rule 4), and for the check that
   // couldn't run it draws the offline chip and Retry. That only reaches a
   // viewer whose task is read without the permission, which is the assignee
-  // (their own Reject). Any other officer whose permissions couldn't be read
+  // (their own Confirmed indicator; never Send back, #5917). Any other officer whose permissions couldn't be read
   // never reads the task, so their card offers nothing, the way every card
   // does before its live task arrives.
   const managerControls = tasksOff

@@ -79,7 +79,20 @@ export const SCREEN_TITLES = {
   // capsule has no room for, so both read as the list they belong to.
   "role-tier": "Roles",
   role: "Roles",
+  // The recruitment list (#5924) is titled with the chapter's own word
+  // ("Rush", "Intake"), which this map can't know: a back control over it
+  // shows the label its screen passes instead (`CHAPTER_WORD_TITLES`). This
+  // entry is the stack's own title, for the platform's back menu.
+  rush: "Recruitment",
+  // One prospect, pushed from the recruitment list (#5924).
+  "rush-prospect": "Prospect",
 } as const satisfies Record<string, string>;
+
+/**
+ * Screens titled with the chapter's own word, which a back control over them
+ * reads from the label its screen passes rather than from `SCREEN_TITLES`.
+ */
+const CHAPTER_WORD_TITLES: ReadonlySet<string> = new Set(["rush"]);
 
 /** The group in `app/(app)/` that holds the tab navigator. */
 const TABS_ROUTE = "(tabs)";
@@ -118,8 +131,11 @@ export function screenBelowName(
 export type ScreenBelow = {
   /** The route under this screen, a tab's own name when it is a tab. */
   name: string;
-  /** What the member calls it: `SCREEN_TITLES`, else "Back". */
-  title: string;
+  /**
+   * What the member calls it: `SCREEN_TITLES`, else "Back"; `null` for a
+   * screen titled with the chapter's own word, which the caller names.
+   */
+  title: string | null;
   /** Pops this screen, as the swipe does. */
   goBack: () => void;
 };
@@ -142,8 +158,9 @@ export function useScreenBelow(): ScreenBelow | null {
   if (!state || state.type !== "stack") return null;
   const name = screenBelowName(state.routes, route.key);
   if (!name) return null;
-  const title =
-    (SCREEN_TITLES as Record<string, string | undefined>)[name] ?? "Back";
+  const title = CHAPTER_WORD_TITLES.has(name)
+    ? null
+    : ((SCREEN_TITLES as Record<string, string | undefined>)[name] ?? "Back");
   return { name, title, goBack };
 }
 

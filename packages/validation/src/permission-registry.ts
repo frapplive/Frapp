@@ -283,26 +283,32 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
   chapterPermission(
     "rush:add",
     "rush",
-    "Add prospects",
-    "Add a prospect to the chapter's recruitment list.",
+    "Add and work prospects",
+    "Add a prospect to the chapter's recruitment list and move them between stages.",
   ),
   chapterPermission(
     "rush:notes",
     "rush",
-    "Write notes on prospects",
-    "Write notes on a prospect for other members to read.",
+    "Write notes and tag prospects",
+    "Write notes on a prospect and tag them.",
+  ),
+  chapterPermission(
+    "rush:read_notes",
+    "rush",
+    "Read recruitment notes",
+    "Read the notes members write on prospects.",
   ),
   chapterPermission(
     "rush:vote",
     "rush",
-    "Vote on prospects",
-    "Cast a vote on a prospect.",
+    "Vote on and rate prospects",
+    "Cast a vote on a prospect and rate them from 1 to 5.",
   ),
   chapterPermission(
     "rush:view_results",
     "rush",
     "See vote results",
-    "See how many votes a prospect has.",
+    "See how many votes a prospect has and their average rating.",
   ),
   chapterPermission(
     "rush:bid",
@@ -314,7 +320,7 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "rush:manage",
     "rush",
     "Manage recruitment",
-    "Delete prospects and export the recruitment list.",
+    "Edit the chapter's stages and tags, and delete anyone's note on a prospect.",
   ),
 
   chapterPermission(

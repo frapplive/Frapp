@@ -61,6 +61,7 @@ import {
 } from "@/components/settings/settings-modules";
 import { chapterProfileSaveBody } from "@/components/settings/chapter-profile-save-body";
 import { ModuleSettingsPage } from "@/components/settings/module-settings-page";
+import { RushModuleSettings } from "@/components/settings/rush-module-settings";
 import {
   SettingsToolBody,
   SettingsToolSubpage,
@@ -885,7 +886,17 @@ function SettingsPageContent() {
                     focusSwitch={focusModuleKey === module.key}
                     onSwitchFocused={handleModuleFocused}
                     rules={
-                      canViewConfig ? renderModuleRules(module.key) : undefined
+                      // Recruitment's stages, tags and notes access read
+                      // through the pipeline's own routes, not the config.
+                      module.key === "rush" ? (
+                        <RushModuleSettings
+                          moduleOn={moduleOn(module.key)}
+                          canEditRoles={can("roles:manage", permissions)}
+                          canSeeWhoCan={canSeeWhoCan}
+                        />
+                      ) : canViewConfig ? (
+                        renderModuleRules(module.key)
+                      ) : undefined
                     }
                   />
                 )}
