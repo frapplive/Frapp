@@ -89,6 +89,20 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "council.type_taken",
   "council.school_unverified",
   "council.title_taken",
+  // Affiliations and PNM records (#5974): a link step the other side or a
+  // race already took, a chapter whose school isn't confirmed, a council
+  // with no recruitment, a season or record that isn't there (or isn't
+  // this council's), or a merge the database refuses.
+  "affiliation.no_shared_school",
+  "affiliation.exists",
+  "affiliation.invalid_transition",
+  "affiliation.not_found",
+  "council.recruitment_off",
+  "council.season_not_found",
+  "council.season_exists",
+  "pnm.not_found",
+  "pnm.already_merged",
+  "pnm.two_accounts",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",

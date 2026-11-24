@@ -1,6 +1,7 @@
 import {
   ActivityGlyph,
   BackworkGlyph,
+  ChaptersGlyph,
   ChatGlyph,
   DirectMessagesGlyph,
   DirectoryGlyph,
@@ -91,7 +92,10 @@ import { SECTION_NAMES, type TenantKind } from "@repo/validation";
  *   name `council` here: Chat, Direct messages and Directory. Activity, which
  *   has no module to switch off, is the row this gate exists for. Opt-in, so
  *   a new chapter row never reaches a council by default. While the kind is
- *   unknown nothing hides, as with the module gate (`useTenantKind`).
+ *   unknown nothing hides, as with the module gate (`useTenantKind`), except
+ *   a council-only row (Chapters, #5974), which waits for the answer: a
+ *   chapter never sees it drawn and taken back, and it never costs a
+ *   chapter's nav the 36px the fit budget below counts.
  *
  * Section gating is derived, never declared: a section renders only when at
  * least one of its items survives every gate (`isNavItemVisible` in
@@ -279,6 +283,18 @@ export const DASHBOARD_NAV: NavSection[] = [
     label: SECTION_NAMES.directory,
     anchor: true,
     items: [
+      {
+        // A council's member chapters, requests and invitations (#5974;
+        // `council-types.md` § What each council's space shows). Every
+        // council member reads it; `council:chapters_manage` acts on it.
+        id: "chapters",
+        label: "Chapters",
+        icon: ChaptersGlyph,
+        href: "/chapters",
+        description: "Member chapters, requests to join and invitations.",
+        requirePermission: "members:view",
+        kinds: ["council"],
+      },
       {
         id: "members",
         label: SECTION_NAMES.directory,

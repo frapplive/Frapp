@@ -23294,6 +23294,858 @@
           "Bootstrap"
         ]
       }
+    },
+    "/v1/chapter/affiliations": {
+      "get": {
+        "description": "Its live school links, and the councils at its confirmed schools with the chapter's link to each, if any.",
+        "operationId": "ChapterAffiliationController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterAffiliationsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's school and councils",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/school": {
+      "post": {
+        "description": "Proposes the link and, since the caller is the chapter's officer, confirms it. A second school becomes a secondary link. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_linkSchool_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkSchoolDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliationSchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Name and confirm the chapter's school",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/school/{linkId}": {
+      "patch": {
+        "description": "Ending a confirmed link ends the chapter's council links at that school. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_decideSchool_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideSchoolLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolLinkDecisionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm, decline or end a school link",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/councils": {
+      "post": {
+        "description": "The council at the chapter's confirmed school accepts or declines. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_requestCouncil_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCouncilDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ask to join a council",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/councils/{linkId}": {
+      "patch": {
+        "description": "`accepted` or `declined` answers an invitation; `ended` withdraws the chapter's request or leaves. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_decideCouncil_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCouncilLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer a council's invitation, or leave",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/council/chapters": {
+      "get": {
+        "description": "Member chapters, suspended ones, invitations out and requests waiting on the council, newest first.",
+        "operationId": "CouncilChaptersController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CouncilChapterDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's chapters",
+        "tags": [
+          "Councils"
+        ]
+      },
+      "post": {
+        "description": "The chapter's officers accept or decline. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "CouncilChaptersController_invite_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteChapterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Invite a chapter",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/chapters/candidates": {
+      "get": {
+        "description": "Chapters that confirmed the council's school and have no live link to it, offered archetypes first.",
+        "operationId": "CouncilChaptersController_candidates_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InviteCandidateDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Chapters the council can invite",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/chapters/{linkId}": {
+      "patch": {
+        "description": "404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "CouncilChaptersController_decide_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCouncilLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer a chapter's request, suspend, reinstate or remove",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/recruitment/seasons": {
+      "get": {
+        "description": "Newest first. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_listSeasons_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's recruitment seasons",
+        "tags": [
+          "Council recruitment"
+        ]
+      },
+      "post": {
+        "description": "409 `council.season_exists` for a term the council already has; 400 when it closes before it opens. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_createSeason_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecruitmentSeasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a recruitment season",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/seasons/{term}": {
+      "patch": {
+        "description": "404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_updateSeason_v1",
+        "parameters": [
+          {
+            "name": "term",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 40,
+              "example": "Spring 2027",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRecruitmentSeasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change a season: its dates, status or retention",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/pnms": {
+      "get": {
+        "description": "Shared fields, never a phone number. Counts only until the season is closed. 404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_masterList_v1",
+        "parameters": [
+          {
+            "name": "term",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 40,
+              "example": "Spring 2027",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterListDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's master list for a season",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/pnms/{pnmId}/phone": {
+      "get": {
+        "description": "Logged before it is read. 404 `pnm.not_found` for anyone not on this council's list. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_phone_v1",
+        "parameters": [
+          {
+            "name": "pnmId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PnmPhoneDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A PNM's phone number",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/duplicates": {
+      "get": {
+        "description": "Suspected duplicates on the council's list: the same name and phone, or the same name and class year. Never merged automatically. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_duplicates_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DuplicatePairDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The merge queue",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/duplicates/dismiss": {
+      "post": {
+        "description": "The pair stops being suggested. 404 `pnm.not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_dismiss_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissDuplicateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Not the same person",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/merges": {
+      "post": {
+        "description": "Moves registrations and interests to the survivor and repoints each chapter's candidate where it can. Logged; no unmerge. 404 `pnm.not_found`; 409 `pnm.already_merged` or `pnm.two_accounts`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_merge_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergePnmsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergedPnmsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Merge two records of one person",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/pnms/{pnmId}": {
+      "get": {
+        "description": "Their shared fields, and their phone only when they chose to share it. 404 `pnm.not_found` for any PNM not linked to this chapter.",
+        "operationId": "ChapterPnmController_get_v1",
+        "parameters": [
+          {
+            "name": "pnmId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterPnmDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A PNM linked to this chapter",
+        "tags": [
+          "Rush"
+        ]
+      }
     }
   },
   "info": {
@@ -42420,6 +43272,804 @@
             "description": "As `GET /v1/notifications?limit=50`."
           }
         }
+      },
+      "AffiliationSchoolSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name"
+        ]
+      },
+      "AffiliationSchoolDto": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "active",
+              "declined",
+              "ended"
+            ]
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "school": {
+            "$ref": "#/components/schemas/AffiliationSchoolSummaryDto"
+          }
+        },
+        "required": [
+          "link_id",
+          "status",
+          "is_primary",
+          "school"
+        ]
+      },
+      "AffiliationCouncilSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "RPI IFC"
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether Frapp staff verified the council."
+          },
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "council_type",
+          "verified",
+          "school_id"
+        ]
+      },
+      "CouncilLinkDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted",
+              "declined",
+              "suspended",
+              "ended"
+            ]
+          },
+          "proposed_by_side": {
+            "type": "string",
+            "enum": [
+              "council",
+              "chapter"
+            ],
+            "description": "Who proposed it: the council invited, or the chapter asked."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "proposed_by_side",
+          "created_at",
+          "decided_at"
+        ]
+      },
+      "ChapterCouncilDto": {
+        "type": "object",
+        "properties": {
+          "council": {
+            "$ref": "#/components/schemas/AffiliationCouncilSummaryDto"
+          },
+          "link": {
+            "nullable": true,
+            "description": "The live link, or null when the chapter isn't linked.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CouncilLinkDto"
+              }
+            ]
+          },
+          "offered": {
+            "type": "boolean",
+            "description": "Whether this council's type is offered the chapter's archetype (council-types.md § Link offers). A chapter may still ask any council at its school."
+          }
+        },
+        "required": [
+          "council",
+          "link",
+          "offered"
+        ]
+      },
+      "ChapterAffiliationsDto": {
+        "type": "object",
+        "properties": {
+          "schools": {
+            "description": "The chapter's live school links, primary first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliationSchoolDto"
+            }
+          },
+          "councils": {
+            "description": "The councils at the chapter's confirmed schools, and any it is linked to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChapterCouncilDto"
+            }
+          }
+        },
+        "required": [
+          "schools",
+          "councils"
+        ]
+      },
+      "LinkSchoolDto": {
+        "type": "object",
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chapter's school. The officer naming it confirms it in the same step."
+          }
+        },
+        "required": [
+          "school_id"
+        ]
+      },
+      "DecideSchoolLinkDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "declined",
+              "ended"
+            ],
+            "description": "`active` confirms a proposed link, `declined` refuses it, `ended` unlinks a confirmed one (and ends the chapter's council links at that school)."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "SchoolLinkDecisionDto": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "active",
+              "declined",
+              "ended"
+            ]
+          }
+        },
+        "required": [
+          "link_id",
+          "status"
+        ]
+      },
+      "RequestCouncilDto": {
+        "type": "object",
+        "properties": {
+          "council_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The council to ask to join."
+          }
+        },
+        "required": [
+          "council_id"
+        ]
+      },
+      "DecideCouncilLinkDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "declined",
+              "suspended",
+              "ended"
+            ],
+            "description": "`accepted` or `declined` answers the other side's proposal; `accepted` also lifts the council's own suspension. `suspended` is the council's, on a member chapter. `ended` withdraws a proposal or ends a membership, from either side."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ChapterListingDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Phi Gamma Delta"
+          },
+          "org_archetype": {
+            "type": "string",
+            "nullable": true,
+            "example": "ifc"
+          },
+          "university": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "org_archetype",
+          "university"
+        ]
+      },
+      "CouncilChapterDto": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/CouncilLinkDto"
+          },
+          "chapter": {
+            "description": "The chapter's public listing only: never its members or data (#4068 decision 11).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChapterListingDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "link",
+          "chapter"
+        ]
+      },
+      "InviteCandidateDto": {
+        "type": "object",
+        "properties": {
+          "chapter": {
+            "$ref": "#/components/schemas/ChapterListingDto"
+          },
+          "offered": {
+            "type": "boolean",
+            "description": "Whether the council's type is offered this chapter's archetype; offered chapters come first."
+          }
+        },
+        "required": [
+          "chapter",
+          "offered"
+        ]
+      },
+      "InviteChapterDto": {
+        "type": "object",
+        "properties": {
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chapter to invite."
+          }
+        },
+        "required": [
+          "chapter_id"
+        ]
+      },
+      "RecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "example": "Spring 2027"
+          },
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ],
+            "description": "Until it is `closed`, the council sees interests as counts only."
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "description": "Days after `closes_at` a PNM record is kept (default and most 180).",
+            "example": 180
+          }
+        },
+        "required": [
+          "term",
+          "opens_at",
+          "closes_at",
+          "bid_window_opens_at",
+          "bid_window_closes_at",
+          "status",
+          "pnm_retention_days"
+        ]
+      },
+      "CreateRecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "example": "Spring 2027",
+            "maxLength": 40
+          },
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ]
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180
+          }
+        },
+        "required": [
+          "term",
+          "opens_at",
+          "closes_at"
+        ]
+      },
+      "UpdateRecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ]
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180
+          }
+        }
+      },
+      "ChapterTotalDto": {
+        "type": "object",
+        "properties": {
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "interested": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "name",
+          "interested"
+        ]
+      },
+      "MasterListRowDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "has_phone": {
+            "type": "boolean",
+            "description": "Whether a phone number is on file. Reading it is `GET …/phone`, logged."
+          },
+          "interest_count": {
+            "type": "number",
+            "description": "How many of the council's member chapters they showed interest in."
+          },
+          "interested_chapter_ids": {
+            "nullable": true,
+            "description": "Which member chapters, by id: null until the season is closed (counts only in season).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source",
+          "registered_at",
+          "has_phone",
+          "interest_count",
+          "interested_chapter_ids"
+        ]
+      },
+      "MasterListDto": {
+        "type": "object",
+        "properties": {
+          "season": {
+            "$ref": "#/components/schemas/RecruitmentSeasonDto"
+          },
+          "counts_only": {
+            "type": "boolean",
+            "description": "True while the season isn't closed: interests are counts only."
+          },
+          "chapter_totals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChapterTotalDto"
+            }
+          },
+          "pnms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MasterListRowDto"
+            }
+          }
+        },
+        "required": [
+          "season",
+          "counts_only",
+          "chapter_totals",
+          "pnms"
+        ]
+      },
+      "PnmPhoneDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "PnmSharedDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source"
+        ]
+      },
+      "DuplicatePairDto": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PnmSharedDto"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PnmSharedDto"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "same_name_and_phone",
+                "same_name_and_class_year"
+              ]
+            }
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "reasons"
+        ]
+      },
+      "DismissDuplicateDto": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "b": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      },
+      "MergePnmsDto": {
+        "type": "object",
+        "properties": {
+          "survivor_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The record that stays."
+          },
+          "loser_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The record merged into it."
+          }
+        },
+        "required": [
+          "survivor_id",
+          "loser_id"
+        ]
+      },
+      "MergedPnmsDto": {
+        "type": "object",
+        "properties": {
+          "survivor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_conflicts": {
+            "type": "number",
+            "description": "Chapters that already had a candidate for each record keep both until they merge them themselves."
+          }
+        },
+        "required": [
+          "survivor_id",
+          "candidate_conflicts"
+        ]
+      },
+      "ChapterPnmDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only when the PNM chose to share it."
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source",
+          "phone"
+        ]
       }
     }
   }

@@ -297,7 +297,7 @@ try {
     [rpi, CH],
   );
   const badStatus = await fails(
-    `insert into school_chapters (school_id, chapter_id, status) values ($1, $2, 'ended')`,
+    `insert into school_chapters (school_id, chapter_id, status) values ($1, $2, 'withdrawn')`,
     [mit, CH],
   );
 
@@ -466,7 +466,7 @@ try {
       want: JSON.stringify({ members: 0, codes: 0 }),
     },
     {
-      name: "one live school link per chapter and school, proposed or active only",
+      name: "one live school link per chapter and school, and only the four states",
       got: JSON.stringify([
         /school_chapters_live_pair/.test(secondLink),
         /school_chapters_status_check/.test(badStatus),

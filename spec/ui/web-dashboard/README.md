@@ -84,8 +84,9 @@ Controls inside a screen gate through `<Can>` or the `can()` / `canAny()` / `can
 
 A Chat anchor of two rows, Chat and Direct messages ([#3774](https://github.com/pdcarlson/Frapp/issues/3774), Shawn, 2026-11-12;
 [§ Chat](#chat)), two member sections (Chapter, Resources), and one unlabeled group holding Directory (Billing left it for Chapter settings' Plan and billing row in [#3827](https://github.com/pdcarlson/Frapp/issues/3827)).
-Chapter settings has no row: it opens from the chapter menu atop the nav, the crest and chapter name, which leads with Chapter settings, then Join another chapter (and the member's chapters to switch between, when there is more than one). _(Paul, 2026-11-19: one place, not a menu item and a row. The row sat in this group from #2946 to then. The phone matches: [`../mobile/navigation.md`](../mobile/navigation.md).)_
+Chapter settings has no row: it opens from the chapter menu atop the nav, the crest and chapter name, which leads with Chapter settings, then a chapter's School and council page for holders of `chapter-config:view` ([§ Council and school links](#council-and-school-links), #5974), then Join another chapter (and the member's chapters to switch between, when there is more than one). _(Paul, 2026-11-19: one place, not a menu item and a row. The row sat in this group from #2946 to then. The phone matches: [`../mobile/navigation.md`](../mobile/navigation.md).)_
 Activity leads the Chapter section: it is the inbox for the rows under it ([§ Activity](#activity)).
+A council's nav is Chat, Direct messages, Chapters and Directory (`kinds`, #5933 and #5974); Chapters is a council's row only, so it adds nothing to a chapter's nav-fit budget.
 There is no Polls row: polls live in the channel where they were made, and the chapter-wide `/polls` list, which could only show the older REST poll shape no client creates any more, was retired ([#3871](https://github.com/pdcarlson/Frapp/issues/3871), Shawn, 2026-11-09).
 Officer setup and officer tools sit behind Chapter settings; there is no Admin group ([#2946](https://github.com/pdcarlson/Frapp/issues/2946)).
 It was named Settings until 2026-11-10: it is the chapter's, and a member's own settings are a separate page on the account menu ([§ Two doors](#two-doors-chapter-settings-and-your-settings), [#3856](https://github.com/pdcarlson/Frapp/issues/3856)).
@@ -103,6 +104,7 @@ It was named Settings until 2026-11-10: it is the chapter's, and a member's own 
 | Resources     | Meetings        | `/meetings`                                                                  | `meetings`                                      | — (every member while the module is on; the page lists only the minutes the viewer may read, [`meetings.md` § Who can read minutes](../../behavior/meetings.md#who-can-read-minutes))                                                           |
 | Resources     | Documents       | `/documents`                                                                 | `documents`                                     | — (upload gated by `chapter_docs:upload`, delete by `chapter_docs:manage`; hidden from a viewer without `chapter_docs:upload` while there are no documents: [`modules.md` § Not-set-up features](../../product/modules.md#not-set-up-features)) |
 | Resources     | Backwork        | `/backwork`                                                                  | `backwork`                                      | `backwork:upload` or `backwork:admin`, the pair the API gates browsing on at controller level (upload needs `backwork:upload` specifically)                                                                                                     |
+| _(unlabeled)_ | Chapters        | `/chapters`                                                                  | —                                               | `members:view`, in a council only (`kinds: ["council"]`, #5974); acting needs `council:chapters_manage`. Hidden until the tenant kind is known, so it never costs a chapter's nav its row |
 | _(unlabeled)_ | Directory       | `/members`                                                                   | —                                               | `members:view`                                                                                                                                                                                                                                  |
 
 **Behind Chapter settings.** The chapter menu's Chapter settings item shows when Chapter settings holds a tab or a tool for the viewer ([`../../behavior/settings/README.md`](../../behavior/settings/README.md#who-sees-what) § Who sees what).
@@ -934,6 +936,26 @@ Flushed together on 2026-11-05 (with `/polls`, since retired, #3871); the board 
     A desktop has the room to show every field editable at once, as Slack's and LinkedIn's web profile editors do, while the phone keeps a readable profile and edits on demand.
   - The email stays in the header, under the major · company · year line; the phone moved it to its Details rows.
     Web has no Details list: its form holds only fields the member edits, and the email is not one of them, so the header, where web shows who you are read-only, is its only place.
+
+### Council and school links
+
+Built for [#5974](https://github.com/frapplive/Frapp/issues/5974) (`school-layer.md` § 2.4, `council-types.md` § What each council's space shows).
+Two pages, one per side of a link; the phone draws the same sections in the same words (`COUNCIL_CHAPTERS_COPY`, `CHAPTER_AFFILIATIONS_COPY` in `@repo/validation`).
+
+- **Chapters (`/chapters`, a council's nav row).**
+  `apps/web/components/affiliations/council-chapters-page.tsx`.
+  Waiting on you (a chapter's request: Accept, Decline), Member chapters (accepted, and suspended with a Suspended badge; the row's menu holds Suspend or Reinstate, then Remove from council, each destructive step confirmed), and Invited (the council's own invitations: Cancel invite).
+  Invite a chapter is the header's main action, a searchable list of the chapters at the council's school, suggested ones (`COUNCIL_LINK_OFFERS`) first.
+  A chapter shows by its public listing only (name, kind, school): a council never reads a chapter's data (#4068 decision 11).
+  A delegate (`members:view` without `council:chapters_manage`) sees Member chapters alone, read-only.
+  A chapter that opens the route is sent to chat (`COUNCIL_ONLY_ROUTES`, `council-route-gate.tsx`).
+- **School and council (`/affiliations`, the chapter menu).**
+  `apps/web/components/affiliations/school-and-council-page.tsx`, reached from the chapter menu under Chapter settings, by a chapter's holders of `chapter-config:view`.
+  School: none offers a school search, whose pick links and confirms it; a proposed school offers Confirm and Not our school; a confirmed one has Unlink school in its menu, whose confirm says it also ends the chapter's council memberships there.
+  Councils, once a school is confirmed: each council at it with its status (`councilLinkLabel`) and the step for its state (Ask to join, Cancel request, Accept or Decline an invitation, and Leave council in the row's menu).
+  Without `chapter-config:manage` the page is read-only.
+  It is its own page, not a Settings tab, for now; folding it into Chapter settings waits on that screen's open PR.
+- Comparable apps: Slack Connect's invitations between workspaces (either side accepts or declines; a pending invite can be cancelled), GitHub's organization membership requests, and Discord's server settings for partnered servers.
 
 ### Two doors: Chapter settings and your Settings
 

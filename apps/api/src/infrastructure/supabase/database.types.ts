@@ -65,6 +65,9 @@ import type {
   ChatThreadFollow,
   CorpusCandidate,
   CorpusSource,
+  CouncilChapter,
+  CouncilPnmAccessLogRow,
+  CouncilRecruitmentSeason,
   DiscordAuthorLink,
   DiscordConnection,
   DiscordImport,
@@ -108,6 +111,11 @@ import type {
   OpenTask,
   PledgeClass,
   PledgeClassAssignment,
+  Pnm,
+  PnmCouncilRegistration,
+  PnmDuplicateDismissal,
+  PnmInterest,
+  PnmMerge,
   PointTransaction,
   PollVote,
   PredictionAnswer,
@@ -117,7 +125,7 @@ import type {
   PushToken,
   Role,
   RoleTier,
-  RushCandidate,
+  RushCandidateRow,
   RushCandidateVote,
   ScheduledNotificationDispatch,
   School,
@@ -250,6 +258,9 @@ export interface Database {
       chat_sidebar_preferences: TableDefinition<ChatSidebarPreferences>;
       chat_thread_follows: TableDefinition<ChatThreadFollow>;
       corpus_sources: TableDefinition<CorpusSource>;
+      council_chapters: TableDefinition<CouncilChapter>;
+      council_pnm_access_log: TableDefinition<CouncilPnmAccessLogRow>;
+      council_recruitment_seasons: TableDefinition<CouncilRecruitmentSeason>;
       discord_author_links: TableDefinition<DiscordAuthorLink>;
       discord_connections: TableDefinition<DiscordConnection>;
       discord_import_channels: TableDefinition<DiscordImportChannel>;
@@ -289,6 +300,11 @@ export interface Database {
       notification_preferences: TableDefinition<NotificationPreference>;
       notifications: TableDefinition<Notification>;
       open_tasks: TableDefinition<OpenTask>;
+      pnm_council_registrations: TableDefinition<PnmCouncilRegistration>;
+      pnm_duplicate_dismissals: TableDefinition<PnmDuplicateDismissal>;
+      pnm_interests: TableDefinition<PnmInterest>;
+      pnm_merges: TableDefinition<PnmMerge>;
+      pnms: TableDefinition<Pnm>;
       point_transactions: TableDefinition<PointTransaction>;
       poll_votes: TableDefinition<PollVote>;
       prediction_answers: TableDefinition<PredictionAnswer>;
@@ -299,7 +315,7 @@ export interface Database {
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
       rush_candidate_votes: TableDefinition<RushCandidateVote>;
-      rush_candidates: TableDefinition<RushCandidate>;
+      rush_candidates: TableDefinition<RushCandidateRow>;
       scheduled_notification_dispatches: TableDefinition<ScheduledNotificationDispatch>;
       school_chapters: TableDefinition<SchoolChapter>;
       school_email_domains: TableDefinition<SchoolEmailDomain>;
@@ -697,6 +713,11 @@ export interface Database {
        * one's EXCUSED attendance) to the new meeting in the same transaction.
        * Returns the pending and approved excuses no new meeting took.
        */
+      /** `20261124082248` (#5974) — deletes a PNM and its cascade; returns the count. */
+      delete_pnm: {
+        Args: { p_pnm_id: string };
+        Returns: number;
+      };
       delete_replaced_occurrences: {
         Args: {
           p_chapter_id: string;
@@ -1074,6 +1095,16 @@ export interface Database {
         Returns: Task[];
       };
       /** `20261116135639` (#5133) — pays a settled market, or re-pays a paid one whose winner changed. */
+      /** `20261124082248` (#5974) — `returns jsonb`: `PnmMergeResult`. */
+      merge_pnms: {
+        Args: {
+          p_council_id: string;
+          p_survivor: string;
+          p_loser: string;
+          p_actor: string;
+        };
+        Returns: Json;
+      };
       pay_prediction_market: {
         Args: {
           p_chapter_id: string;
@@ -1102,6 +1133,11 @@ export interface Database {
        * conversation first; one row with a null `message_id` when it holds
        * none, no row when it is gone or its channel is a DM.
        */
+      /** `20261124082248` (#5974) — the PNM retention sweep; returns the count. */
+      purge_expired_pnms: {
+        Args: { p_now: string };
+        Returns: number;
+      };
       read_chat_corpus_window: {
         Args: { p_chapter_id: string; p_window_id: string };
         Returns: {
@@ -1149,6 +1185,18 @@ export interface Database {
        * send: takes back the caller's ask, un-counts the asks it spoke for and
        * clears the meeting's cooldown.
        */
+      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
+      record_pnm_interest: {
+        Args: {
+          p_pnm_id: string;
+          p_chapter_id: string;
+          p_source: string;
+          p_source_label: string | null;
+          p_council_id: string | null;
+          p_term: string | null;
+        };
+        Returns: Json;
+      };
       release_meeting_minutes_ping: {
         Args: { p_meeting_id: string; p_chapter_id: string; p_user_id: string };
         Returns: undefined;
@@ -1460,6 +1508,17 @@ export interface Database {
        * still holds `p_expected` and every newly given id names a live role;
        * returns the row, or none when it wrote nothing.
        */
+      /** `20261124082248` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
+      set_council_chapter_status: {
+        Args: {
+          p_council_id: string;
+          p_chapter_id: string;
+          p_side: string;
+          p_status: string;
+          p_actor: string;
+        };
+        Returns: Json;
+      };
       set_member_role_ids: {
         Args: {
           p_chapter_id: string;
@@ -1474,6 +1533,16 @@ export interface Database {
        * and cost, or records a call made with no hold. Returns `settled`,
        * `inserted` or `missing`.
        */
+      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
+      set_school_chapter_status: {
+        Args: {
+          p_link_id: string;
+          p_chapter_id: string;
+          p_status: string;
+          p_actor: string;
+        };
+        Returns: Json;
+      };
       settle_ai_spend: {
         Args: {
           p_reservation_id: string | null;
@@ -1544,6 +1613,22 @@ export interface Database {
         Returns: number | null;
       };
       /** `20261116135639` (#5133) — refunds every stake; a paid market's payouts are reversed first. */
+      /** `20261124082248` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
+      upsert_verified_pnm: {
+        Args: {
+          p_school_id: string;
+          p_email: string;
+          p_first_name: string;
+          p_last_name: string;
+          p_preferred_name: string | null;
+          p_class_year: number | null;
+          p_phone: string | null;
+          p_phone_shared: boolean | null;
+          p_created_via: string;
+          p_user_id: string | null;
+        };
+        Returns: Json;
+      };
       void_prediction_market: {
         Args: {
           p_chapter_id: string;

@@ -125,6 +125,11 @@ export function DirectoryGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.directory} {...props} />;
 }
 
+/** A council's Chapters (#5974): the shared set's `chapter`, the phone's More row for chapters. */
+export function ChaptersGlyph(props: NavGlyphProps) {
+  return <NavGlyph paths={NAV_GLYPHS.chapter} {...props} />;
+}
+
 export function BillingGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.billing} {...props} />;
 }

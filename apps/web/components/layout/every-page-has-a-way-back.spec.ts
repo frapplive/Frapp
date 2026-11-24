@@ -56,6 +56,7 @@ const OFF_NAV_DOORS: Readonly<Record<string, string>> = {
   "/profile": "account menu",
   "/preferences": "account menu",
   "/settings": "chapter menu",
+  "/affiliations": "chapter menu",
   "/whats-new": "account menu",
   "/ask": "Ask bar at the sidebar's foot",
 };

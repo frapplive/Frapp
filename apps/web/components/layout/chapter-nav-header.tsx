@@ -5,7 +5,11 @@ import Link from "next/link";
 import { AlertTriangle, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useAccessibleChapters, useCurrentChapter } from "@repo/hooks";
 import type { ChapterMembershipSummary } from "@repo/hooks";
-import type { ChapterMark } from "@repo/validation";
+import {
+  CHAPTER_AFFILIATIONS_COPY,
+  can,
+  type ChapterMark,
+} from "@repo/validation";
 import { chapterMarkFor, CrestTile } from "@/components/layout/crest-tile";
 import {
   DropdownMenu,
@@ -103,6 +107,10 @@ export function ChapterNavHeader({
   const showSettingsLink = hasSettingsDestination(permissions, isModuleEnabled);
   // A council's settings are its own (#5933): the menu names them so.
   const tenantKind = useTenantKind();
+  // The chapter's School and council page (#5974): a chapter's officers who
+  // read its config. A council has no school link of its own to manage here.
+  const showAffiliationsLink =
+    tenantKind === "chapter" && can("chapter-config:view", permissions ?? []);
   const selectChapter = useSelectChapter();
   const { toast } = useToast();
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
@@ -349,6 +357,13 @@ export function ChapterNavHeader({
           <DropdownMenuItem asChild>
             <Link href="/settings" onClick={onNavigate}>
               {SETTINGS_TITLE[tenantKind ?? "chapter"]}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        {showAffiliationsLink ? (
+          <DropdownMenuItem asChild>
+            <Link href="/affiliations" onClick={onNavigate}>
+              {CHAPTER_AFFILIATIONS_COPY.title}
             </Link>
           </DropdownMenuItem>
         ) : null}

@@ -5,12 +5,15 @@ import {
   ACTIVITY_TO_DO_EMPTY,
   useActiveChapterId,
   useCouncil,
+  useCouncilChapters,
+  useCouncilInviteCandidates,
   useMyPermissions,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import type { SignetTokens } from "@repo/theme/signet";
 import { chapterInitials } from "@repo/validation";
 import { PersonGlyph } from "@/components/control-glyphs";
+import { CouncilChapters } from "@/components/council/council-chapters";
 import { LeadTile } from "@/components/lead-tile";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import { InviteGlyph } from "@/components/more/more-glyphs";
@@ -25,6 +28,10 @@ import {
 } from "@/components/state-block";
 import { StatusChip } from "@/components/status-chip";
 import { useChapterBranding } from "@/lib/chapter-branding";
+import {
+  canManageCouncilChapters,
+  canViewCouncilChapters,
+} from "@/lib/council/chapters";
 import { COUNCIL_HOME_COPY, councilHomeSteps } from "@/lib/council/home";
 import { destinationHue } from "@/lib/more/destination-hue";
 import { councilMetaLine } from "@/lib/onboarding/council-form";
@@ -53,6 +60,11 @@ const MARK_SIZE = 48;
  *
  * Chat home's officer setup checklist is held back in a council, so the
  * first steps have one home (principles.md P3.7).
+ *
+ * Under them, the council's Chapters (#5974, `council-chapters.tsx`): the
+ * phone's stack has no Chapters route, so the list web gives its own page is
+ * a section here, read by anyone with `members:view` and worked by a
+ * `council:chapters_manage` holder.
  */
 export function CouncilHome() {
   const { tokens } = useFrappTheme();
@@ -65,7 +77,23 @@ export function CouncilHome() {
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions ?? [];
   const { logoUrl, accent } = useChapterBranding();
-  const refresh = useRefetchAll([council, permissionsQuery]);
+  // Nothing goes out until permissions answer: the list refuses a viewer
+  // without `members:view`, and the candidates one without the manage key.
+  const permissionsKnown = permissionsQuery.isSuccess;
+  const canViewChapters =
+    permissionsKnown && canViewCouncilChapters(permissions);
+  const canManageChapters =
+    permissionsKnown && canManageCouncilChapters(permissions);
+  const chapters = useCouncilChapters({ enabled: canViewChapters });
+  const candidates = useCouncilInviteCandidates({
+    enabled: canManageChapters,
+  });
+  const refresh = useRefetchAll([
+    council,
+    permissionsQuery,
+    chapters,
+    candidates,
+  ]);
   const steps = councilHomeSteps(permissions);
 
   const tile = (Glyph: ComponentType<{ color: string }>, hue: string) => (
@@ -160,6 +188,15 @@ export function CouncilHome() {
         // A delegate has nothing to set up: Activity's own empty line, where
         // the steps would be, never an empty box.
         <Text style={styles.empty}>{ACTIVITY_TO_DO_EMPTY}</Text>
+      ) : null}
+
+      {data && canViewChapters ? (
+        <CouncilChapters
+          permissions={permissions}
+          canManage={canManageChapters}
+          chapters={chapters}
+          candidates={candidates}
+        />
       ) : null}
     </ScreenShell>
   );

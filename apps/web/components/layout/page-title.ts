@@ -1,4 +1,4 @@
-import type { TenantKind } from "@repo/validation";
+import { CHAPTER_AFFILIATIONS_COPY, type TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import {
   DASHBOARD_NAV_ITEMS,
@@ -59,6 +59,8 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/preferences": "Settings",
   "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
+  // Opened from the chapter menu (#5974).
+  "/affiliations": CHAPTER_AFFILIATIONS_COPY.title,
   // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
   [ASK_ROUTE]: "Frapp Intelligence",
 };

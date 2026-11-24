@@ -50,6 +50,7 @@ export function SearchablePicker<T>({
   leadingItems = [],
   defaultValue,
   keyboardlessOnTouch = false,
+  onQueryChange,
 }: {
   /** The button that opens the list; it becomes the popover's trigger. */
   trigger: ReactElement;
@@ -89,17 +90,28 @@ export function SearchablePicker<T>({
    * list, so a hardware keyboard's arrows and Enter work.
    */
   keyboardlessOnTouch?: boolean;
+  /**
+   * The caller searches (a school search, #5974): it hears each query, and
+   * `items` are its results, shown as given rather than filtered here.
+   */
+  onQueryChange?: (query: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const commandRef = useRef<HTMLDivElement>(null);
   const searching = normalizeWords(query).length > 0;
-  const shown = searching
-    ? items.filter((item) => matchesWordStarts(nameOf(item), query))
-    : [...leadingItems, ...items];
+  const shown = onQueryChange
+    ? items
+    : searching
+      ? items.filter((item) => matchesWordStarts(nameOf(item), query))
+      : [...leadingItems, ...items];
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    onQueryChange?.(next);
+  };
   const close = () => {
     setOpen(false);
-    setQuery("");
+    changeQuery("");
   };
   const row = (item: T) => (
     <CommandItem
@@ -136,7 +148,7 @@ export function SearchablePicker<T>({
         onEscapeKeyDown={(event) => {
           if (!query) return;
           event.preventDefault();
-          setQuery("");
+          changeQuery("");
         }}
       >
         <Command
@@ -149,7 +161,7 @@ export function SearchablePicker<T>({
         >
           <CommandInput
             value={query}
-            onValueChange={setQuery}
+            onValueChange={changeQuery}
             placeholder={placeholder}
             className="h-9 py-2 text-sm pointer-coarse:h-11 pointer-coarse:text-base"
           />

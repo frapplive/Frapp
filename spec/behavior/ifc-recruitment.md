@@ -2,6 +2,8 @@
 
 > **Status: Proposed. Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul). Nothing here is built, and no build date is set.**
 >
+> _(Updated 2026-11-24, [#5974](https://github.com/frapplive/Frapp/issues/5974); Winston, `gampheadband`.)_ Paul approved the IFC recruitment work on 2026-11-23, due 2027-01-11 ([#5833](https://github.com/frapplive/Frapp/issues/5833)). **Built so far:** [§ The council master list](#the-council-master-list)'s identity, duplicates and merge queue, the in-season counts and the logged phone reveal (API only, no screens yet), and [§ Retention and deletion](#retention-and-deletion)'s 180-day clock for PNM records. Where they differ from this text is recorded in [`school-layer.md`](../architecture/school-layer.md) § 2.5 and § 3.3, each as "#5974". The rest is still proposed, and the lines below about nothing being scheduled predate the approval.
+>
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
 > GitHub hides that account's issues and PRs (#4192, epic #4226 and its sub-issues) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 >

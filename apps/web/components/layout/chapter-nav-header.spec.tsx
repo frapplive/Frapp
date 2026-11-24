@@ -168,7 +168,18 @@ describe("ChapterNavHeader", () => {
     // Chapter settings leads: this menu is its only door (2026-11-19).
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent),
-    ).toEqual(["Chapter settings", "Join another chapter", "Start a council"]);
+    ).toEqual([
+      "Chapter settings",
+      "School and council",
+      "Join another chapter",
+      "Start a council",
+    ]);
+    // School and council opens its own page (#5974).
+    expect(
+      screen
+        .getByRole("menuitem", { name: "School and council" })
+        .getAttribute("href"),
+    ).toBe("/affiliations");
     // Start a council sits beside joining one (#5933).
     expect(
       screen
@@ -214,6 +225,30 @@ describe("ChapterNavHeader", () => {
     expect(screen.getByText("Your chapters and councils")).toBeInTheDocument();
     expect(screen.getByText("Interfraternity Council")).toBeInTheDocument();
     expect(screen.getByText("RPI")).toBeInTheDocument();
+    // A council has no school link to manage from here (#5974).
+    expect(screen.queryByText("School and council")).not.toBeInTheDocument();
+  });
+
+  it("offers School and council only to a chapter viewer who reads its config (#5974)", async () => {
+    chaptersQuery.current = {
+      data: [membership("chap-1", "Alpha Chapter")],
+      isSuccess: true,
+    };
+    permissionsQuery.current = {
+      data: { permissions: ["members:view", "backwork:upload"] },
+    };
+    const { unmount } = render(<ChapterNavHeader collapsed={false} />);
+    openMenu();
+    expect(await screen.findByText("Join another chapter")).toBeInTheDocument();
+    expect(screen.queryByText("School and council")).not.toBeInTheDocument();
+    unmount();
+
+    // Nor while the permission read is in flight.
+    permissionsQuery.current = { data: undefined };
+    render(<ChapterNavHeader collapsed={false} />);
+    openMenu();
+    expect(await screen.findByText("Join another chapter")).toBeInTheDocument();
+    expect(screen.queryByText("School and council")).not.toBeInTheDocument();
   });
 
   it("offers chapter settings only to a viewer Settings has something for", async () => {
