@@ -20,6 +20,42 @@ export interface RushCandidate {
   created_at: string;
 }
 
+/**
+ * The columns the pipeline works a candidate with (#5934): its owner, its
+ * last logged contact and its one open follow-up. Kept apart from
+ * {@link RushCandidate} because the chat card and the candidate routes
+ * spread a candidate into their responses, and none of this belongs on a
+ * card in a channel. Only the pipeline reads them.
+ */
+export interface RushCandidateWork {
+  owner_id: string | null;
+  /** `YYYY-MM-DD`: the newest logged contact's day. */
+  last_contact_on: string | null;
+  last_contact_by: string | null;
+  /** `YYYY-MM-DD`: the day the follow-up comes due. */
+  follow_up_on: string | null;
+  follow_up_note: string | null;
+  follow_up_user_id: string | null;
+}
+
+/**
+ * The school layer's columns (#5974, `school-layer.md` § 2.5): the PNM a
+ * candidate is, and who made it. Kept off {@link RushCandidate} so the rush
+ * DTOs' drift guards don't change the rush contract; the pipeline's
+ * candidate DTO documents `origin` (#5977).
+ */
+export interface RushCandidateSchool {
+  /** The school-level PNM this prospect is, or null for a hand-added one. */
+  pnm_id: string | null;
+  /** `manual` (a member added them) or `pnm` (their interest form); never changes. */
+  origin: 'manual' | 'pnm';
+}
+
+/** A whole `rush_candidates` row. */
+export type RushCandidateRow = RushCandidate &
+  RushCandidateWork &
+  RushCandidateSchool;
+
 export interface RushCandidateVote {
   id: string;
   candidate_id: string;
@@ -36,19 +72,4 @@ export interface RushCandidateVote {
 export interface RushCandidateView extends RushCandidate {
   vote_count?: number;
   viewer_has_voted: boolean;
-}
-
-/**
- * The `rush_candidates` row as the table holds it (`database.types.ts`):
- * the candidate plus the school layer's columns (#5974, `school-layer.md`
- * § 2.5). Kept off {@link RushCandidate} so the rush DTOs' drift guards
- * don't change the rush contract. The rush repository reads `*`, so its rows
- * carry the two columns; the interest form (#5977) creates `pnm` rows, and
- * the pipeline's candidate DTO documents `origin`.
- */
-export interface RushCandidateRow extends RushCandidate {
-  /** The school-level PNM this prospect is, or null for a hand-added one. */
-  pnm_id: string | null;
-  /** `manual` (a member added them) or `pnm`; never changes. */
-  origin: 'manual' | 'pnm';
 }

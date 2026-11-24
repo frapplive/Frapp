@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import {
   rushMovableStages,
   rushRatingSummary,
+  useChapterRoster,
   useRateRushCandidate,
   useSetRushCandidateTags,
   useVoteRushCandidate,
@@ -13,6 +14,9 @@ import {
   type RushTag,
   rushNotesMode,
   rushAddedBy,
+  rushRowMark,
+  rushLastContactLine,
+  rushMemberOptions,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { RUSH_CLOSED_REASON_LABELS, sortRushStages } from "@repo/validation";
@@ -39,6 +43,9 @@ import { toastFailure } from "@/lib/failure-toast";
 import { cn } from "@/lib/utils";
 import { RushRatingControl } from "./rush-rating";
 import { RushNotes } from "./rush-notes";
+import { LogContactMenu, RushContactHistory } from "./rush-contacts";
+import { RushFollowUpControl } from "./rush-follow-up";
+import { RushOwnerControl } from "./rush-owner";
 
 export interface RushProspectPanelProps {
   candidate: RushPipelineCandidate | null;
@@ -49,6 +56,10 @@ export interface RushProspectPanelProps {
   writable: boolean;
   /** `users.id`, for the notes' self-exclusion and authorship. */
   viewerId: string | null;
+  /** The chapter's stale days, from the pipeline read. */
+  staleDays: number;
+  /** `YYYY-MM-DD` on this device (`localIsoDate` in `@repo/formatting`). */
+  today: string;
   /** The page's word for recruitment, for the way back ("Back to Rush"). */
   term: string;
   onClose: () => void;
@@ -66,6 +77,11 @@ export interface RushProspectPanelProps {
  * viewer's own stars, the average, the vote), how the chapter has tagged
  * them, then the chapter's notes. Every control shows only to a role that
  * may use it (`rushPipelineAccess`).
+ *
+ * Its state comes first (#5934, rulebook § 6 "a record says its state
+ * first"): "Last contacted November 18 · by Chris" with Log contact beside it, then
+ * Stage, Owner and Follow-up, the rows a recruiter works the prospect by; the
+ * logged contacts sit above the notes.
  */
 export function RushProspectPanel(props: RushProspectPanelProps) {
   const { candidate, term, onClose } = props;
@@ -95,9 +111,13 @@ function ProspectBody({
   access,
   writable,
   viewerId,
+  staleDays,
+  today,
   onMove,
 }: RushProspectPanelProps & { candidate: RushPipelineCandidate }) {
   const rate = useRateRushCandidate();
+  const roster = useChapterRoster();
+  const members = rushMemberOptions(roster.data, viewerId);
   const vote = useVoteRushCandidate();
   const setTags = useSetRushCandidateTags();
   const rating = rushRatingSummary(candidate);
@@ -112,6 +132,12 @@ function ProspectBody({
   const applied = tags.filter((tag) => candidate.tag_ids.includes(tag.id));
   const addable = tags.filter((tag) => !candidate.tag_ids.includes(tag.id));
   const canTag = access.writeNotes && writable;
+  const closed = current?.category === "closed";
+  const work = rushRowMark(candidate, staleDays, today, closed);
+  // Nobody logs a contact with themself (`rush.md` § Contacts, owner and follow-ups).
+  const self = !!viewerId && candidate.user_id === viewerId;
+  const viewerName =
+    members.find((member) => member.user_id === viewerId)?.display_name ?? null;
 
   function saveTags(change: { add?: string; remove?: string }) {
     setTags.change(
@@ -129,6 +155,18 @@ function ProspectBody({
 
   return (
     <div className="grid gap-6">
+      <div className="flex min-h-9 items-center justify-between gap-3">
+        <p className="min-w-0 text-sm text-muted-foreground">
+          {rushLastContactLine(candidate, today)}
+        </p>
+        {access.add && !self ? (
+          <LogContactMenu
+            candidate={candidate}
+            disabled={!writable}
+            viewerName={viewerName}
+          />
+        ) : null}
+      </div>
       <dl className="grid gap-1">
         <FieldRow label="Stage">
           {access.move ? (
@@ -167,6 +205,28 @@ function ProspectBody({
             </StaticValue>
           )}
         </FieldRow>
+        <FieldRow label="Owner">
+          <RushOwnerControl
+            candidate={candidate}
+            access={access}
+            writable={writable}
+            viewerId={viewerId}
+            members={members}
+          />
+        </FieldRow>
+        {closed ? null : (
+          <FieldRow label="Follow-up">
+            <RushFollowUpControl
+              candidate={candidate}
+              canEdit={access.add && writable && !self}
+              stale={work?.tone === "stale"}
+              closed={closed}
+              today={today}
+              viewerId={viewerId}
+              members={members}
+            />
+          </FieldRow>
+        )}
         {candidate.bid_status === "extended" ? (
           <FieldRow label="Bid">
             <span className="px-2 py-1.5">
@@ -312,6 +372,11 @@ function ProspectBody({
           </div>
         </FieldRow>
       </dl>
+      <RushContactHistory
+        key={`contacts-${candidate.id}`}
+        candidateId={candidate.id}
+        today={today}
+      />
       <RushProspectForm
         candidateId={candidate.id}
         fromForm={candidate.origin === "pnm"}

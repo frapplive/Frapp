@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { RushClosedReason } from '@repo/validation';
+import type { RushClosedReason, RushContactKind } from '@repo/validation';
 import { SUPABASE_CLIENT } from '../supabase.provider';
 import type { FrappSupabaseClient } from '../database.types';
 import { SupabaseQueryError } from '../supabase-query-error';
@@ -8,9 +8,11 @@ import type {
   RushStageWrite,
 } from '#domain/repositories/rush-pipeline.repository.interface';
 import type {
+  RushCandidateContact,
   RushCandidateNote,
   RushCandidateRating,
   RushCandidateTag,
+  RushSettingsRow,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
@@ -104,6 +106,20 @@ export class SupabaseRushPipelineRepository implements IRushPipelineRepository {
       .order('created_at', { ascending: false });
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
+  }
+
+  async findCandidate(
+    candidateId: string,
+    chapterId: string,
+  ): Promise<RushCandidateRow | null> {
+    const { data, error } = await this.supabase
+      .from('rush_candidates')
+      .select('*')
+      .eq('id', candidateId)
+      .eq('chapter_id', chapterId)
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
   }
 
   async setCandidateStage(
@@ -329,5 +345,129 @@ export class SupabaseRushPipelineRepository implements IRushPipelineRepository {
       .eq('id', noteId)
       .eq('chapter_id', chapterId);
     if (error) throw new SupabaseQueryError(error);
+  }
+
+  async listContacts(
+    candidateId: string,
+    chapterId: string,
+  ): Promise<RushCandidateContact[]> {
+    const { data, error } = await this.supabase
+      .from('rush_candidate_contacts')
+      .select('*')
+      .eq('candidate_id', candidateId)
+      .eq('chapter_id', chapterId)
+      .order('contacted_on', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
+  }
+
+  async createContact(input: {
+    candidateId: string;
+    chapterId: string;
+    loggedBy: string;
+    kind: RushContactKind;
+    contactedOn: string;
+    note: string | null;
+  }): Promise<RushCandidateContact> {
+    const { data, error } = await this.supabase
+      .from('rush_candidate_contacts')
+      .insert({
+        candidate_id: input.candidateId,
+        chapter_id: input.chapterId,
+        logged_by: input.loggedBy,
+        kind: input.kind,
+        contacted_on: input.contactedOn,
+        note: input.note,
+      })
+      .select()
+      .single();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
+  async advanceLastContact(
+    candidateId: string,
+    chapterId: string,
+    contactedOn: string,
+    loggedBy: string,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('rush_candidates')
+      .update({ last_contact_on: contactedOn, last_contact_by: loggedBy })
+      .eq('id', candidateId)
+      .eq('chapter_id', chapterId)
+      .or(`last_contact_on.is.null,last_contact_on.lte.${contactedOn}`);
+    if (error) throw new SupabaseQueryError(error);
+  }
+
+  async setOwner(
+    candidateId: string,
+    chapterId: string,
+    ownerId: string | null,
+    onlyIfOwnedBy?: string | null,
+  ): Promise<RushCandidateRow | null> {
+    let query = this.supabase
+      .from('rush_candidates')
+      .update({ owner_id: ownerId })
+      .eq('id', candidateId)
+      .eq('chapter_id', chapterId);
+    if (onlyIfOwnedBy === null) query = query.is('owner_id', null);
+    else if (onlyIfOwnedBy !== undefined) {
+      query = query.eq('owner_id', onlyIfOwnedBy);
+    }
+    const { data, error } = await query.select().maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
+  async setFollowUp(
+    candidateId: string,
+    chapterId: string,
+    followUp: { on: string; note: string | null; userId: string } | null,
+  ): Promise<RushCandidateRow> {
+    const { data, error } = await this.supabase
+      .from('rush_candidates')
+      .update({
+        follow_up_on: followUp?.on ?? null,
+        follow_up_note: followUp?.note ?? null,
+        follow_up_user_id: followUp?.userId ?? null,
+      })
+      .eq('id', candidateId)
+      .eq('chapter_id', chapterId)
+      .select()
+      .single();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
+  async findSettings(chapterId: string): Promise<RushSettingsRow | null> {
+    const { data, error } = await this.supabase
+      .from('rush_settings')
+      .select('*')
+      .eq('chapter_id', chapterId)
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
+  async saveSettings(
+    chapterId: string,
+    staleDays: number,
+  ): Promise<RushSettingsRow> {
+    const { data, error } = await this.supabase
+      .from('rush_settings')
+      .upsert(
+        {
+          chapter_id: chapterId,
+          stale_days: staleDays,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'chapter_id' },
+      )
+      .select()
+      .single();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
   }
 }

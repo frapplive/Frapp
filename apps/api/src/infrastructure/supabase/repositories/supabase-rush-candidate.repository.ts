@@ -9,6 +9,15 @@ import {
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import { SupabaseQueryError } from '../supabase-query-error';
 
+/**
+ * The columns a {@link RushCandidate} carries. The card and the candidate
+ * routes spread a candidate into their responses, so this never reads `*`:
+ * the pipeline's owner, contact and follow-up columns (#5934) stay off a chat
+ * card. `SupabaseRushPipelineRepository` reads those.
+ */
+const CANDIDATE_COLUMNS =
+  'id, chapter_id, display_name, name_key, user_id, stage, closed_reason, bid_status, created_by, created_at';
+
 @Injectable()
 export class SupabaseRushCandidateRepository implements IRushCandidateRepository {
   constructor(
@@ -19,7 +28,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
   async findById(id: string, chapterId: string): Promise<RushCandidate | null> {
     const { data, error } = await this.supabase
       .from('rush_candidates')
-      .select('*')
+      .select(CANDIDATE_COLUMNS)
       .eq('id', id)
       .eq('chapter_id', chapterId)
       .maybeSingle();
@@ -35,7 +44,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
     // share a name (#5977), and two rows must answer 409, never a 500.
     const { data, error } = await this.supabase
       .from('rush_candidates')
-      .select('*')
+      .select(CANDIDATE_COLUMNS)
       .eq('chapter_id', chapterId)
       .eq('name_key', nameKey)
       .order('created_at', { ascending: true })
@@ -63,7 +72,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
         ...(data.id ? { id: data.id } : {}),
         ...(data.created_at ? { created_at: data.created_at } : {}),
       })
-      .select()
+      .select(CANDIDATE_COLUMNS)
       .single();
     if (error) throw new SupabaseQueryError(error);
     return created;
@@ -75,7 +84,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
       .update({ bid_status: 'extended' })
       .eq('id', id)
       .eq('chapter_id', chapterId)
-      .select()
+      .select(CANDIDATE_COLUMNS)
       .single();
     if (error) throw new SupabaseQueryError(error);
     return data;

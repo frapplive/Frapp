@@ -358,7 +358,7 @@ Chat keeps working, and the card links to the candidate's page.
 | Category | Moves here automatically | Slice |
 | --- | --- | --- |
 | `new` | On creation from a form or an import (an add already lands here) | Interest forms, the master list |
-| `contacted` | On the first logged contact | Slice 2 (#5833) |
+| `contacted` | On the first logged contact | **Built in #5934** |
 | `met` | When marked present at a chapter event | Step 2, PNM attendance |
 | `closed` | With the reasons below | Bids; the PNM's own view |
 
@@ -373,6 +373,8 @@ Chat keeps working, and the card links to the candidate's page.
 **Built in #5924:** [`rush.md` § Tags](rush.md#tags), [§ Ratings](rush.md#ratings) and [§ Notes](rush.md#notes), including `rush:read_notes` and its opt-in for existing chapters. The reasoning for the separate read key is kept there. Still to build here: deleting notes and ratings 30 days after the season closes ([§ Retention](#retention-and-deletion)), once seasons exist.
 
 ### Contact tracking and follow-ups
+
+**Built in #5934:** the rules are in [`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups). What follows is the design they came from; phone and email below wait for interest forms.
 
 - **Log a contact.** Pick the kind (text, call, in person, social DM, email, event) and the date; a note is optional. Who logged it is recorded.
   - This needs `rush:add`, which this design widens to "add and work prospects", so it also covers moving stages.
@@ -752,7 +754,7 @@ This builds on the URL and data-model phases 1 and 2 of the concept.
 
 1. **The chapter pipeline.**
    - Stage categories with default stages; notes, tags and ratings. **Built in #5924** ([`rush.md` § Pipeline](rush.md#pipeline)).
-   - Contacts, owner, follow-ups and the stale alert.
+   - Contacts, owner, follow-ups and the stale alert. **Built in #5934** ([`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups)).
    - Bid extend, accept, decline, record and expire, with the shipped-client compatibility above. A recorded acceptance waits for confirmation.
    - The Recruitment module settings page, including the `rush:read_notes` opt-in for existing chapters and the new-member role.
    - The [phone-first actions](#a-recruitment-week-at-real-scale) on mobile.

@@ -18,6 +18,9 @@ export type RushStage = components["schemas"]["RushStageDto"];
 export type RushStageInput = components["schemas"]["RushStageInputDto"];
 export type RushTag = components["schemas"]["RushTagDto"];
 export type RushNote = components["schemas"]["RushNoteDto"];
+export type RushContact = components["schemas"]["RushContactDto"];
+export type RushContactKind = RushContact["kind"];
+export type RushSettings = components["schemas"]["RushSettingsDto"];
 export type RushManualClosedReason = NonNullable<
   components["schemas"]["MoveRushCandidateStageDto"]["closed_reason"]
 >;
@@ -27,6 +30,8 @@ export const rushPipelineKeys = {
     ["rush", chapterId, "pipeline"] as const,
   notes: (chapterId: string | null, candidateId: string) =>
     ["rush", chapterId, "notes", candidateId] as const,
+  contacts: (chapterId: string | null, candidateId: string) =>
+    ["rush", chapterId, "contacts", candidateId] as const,
 };
 
 /** Stages, tags and every prospect, for the board, the list and the phone. */
@@ -409,5 +414,216 @@ export function useDeleteRushNote() {
       if (error) throw error;
     },
     onSettled: (_data, _error, input) => invalidate(input.candidateId),
+  });
+}
+
+// ── Contacts, owner, follow-ups and settings (#5934) ─────────────────────────
+
+/** A prospect's logged contacts, newest first (`rush:view`). */
+export function useRushContacts(
+  candidateId: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  return useQuery({
+    queryKey: rushPipelineKeys.contacts(chapterId, candidateId ?? ""),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await client.GET(
+        "/v1/rush/candidates/{id}/contacts",
+        { signal, params: { path: { id: candidateId! } } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: (options?.enabled ?? true) && !!chapterId && !!candidateId,
+  });
+}
+
+/**
+ * Log a contact (`rush:add`). The prospect's last contact and cleared
+ * follow-up show at once; the pipeline is read again for the rest (a first
+ * contact also moves a New prospect to Contacted on the server).
+ */
+export function useLogRushContact() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  const chapterId = useActiveChapterId();
+  const invalidate = useRushInvalidate();
+  const optimistic = useOptimisticCandidate();
+  return useMutation({
+    mutationKey: ["rush", "log-contact"],
+    mutationFn: async (input: {
+      candidateId: string;
+      kind: RushContactKind;
+      contactedOn: string;
+      note?: string;
+      /** The logger's name, for the optimistic "by …". */
+      byName?: string;
+    }) => {
+      const { data, error } = await client.POST(
+        "/v1/rush/candidates/{id}/contacts",
+        {
+          params: { path: { id: input.candidateId } },
+          body: {
+            kind: input.kind,
+            contacted_on: input.contactedOn,
+            ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+          },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onMutate: (input) =>
+      optimistic(input.candidateId, (candidate) => ({
+        ...candidate,
+        ...(!candidate.last_contact_on ||
+        candidate.last_contact_on <= input.contactedOn
+          ? {
+              last_contact_on: input.contactedOn,
+              last_contact_by_name:
+                input.byName ?? candidate.last_contact_by_name,
+            }
+          : {}),
+        follow_up_on: null,
+        follow_up_note: null,
+        follow_up_user_id: null,
+        follow_up_user_name: null,
+      })),
+    onError: (_error, _input, rollback) => rollback?.(),
+    onSettled: (_data, _error, input) => {
+      void queryClient.invalidateQueries({
+        queryKey: rushPipelineKeys.contacts(chapterId, input.candidateId),
+      });
+      return invalidate();
+    },
+  });
+}
+
+/**
+ * Set or clear a prospect's owner. Claiming an unowned prospect or letting go
+ * of your own needs `rush:add`; anything else needs `rush:manage`. A 409
+ * means someone else claimed them first.
+ */
+export function useSetRushOwner() {
+  const client = useFrappClient();
+  const invalidate = useRushInvalidate();
+  const optimistic = useOptimisticCandidate();
+  return useMutation({
+    mutationKey: ["rush", "set-owner"],
+    mutationFn: async (input: {
+      candidateId: string;
+      ownerId: string | null;
+      /** The new owner's name, for the optimistic row. */
+      ownerName?: string | null;
+    }) => {
+      const { data, error } = await client.PUT(
+        "/v1/rush/candidates/{id}/owner",
+        {
+          params: { path: { id: input.candidateId } },
+          body: { owner_id: input.ownerId },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onMutate: (input) =>
+      optimistic(input.candidateId, (candidate) => ({
+        ...candidate,
+        owner_id: input.ownerId,
+        owner_name: input.ownerId ? (input.ownerName ?? null) : null,
+      })),
+    onError: (_error, _input, rollback) => rollback?.(),
+    onSettled: invalidate,
+  });
+}
+
+/**
+ * Set a prospect's follow-up (`rush:add`): a day, what to do, and who it's
+ * for, the owner by default.
+ */
+export function useSetRushFollowUp() {
+  const client = useFrappClient();
+  const invalidate = useRushInvalidate();
+  const optimistic = useOptimisticCandidate();
+  return useMutation({
+    mutationKey: ["rush", "set-follow-up"],
+    mutationFn: async (input: {
+      candidateId: string;
+      dueOn: string;
+      note?: string;
+      forUserId?: string;
+    }) => {
+      const { data, error } = await client.PUT(
+        "/v1/rush/candidates/{id}/follow-up",
+        {
+          params: { path: { id: input.candidateId } },
+          body: {
+            due_on: input.dueOn,
+            ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+            ...(input.forUserId ? { for_user_id: input.forUserId } : {}),
+          },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onMutate: (input) =>
+      optimistic(input.candidateId, (candidate) => ({
+        ...candidate,
+        follow_up_on: input.dueOn,
+        follow_up_note: input.note?.trim() || null,
+      })),
+    onError: (_error, _input, rollback) => rollback?.(),
+    onSettled: invalidate,
+  });
+}
+
+/** Clear a prospect's follow-up (`rush:add`). */
+export function useClearRushFollowUp() {
+  const client = useFrappClient();
+  const invalidate = useRushInvalidate();
+  const optimistic = useOptimisticCandidate();
+  return useMutation({
+    mutationKey: ["rush", "clear-follow-up"],
+    mutationFn: async (candidateId: string) => {
+      const { data, error } = await client.DELETE(
+        "/v1/rush/candidates/{id}/follow-up",
+        { params: { path: { id: candidateId } } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onMutate: (candidateId) =>
+      optimistic(candidateId, (candidate) => ({
+        ...candidate,
+        follow_up_on: null,
+        follow_up_note: null,
+        follow_up_user_id: null,
+        follow_up_user_name: null,
+      })),
+    onError: (_error, _candidateId, rollback) => rollback?.(),
+    onSettled: invalidate,
+  });
+}
+
+/**
+ * Save the chapter's stale days (`rush:manage`). The pipeline carries the
+ * value (`stale_days`), so it is the one read refreshed.
+ */
+export function useSaveRushSettings() {
+  const client = useFrappClient();
+  const invalidate = useRushInvalidate();
+  return useMutation({
+    mutationKey: ["rush", "save-settings"],
+    mutationFn: async (settings: RushSettings) => {
+      const { data, error } = await client.PUT("/v1/rush/settings", {
+        body: settings,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSettled: invalidate,
   });
 }

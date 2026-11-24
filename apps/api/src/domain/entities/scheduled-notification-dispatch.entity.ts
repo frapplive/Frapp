@@ -11,11 +11,20 @@
  */
 
 /** Entity families the dispatch log dedups. */
-export type DispatchEntityType = 'INVOICE' | 'TASK' | 'EVENT' | 'POLL';
+export type DispatchEntityType =
+  'INVOICE' | 'TASK' | 'EVENT' | 'POLL' | 'RUSH_CANDIDATE';
 
 /** Work thresholds, one dispatch row per (entity, threshold, due date). */
 export type DispatchThreshold =
-  'DUE_SOON' | 'OVERDUE' | 'AUTO_ABSENT' | 'EXPIRED' | 'EVENT_REMINDER';
+  | 'DUE_SOON'
+  | 'OVERDUE'
+  | 'AUTO_ABSENT'
+  | 'EXPIRED'
+  | 'EVENT_REMINDER'
+  /** A recruitment follow-up's morning (#5934). */
+  | 'FOLLOW_UP'
+  /** A recruitment candidate gone stale, told to its owner once (#5934). */
+  | 'STALE';
 
 /**
  * The reminder sweep a dispatch belongs to, as an identifier-shaped id

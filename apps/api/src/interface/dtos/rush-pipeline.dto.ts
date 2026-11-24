@@ -7,16 +7,23 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   RUSH_CLOSED_REASONS,
+  RUSH_CONTACT_KINDS,
+  RUSH_CONTACT_NOTE_MAX,
+  RUSH_FOLLOW_UP_NOTE_MAX,
+  RUSH_STALE_DAYS_MAX,
+  RUSH_STALE_DAYS_MIN,
   RUSH_MANUAL_CLOSED_REASONS,
   RUSH_NOTE_MAX,
   RUSH_RATING_MAX,
@@ -27,16 +34,20 @@ import {
   RUSH_TAG_LABEL_MAX,
   RUSH_TAGS_MAX,
   type RushClosedReason,
+  type RushContactKind,
   type RushManualClosedReason,
   type RushStageCategory,
 } from '@repo/validation';
 import type {
+  RushContactView,
   RushNoteView,
   RushPipeline,
   RushPipelineCandidate,
+  RushSettings,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
+import type { RushFollowUpView } from '../../application/services/rush-pipeline.service';
 import type { RushBidStatus } from '#domain/entities/rush-candidate.entity';
 import type { AssertNever } from './drift-guard';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
@@ -163,6 +174,57 @@ export class RushPipelineCandidateDto implements RushPipelineCandidate {
 
   @ApiProperty()
   viewer_has_voted: boolean;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: "The member who is the prospect's main point of contact.",
+  })
+  owner_id: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  owner_name: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'The day of the newest logged contact.',
+  })
+  last_contact_on: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  last_contact_by: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  last_contact_by_name: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: 'The day the open follow-up comes due.',
+  })
+  follow_up_on: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'What to do, such as "invite to house dinner".',
+  })
+  follow_up_note: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Who the follow-up is for; they get the push.',
+  })
+  follow_up_user_id: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  follow_up_user_name: string | null;
 }
 
 export class RushPipelineDto implements RushPipeline {
@@ -180,6 +242,12 @@ export class RushPipelineDto implements RushPipeline {
     description: 'Newest first.',
   })
   candidates: RushPipelineCandidateDto[];
+
+  @ApiProperty({
+    description:
+      'Days without a logged contact before an open prospect needs a follow-up.',
+  })
+  stale_days: number;
 }
 
 export class RushStageInputDto {
@@ -316,6 +384,149 @@ export class RushNoteDto implements RushNoteView {
   @ApiProperty({ format: 'date-time' })
   updated_at: string;
 }
+
+export class RushSettingsDto implements RushSettings {
+  @ApiProperty({
+    minimum: RUSH_STALE_DAYS_MIN,
+    maximum: RUSH_STALE_DAYS_MAX,
+    description:
+      'Days without a logged contact before an open prospect needs a follow-up.',
+  })
+  @IsInt()
+  @Min(RUSH_STALE_DAYS_MIN)
+  @Max(RUSH_STALE_DAYS_MAX)
+  stale_days: number;
+}
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export class LogRushContactDto {
+  @ApiProperty({ enum: RUSH_CONTACT_KINDS })
+  @IsIn(RUSH_CONTACT_KINDS)
+  kind: RushContactKind;
+
+  @ApiProperty({
+    format: 'date',
+    description: 'The day of the contact: today or earlier.',
+  })
+  @IsString()
+  @Matches(DAY_PATTERN)
+  contacted_on: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: RUSH_CONTACT_NOTE_MAX,
+    description: 'Read only by roles that can read recruitment notes.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(RUSH_CONTACT_NOTE_MAX)
+  note?: string | null;
+}
+
+export class RushContactDto implements RushContactView {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ format: 'uuid' })
+  candidate_id: string;
+
+  @ApiProperty({ format: 'uuid' })
+  logged_by: string;
+
+  @ApiProperty()
+  logged_by_name: string;
+
+  @ApiProperty({ enum: RUSH_CONTACT_KINDS })
+  kind: RushContactKind;
+
+  @ApiProperty({ format: 'date' })
+  contacted_on: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Absent without `rush:read_notes`, and on a prospect linked to the reader.',
+  })
+  note?: string | null;
+
+  @ApiProperty({ format: 'date-time' })
+  created_at: string;
+}
+
+export class SetRushOwnerDto {
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`.',
+  })
+  @ValidateIf((_dto, value) => value !== null)
+  @IsUUID()
+  owner_id: string | null;
+}
+
+export class RushOwnerDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  owner_id: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  owner_name: string | null;
+}
+
+export class SetRushFollowUpDto {
+  @ApiProperty({ format: 'date', description: 'Today or later.' })
+  @IsString()
+  @Matches(DAY_PATTERN)
+  due_on: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: RUSH_FOLLOW_UP_NOTE_MAX,
+    description: 'What to do, such as "invite to house dinner".',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(RUSH_FOLLOW_UP_NOTE_MAX)
+  note?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Who it is for. Defaults to the owner, else the caller.',
+  })
+  @IsOptional()
+  @IsUUID()
+  for_user_id?: string;
+}
+
+export class RushFollowUpDto implements RushFollowUpView {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ type: String, format: 'date', nullable: true })
+  follow_up_on: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  follow_up_note: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  follow_up_user_id: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  follow_up_user_name: string | null;
+}
+
+/** @driftguard */
+export type RushContactDtoMissingFields = AssertNever<
+  Exclude<keyof RushContactView, keyof RushContactDto>
+>;
 
 /** @driftguard */
 export type RushPipelineCandidateDtoMissingFields = AssertNever<

@@ -28,8 +28,18 @@ function pipeline(tagIds: string[]): RushPipeline {
         tag_ids: tagIds,
         viewer_rating: null,
         viewer_has_voted: false,
+        owner_id: null,
+        owner_name: null,
+        last_contact_on: null,
+        last_contact_by: null,
+        last_contact_by_name: null,
+        follow_up_on: null,
+        follow_up_note: null,
+        follow_up_user_id: null,
+        follow_up_user_name: null,
       },
     ],
+    stale_days: 7,
   };
 }
 

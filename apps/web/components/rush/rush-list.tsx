@@ -10,7 +10,7 @@ import {
   type RushPipelineCandidate,
   type RushStage,
   type RushTag,
-  rushAddedBy,
+  rushRowMark,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { sortRushStages } from "@repo/validation";
@@ -26,9 +26,9 @@ import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 import { rushMoveEntries } from "./rush-board";
-import { RushBidBadge, RushTagChips } from "./rush-facts";
+import { RushBidBadge, RushFollowUpFact, RushTagChips } from "./rush-facts";
 
-type SortKey = "name" | "stage" | "rating" | "added_by" | "added";
+type SortKey = "name" | "stage" | "owner" | "follow_up" | "rating" | "added";
 type Sort = { key: SortKey; dir: "asc" | "desc" };
 
 /**
@@ -37,6 +37,12 @@ type Sort = { key: SortKey; dir: "asc" | "desc" };
  * newest first until one is picked. A row opens the prospect's panel, and
  * its menu (⋯, right-click) has the same Move to as a card. The rating
  * column shows only to a role that sees results.
+ *
+ * Owner and Follow-up (#5934) take the place Added by had: who is working a
+ * prospect and what is due on them is what a recruiter sorts by, as a
+ * Pipedrive deal list leads with owner and next activity. Sorting Follow-up
+ * puts the prospects that need one first, then follow-ups by day, then
+ * prospects with nothing due. Who added a prospect is on their panel.
  */
 export function RushList({
   stages,
@@ -45,6 +51,8 @@ export function RushList({
   access,
   writable,
   selectedId,
+  staleDays,
+  today,
   onOpen,
   onMove,
 }: {
@@ -54,6 +62,8 @@ export function RushList({
   access: RushPipelineAccess;
   writable: boolean;
   selectedId: string | null;
+  staleDays: number;
+  today: string;
   onOpen: (candidate: RushPipelineCandidate) => void;
   onMove: (
     candidate: RushPipelineCandidate,
@@ -65,10 +75,30 @@ export function RushList({
   const canMove = access.move && writable;
   const showRating = access.viewResults;
 
+  const closedKeys = useMemo(
+    () =>
+      new Set(stages.filter((s) => s.category === "closed").map((s) => s.key)),
+    [stages],
+  );
+  const workOf = (candidate: RushPipelineCandidate) =>
+    rushRowMark(candidate, staleDays, today, closedKeys.has(candidate.stage));
+
   const rows = useMemo(() => {
     const order = new Map(
       sortRushStages(stages).map((stage, index) => [stage.key, index]),
     );
+    // Needs follow-up first, then follow-ups by day, then nothing due.
+    const followUpKey = (candidate: RushPipelineCandidate) => {
+      const work = rushRowMark(
+        candidate,
+        staleDays,
+        today,
+        closedKeys.has(candidate.stage),
+      );
+      if (work?.tone === "stale") return "0";
+      if (work) return `1${candidate.follow_up_on}`;
+      return "2";
+    };
     const compare = (a: RushPipelineCandidate, b: RushPipelineCandidate) => {
       switch (sort.key) {
         case "name":
@@ -77,15 +107,20 @@ export function RushList({
           return (order.get(a.stage) ?? 0) - (order.get(b.stage) ?? 0);
         case "rating":
           return (a.rating_average ?? 0) - (b.rating_average ?? 0);
-        case "added_by":
-          return rushAddedBy(a).localeCompare(rushAddedBy(b));
+        case "owner":
+          // Unowned last when ascending.
+          return (a.owner_name ?? "\uffff").localeCompare(
+            b.owner_name ?? "\uffff",
+          );
+        case "follow_up":
+          return followUpKey(a).localeCompare(followUpKey(b));
         case "added":
           return a.created_at.localeCompare(b.created_at);
       }
     };
     const sorted = [...candidates].sort(compare);
     return sort.dir === "desc" ? sorted.reverse() : sorted;
-  }, [candidates, stages, sort]);
+  }, [candidates, stages, sort, staleDays, today, closedKeys]);
 
   const header = (key: SortKey, label: string) => (
     <SortHeader
@@ -110,9 +145,10 @@ export function RushList({
         <TableRow>
           {header("name", "Name")}
           {header("stage", "Stage")}
+          {header("owner", "Owner")}
+          {header("follow_up", "Follow-up")}
           <TableHead>Tags</TableHead>
           {showRating ? header("rating", "Rating") : null}
-          {header("added_by", "Added by")}
           {header("added", "Added")}
           <TableHead className="w-10">
             <span className="sr-only">Actions</span>
@@ -165,6 +201,23 @@ export function RushList({
                       <RushBidBadge candidate={candidate} />
                     </span>
                   </TableCell>
+                  <TableCell
+                    className={cn(
+                      "max-w-40 truncate text-sm",
+                      candidate.owner_id
+                        ? "text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {candidate.owner_id
+                      ? (candidate.owner_name ?? "")
+                      : "No owner"}
+                  </TableCell>
+                  <TableCell className="max-w-44">
+                    <span className="flex min-w-0 text-sm">
+                      <RushFollowUpFact state={workOf(candidate)} />
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <RushTagChips
                       tagIds={candidate.tag_ids}
@@ -177,9 +230,6 @@ export function RushList({
                       {rushRatingSummary(candidate)}
                     </TableCell>
                   ) : null}
-                  <TableCell className="max-w-40 truncate text-sm text-muted-foreground">
-                    {rushAddedBy(candidate)}
-                  </TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDay(candidate.created_at)}
                   </TableCell>

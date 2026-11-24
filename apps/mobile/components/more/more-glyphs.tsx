@@ -2,7 +2,6 @@ import { Path } from "react-native-svg";
 import { NAV_GLYPHS, type NavGlyphName } from "@repo/theme/nav-glyphs";
 import { Frame, paint, type GlyphPaintProps } from "@/components/glyph-recipe";
 import { NavGlyph } from "@/components/nav-glyph";
-import { RushGlyph } from "@/components/chat/card-glyphs";
 
 /**
  * The You tab's leading row glyphs (the More hub's until #3839), and the bell.
@@ -108,14 +107,7 @@ export function InviteGlyph(props: HubGlyphProps) {
   return <HubGlyph name="invite" {...props} />;
 }
 
-/**
- * The recruitment pipeline (#5924): the funnel the chat recruitment card's
- * eyebrow draws (`RushGlyph`), so the row and the card read as one place.
- * The nav set has no recruitment shape yet; this is that card's, in one hue.
- */
-export function RecruitmentGlyph({
-  color,
-  size = MORE_GLYPH_SIZE,
-}: HubGlyphProps) {
-  return <RushGlyph focused={false} accent={color} muted={color} size={size} />;
+/** Recruitment (#5924): the nav set's funnel, as web's sidebar draws it (#5931). */
+export function RecruitmentGlyph(props: HubGlyphProps) {
+  return <HubGlyph name="recruitment" {...props} />;
 }

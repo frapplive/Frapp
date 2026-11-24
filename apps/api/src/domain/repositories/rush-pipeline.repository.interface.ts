@@ -1,8 +1,14 @@
-import type { RushClosedReason, RushStageCategory } from '@repo/validation';
 import type {
+  RushClosedReason,
+  RushContactKind,
+  RushStageCategory,
+} from '@repo/validation';
+import type {
+  RushCandidateContact,
   RushCandidateNote,
   RushCandidateRating,
   RushCandidateTag,
+  RushSettingsRow,
   RushStage,
   RushTag,
 } from '../entities/rush-pipeline.entity';
@@ -41,6 +47,11 @@ export interface IRushPipelineRepository {
   ): Promise<RushStage[]>;
 
   listCandidates(chapterId: string): Promise<RushCandidateRow[]>;
+  /** One candidate with the pipeline's columns, or null. */
+  findCandidate(
+    candidateId: string,
+    chapterId: string,
+  ): Promise<RushCandidateRow | null>;
   setCandidateStage(
     candidateId: string,
     chapterId: string,
@@ -95,4 +106,50 @@ export interface IRushPipelineRepository {
     body: string,
   ): Promise<RushCandidateNote>;
   deleteNote(noteId: string, chapterId: string): Promise<void>;
+
+  // Contacts, owner, follow-ups and settings (#5934) -------------------------
+
+  /** A candidate's logged contacts, newest day first. */
+  listContacts(
+    candidateId: string,
+    chapterId: string,
+  ): Promise<RushCandidateContact[]>;
+  createContact(input: {
+    candidateId: string;
+    chapterId: string;
+    loggedBy: string;
+    kind: RushContactKind;
+    contactedOn: string;
+    note: string | null;
+  }): Promise<RushCandidateContact>;
+  /**
+   * Moves the candidate's last contact to this one, only forward: a row
+   * whose `last_contact_on` is already later keeps it, so two contacts
+   * logged at once settle on the later day.
+   */
+  advanceLastContact(
+    candidateId: string,
+    chapterId: string,
+    contactedOn: string,
+    loggedBy: string,
+  ): Promise<void>;
+  /**
+   * Sets the owner. With `onlyIfOwnedBy`, the write lands only while the
+   * current owner is that value (`null`: unowned), so two claims at once
+   * leave one owner; `null` comes back for the one that lost.
+   */
+  setOwner(
+    candidateId: string,
+    chapterId: string,
+    ownerId: string | null,
+    onlyIfOwnedBy?: string | null,
+  ): Promise<RushCandidateRow | null>;
+  /** Sets the one open follow-up, or clears it with `null`. */
+  setFollowUp(
+    candidateId: string,
+    chapterId: string,
+    followUp: { on: string; note: string | null; userId: string } | null,
+  ): Promise<RushCandidateRow>;
+  findSettings(chapterId: string): Promise<RushSettingsRow | null>;
+  saveSettings(chapterId: string, staleDays: number): Promise<RushSettingsRow>;
 }

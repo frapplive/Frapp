@@ -23,7 +23,13 @@ const state = vi.hoisted(() => ({
   tags: [] as unknown[],
   notes: [] as unknown[],
   notesOptions: [] as ({ enabled?: boolean } | undefined)[],
+  contacts: [] as unknown[],
+  contactsOptions: [] as ({ enabled?: boolean } | undefined)[],
 }));
+const setOwner = vi.hoisted(() => vi.fn());
+const logContact = vi.hoisted(() => vi.fn());
+const setFollowUp = vi.hoisted(() => vi.fn());
+const clearFollowUp = vi.hoisted(() => vi.fn());
 const move = vi.hoisted(() => vi.fn());
 const rate = vi.hoisted(() => vi.fn());
 const vote = vi.hoisted(() => vi.fn());
@@ -42,6 +48,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       stages: STAGES,
       tags: state.tags,
       candidates: [state.candidate],
+      stale_days: 7,
     },
     isPending: false,
     isError: false,
@@ -68,6 +75,30 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useAddRushNote: () => ({ mutate: addNote, isPending: false }),
   useEditRushNote: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteRushNote: () => ({ mutate: deleteNote, isPending: false }),
+  useSetRushOwner: () => ({ mutate: setOwner, isPending: false }),
+  useChapterRoster: () => ({
+    data: [
+      { user_id: "viewer-1", display_name: "Viewer One" },
+      { user_id: "chris", display_name: "Chris Diaz" },
+      { user_id: "amy", display_name: "Amy Bell" },
+    ],
+  }),
+  useRushContacts: (_id: string, options?: { enabled?: boolean }) => {
+    state.contactsOptions.push(options);
+    return {
+      data: options?.enabled === false ? undefined : state.contacts,
+      isPending: false,
+      isError: false,
+      refetch: () => Promise.resolve(),
+    };
+  },
+  useLogRushContact: () => ({
+    mutateAsync: logContact,
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useSetRushFollowUp: () => ({ mutateAsync: setFollowUp, isPending: false }),
+  useClearRushFollowUp: () => ({ mutate: clearFollowUp, isPending: false }),
 }));
 
 vi.mock("@/lib/chapter-branding", async () => {
@@ -84,6 +115,14 @@ import { rushNotesMode } from "@repo/hooks";
 import { RUSH_NOTES_HEADING, RUSH_NOTES_WRITE_ONLY } from "./rush-notes";
 import { RushStars } from "./rush-stars";
 import { OptionSheet } from "@/components/option-sheet";
+import { DueDateField } from "@/components/tasks/due-date-field";
+import { RushLogContactSheet } from "./rush-log-contact-sheet";
+import { RushFollowUpSheet } from "./rush-follow-up-sheet";
+import { Redirect } from "expo-router";
+import {
+  openNotificationTarget,
+  resolveNotificationTarget,
+} from "@/lib/notifications/targets";
 
 const VIEW = ["members:view", "rush:view"];
 
@@ -121,6 +160,15 @@ const CANDIDATE = {
   tag_ids: ["t1"],
   viewer_rating: null,
   viewer_has_voted: false,
+  owner_id: null,
+  owner_name: null,
+  last_contact_on: null,
+  last_contact_by: null,
+  last_contact_by_name: null,
+  follow_up_on: null,
+  follow_up_note: null,
+  follow_up_user_id: null,
+  follow_up_user_name: null,
 };
 
 const TAGS = [
@@ -174,6 +222,15 @@ function button(tree: ReactTestRenderer, label: string) {
 }
 
 beforeEach(() => {
+  // A Tuesday.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 10, 24, 12));
+  dropAllKeptDrafts();
+  state.contacts = [];
+  state.contactsOptions = [];
+  for (const fn of [setOwner, logContact, setFollowUp, clearFollowUp]) {
+    fn.mockReset();
+  }
   vi.mocked(useLocalSearchParams).mockReturnValue({ candidateId: "cand-1" });
   state.permissions = VIEW;
   state.viewerId = "viewer-1";
@@ -496,5 +553,359 @@ describe("a prospect's screen (#5924)", () => {
         node.props.accessibilityLabel.startsWith("Back to "),
     );
     expect(back.props.accessibilityLabel).toBe("Back to Rush");
+  });
+});
+
+const ADD = [...VIEW, "rush:add"];
+const MANAGE = [...ADD, "rush:manage"];
+
+function pressables(tree: ReactTestRenderer, label: string) {
+  return tree.root.findAll(
+    (node) =>
+      (node.type as unknown) === "Pressable" &&
+      node.props.accessibilityLabel === label,
+  );
+}
+
+describe("contacts (#5934)", () => {
+  it("says when they were last contacted and by whom, or that nobody has", () => {
+    expect(screenText(render())).toContain("No contact logged yet");
+    state.candidate = {
+      ...CANDIDATE,
+      last_contact_on: "2026-11-20",
+      last_contact_by_name: "Chris Diaz",
+    };
+    expect(screenText(render())).toContain(
+      "Last contacted November 20 · by Chris Diaz",
+    );
+  });
+
+  it("offers Log contact only for rush:add, and never on the viewer's own record", () => {
+    expect(button(render(), "Log contact")).toHaveLength(0);
+    state.permissions = ADD;
+    expect(button(render(), "Log contact")).toHaveLength(1);
+    state.candidate = { ...CANDIDATE, user_id: "viewer-1" };
+    expect(button(render(), "Log contact")).toHaveLength(0);
+  });
+
+  it("logs a contact in two taps: Log contact, then the kind, for today", async () => {
+    state.permissions = ADD;
+    logContact.mockResolvedValue({});
+    const tree = render();
+    expect(tree.root.findAllByType(RushLogContactSheet)).toHaveLength(0);
+    act(() => button(tree, "Log contact")[0]!.props.onPress());
+    expect(tree.root.findAllByType(RushLogContactSheet)).toHaveLength(1);
+    await act(async () => pressables(tree, "Text")[0]!.props.onPress());
+    expect(logContact).toHaveBeenCalledTimes(1);
+    expect(logContact.mock.calls[0]![0]).toMatchObject({
+      candidateId: "cand-1",
+      kind: "text",
+      contactedOn: "2026-11-24",
+      note: undefined,
+      byName: "Viewer One",
+    });
+    // A second tap while the sheet slides down logs nothing more.
+    await act(async () => pressables(tree, "Call")[0]!.props.onPress());
+    expect(logContact).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes another day, back to the season's start, and a note, from the same sheet", async () => {
+    state.permissions = ADD;
+    logContact.mockResolvedValue({});
+    const tree = render();
+    act(() => button(tree, "Log contact")[0]!.props.onPress());
+    const day = tree.root
+      .findByType(RushLogContactSheet)
+      .findByType(DueDateField);
+    expect(day.props.latest).toBe("2026-11-24");
+    expect(day.props.earliest).toBe("2026-07-27");
+    act(() => day.props.onChange("2026-11-20"));
+    const note = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "BottomSheetTextInput" &&
+        node.props.accessibilityLabel === "Note",
+    );
+    expect(note.props.maxLength).toBe(500);
+    act(() => note.props.onChangeText("Coming to dinner Thursday"));
+    await act(async () => pressables(tree, "Call")[0]!.props.onPress());
+    expect(logContact.mock.calls[0]![0]).toMatchObject({
+      kind: "call",
+      contactedOn: "2026-11-20",
+      note: "Coming to dinner Thursday",
+    });
+  });
+
+  it("lists the history newest first, with a note under a contact when present", () => {
+    state.candidate = {
+      ...CANDIDATE,
+      last_contact_on: "2026-11-24",
+      last_contact_by_name: "Chris Diaz",
+    };
+    state.contacts = [
+      {
+        id: "k2",
+        candidate_id: "cand-1",
+        logged_by: "chris",
+        logged_by_name: "Chris Diaz",
+        kind: "text",
+        contacted_on: "2026-11-24",
+        note: "Said yes to dinner",
+        created_at: "",
+      },
+      {
+        id: "k1",
+        candidate_id: "cand-1",
+        logged_by: "amy",
+        logged_by_name: "Amy Bell",
+        kind: "event",
+        contacted_on: "2026-11-18",
+        created_at: "",
+      },
+    ];
+    const text = screenText(render());
+    expect(text).toContain("Contacts");
+    expect(text).toContain("Texted · Today · by Chris Diaz");
+    expect(text).toContain("Said yes to dinner");
+    expect(text).toContain("Saw at an event · November 18 · by Amy Bell");
+  });
+
+  it("doesn't read a history for a prospect nobody has reached", () => {
+    const text = screenText(render());
+    expect(text).not.toContain("Contacts");
+    expect(state.contactsOptions.every((o) => o?.enabled === false)).toBe(true);
+  });
+});
+
+describe("the owner (#5934)", () => {
+  it("reads No owner, with nothing to press, for a role that only looks", () => {
+    const tree = render();
+    expect(screenText(tree)).toContain("No owner");
+    expect(button(tree, "Claim Jordan Reyes")).toHaveLength(0);
+    expect(sheet(tree, "Owner")).toBeUndefined();
+  });
+
+  it("lets rush:add claim an unowned prospect", () => {
+    state.permissions = ADD;
+    const tree = render();
+    expect(sheet(tree, "Owner")).toBeUndefined();
+    act(() => button(tree, "Claim Jordan Reyes")[0]!.props.onPress());
+    expect(setOwner).toHaveBeenCalledWith(
+      { candidateId: "cand-1", ownerId: "viewer-1", ownerName: "Viewer One" },
+      expect.anything(),
+    );
+  });
+
+  it("lets rush:add let go of their own, and do nothing with someone else's", () => {
+    state.permissions = ADD;
+    state.candidate = { ...CANDIDATE, owner_id: "viewer-1", owner_name: "Me" };
+    let tree = render();
+    expect(screenText(tree)).toContain("You");
+    act(() => button(tree, "Let go of Jordan Reyes")[0]!.props.onPress());
+    expect(setOwner).toHaveBeenCalledWith(
+      { candidateId: "cand-1", ownerId: null, ownerName: null },
+      expect.anything(),
+    );
+
+    state.candidate = {
+      ...CANDIDATE,
+      owner_id: "chris",
+      owner_name: "Chris Diaz",
+    };
+    tree = render();
+    expect(screenText(tree)).toContain("Chris Diaz");
+    expect(button(tree, "Let go of Jordan Reyes")).toHaveLength(0);
+    expect(button(tree, "Claim Jordan Reyes")).toHaveLength(0);
+  });
+
+  it("says in plain words when someone claimed them first", () => {
+    state.permissions = ADD;
+    const tree = render();
+    vi.mocked(Alert.alert).mockClear();
+    act(() => button(tree, "Claim Jordan Reyes")[0]!.props.onPress());
+    act(() => setOwner.mock.calls[0]![1].onError({ status: 409 }));
+    expect(vi.mocked(Alert.alert)).toHaveBeenCalledWith(
+      "Couldn't claim them",
+      "Someone else claimed them first.",
+    );
+  });
+
+  it("gives rush:manage a searchable picker of the members, nobody and themself first", () => {
+    state.permissions = MANAGE;
+    state.candidate = {
+      ...CANDIDATE,
+      owner_id: "chris",
+      owner_name: "Chris Diaz",
+    };
+    const tree = render();
+    // No Claim or Let go beside it: the picker holds both.
+    expect(button(tree, "Claim Jordan Reyes")).toHaveLength(0);
+    const picker = sheet(tree, "Owner")!;
+    expect(picker.props.searchPlaceholder).toBe("Find a member");
+    expect(picker.props.selected).toBe("chris");
+    expect(picker.props.options.map((o: { label: string }) => o.label)).toEqual(
+      ["No owner", "You", "Amy Bell", "Chris Diaz"],
+    );
+    act(() => picker.props.onSelect("amy"));
+    expect(setOwner).toHaveBeenCalledWith(
+      { candidateId: "cand-1", ownerId: "amy", ownerName: "Amy Bell" },
+      expect.anything(),
+    );
+    act(() => picker.props.onSelect(null));
+    expect(setOwner).toHaveBeenLastCalledWith(
+      { candidateId: "cand-1", ownerId: null, ownerName: null },
+      expect.anything(),
+    );
+  });
+
+  it("says when the member picked can't work prospects", () => {
+    state.permissions = MANAGE;
+    const tree = render();
+    vi.mocked(Alert.alert).mockClear();
+    act(() => sheet(tree, "Owner")!.props.onSelect("amy"));
+    act(() => setOwner.mock.calls[0]![1].onError({ status: 400 }));
+    expect(vi.mocked(Alert.alert).mock.calls[0]![1]).toMatch(
+      /can't work prospects/,
+    );
+  });
+});
+
+describe("the follow-up (#5934)", () => {
+  const SET = {
+    ...CANDIDATE,
+    follow_up_on: "2026-11-26",
+    follow_up_note: "invite to house dinner",
+    follow_up_user_id: "chris",
+    follow_up_user_name: "Chris Diaz",
+  };
+
+  it("says its day, what to do, and who it's for when it isn't the viewer", () => {
+    state.candidate = SET;
+    let text = screenText(render());
+    expect(text).toContain("Follow-up Thursday, invite to house dinner");
+    expect(text).toContain("For Chris Diaz");
+    state.candidate = { ...SET, follow_up_user_id: "viewer-1" };
+    text = screenText(render());
+    expect(text).not.toContain("For ");
+  });
+
+  it("is read-only without rush:add, and absent when none is set", () => {
+    state.candidate = SET;
+    let tree = render();
+    expect(
+      pressables(tree, "Follow-up Thursday, invite to house dinner"),
+    ).toHaveLength(0);
+    state.candidate = { ...CANDIDATE };
+    tree = render();
+    expect(screenText(tree)).not.toContain("Follow-up");
+  });
+
+  it("is set from a sheet: a day, what to do, for the owner by default", async () => {
+    state.permissions = ADD;
+    state.candidate = {
+      ...CANDIDATE,
+      owner_id: "chris",
+      owner_name: "Chris Diaz",
+    };
+    setFollowUp.mockResolvedValue({});
+    const tree = render();
+    act(() => pressables(tree, "Follow-up")[0]!.props.onPress());
+    const followUp = tree.root.findByType(RushFollowUpSheet);
+    expect(screenText(tree)).toContain("For Chris Diaz");
+    const day = followUp.findByType(DueDateField);
+    // Tomorrow by default; up to 180 days ahead.
+    expect(day.props.value).toBe("2026-11-25");
+    expect(day.props.latest).toBe("2027-05-23");
+    act(() => day.props.onChange("2026-11-26"));
+    const what = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "BottomSheetTextInput" &&
+        node.props.accessibilityLabel === "What to do",
+    );
+    expect(what.props.maxLength).toBe(120);
+    act(() => what.props.onChangeText("Invite to house dinner"));
+    await act(async () =>
+      pressables(tree, "Save follow-up")[0]!.props.onPress(),
+    );
+    expect(setFollowUp).toHaveBeenCalledWith({
+      candidateId: "cand-1",
+      dueOn: "2026-11-26",
+      note: "Invite to house dinner",
+      forUserId: undefined,
+    });
+  });
+
+  it("keeps a set follow-up with whoever it's for, and clears it", () => {
+    state.permissions = ADD;
+    state.candidate = SET;
+    const tree = render();
+    act(() =>
+      pressables(
+        tree,
+        "Follow-up Thursday, invite to house dinner",
+      )[0]!.props.onPress(),
+    );
+    const followUp = tree.root.findByType(RushFollowUpSheet);
+    expect(followUp.findByType(DueDateField).props.value).toBe("2026-11-26");
+    act(() => button(tree, "Clear follow-up")[0]!.props.onPress());
+    expect(clearFollowUp).toHaveBeenCalledWith("cand-1", expect.anything());
+  });
+
+  it("takes none on a closed prospect", () => {
+    state.permissions = ADD;
+    state.candidate = {
+      ...CANDIDATE,
+      stage: "closed",
+      closed_reason: "no_response",
+    };
+    expect(pressables(render(), "Follow-up")).toHaveLength(0);
+  });
+});
+
+describe("opened cold from a follow-up or stale push (#5934)", () => {
+  const PUSH = { target: { screen: "rush", candidateId: "cand-1" } };
+
+  it("resolves to this prospect's screen, opened on its own", () => {
+    const target = resolveNotificationTarget(PUSH);
+    expect(target).toEqual({
+      pathname: "/rush-prospect",
+      params: { candidateId: "cand-1" },
+    });
+    const router = { push: vi.fn(), replace: vi.fn(), dismissTo: vi.fn() };
+    openNotificationTarget(router, target);
+    expect(router.push).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws the prospect, with a way back to the list under the chapter's word", () => {
+    state.permissions = ADD;
+    vi.mocked(useLocalSearchParams).mockReturnValue(
+      resolveNotificationTarget(PUSH).params!,
+    );
+    const tree = render();
+    expect(textHeadings(tree).map((node) => node.children.join(""))).toEqual([
+      "Jordan Reyes",
+    ]);
+    expect(button(tree, "Log contact")).toHaveLength(1);
+    const back = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityLabel === "Back to Rush",
+    );
+    expect(back).toBeTruthy();
+  });
+
+  it("sends a viewer who can't open recruitment back to You", () => {
+    state.permissions = ["members:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue(
+      resolveNotificationTarget(PUSH).params!,
+    );
+    const tree = render();
+    expect(tree.root.findAllByType(Redirect as never)).toHaveLength(1);
+  });
+
+  it("says the prospect is gone when the push outlived them", () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({ candidateId: "gone" });
+    expect(screenText(render())).toContain(
+      "This prospect is no longer on the list.",
+    );
   });
 });

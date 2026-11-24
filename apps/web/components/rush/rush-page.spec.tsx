@@ -1,17 +1,27 @@
+import { localIsoDate } from "@repo/formatting";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { shiftRushDayKey } from "@repo/validation";
 
-const { permissions, pipeline, moveMutate, moduleOn, vocabulary } = vi.hoisted(
-  () => ({
-    permissions: { current: ["*"] as string[] },
-    pipeline: { current: null as unknown },
-    moveMutate: vi.fn(),
-    moduleOn: { current: true },
-    vocabulary: { current: undefined as unknown },
-  }),
-);
+const {
+  permissions,
+  pipeline,
+  moveMutate,
+  moduleOn,
+  vocabulary,
+  searchParams,
+} = vi.hoisted(() => ({
+  permissions: { current: ["*"] as string[] },
+  pipeline: { current: null as unknown },
+  moveMutate: vi.fn(),
+  moduleOn: { current: true },
+  vocabulary: { current: undefined as unknown },
+  searchParams: { current: new URLSearchParams() },
+}));
+
+const TODAY = localIsoDate(new Date());
 
 const stage = (
   key: string,
@@ -40,20 +50,40 @@ const STAGES = [
   stage("closed", "Closed", "closed"),
 ];
 
-const candidate = (id: string, name: string, stageKey = "new") => ({
+const candidate = (
+  id: string,
+  name: string,
+  stageKey = "new",
+  extra: Record<string, unknown> = {},
+) => ({
   id,
   display_name: name,
   user_id: null,
   stage: stageKey,
-  closed_reason: null,
+  closed_reason: stageKey === "closed" ? "not_interested" : null,
   bid_status: "none",
   created_by: "u-1",
   created_by_name: "Moiz Steenhuis",
   origin: "manual" as const,
-  created_at: "2026-11-20T12:00:00Z",
+  created_at: `${TODAY}T12:00:00Z`,
   tag_ids: [],
   viewer_rating: null,
   viewer_has_voted: false,
+  owner_id: null,
+  owner_name: null,
+  last_contact_on: null,
+  last_contact_by: null,
+  last_contact_by_name: null,
+  follow_up_on: null,
+  follow_up_note: null,
+  follow_up_user_id: null,
+  follow_up_user_name: null,
+  ...extra,
+});
+
+/** Added `days` ago, so with no contact they go stale after 7. */
+const addedDaysAgo = (days: number) => ({
+  created_at: `${shiftRushDayKey(TODAY, -days)}T12:00:00Z`,
 });
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -80,6 +110,16 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useEditRushNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteRushNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAddRushProspect: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useChapterRoster: () => ({ data: [] }),
+  useRushContacts: () => ({ data: [], isPending: false, isError: false }),
+  useLogRushContact: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetRushOwner: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetRushFollowUp: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useClearRushFollowUp: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParams.current,
 }));
 
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
@@ -139,12 +179,14 @@ beforeEach(() => {
   pipeline.current = {
     stages: STAGES,
     tags: [],
+    stale_days: 7,
     candidates: [
       candidate("a", "Jake Smith"),
       candidate("b", "Owen Park", "contacted"),
       candidate("c", "Leo Grant", "closed"),
     ],
   };
+  searchParams.current = new URLSearchParams();
   window.localStorage.clear();
 });
 
@@ -272,6 +314,7 @@ describe("the recruitment page", () => {
     pipeline.current = {
       stages: [...STAGES, stage("dropped", "Dropped", "closed", 1)],
       tags: [],
+      stale_days: 7,
       candidates: [candidate("a", "Jake Smith")],
     };
     const { container } = renderPage();
@@ -287,7 +330,12 @@ describe("the recruitment page", () => {
 
   it("names itself in the chapter's word when empty, with how to add one", () => {
     vocabulary.current = { vocabulary: { recruitment: "Intake" } };
-    pipeline.current = { stages: STAGES, tags: [], candidates: [] };
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [],
+    };
     renderPage();
     expect(
       screen.getByText(
@@ -323,5 +371,202 @@ describe("the recruitment page", () => {
     expect(
       screen.queryByRole("columnheader", { name: /Rating/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("follow-ups on the recruitment page (#5934)", () => {
+  const due = (id: string, name: string, stageKey = "new") =>
+    candidate(id, name, stageKey, {
+      follow_up_on: TODAY,
+      follow_up_note: "invite to house dinner",
+      follow_up_user_id: "me",
+      follow_up_user_name: "Chris Lee",
+    });
+
+  it("says how many follow-ups are due today for the viewer", () => {
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [
+        due("a", "Jake Smith"),
+        candidate("b", "Owen Park", "contacted", {
+          follow_up_on: shiftRushDayKey(TODAY, -2),
+          follow_up_user_id: "me",
+        }),
+        // Someone else's, and one still ahead: not counted.
+        candidate("c", "Leo Grant", "new", {
+          follow_up_on: TODAY,
+          follow_up_user_id: "u-2",
+        }),
+        candidate("d", "Ray Diaz", "new", {
+          follow_up_on: shiftRushDayKey(TODAY, 3),
+          follow_up_user_id: "me",
+        }),
+      ],
+    };
+    renderPage();
+    expect(
+      screen.getByText("4 prospects · 2 follow-ups due today"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the follow-ups off the count when none are due", () => {
+    renderPage();
+    expect(screen.getByText("2 prospects")).toBeInTheDocument();
+  });
+
+  it("opens on Follow up when the viewer has some, and All shows the rest", async () => {
+    const user = userEvent.setup();
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [
+        due("a", "Jake Smith"),
+        // Owned by the viewer and gone quiet: theirs to follow up.
+        candidate("b", "Owen Park", "contacted", {
+          owner_id: "me",
+          owner_name: "Chris Lee",
+          ...addedDaysAgo(9),
+        }),
+        candidate("c", "Leo Grant"),
+      ],
+    };
+    renderPage();
+    expect(screen.getByRole("tab", { name: "Follow up" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Jake Smith")).toBeInTheDocument();
+    expect(screen.getByText("Owen Park")).toBeInTheDocument();
+    expect(screen.queryByText("Leo Grant")).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "All" }));
+    expect(screen.getByText("Leo Grant")).toBeInTheDocument();
+  });
+
+  it("opens on All when the viewer has nothing to follow up", () => {
+    renderPage();
+    expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("says what Follow up holds once it is empty", () => {
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [due("a", "Jake Smith")],
+    };
+    const { rerender } = renderPage();
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [candidate("a", "Jake Smith", "contacted")],
+    };
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <RushPage />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(/^Nothing to follow up on\./)).toBeInTheDocument();
+  });
+
+  it("gives no Follow up switch to a role that can't work prospects", () => {
+    permissions.current = MEMBER.filter((key) => key !== "rush:add");
+    renderPage();
+    expect(screen.queryByRole("tab", { name: "Follow up" })).toBeNull();
+  });
+
+  it("shows the owner and the follow-up on a card", () => {
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [
+        candidate("a", "Jake Smith", "new", {
+          owner_id: "u-2",
+          owner_name: "Ana Ruiz",
+          follow_up_on: shiftRushDayKey(TODAY, 3),
+          follow_up_user_id: "u-2",
+        }),
+        candidate("b", "Owen Park", "contacted", {
+          follow_up_on: TODAY,
+          follow_up_user_id: "u-2",
+        }),
+      ],
+    };
+    const { container } = renderPage();
+    const card = container.querySelector('[data-rush-card="a"]')!;
+    expect(card.textContent).toMatch(/Owned by Ana Ruiz · Follow-up /);
+    const dueCard = container.querySelector('[data-rush-card="b"]')!;
+    expect(dueCard.textContent).toContain("No owner");
+    expect(dueCard.textContent).toContain("Follow-up today");
+  });
+
+  it("flags a prospect gone quiet, but never a closed one", () => {
+    pipeline.current = {
+      stages: STAGES,
+      tags: [],
+      stale_days: 7,
+      candidates: [
+        candidate("a", "Jake Smith", "new", addedDaysAgo(8)),
+        candidate("b", "Owen Park", "new", addedDaysAgo(3)),
+        candidate("c", "Leo Grant", "closed", {
+          ...addedDaysAgo(30),
+          follow_up_on: TODAY,
+        }),
+      ],
+    };
+    const { container } = renderPage();
+    expect(
+      container.querySelector('[data-rush-card="a"]')!.textContent,
+    ).toContain("Needs follow-up");
+    expect(
+      container.querySelector('[data-rush-card="b"]')!.textContent,
+    ).not.toContain("Needs follow-up");
+    const closed = container.querySelector('[data-rush-card="c"]')!;
+    expect(closed.textContent).not.toContain("Needs follow-up");
+    expect(closed.textContent).not.toContain("Follow-up");
+  });
+
+  it("finds a prospect by name on the list", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: "List" }));
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search prospects by name" }),
+      "owe",
+    );
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Owen Park")).toBeInTheDocument();
+    expect(within(table).queryByText("Jake Smith")).toBeNull();
+    await user.clear(
+      screen.getByRole("searchbox", { name: "Search prospects by name" }),
+    );
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search prospects by name" }),
+      "zzz",
+    );
+    expect(screen.getByText('No prospects match "zzz".')).toBeInTheDocument();
+  });
+
+  it("shows owner and follow-up columns on the list", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: "List" }));
+    const table = screen.getByRole("table");
+    expect(
+      within(table).getByRole("columnheader", { name: /Owner/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("columnheader", { name: /Follow-up/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the prospect a notification links to", async () => {
+    searchParams.current = new URLSearchParams("prospect=b");
+    renderPage();
+    expect(
+      await screen.findByRole("heading", { name: "Owen Park" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No contact logged yet")).toBeInTheDocument();
   });
 });

@@ -52,6 +52,7 @@ export * from "./read-cursor";
 export * from "./read-receipts";
 export * from "./rush-card";
 export * from "./rush-pipeline";
+export * from "./rush-work";
 export * from "./scheduled-message-times";
 export * from "./search-analytics";
 export * from "./service-entry-card";

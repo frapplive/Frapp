@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { GoogleDriveStatus } from "@repo/hooks";
 import { DriveFolderPanel, heldCopies } from "./drive-folder-panel";
 import type { ChapterDocument } from "./document-types";
+import { DrivePickerError } from "@/lib/google-drive-picker";
 
 const EMAIL = "frapp-docs@signet-frapp.iam.gserviceaccount.com";
 let status: GoogleDriveStatus | undefined;
@@ -422,6 +423,29 @@ describe("DriveFolderPanel", () => {
       );
       expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("says why the picker stopped when it couldn't display", async () => {
+      status = pickerStatus();
+      pickDriveFolder.mockRejectedValue(
+        new DrivePickerError(
+          "Google's folder picker didn't display properly. Reload the page and try again.",
+        ),
+      );
+      const user = userEvent.setup();
+      render(<DriveFolderPanel gate={gate} />);
+      await user.click(
+        screen.getByRole("button", { name: "Connect Google Drive" }),
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: "Choose a folder in Google Drive",
+        }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Google's folder picker didn't display properly. Reload the page and try again.",
+      );
+      expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     });
 
     it("shows the server's reason a picked folder was refused", async () => {
