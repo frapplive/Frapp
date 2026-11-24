@@ -98,7 +98,7 @@ Stage, fit rating and bid status are three separate things, because a chapter ac
 Built in #5934 (slice 2 of #5833). The reasoning and the recruitment week they're checked against: [`ifc-recruitment.md` § Contact tracking and follow-ups](ifc-recruitment.md#contact-tracking-and-follow-ups).
 
 - **Log a contact** (`rush:add`): the kind (text, call, in person, social DM, email, at an event), the day (today by default; any day back to 120 days, never a later one), and an optional note of up to 500 characters. Who logged it is recorded. On the phone it is two taps from the prospect: Log contact, then the kind.
-  - The prospect's **last contact** is the newest logged day and who logged it ("Last contacted Tue · by Chris"). A contact dated earlier than the last one doesn't move it back.
+  - The prospect's **last contact** is the newest logged day and who logged it ("Last contacted Tuesday · by Chris"). A contact dated earlier than the last one doesn't move it back.
   - Logging any contact **clears the follow-up**.
   - A contact's note reads like a recruitment note: only with `rush:read_notes`, and never on a prospect linked to the reader. Everyone with `rush:view` sees that the contact happened. Nobody logs a contact with themself.
   - Contacts stay when the member who logged them deletes their account, under "Deleted User", as notes do.

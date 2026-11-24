@@ -210,7 +210,7 @@ export const RUSH_CONTACT_KIND_LABELS: Record<RushContactKind, string> = {
   event: "At an event",
 };
 
-/** Each kind as a history line reads: "Texted · Tue · by Chris". */
+/** Each kind as a history line reads: "Texted · Tuesday · by Chris". */
 export const RUSH_CONTACT_KIND_PAST: Record<RushContactKind, string> = {
   text: "Texted",
   call: "Called",
@@ -330,26 +330,35 @@ export function isRushFollowUpForViewer(
   );
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
 const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
+  "January",
+  "February",
+  "March",
+  "April",
   "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ] as const;
 
 /**
- * A recruitment day as the screens say it, relative to `today`: "Today",
- * "Yesterday", "Tomorrow", a weekday within the week either side ("Tue",
- * "Thu"), else "Nov 3".
+ * A recruitment day as the screens say it, relative to `today`, written out
+ * as the rulebook's § Words and dates asks (no "Thu", no "Nov 3"): "Today",
+ * "Yesterday", "Tomorrow", the weekday within the week either side
+ * ("Thursday"), else "November 3", with the year only when it differs.
  */
 export function formatRushDay(day: string, today: string): string {
   const diff = rushDaysBetween(today, day);
@@ -359,7 +368,8 @@ export function formatRushDay(day: string, today: string): string {
   const [y, m, d] = day.split("-").map(Number);
   const at = new Date(Date.UTC(y!, m! - 1, d!));
   if (diff > -7 && diff < 7) return WEEKDAYS[at.getUTCDay()]!;
-  return `${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
+  const monthDay = `${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
+  return day.slice(0, 4) === today.slice(0, 4) ? monthDay : `${monthDay}, ${y}`;
 }
 
 /**
