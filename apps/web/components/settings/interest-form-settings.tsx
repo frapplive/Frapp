@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import QRCode from "qrcode";
-import { Copy, Download, Plus } from "lucide-react";
+import { Check, Copy, Download, Plus } from "lucide-react";
 import {
   interestFormErrorCopy,
   useAddInterestFormLabel,
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/hooks/use-toast";
+import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { InterestFormQuestionsEditor } from "./interest-form-questions";
 
 /** The contacts picker's "nobody else" value. */
@@ -65,13 +66,44 @@ async function downloadQr(path: string, name: string): Promise<void> {
   link.click();
 }
 
-async function copyLink(path: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(formUrl(path));
-    toast({ title: COPY.copied });
-  } catch {
-    toast({ title: "Couldn't copy the link.", variant: "destructive" });
-  }
+/** Copies the full link, with the shared "Copied" state. */
+function CopyLinkButton({ path, name }: { path: string; name: string }) {
+  const { copied, copy } = useCopyToClipboard("Couldn't copy the link.");
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      aria-label={copied ? COPY.copied : `${COPY.copyLink}: ${name}`}
+      title={copied ? COPY.copied : COPY.copyLink}
+      onClick={() => void copy(formUrl(path))}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </Button>
+  );
+}
+
+/** Saves the QR code for a link as a PNG. */
+function QrButton({ path, name }: { path: string; name: string }) {
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      aria-label={`${COPY.downloadQr}: ${name}`}
+      title={COPY.downloadQr}
+      onClick={() =>
+        void downloadQr(path, name).catch(() =>
+          toast({
+            title: "Couldn't make the QR code.",
+            variant: "destructive",
+          }),
+        )
+      }
+    >
+      <Download className="h-4 w-4" />
+    </Button>
+  );
 }
 
 /**
@@ -173,26 +205,8 @@ function FormSettings({
                 <span className="truncate font-mono text-caption text-muted-foreground">
                   {formUrl(form.path).replace(/^https?:\/\//, "")}
                 </span>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={COPY.copyLink}
-                  title={COPY.copyLink}
-                  onClick={() => void copyLink(form.path)}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`${COPY.downloadQr}: ${COPY.defaultQr}`}
-                  title={COPY.downloadQr}
-                  onClick={() => void downloadQr(form.path, "interest-form")}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
+                <CopyLinkButton path={form.path} name={COPY.defaultQr} />
+                <QrButton path={form.path} name="interest-form" />
               </span>
             }
           />
@@ -361,26 +375,8 @@ function QrLabels({
               label={<span className="font-mono">{row.label}</span>}
               control={
                 <span className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`${COPY.copyLink}: ${row.label}`}
-                    title={COPY.copyLink}
-                    onClick={() => void copyLink(row.path)}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`${COPY.downloadQr}: ${row.label}`}
-                    title={COPY.downloadQr}
-                    onClick={() => void downloadQr(row.path, row.label)}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
+                  <CopyLinkButton path={row.path} name={row.label} />
+                  <QrButton path={row.path} name={row.label} />
                   {canManage ? (
                     <ActionMenuButton
                       label={`More for ${row.label}`}

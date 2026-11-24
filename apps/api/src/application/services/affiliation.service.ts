@@ -356,8 +356,9 @@ export class AffiliationService {
     if (!result.ok) throw refusal(result.reason);
     // Accepted: the chapter's interest-form PNMs join the council's master
     // list, as the consent text they agreed to said (#5977). Never throws.
+    // It runs after the answer: the officer doesn't wait on the emails.
     if (result.link.status === 'accepted') {
-      await this.interestForms.pushUpChapter(chapterId);
+      void this.interestForms.pushUpChapter(chapterId);
     }
     return linkView(result.link);
   }

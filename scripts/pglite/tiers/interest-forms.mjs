@@ -186,6 +186,73 @@ try {
   const wrong = await confirm(FORM_A, sent.id, "not-the-hash");
   const right = await confirm(FORM_A, sent.id, "code-hash");
 
+  // ── No school, first in the session: its path never reads the school
+  // branch's record (a fresh connection's first call must not fail) ──
+  const loneFirst = await submit(
+    FORM_LONE,
+    await verified(FORM_LONE, "anyone@gmail.com", "proof-l1"),
+    "proof-l1",
+    "Lee",
+    "Solo",
+  );
+  const loneAgain = await submit(
+    FORM_LONE,
+    await verified(FORM_LONE, "ANYONE@gmail.com", "proof-l2"),
+    "proof-l2",
+    "Lee",
+    "Solo",
+  );
+  // ── Ceilings ──
+  const startWith = (formId, email, ip, perAddress, perIp, cooldown) =>
+    fn(
+      `select public.start_interest_form_code($1, $2, 'salt', 'code-hash', $3, 600, 3600, $4, $5, $6)`,
+      [formId, email, ip, perAddress, perIp, cooldown],
+    );
+  const firstOfTwo = await startWith(
+    FORM_A,
+    "cap@fts-tier.edu",
+    "ip-cap",
+    6,
+    200,
+    60,
+  );
+  const cooldown = await startWith(
+    FORM_A,
+    "cap@fts-tier.edu",
+    "ip-cap",
+    6,
+    200,
+    60,
+  );
+  await startWith(FORM_A, "cap2@fts-tier.edu", "ip-cap-2", 2, 200, 0);
+  await startWith(FORM_A, "cap2@fts-tier.edu", "ip-cap-2", 2, 200, 0);
+  const addressCap = await startWith(
+    FORM_A,
+    "CAP2@fts-tier.edu",
+    "ip-cap-3",
+    2,
+    200,
+    0,
+  );
+  await startWith(FORM_A, "ipa@fts-tier.edu", "ip-busy", 6, 2, 0);
+  await startWith(FORM_A, "ipb@fts-tier.edu", "ip-busy", 6, 2, 0);
+  const ipCap = await startWith(FORM_A, "ipc@fts-tier.edu", "ip-busy", 6, 2, 0);
+  const tries = await start(FORM_A, "tries@fts-tier.edu");
+  for (let i = 0; i < 4; i += 1) await confirm(FORM_A, tries.id, "nope");
+  const exhausted = await confirm(FORM_A, tries.id, "nope");
+  const afterExhausted = await confirm(FORM_A, tries.id, "code-hash");
+  // A code or proof from one chapter's form does nothing on another's.
+  const crossSent = await start(FORM_B, "cross@fts-tier.edu");
+  const crossConfirm = await confirm(FORM_A, crossSent.id, "code-hash");
+  await confirm(FORM_B, crossSent.id, "code-hash", "proof-cross");
+  const crossSubmit = await submit(
+    FORM_A,
+    crossSent.id,
+    "proof-cross",
+    "Cross",
+    "Over",
+  );
+
   // ── The submission ──
   const noProof = await submit(FORM_A, sent.id, "wrong-proof", "Pat", "Doe");
   const first = await submit(FORM_A, sent.id, "proof-hash", "Pat", "Doe", {
@@ -194,6 +261,9 @@ try {
     phone: "5550001111",
   });
   const spent = await submit(FORM_A, sent.id, "proof-hash", "Pat", "Doe");
+  const phoneKept = await one(
+    `select phone, phone_shared from pnms where school_email = 'pat@fts-tier.edu'`,
+  );
   const afterFirst = await one(
     `select
        (select count(*)::int from pnms where school_id = $1) as pnms,
@@ -299,21 +369,6 @@ try {
     [CH_B],
   );
 
-  // ── No school ──
-  const loneFirst = await submit(
-    FORM_LONE,
-    await verified(FORM_LONE, "anyone@gmail.com", "proof-l1"),
-    "proof-l1",
-    "Lee",
-    "Solo",
-  );
-  const loneAgain = await submit(
-    FORM_LONE,
-    await verified(FORM_LONE, "ANYONE@gmail.com", "proof-l2"),
-    "proof-l2",
-    "Lee",
-    "Solo",
-  );
   const loneRows = await one(
     `select
        (select count(*)::int from rush_candidates where chapter_id = $1) as candidates,
@@ -321,6 +376,20 @@ try {
        (select count(*)::int from pnm_interests where chapter_id = $1) as interests`,
     [CH_LONE],
   );
+
+  // ── Replacing a form ──
+  const replaced = await one(
+    `select * from public.replace_interest_form($1, 'formtiera9', $2)`,
+    [CH_A, USER],
+  );
+  const afterReplace = await one(
+    `select
+       (select count(*)::int from chapter_interest_forms where chapter_id = $1 and replaced_at is null) as live,
+       (select is_open from chapter_interest_forms where slug = 'formtiera1') as old_open,
+       (select count(*)::int from chapter_interest_form_labels where form_id = $2) as labels`,
+    [CH_A, replaced.id],
+  );
+  const oldSlug = await start(FORM_A, "late@fts-tier.edu");
 
   const posture = (
     await db.query(`
@@ -342,7 +411,8 @@ try {
           ('public.submit_interest_form(uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[])'),
           ('public.push_up_chapter_form_interests(uuid)'),
           ('public.interest_form_push_target(uuid, uuid)'),
-          ('public.interest_form_school_for(uuid, text)')
+          ('public.interest_form_school_for(uuid, text)'),
+          ('public.replace_interest_form(uuid, text, uuid)')
         ) as f(name)
        where r.rolname in ('anon', 'authenticated')
          and has_function_privilege(r.rolname, f.name, 'execute')`)
@@ -350,6 +420,45 @@ try {
 
   const reason = (r) => (r.ok ? "ok" : r.reason);
   const checks = [
+    {
+      name: "the ceilings hold: a resend cooldown, per address (any case), per IP, and five tries a code",
+      got: [
+        reason(firstOfTwo),
+        reason(cooldown),
+        reason(addressCap),
+        reason(ipCap),
+        reason(exhausted),
+        reason(afterExhausted),
+      ],
+      want: [
+        "ok",
+        "cooldown",
+        "address_limit",
+        "ip_limit",
+        "too_many_attempts",
+        "too_many_attempts",
+      ],
+    },
+    {
+      name: "a code or proof from one chapter's form does nothing on another's",
+      got: [reason(crossConfirm), reason(crossSubmit)],
+      want: ["no_code", "bad_proof"],
+    },
+    {
+      name: "a phone given on one chapter's form is never shared school-wide",
+      got: phoneKept,
+      want: { phone: "5550001111", phone_shared: false },
+    },
+    {
+      name: "replacing a form keeps it open with its labels, and the old slug stops taking codes",
+      got: [replaced.slug, replaced.is_open, afterReplace, reason(oldSlug)],
+      want: [
+        "formtiera9",
+        true,
+        { live: 1, old_open: false, labels: 1 },
+        "form_closed",
+      ],
+    },
     {
       name: "one live form per chapter",
       got: /duplicate key/.test(secondLive),

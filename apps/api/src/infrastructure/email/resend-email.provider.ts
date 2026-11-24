@@ -123,11 +123,15 @@ function schoolCodeEmailText(params: SendSchoolCodeEmailParams): string {
 
 const EMAIL_WRAP_OPEN = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5"><p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>`;
 
-/** "123456 is your code for Phi Gamma Delta Tau Nu's interest form". */
+/**
+ * "123456 is your Frapp code". No chapter name: a chapter names itself, and
+ * the form sends to any address a stranger types, so its free text stays
+ * out of the subject a phishing attempt would borrow (as the invite's does).
+ */
 function interestFormCodeSubject(
   params: SendInterestFormCodeEmailParams,
 ): string {
-  return `${params.code} is your code for ${clipName(params.chapterName) ?? 'the'} interest form`;
+  return `${params.code} is your Frapp code`;
 }
 
 function interestFormCodeFootnote(

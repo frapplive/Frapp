@@ -23,7 +23,8 @@
 --    `start_interest_form_code`, `confirm_interest_form_code`,
 --    `submit_interest_form` (the whole submission in one transaction) and
 --    `push_up_chapter_form_interests` (a chapter's form PNMs join its
---    council's master list once the link is accepted).
+--    council's master list once the link is accepted), and
+--    `replace_interest_form`.
 --
 -- Posture: RLS on with no policies on every new table, as every rush table;
 -- the API reaches them through the service role. The public page reads a
@@ -162,6 +163,9 @@ create table if not exists public.interest_form_submissions (
   answers                jsonb not null default '{}'::jsonb
                          constraint interest_form_submissions_answers_shape
                          check (jsonb_typeof(answers) = 'object'),
+  questions              jsonb not null default '[]'::jsonb
+                         constraint interest_form_submissions_questions_shape
+                         check (jsonb_typeof(questions) = 'array'),
   referrer_text          text
                          constraint interest_form_submissions_referrer_len
                          check (referrer_text is null or char_length(referrer_text) between 1 and 200),
@@ -487,7 +491,9 @@ revoke all on function public.interest_form_push_target(uuid, uuid) from public,
 --   2. finds or creates the PNM: at a school through `upsert_verified_pnm`
 --      (the identity rules); with no school there is no school-wide record,
 --      and the chapter's own submissions are the match (§ Chapters with no
---      school);
+--      school). It never sets `pnms.phone_shared`: a phone given on one
+--      chapter's form is that chapter's (on the submission), never shared
+--      with every chapter the PNM is linked to;
 --   3. adds or refreshes the interest (`record_pnm_interest`), pushed up to
 --      the council when `interest_form_push_target` names one;
 --   4. creates the chapter's candidate in its first stage with `pnm_id`, or
@@ -527,6 +533,7 @@ declare
   v_pnm_id uuid;
   v_result jsonb;
   v_target record;
+  v_council_id uuid;
   v_pushed boolean := false;
   v_label text;
   v_candidate_id uuid;
@@ -571,7 +578,7 @@ begin
   if v_school_id is not null then
     v_result := public.upsert_verified_pnm(
       v_school_id, v_email, p_first_name, p_last_name, p_preferred_name,
-      p_class_year, p_phone, nullif(btrim(p_phone), '') is not null, 'interest_form', null
+      p_class_year, p_phone, null, 'interest_form', null
     );
     if not (v_result ->> 'ok')::boolean then
       return v_result;
@@ -584,6 +591,9 @@ begin
         v_pnm_id, v_form.chapter_id, 'interest_form', v_label, v_target.council_id, v_target.term
       );
       v_pushed := (v_result ->> 'ok')::boolean;
+      if v_pushed then
+        v_council_id := v_target.council_id;
+      end if;
     end if;
     if not v_pushed then
       v_result := public.record_pnm_interest(
@@ -660,12 +670,12 @@ begin
 
   insert into public.interest_form_submissions (
     form_id, chapter_id, pnm_id, candidate_id, email, first_name, last_name,
-    preferred_name, class_year, phone, answers, referrer_text, referrer_user_id,
+    preferred_name, class_year, phone, answers, questions, referrer_text, referrer_user_id,
     link_candidate_id, source_label, consent_version, consent_boxes
   ) values (
     p_form_id, v_form.chapter_id, v_pnm_id, v_candidate_id, v_email, btrim(p_first_name),
     btrim(p_last_name), nullif(btrim(p_preferred_name), ''), p_class_year,
-    nullif(btrim(p_phone), ''), coalesce(p_answers, '{}'::jsonb),
+    nullif(btrim(p_phone), ''), coalesce(p_answers, '{}'::jsonb), v_form.questions,
     nullif(btrim(p_referrer_text), ''), v_referrer_id, v_link_id, v_label,
     p_consent_version, p_consent_boxes
   )
@@ -679,7 +689,7 @@ begin
     'candidate_id', v_candidate_id,
     'candidate_created', v_candidate_created,
     'pushed_up', v_pushed,
-    'council_id', case when v_pushed then v_target.council_id end,
+    'council_id', v_council_id,
     'email', v_email,
     'display_name', left(v_name, 200)
   );
@@ -692,6 +702,49 @@ revoke all on function public.submit_interest_form(
 grant execute on function public.submit_interest_form(
   uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[]
 ) to service_role;
+
+-- Replaces the chapter's live form in one transaction: the old slug stops
+-- answering, and a new one takes its place with the same settings, open
+-- state and QR labels (ADR-27). Null when the chapter has no live form.
+create or replace function public.replace_interest_form(
+  p_chapter_id uuid,
+  p_slug       text,
+  p_actor      uuid
+)
+returns public.chapter_interest_forms
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_old public.chapter_interest_forms;
+  v_new public.chapter_interest_forms;
+begin
+  select * into v_old
+    from public.chapter_interest_forms
+   where chapter_id = p_chapter_id and replaced_at is null
+   for update;
+  if v_old.id is null then
+    return null;
+  end if;
+  update public.chapter_interest_forms
+     set replaced_at = now(), is_open = false, updated_at = now()
+   where id = v_old.id;
+  insert into public.chapter_interest_forms (
+    chapter_id, slug, is_open, blurb, questions, ask_referrer, contacts_group_id, created_by
+  ) values (
+    p_chapter_id, p_slug, v_old.is_open, v_old.blurb, v_old.questions,
+    v_old.ask_referrer, v_old.contacts_group_id, p_actor
+  )
+  returning * into v_new;
+  insert into public.chapter_interest_form_labels (form_id, label)
+  select v_new.id, label from public.chapter_interest_form_labels where form_id = v_old.id;
+  return v_new;
+end;
+$$;
+
+revoke all on function public.replace_interest_form(uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.replace_interest_form(uuid, text, uuid) to service_role;
 
 -- When the chapter's council link is accepted (or a season opens), the
 -- chapter's form PNMs at the council's school join the master list: the

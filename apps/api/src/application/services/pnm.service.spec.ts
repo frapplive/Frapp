@@ -485,6 +485,26 @@ describe('PnmService — seasons', () => {
     ).rejects.toThrow(ConflictException);
   });
 
+  it("opening a season pushes each accepted chapter's form PNMs up, once (#5977)", async () => {
+    const { service, pnms, interestForms } = setup();
+    pnms.findSeason.mockResolvedValueOnce(season('planned'));
+    pnms.updateSeason.mockResolvedValueOnce(season('open'));
+    await service.updateSeason(COUNCIL, TERM, { status: 'open' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(interestForms.pushUpChapter.mock.calls.map(([id]) => id)).toEqual([
+      CH_A,
+      CH_B,
+    ]);
+
+    // Saving an already-open season again pushes nothing.
+    interestForms.pushUpChapter.mockClear();
+    pnms.findSeason.mockResolvedValueOnce(season('open'));
+    pnms.updateSeason.mockResolvedValueOnce(season('open'));
+    await service.updateSeason(COUNCIL, TERM, { status: 'open' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(interestForms.pushUpChapter).not.toHaveBeenCalled();
+  });
+
   it('refuses a season that closes before it opens', async () => {
     const { service } = setup();
 

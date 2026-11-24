@@ -1429,6 +1429,34 @@ describe("dispatchRush — vote and bid", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("says several prospects share the name, rather than none match (#5977)", async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: {
+        code: "rush.candidate.several_match",
+        message: "Several prospects match",
+        candidate_ids: ["a", "b"],
+      },
+      response: { status: 409 },
+    });
+    const post = vi.fn();
+    const ctx: ChatActionContext = {
+      ...buildCtx(post),
+      apiClient: {
+        POST: post,
+        GET: get,
+      } as unknown as ChatActionContext["apiClient"],
+    };
+
+    const result = await dispatchRushVoteCmd(ctx, "vote Jordan Ray");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Several prospects have that name. Open Recruitment to pick one.",
+    });
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("extends a bid by name without a placeholder", async () => {
     const get = vi.fn().mockResolvedValue({
       data: { id: "cand-1" },

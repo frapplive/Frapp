@@ -68,6 +68,8 @@ export interface InterestFormSubmission {
   phone: string | null;
   /** Answers keyed by question id, as `normalizeFormAnswers` stores them. */
   answers: Record<string, string | string[]>;
+  /** The questions as the form asked them when this was sent. */
+  questions: FormQuestion[];
   referrer_text: string | null;
   referrer_user_id: string | null;
   link_candidate_id: string | null;

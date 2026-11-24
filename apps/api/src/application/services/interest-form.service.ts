@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -26,19 +26,22 @@ import {
   INTEREST_FORM_CONSENT_VERSION,
   INTEREST_FORM_LABEL_PATTERN,
   INTEREST_FORM_LABELS_MAX,
+  INTEREST_FORM_PHONE_MAX_LENGTH,
+  INTEREST_FORM_PHONE_MIN_LENGTH,
   INTEREST_FORM_PROOF_TTL_SECONDS,
   INTEREST_FORM_QUESTIONS_MAX,
   INTEREST_FORM_REFUSAL,
   INTEREST_FORM_REFUSAL_COPY,
+  INTEREST_FORM_SETTINGS_COPY,
   INTEREST_FORM_COPY,
   interestFormConsentText,
   interestFormPath,
   interestFormSensitiveLine,
   interestFormSensitiveTopic,
-  interestFormWrongDomainLine,
   isPlainSchoolEmail,
   normalizeInterestFormLabel,
   schoolRateLimitedLine,
+  schoolWrongDomainLine,
   type ConsentRun,
 } from '@repo/validation';
 import { orgHidingGreekLettersIn } from '@repo/org-archetypes';
@@ -77,7 +80,9 @@ import {
 } from '#domain/utils/form-card-rules';
 import { resolveAppOrigin } from '../../infrastructure/email/invite-link.util';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
+import { EMAIL_SEND_CONCURRENCY, mapWithConcurrency } from './email-send-pool';
 import { NotificationService } from './notification.service';
+import { hashCodeIp, hashSchoolCode } from './school.service';
 import { RbacService } from './rbac.service';
 
 /** The officer's view of the form on the Recruitment module page. */
@@ -172,31 +177,41 @@ export interface CandidateFormView {
   answers: { question: string; answer: string }[];
 }
 
-/** A salted SHA-256, hex: the code with its row's salt, a proof with none. */
-export function hashInterestFormSecret(salt: string, value: string): string {
-  return createHash('sha256').update(`${salt}:${value}`).digest('hex');
-}
+/**
+ * A salted SHA-256, hex: the code with its row's salt, a proof with its
+ * verification's id. #5929's school code hash, one rule for both.
+ */
+export const hashInterestFormSecret = hashSchoolCode;
 
-/** The IP the ceilings count by, hashed; null when Express has none. */
+/** The IP the form's ceilings count by, hashed (`hashCodeIp`'s caveat holds). */
 export function hashInterestFormIp(ip: string | undefined): string | null {
-  const value = ip?.trim();
-  if (!value) return null;
-  return createHash('sha256').update(`interest-form-ip:${value}`).digest('hex');
+  return hashCodeIp(ip, 'interest-form-ip');
 }
 
 /** A form slug: 10 characters a printed QR code and a phone both read cleanly. */
 const SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const SLUG_LENGTH = 10;
 
+const SLUG_DIGITS = '23456789';
+
+/**
+ * Always holds a digit, so analytics never mistakes the slug for a screen
+ * name (`SCREEN_SEGMENT` in `@repo/observability`'s `analytics-path.ts`
+ * keeps an all-letter segment) and records `/f/[id]`.
+ */
 export function mintInterestFormSlug(): string {
-  let slug = '';
+  const chars: string[] = [];
   for (let i = 0; i < SLUG_LENGTH; i += 1) {
-    slug += SLUG_ALPHABET[randomInt(0, SLUG_ALPHABET.length)];
+    chars.push(SLUG_ALPHABET[randomInt(0, SLUG_ALPHABET.length)]);
   }
-  return slug;
+  chars[randomInt(0, SLUG_LENGTH)] =
+    SLUG_DIGITS[randomInt(0, SLUG_DIGITS.length)];
+  return chars.join('');
 }
 
-const PROOF_SHAPE = /^([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/;
+/** `<verification uuid>.<43-character secret>`; anything else is refused before the database. */
+const PROOF_SHAPE =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([A-Za-z0-9_-]{43})$/;
 const SLUG_SHAPE = /^[a-z0-9]{8,32}$/;
 
 function refused(
@@ -402,8 +417,9 @@ export class InterestFormService {
       candidateId,
     );
     if (!submission) return null;
-    const form = await this.forms.findLiveForm(chapterId);
-    const questions = form?.questions ?? [];
+    // The questions as the PNM saw them: an officer may have since retitled,
+    // retyped or removed one, and the answers belong to the asked words.
+    const questions = submission.questions ?? [];
     const referrer = submission.referrer_user_id
       ? await this.users.findById(submission.referrer_user_id)
       : null;
@@ -425,8 +441,7 @@ export class InterestFormService {
   }
 
   /**
-   * After a chapter's council link is accepted, a council verified or a
-   * season opened: the chapter's form PNMs join the master list, and each
+   * After a chapter's council link is accepted or a season opened: the chapter's form PNMs join the master list, and each
    * is emailed that their details went to the council (§ Before the
    * chapter's council link is accepted). Never throws: the step that
    * triggered it has already happened.
@@ -440,15 +455,22 @@ export class InterestFormService {
         this.chapters.findById(result.council_id),
       ]);
       if (chapter && council) {
-        await Promise.all(
-          result.pushed.map((pnm) =>
+        const sent = await mapWithConcurrency(
+          result.pushed,
+          EMAIL_SEND_CONCURRENCY,
+          (pnm) =>
             this.email.sendInterestFormPushedUpEmail({
               to: pnm.email,
               chapterName: chapter.name,
               councilName: council.name,
             }),
-          ),
         );
+        const failed = sent.filter((ok) => !ok).length;
+        if (failed > 0) {
+          this.logger.warn(
+            `${failed} of ${sent.length} push-up emails did not go out (chapter ${chapterId})`,
+          );
+        }
       }
       return result.pushed.length;
     } catch (error) {
@@ -543,7 +565,7 @@ export class InterestFormService {
           const place = await this.forms.findPlace(chapter.id);
           throw new BadRequestException({
             code: INTEREST_FORM_REFUSAL.wrongDomain,
-            message: interestFormWrongDomainLine(
+            message: schoolWrongDomainLine(
               place.schools[0]?.name ?? 'school',
               place.schools.flatMap((row) => row.domains),
             ),
@@ -675,6 +697,19 @@ export class InterestFormService {
     if (!proof) throw badProof();
     const [, verificationId, secret] = proof;
 
+    // Checked on the trimmed value, as stored: a phone counts digits.
+    const phone = input.phone?.trim() || null;
+    if (
+      phone &&
+      (phone.replace(/\D/g, '').length < INTEREST_FORM_PHONE_MIN_LENGTH ||
+        phone.length > INTEREST_FORM_PHONE_MAX_LENGTH)
+    ) {
+      throw new BadRequestException({
+        code: INTEREST_FORM_REFUSAL.invalidAnswers,
+        message: INTEREST_FORM_COPY.phoneInvalid,
+      });
+    }
+
     const checked = normalizeFormAnswers(form.questions, input.answers ?? {});
     if ('error' in checked) {
       throw new BadRequestException({
@@ -691,7 +726,7 @@ export class InterestFormService {
       lastName: input.last_name.trim(),
       preferredName: input.preferred_name?.trim() || null,
       classYear: input.class_year ?? null,
-      phone: input.phone?.trim() || null,
+      phone,
       answers: checked.answers,
       referrerText: form.ask_referrer ? input.referrer?.trim() || null : null,
       sourceLabel: input.source_label?.trim() || null,
@@ -891,7 +926,7 @@ export class InterestFormService {
     if (!chapterTakesInterest(chapter)) {
       throw new ConflictException({
         code: INTEREST_FORM_REFUSAL.notOffered,
-        message: INTEREST_FORM_SETTINGS_NPHC,
+        message: INTEREST_FORM_SETTINGS_COPY.nphc,
       });
     }
     return this.liveForm(chapterId, actor);
@@ -913,9 +948,6 @@ export class InterestFormService {
     return { form, chapter };
   }
 }
-
-const INTEREST_FORM_SETTINGS_NPHC =
-  "Interest forms aren't offered for NPHC chapters, whose intake works differently.";
 
 function badProof(): BadRequestException {
   return new BadRequestException({

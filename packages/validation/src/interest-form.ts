@@ -251,9 +251,6 @@ export const INTEREST_FORM_COPY = {
   agreeRequired: "Tick the box to agree before you send.",
   answerRequired: "Answer this question.",
   doneTitle: "You're on the list",
-  privacy: "Privacy Policy",
-  terms: "Terms",
-  getTheApp: "Get the app",
 } as const;
 
 export const INTEREST_FORM_REFUSAL_COPY = {
@@ -267,24 +264,6 @@ export const INTEREST_FORM_REFUSAL_COPY = {
     "This chapter's school isn't set up to check email addresses yet.",
   consentRequired: "Tick the box to agree before you send.",
 } as const;
-
-/** After a code goes out. */
-export function interestFormCodeSentLine(email: string): string {
-  return `Enter the ${INTEREST_FORM_CODE_LENGTH}-digit code we sent to ${email}.`;
-}
-
-/** The refusal for an address off the chapter's school domains. */
-export function interestFormWrongDomainLine(
-  schoolName: string,
-  domains: readonly string[],
-): string {
-  const shown = domains.map((domain) => `@${domain}`);
-  const list =
-    shown.length <= 1
-      ? (shown[0] ?? "your school's address")
-      : `${shown.slice(0, -1).join(", ")} or ${shown[shown.length - 1]}`;
-  return `Use your ${schoolName} email, ending in ${list}.`;
-}
 
 /** After submitting. */
 export function interestFormDoneLine(chapterName: string): string {

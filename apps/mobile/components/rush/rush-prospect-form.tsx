@@ -1,4 +1,4 @@
-import { Linking } from "react-native";
+import { Alert, Linking } from "react-native";
 import { useCandidateForm } from "@repo/hooks";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 
@@ -18,6 +18,12 @@ export function RushProspectForm({
   const form = useCandidateForm(candidateId, { enabled: fromForm });
   const submission = form.data;
   if (!fromForm || !submission) return null;
+  // A phone with no mail app refuses a mailto: link; say so rather than
+  // leaving the tap dead.
+  const open = (url: string) =>
+    void Linking.openURL(url).catch(() =>
+      Alert.alert("Couldn't open that", "Copy it from here instead."),
+    );
   return (
     <>
       <SectionHeader>Interest form</SectionHeader>
@@ -26,14 +32,16 @@ export function RushProspectForm({
           label="Email"
           value={submission.email}
           accessibilityHint="Opens Mail."
-          onPress={() => void Linking.openURL(`mailto:${submission.email}`)}
+          onPress={() => open(`mailto:${submission.email}`)}
         />
         {submission.phone ? (
           <ListRow
             label="Phone"
             value={submission.phone}
             accessibilityHint="Calls or texts them."
-            onPress={() => void Linking.openURL(`tel:${submission.phone}`)}
+            onPress={() =>
+              open(`tel:${submission.phone?.replace(/[^\d+]/g, "")}`)
+            }
           />
         ) : null}
         {submission.class_year ? (
@@ -60,9 +68,9 @@ export function RushProspectForm({
             }
           />
         ) : null}
-        {submission.answers.map((line) => (
+        {submission.answers.map((line, index) => (
           <ListRow
-            key={line.question}
+            key={index}
             label={line.question}
             variant="detail"
             value={line.answer}

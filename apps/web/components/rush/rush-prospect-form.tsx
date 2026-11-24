@@ -61,8 +61,8 @@ export function RushProspectForm({
           </StaticValue>
         </FieldRow>
       ) : null}
-      {submission.answers.map((line) => (
-        <FieldRow key={line.question} label={line.question} alignTop>
+      {submission.answers.map((line, index) => (
+        <FieldRow key={index} label={line.question} alignTop>
           <StaticValue>{line.answer}</StaticValue>
         </FieldRow>
       ))}

@@ -91,41 +91,16 @@ export class SupabaseInterestFormRepository implements IInterestFormRepository {
     slug: string,
     actor: string,
   ): Promise<ChapterInterestForm | null> {
-    const now = new Date().toISOString();
-    const { data: old, error } = await this.supabase
-      .from('chapter_interest_forms')
-      .update({ replaced_at: now, is_open: false, updated_at: now })
-      .eq('chapter_id', chapterId)
-      .is('replaced_at', null)
-      .select('*')
-      .maybeSingle();
+    // One transaction (`replace_interest_form`): the old row's settings,
+    // open state and labels carry over before it closes.
+    const { data, error } = await this.supabase.rpc('replace_interest_form', {
+      p_chapter_id: chapterId,
+      p_slug: slug,
+      p_actor: actor,
+    });
     if (error) throw new SupabaseQueryError(error);
-    if (!old) return null;
-
-    const { data: next, error: insertError } = await this.supabase
-      .from('chapter_interest_forms')
-      .insert({
-        chapter_id: chapterId,
-        slug,
-        is_open: old.is_open,
-        blurb: old.blurb,
-        questions: old.questions,
-        ask_referrer: old.ask_referrer,
-        contacts_group_id: old.contacts_group_id,
-        created_by: actor,
-      })
-      .select('*')
-      .single();
-    if (insertError) throw new SupabaseQueryError(insertError);
-
-    const labels = await this.findLabels(old.id);
-    if (labels.length) {
-      const { error: labelError } = await this.supabase
-        .from('chapter_interest_form_labels')
-        .insert(labels.map((row) => ({ form_id: next.id, label: row.label })));
-      if (labelError) throw new SupabaseQueryError(labelError);
-    }
-    return next;
+    const row = data as unknown as ChapterInterestForm | null;
+    return row?.id ? row : null;
   }
 
   async findBySlug(slug: string): Promise<ChapterInterestForm | null> {
@@ -226,6 +201,10 @@ export class SupabaseInterestFormRepository implements IInterestFormRepository {
         .eq('kind', 'council')
         .in('council_school_id', schoolIds)
         .not('council_verified_at', 'is', null)
+        // The council the submission is pushed to: one that recruits
+        // (`interest_form_push_target`), so the consent text never names a
+        // council that receives nothing.
+        .neq('recruitment_model', 'none')
         .order('name');
       if (councilError) throw new SupabaseQueryError(councilError);
       const first = (councils ?? [])[0];

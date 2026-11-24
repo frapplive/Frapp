@@ -149,7 +149,8 @@ export class PnmService {
         message: `Your council already has a ${term} season.`,
       });
     }
-    if (created.status === 'open') await this.pushUpChapters(councilId);
+    // After the answer: the officer doesn't wait on the emails.
+    if (created.status === 'open') void this.pushUpChapters(councilId);
     return created;
   }
 
@@ -175,7 +176,7 @@ export class PnmService {
     const updated = await this.pnms.updateSeason(councilId, term, patch);
     if (!updated) throw seasonNotFound();
     if (updated.status === 'open' && current.status !== 'open') {
-      await this.pushUpChapters(councilId);
+      void this.pushUpChapters(councilId);
     }
     return updated;
   }

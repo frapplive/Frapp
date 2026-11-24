@@ -1356,6 +1356,11 @@ export interface Database {
         Args: { p_chapter_id: string; p_ids: string[]; p_fixed_ids: string[] };
         Returns: RoleTier[];
       };
+      /** `20261124144042` (#5977). Replaces a chapter's live interest form in one transaction. */
+      replace_interest_form: {
+        Args: { p_chapter_id: string; p_slug: string; p_actor: string };
+        Returns: ChapterInterestForm;
+      };
       /**
        * `20261119181810` (#5471). Records a member's ask for unposted minutes
        * and decides, under a lock on the meeting, whether it pings: one ask

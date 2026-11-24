@@ -49,6 +49,7 @@ import { ActivationService } from './activation.service';
 import { LegalAcceptanceService } from './legal-acceptance.service';
 import { EMAIL_PROVIDER } from '#domain/adapters/email.interface';
 import type { IEmailProvider } from '#domain/adapters/email.interface';
+import { EMAIL_SEND_CONCURRENCY, mapWithConcurrency } from './email-send-pool';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import {
@@ -255,35 +256,6 @@ export interface BulkEmailInviteResult {
   invites: InviteListItem[];
   /** Addresses whose invite token was created but the email failed to send. */
   failed: string[];
-}
-
-/**
- * Resend's default rate limit is low (2 requests/second on the standard
- * tier), and a bulk invite can carry up to 50 addresses (`BulkEmailInviteDto`).
- * Firing all of them as one `Promise.all` would send up to 50 concurrent
- * requests and turn a healthy provider into a wall of spurious 429s reported
- * back as address failures. A small worker pool keeps genuine delivery
- * failures distinguishable from self-inflicted rate-limiting.
- */
-const EMAIL_SEND_CONCURRENCY = 2;
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await fn(items[index]);
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, worker),
-  );
-  return results;
 }
 
 /** The emailed-invite ceiling's refusal (429), on top of its sentence. */

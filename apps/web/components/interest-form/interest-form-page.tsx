@@ -19,9 +19,10 @@ import {
   INTEREST_FORM_NAME_MAX_LENGTH,
   INTEREST_FORM_PHONE_MAX_LENGTH,
   INTEREST_FORM_REFERRER_MAX_LENGTH,
-  interestFormCodeSentLine,
+  INTEREST_FORM_REFUSAL_COPY,
   interestFormDoneLine,
   isPlainSchoolEmail,
+  schoolCodeSentLine,
 } from "@repo/validation";
 import { statusOf } from "@repo/api-sdk";
 import { QuestionField } from "@/components/chat/form-fill-dialog";
@@ -64,6 +65,8 @@ export function InterestFormPage({
   const form = usePublicInterestForm(slug, src);
   const [verified, setVerified] = useState<InterestFormVerified | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Why the page went back to the email step: a proof that timed out.
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (form.isPending) return <FormSkeleton />;
   if (form.isError || !form.data) {
@@ -119,11 +122,22 @@ export function InterestFormPage({
             slug={slug}
             form={data}
             verified={verified}
-            onRestart={() => setVerified(null)}
+            onRestart={() => {
+              setNotice(INTEREST_FORM_REFUSAL_COPY.badProof);
+              setVerified(null);
+            }}
             onDone={() => setDone(interestFormDoneLine(data.chapter.name))}
           />
         ) : (
-          <VerifyStep slug={slug} form={data} onVerified={setVerified} />
+          <VerifyStep
+            slug={slug}
+            form={data}
+            notice={notice}
+            onVerified={(next) => {
+              setNotice(null);
+              setVerified(next);
+            }}
+          />
         )}
       </div>
     </>
@@ -221,10 +235,13 @@ function Field({
 function VerifyStep({
   slug,
   form,
+  notice,
   onVerified,
 }: {
   slug: string;
   form: PublicInterestForm;
+  /** Why the visitor is back here, shown until they send a code. */
+  notice: string | null;
   onVerified: (verified: InterestFormVerified) => void;
 }) {
   const id = useId();
@@ -275,6 +292,11 @@ function VerifyStep({
   if (!sentTo) {
     return (
       <form className="space-y-4" onSubmit={send} noValidate>
+        {notice ? (
+          <p role="status" className="text-sm text-foreground">
+            {notice}
+          </p>
+        ) : null}
         <Field
           htmlFor={`${id}-email`}
           label={school ? COPY.schoolEmailLabel : COPY.emailLabel}
@@ -312,9 +334,7 @@ function VerifyStep({
 
   return (
     <form className="space-y-4" onSubmit={check} noValidate>
-      <p className="text-sm text-foreground">
-        {interestFormCodeSentLine(sentTo)}
-      </p>
+      <p className="text-sm text-foreground">{schoolCodeSentLine(sentTo)}</p>
       <Field htmlFor={`${id}-code`} label={COPY.codeLabel} error={error}>
         <Input
           id={`${id}-code`}
@@ -394,7 +414,11 @@ function DetailsStep({
   function validate(): Record<string, string> {
     const found: Record<string, string> = {};
     if (!firstName.trim() || !lastName.trim()) found.name = COPY.nameRequired;
-    if (classYear.trim() && !/^\d{4}$/.test(classYear.trim())) {
+    const year = Number(classYear.trim());
+    if (
+      classYear.trim() &&
+      (!/^\d{4}$/.test(classYear.trim()) || year < 1900 || year > 2200)
+    ) {
       found.classYear = COPY.classYearInvalid;
     }
     if (phone.trim() && phone.replace(/\D/g, "").length < 7) {

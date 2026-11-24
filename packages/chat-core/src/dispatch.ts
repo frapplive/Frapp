@@ -1319,10 +1319,19 @@ export async function postHours(
   return { ok: true };
 }
 
+/** What a name lookup answered: one prospect, several, or none. */
+type RushCandidateLookup = string | "several" | null;
+
+/**
+ * The prospect a command names. Two prospects may share a name since the
+ * interest form (#5977): the API answers 409 `rush.candidate.several_match`,
+ * and the command says so rather than "No candidate matches"
+ * (`ifc-recruitment.md` § Name lookup; the picker is still to come).
+ */
 async function resolveRushCandidateId(
   ctx: ChatActionContext,
   token: string,
-): Promise<string | null> {
+): Promise<RushCandidateLookup> {
   if (
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       token,
@@ -1335,6 +1344,8 @@ async function resolveRushCandidateId(
       params: { query: { name: token } },
     });
     const id = (result.data as { id?: string } | undefined)?.id;
+    const code = (result.error as { code?: unknown } | undefined)?.code;
+    if (code === "rush.candidate.several_match") return "several";
     if (!responseStatus(result).ok || typeof id !== "string") return null;
     return id;
   } catch {
@@ -1370,6 +1381,12 @@ async function dispatchRush(
       ? (parsed.value.candidateId ?? parsed.value.candidateToken ?? "")
       : parsed.value.candidateToken;
   const id = await resolveRushCandidateId(ctx, token);
+  if (id === "several") {
+    return {
+      ok: false,
+      error: "Several prospects have that name. Open Recruitment to pick one.",
+    };
+  }
   if (!id) {
     return { ok: false, error: "No candidate matches that name" };
   }

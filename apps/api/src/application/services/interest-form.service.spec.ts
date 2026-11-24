@@ -179,7 +179,10 @@ const SUBMISSION = {
 describe('InterestFormService — settings', () => {
   it('mints a slug a QR code and a phone read cleanly', () => {
     for (let i = 0; i < 50; i += 1) {
-      expect(mintInterestFormSlug()).toMatch(/^[a-hjkmnp-z2-9]{10}$/);
+      const slug = mintInterestFormSlug();
+      expect(slug).toMatch(/^[a-hjkmnp-z2-9]{10}$/);
+      // A digit keeps analytics from reading it as a screen name.
+      expect(slug).toMatch(/\d/);
     }
   });
 
