@@ -87,6 +87,7 @@ export * from "./use-backwork";
 export * from "./use-billing";
 export * from "./use-calendar-feed";
 export * from "./use-chapter-directory";
+export * from "./use-chapter-role-colors";
 export * from "./use-chapters";
 export * from "./use-chat";
 export * from "./use-chat-background";

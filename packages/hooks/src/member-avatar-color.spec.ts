@@ -1,5 +1,6 @@
 import { contrastRatio, parseHex } from "@repo/color";
-import { ROLE_COLOR_PALETTE, roleColorForHue } from "@repo/validation";
+import { hsvToHex } from "@repo/color";
+import { pickRoleColor, ROLE_COLOR_PALETTE } from "@repo/validation";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -107,11 +108,19 @@ describe("memberAvatarTint contrast", () => {
     },
   );
 
-  // A custom role hue (#5784) reaches an avatar the same way; every slider
-  // position is checked, one every 2 degrees.
-  it("keeps every custom role hue's initials at AA on their tint", () => {
+  // A custom role color (#5784, #5966) reaches an avatar the same way; the
+  // picker's square is sampled across saturation and brightness, its darkest
+  // and greyest edges included, one hue every 2 degrees.
+  it("keeps every custom role color's initials at AA on their tint", () => {
+    const picks: [number, string][] = [];
     for (let hue = 0; hue < 360; hue += 2) {
-      const hex = roleColorForHue(hue).hex;
+      for (const s of [0, 0.5, 1]) {
+        for (const v of [0, 0.3, 1]) {
+          picks.push([hue, pickRoleColor(hsvToHex({ h: hue, s, v }))!.hex]);
+        }
+      }
+    }
+    for (const [hue, hex] of picks) {
       const tint = memberAvatarTint(hex);
       expect(
         ratio(tint.text, tint.fill),
