@@ -565,7 +565,7 @@ export interface Database {
        * `20261117172708` (#4295 step 3) — a task for everyone: its group, a
        * copy per member and each copy's checklist in one transaction.
        * Returns the copies. `p_followed_by` since `20261119162318` (#5473);
-       * `p_attachments` since `20261123183858`.
+       * `p_attachments` since `20261124034200`.
        */
       create_task_group: {
         Args: {
@@ -590,7 +590,7 @@ export interface Database {
       /**
        * `20261116044044` (#5119) — a repeating task's series and its first
        * copy in one transaction. Returns the first copy. `p_attachments`
-       * since `20261123183858`.
+       * since `20261124034200`.
        */
       create_task_series: {
         Args: {
