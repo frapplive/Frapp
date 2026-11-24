@@ -142,6 +142,7 @@ export * from "./use-role-tiers";
 export * from "./use-roles";
 export * from "./use-rush";
 export * from "./use-rush-pipeline";
+export * from "./rush-work";
 export * from "./use-scheduled-messages";
 export * from "./use-search";
 export * from "./use-self-assignable-roles";

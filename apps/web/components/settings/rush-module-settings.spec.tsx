@@ -2,13 +2,16 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { roles, tiers, mine, updateTier, saveStages } = vi.hoisted(() => ({
-  roles: { current: [] as Array<Record<string, unknown>> },
-  tiers: { current: [] as Array<Record<string, unknown>> },
-  mine: { permissions: ["*"] as string[] },
-  updateTier: vi.fn(),
-  saveStages: vi.fn(),
-}));
+const { roles, tiers, mine, updateTier, saveStages, saveSettings } = vi.hoisted(
+  () => ({
+    saveSettings: vi.fn(),
+    roles: { current: [] as Array<Record<string, unknown>> },
+    tiers: { current: [] as Array<Record<string, unknown>> },
+    mine: { permissions: ["*"] as string[] },
+    updateTier: vi.fn(),
+    saveStages: vi.fn(),
+  }),
+);
 
 const ok = (data: unknown) => ({
   data,
@@ -27,6 +30,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateRoleTier: () => ({ mutateAsync: updateTier, isPending: false }),
   useSaveRushStages: () => ({ mutate: saveStages, isPending: false }),
+  useSaveRushSettings: () => ({ mutate: saveSettings, isPending: false }),
   useCreateRushTag: () => ({ mutateAsync: vi.fn() }),
   useRenameRushTag: () => ({ mutate: vi.fn() }),
   useDeleteRushTag: () => ({ mutateAsync: vi.fn() }),
@@ -43,6 +47,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 const { RushNotesAccess } = await import("./rush-module-settings");
 const { RushStageEditor, stagesBody } = await import("./rush-stage-editor");
+const { RushStaleDays } = await import("./rush-stale-days");
 
 const stage = (key: string, label: string, category: string, position = 0) => ({
   id: `s-${key}`,
@@ -361,5 +366,51 @@ describe("turning recruitment notes on", () => {
     expect(
       screen.getByText("Only the President can turn this on."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the stale days (#5934)", () => {
+  beforeEach(() => saveSettings.mockReset());
+
+  it("reads as a sentence for a role that can't change it", () => {
+    render(<RushStaleDays staleDays={7} canEdit={false} />);
+    expect(
+      screen.getByText("Needs follow-up after 7 days without a logged contact"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("saves a new number on Enter for rush:manage", async () => {
+    const user = userEvent.setup();
+    render(<RushStaleDays staleDays={7} canEdit />);
+    const field = screen.getByRole("textbox", { name: /Days without/ });
+    await user.clear(field);
+    await user.type(field, "10{Enter}");
+    expect(saveSettings).toHaveBeenCalledWith(
+      { stale_days: 10 },
+      expect.anything(),
+    );
+  });
+
+  it("refuses a number outside 1 to 60 and sends nothing", async () => {
+    const user = userEvent.setup();
+    render(<RushStaleDays staleDays={7} canEdit />);
+    const field = screen.getByRole("textbox", { name: /Days without/ });
+    await user.clear(field);
+    await user.type(field, "90{Enter}");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Pick from 1 to 60 days.",
+    );
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("puts the old number back on Escape", async () => {
+    const user = userEvent.setup();
+    render(<RushStaleDays staleDays={7} canEdit />);
+    const field = screen.getByRole("textbox", { name: /Days without/ });
+    await user.clear(field);
+    await user.type(field, "12{Escape}");
+    expect(field).toHaveValue("7");
+    expect(saveSettings).not.toHaveBeenCalled();
   });
 });

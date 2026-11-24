@@ -5,6 +5,7 @@ import {
   type RushTag,
 } from "@repo/hooks";
 import { Badge } from "@/components/ui/badge";
+import type { RushRowMark } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -58,4 +59,26 @@ export function RushBidBadge({
 }) {
   if (candidate.bid_status !== "extended") return null;
   return <Badge variant="success">Bid extended</Badge>;
+}
+
+/**
+ * A prospect's follow-up or stale flag on a card or a list row
+ * (`rushRowMark` in `@repo/hooks`): a follow-up not yet due is a muted fact; one due
+ * today or earlier, and "Needs follow-up", are the warning badge, as an
+ * overdue task's due is a status.
+ */
+export function RushFollowUpFact({ state }: { state: RushRowMark | null }) {
+  if (!state) return null;
+  if (state.tone === "planned") {
+    return (
+      <span className="truncate text-caption text-muted-foreground">
+        {state.label}
+      </span>
+    );
+  }
+  return (
+    <Badge variant="warning" className="shrink-0 whitespace-nowrap">
+      {state.label}
+    </Badge>
+  );
 }
