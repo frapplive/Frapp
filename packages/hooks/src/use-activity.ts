@@ -12,8 +12,6 @@ export const activityKeys = createChapterQueryKeys("activity");
  * The Activity page's read (`GET /v1/activity`, `spec/behavior/activity.md`):
  * what waits on the member and what they made.
  *
- * Not `useActivityFeed`, which is the chapter feed no screen renders.
- *
  * A poll row carries no tallies; draw chat's own card from the message it
  * points at. Invalidate `activityKeys.chapter(chapterId)` after acting on a row (a vote, a
  * task transition, an approval) so the row leaves the list.

@@ -47,7 +47,7 @@ export function useIsRolePreviewActive(): boolean {
 
 /**
  * Writes a preview still lets through: the bookkeeping the app does on its
- * own while the officer reads (marking a channel or the activity feed read,
+ * own while the officer reads (marking a channel, Activity or a notification read,
  * registering this browser for pushes, the What's new marker). They change
  * nothing anyone else sees, and refusing them would only leave unread badges
  * stuck and errors in the console. Anything else is something the officer

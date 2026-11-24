@@ -472,9 +472,9 @@ export class ChatService {
    * each row from their own list (#2303).
    *
    * Its own method rather than a field `getChannels` always computes, because
-   * `getChannels` has callers that only look for one chapter channel (the
-   * activity feed finding `#announcements`), and the hidden lookup is a round
-   * trip they would pay for and throw away. It runs beside the post-capability
+   * `getChannels` has callers that only need which channels the caller can
+   * read (the Activity page placing its poll cards), and the hidden lookup is
+   * a round trip they would pay for and throw away. It runs beside the post-capability
    * projection, not after it, so it adds no latency to the list.
    */
   async getChannelList(

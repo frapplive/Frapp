@@ -1150,7 +1150,7 @@ describe('ChatService', () => {
         expect(mockReadReceiptRepo.findHiddenChannelIds).not.toHaveBeenCalled();
       });
 
-      it('leaves getChannels (the activity feed’s read) without the hidden lookup', async () => {
+      it('leaves getChannels (the Activity page’s read) without the hidden lookup', async () => {
         mockChannelRepo.findByChapter.mockResolvedValue(everything);
 
         const result = await service.getChannels('ch-1', 'user-1');
