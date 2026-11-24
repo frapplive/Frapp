@@ -10,15 +10,34 @@ import { RUSH_CANDIDATE_REPOSITORY } from '#domain/repositories/rush-candidate.r
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
+import { ChapterModule } from '../chapter/chapter.module';
+import { ChannelAccessModule } from '../channel-access/channel-access.module';
+import { RushSettingsService } from '../../application/services/rush-settings.service';
+import { SupabaseChatChannelRepository } from '../../infrastructure/supabase/repositories/supabase-chat-channel.repository';
+import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.interface';
 
 @Module({
   // ChatModule → ChatService (posts the /rush card); AuthModule → USER_REPOSITORY
   // (resolves the adder's display name embedded in the card payload).
-  imports: [RbacModule, ChatModule, AuthModule],
+  // ChapterModule → the role, tier and group repositories, and
+  // ChannelAccessModule → who can read a channel, for the Recruitment
+  // settings' new-member role, contacts Group and card channel (#5973).
+  imports: [
+    RbacModule,
+    ChatModule,
+    AuthModule,
+    ChapterModule,
+    ChannelAccessModule,
+  ],
   controllers: [RushController, RushPipelineController],
   providers: [
     RushService,
     RushPipelineService,
+    RushSettingsService,
+    {
+      provide: CHAT_CHANNEL_REPOSITORY,
+      useClass: SupabaseChatChannelRepository,
+    },
     {
       provide: RUSH_PIPELINE_REPOSITORY,
       useClass: SupabaseRushPipelineRepository,

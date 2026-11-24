@@ -383,3 +383,22 @@ export function rushFollowUpsDueCount(
     (c) => c.follow_up_user_id === viewerId && isRushFollowUpDue(c, today),
   ).length;
 }
+
+/**
+ * The starting tier an accepted PNM joins under (#4068 decision 10): the one
+ * named "New members", whatever its case or spacing. A chapter that renamed it
+ * away has none, and its Recruitment settings ask it to pick a role instead
+ * (`spec/behavior/ifc-recruitment.md` § Bids).
+ */
+export const RUSH_NEW_MEMBERS_TIER_NAME = "New members";
+
+export function rushNewMembersTier<T extends { name: string }>(
+  tiers: readonly T[],
+): T | null {
+  const key = RUSH_NEW_MEMBERS_TIER_NAME.toLowerCase();
+  return (
+    tiers.find(
+      (tier) => tier.name.trim().replace(/\s+/g, " ").toLowerCase() === key,
+    ) ?? null
+  );
+}

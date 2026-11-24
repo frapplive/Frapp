@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import {
+  rushDashboard,
   rushRatingSummary,
   useRushPipeline,
   useViewerUserId,
@@ -33,6 +34,7 @@ import {
   type ItemMenuHandle,
 } from "@/components/item-actions-menu";
 import { RushAddProspectSheet } from "@/components/rush/rush-add-prospect-sheet";
+import { RushSummary } from "@/components/rush/rush-summary";
 import {
   RUSH_LOG_CONTACT,
   RushLogContactSheet,
@@ -89,6 +91,13 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * **New prospect** is the floating "+" for `rush:add` (#5931), a one-name
  * sheet; once one is added the list shows the stage it landed in.
  */
+type RushListView = "list" | "summary";
+
+const RUSH_LIST_VIEWS = [
+  { value: "list", label: "List" },
+  { value: "summary", label: "Summary" },
+] as const satisfies readonly { value: RushListView; label: string }[];
+
 export function RushListScreen() {
   const router = useRouter();
   const entry = useRushEntry();
@@ -100,6 +109,8 @@ export function RushListScreen() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [logging, setLogging] = useState<string | null>(null);
+  // List or Summary (#5973), web's Board / List / Summary on a phone's width.
+  const [view, setView] = useState<RushListView>("list");
   const canWork = entry.access.add;
   const today = localIsoDate(new Date());
 
@@ -169,6 +180,22 @@ export function RushListScreen() {
       );
     }
     if (!data || !tab) return null;
+    if (view === "summary") {
+      return (
+        <RushSummary
+          dashboard={rushDashboard(data.stages, data.candidates, {
+            viewerId,
+            staleDays: data.stale_days,
+            today,
+            viewResults: entry.access.viewResults,
+          })}
+          canOwn={canWork}
+          onOpen={(candidateId) =>
+            router.push({ pathname: "/rush-prospect", params: { candidateId } })
+          }
+        />
+      );
+    }
     return (
       <>
         <FilterChips
@@ -209,6 +236,16 @@ export function RushListScreen() {
         openCount === null ? undefined : rushListSubtitle(openCount, dueCount)
       }
       refresh={refresh}
+      views={
+        data && data.candidates.length > 0
+          ? {
+              accessibilityLabel: "Show",
+              options: RUSH_LIST_VIEWS,
+              value: view,
+              onChange: setView,
+            }
+          : undefined
+      }
       keyboardShouldPersistTaps="handled"
       createAction={
         canWork
@@ -219,7 +256,7 @@ export function RushListScreen() {
           : undefined
       }
     >
-      {data && data.candidates.length > 0 ? (
+      {data && data.candidates.length > 0 && view === "list" ? (
         <SearchField
           value={search}
           onChangeText={setSearch}

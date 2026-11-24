@@ -11535,6 +11535,24 @@ export interface components {
             /** @description Whether the authenticated caller has already voted. */
             viewer_has_voted: boolean;
         };
+        RushNameMatchDto: {
+            /** Format: uuid */
+            id: string;
+            display_name: string;
+            /** @description The stage key. */
+            stage: string;
+            /** @description The stage's name in this chapter, to tell two matches apart. */
+            stage_label: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        RushSeveralMatchDto: {
+            /** @enum {string} */
+            code: "rush.several_match";
+            /** @example Several prospects match */
+            message: string;
+            candidates: components["schemas"]["RushNameMatchDto"][];
+        };
         CreateRushCandidateDto: {
             display_name: string;
             /** @description When the candidate is already a chapter member, the resolved user id. Omit for an external prospect. */
@@ -11724,9 +11742,51 @@ export interface components {
         RushNoteInputDto: {
             body: string;
         };
+        RushSettingsSkippedMemberDto: {
+            /** Format: uuid */
+            user_id: string;
+            display_name: string;
+        };
         RushSettingsDto: {
             /** @description Days without a logged contact before an open prospect needs a follow-up. */
             stale_days: number;
+            /**
+             * Format: uuid
+             * @description The role an accepted PNM’s invite carries, as picked. Null means the default.
+             */
+            new_member_role_id: string | null;
+            /**
+             * Format: uuid
+             * @description The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role.
+             */
+            default_new_member_role_id: string | null;
+            /**
+             * Format: uuid
+             * @description The recruitment contacts Group, told about each interest-form submission.
+             */
+            contacts_group_id: string | null;
+            /** @description Members of the contacts Group who lack `rush:view` and so are skipped. */
+            contacts_group_skipped: components["schemas"]["RushSettingsSkippedMemberDto"][];
+            /**
+             * Format: uuid
+             * @description Where an interest-form submission’s candidate card is posted. Null posts none.
+             */
+            card_channel_id: string | null;
+        };
+        SaveRushSettingsDto: {
+            stale_days?: number;
+            /**
+             * Format: uuid
+             * @description A role of this chapter; null goes back to the default.
+             */
+            new_member_role_id?: string | null;
+            /** Format: uuid */
+            contacts_group_id?: string | null;
+            /**
+             * Format: uuid
+             * @description A channel everyone who can read holds `rush:view`; null posts no card.
+             */
+            card_channel_id?: string | null;
         };
         RushContactDto: {
             /** Format: uuid */
@@ -24287,6 +24347,15 @@ export interface operations {
                     "application/json": components["schemas"]["RushCandidateViewDto"];
                 };
             };
+            /** @description The name matches several prospects; pick one by id. Never a silent pick. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushSeveralMatchDto"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -24867,7 +24936,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RushSettingsDto"];
+                "application/json": components["schemas"]["SaveRushSettingsDto"];
             };
         };
         responses: {

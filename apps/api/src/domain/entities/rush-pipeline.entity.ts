@@ -85,12 +85,46 @@ export interface RushContactView {
 export interface RushSettingsRow {
   chapter_id: string;
   stale_days: number;
+  /** The role an accepted PNM's invite carries; null means the default. */
+  new_member_role_id: string | null;
+  /** The recruitment contacts Group (#5973). */
+  contacts_group_id: string | null;
+  /** Where an interest-form submission's card is posted; null posts none. */
+  card_channel_id: string | null;
   updated_at: string;
+}
+
+/** What a settings save changes; a field left out keeps its value. */
+export interface RushSettingsPatch {
+  stale_days?: number;
+  new_member_role_id?: string | null;
+  contacts_group_id?: string | null;
+  card_channel_id?: string | null;
+}
+
+/** A member of the contacts Group who can't open recruitment. */
+export interface RushSettingsSkippedMember {
+  user_id: string;
+  display_name: string;
 }
 
 /** A chapter's recruitment settings, defaults filled in. */
 export interface RushSettings {
   stale_days: number;
+  /** The role picked on the settings page, or null for the default. */
+  new_member_role_id: string | null;
+  /**
+   * The default: the first role in the chapter's New members tier, or null
+   * when it has no such tier or the tier holds no role.
+   */
+  default_new_member_role_id: string | null;
+  contacts_group_id: string | null;
+  /**
+   * Members of the contacts Group who lack `rush:view`, and so are skipped
+   * when the Group is told. Empty with no Group.
+   */
+  contacts_group_skipped: RushSettingsSkippedMember[];
+  card_channel_id: string | null;
 }
 
 /**

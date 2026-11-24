@@ -51,6 +51,7 @@ export * from "./put-signed-upload";
 export * from "./read-cursor";
 export * from "./read-receipts";
 export * from "./rush-card";
+export * from "./rush-dashboard";
 export * from "./rush-pipeline";
 export * from "./rush-work";
 export * from "./scheduled-message-times";

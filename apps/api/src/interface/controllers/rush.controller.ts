@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -38,6 +39,7 @@ import {
   CreateRushCandidateResponseDto,
   LookupRushCandidateQueryDto,
   RushCandidateViewDto,
+  RushSeveralMatchDto,
 } from '../dtos/rush-candidate.dto';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -82,6 +84,11 @@ export class RushController {
   @RequirePermissions(SystemPermissions.RUSH_VIEW)
   @ApiOperation({ summary: 'Look up a candidate by display name' })
   @ApiOkResponse({ type: RushCandidateViewDto })
+  @ApiConflictResponse({
+    type: RushSeveralMatchDto,
+    description:
+      'The name matches several prospects; pick one by id. Never a silent pick.',
+  })
   async lookup(
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,

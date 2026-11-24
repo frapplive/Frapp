@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RushPipelineService } from '../../application/services/rush-pipeline.service';
+import { RushSettingsService } from '../../application/services/rush-settings.service';
 import { RbacService } from '../../application/services/rbac.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
@@ -40,6 +41,7 @@ import {
   RushFollowUpDto,
   RushOwnerDto,
   RushSettingsDto,
+  SaveRushSettingsDto,
   SetRushFollowUpDto,
   SetRushOwnerDto,
   RushCandidateStageDto,
@@ -83,6 +85,7 @@ import { SystemPermissions } from '#domain/constants/permissions';
 export class RushPipelineController {
   constructor(
     private readonly pipelineService: RushPipelineService,
+    private readonly settingsService: RushSettingsService,
     private readonly rbacService: RbacService,
   ) {}
 
@@ -309,7 +312,7 @@ export class RushPipelineController {
   @ApiOperation({ summary: "The chapter's recruitment settings" })
   @ApiOkResponse({ type: RushSettingsDto })
   async settings(@CurrentChapterId() chapterId: string) {
-    return this.pipelineService.getSettings(chapterId);
+    return this.settingsService.get(chapterId);
   }
 
   @Put('settings')
@@ -318,9 +321,9 @@ export class RushPipelineController {
   @ApiOkResponse({ type: RushSettingsDto })
   async saveSettings(
     @CurrentChapterId() chapterId: string,
-    @Body() dto: RushSettingsDto,
+    @Body() dto: SaveRushSettingsDto,
   ) {
-    return this.pipelineService.saveSettings(chapterId, dto.stale_days);
+    return this.settingsService.save(chapterId, dto);
   }
 
   @Get('candidates/:id/contacts')

@@ -5,6 +5,7 @@ import {
 } from '../decorators/permissions.decorator';
 import { REQUIRED_MODULE_KEY } from '../decorators/module.decorator';
 import type { RushPipelineService } from '../../application/services/rush-pipeline.service';
+import type { RushSettingsService } from '../../application/services/rush-settings.service';
 import type { RbacService } from '../../application/services/rbac.service';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -16,6 +17,7 @@ import { SystemPermissions } from '#domain/constants/permissions';
 describe('RushPipelineController permissions', () => {
   const controller = new RushPipelineController(
     {} as RushPipelineService,
+    {} as RushSettingsService,
     {} as RbacService,
   );
 
@@ -71,6 +73,7 @@ describe('RushPipelineController permissions', () => {
 it('setOwner requires rush:add or rush:manage (#5934)', () => {
   const controller = new RushPipelineController(
     {} as RushPipelineService,
+    {} as RushSettingsService,
     {} as RbacService,
   );
   expect(Reflect.getMetadata(PERMISSIONS_ANY_KEY, controller.setOwner)).toEqual(
@@ -92,6 +95,7 @@ describe('RushPipelineController permission reads', () => {
     };
     const controller = new RushPipelineController(
       pipelineService as unknown as RushPipelineService,
+      {} as RushSettingsService,
       rbacService as unknown as RbacService,
     );
     return { controller, pipelineService, rbacService };
@@ -125,6 +129,7 @@ describe('RushPipelineController permission reads', () => {
       };
       const controller = new RushPipelineController(
         pipelineService as unknown as RushPipelineService,
+        {} as RushSettingsService,
         {
           memberHasAnyPermission: jest
             .fn()

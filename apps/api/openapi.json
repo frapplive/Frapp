@@ -14737,6 +14737,16 @@
               }
             }
           },
+          "409": {
+            "description": "The name matches several prospects; pick one by id. Never a silent pick.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushSeveralMatchDto"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error",
             "content": {
@@ -15624,7 +15634,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RushSettingsDto"
+                "$ref": "#/components/schemas/SaveRushSettingsDto"
               }
             }
           }
@@ -36248,6 +36258,63 @@
           "viewer_has_voted"
         ]
       },
+      "RushNameMatchDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string",
+            "description": "The stage key."
+          },
+          "stage_label": {
+            "type": "string",
+            "description": "The stage's name in this chapter, to tell two matches apart."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "stage",
+          "stage_label",
+          "created_at"
+        ]
+      },
+      "RushSeveralMatchDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "rush.several_match"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "example": "Several prospects match"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushNameMatchDto"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "candidates"
+        ]
+      },
       "CreateRushCandidateDto": {
         "type": "object",
         "properties": {
@@ -36822,6 +36889,22 @@
           "body"
         ]
       },
+      "RushSettingsSkippedMemberDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ]
+      },
       "RushSettingsDto": {
         "type": "object",
         "properties": {
@@ -36830,11 +36913,74 @@
             "minimum": 1,
             "maximum": 60,
             "description": "Days without a logged contact before an open prospect needs a follow-up."
+          },
+          "new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The role an accepted PNM’s invite carries, as picked. Null means the default."
+          },
+          "default_new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role."
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The recruitment contacts Group, told about each interest-form submission."
+          },
+          "contacts_group_skipped": {
+            "description": "Members of the contacts Group who lack `rush:view` and so are skipped.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushSettingsSkippedMemberDto"
+            }
+          },
+          "card_channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Where an interest-form submission’s candidate card is posted. Null posts none."
           }
         },
         "required": [
-          "stale_days"
+          "stale_days",
+          "new_member_role_id",
+          "default_new_member_role_id",
+          "contacts_group_id",
+          "contacts_group_skipped",
+          "card_channel_id"
         ]
+      },
+      "SaveRushSettingsDto": {
+        "type": "object",
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "A role of this chapter; null goes back to the default."
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "card_channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "A channel everyone who can read holds `rush:view`; null posts no card."
+          }
+        }
       },
       "RushContactDto": {
         "type": "object",

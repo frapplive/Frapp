@@ -10,6 +10,7 @@ import type { IRushCandidateRepository } from '#domain/repositories/rush-candida
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
+import type { RushStage } from '#domain/entities/rush-pipeline.entity';
 import { ChatService } from './chat.service';
 import { RushPipelineService } from './rush-pipeline.service';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
@@ -26,7 +27,7 @@ describe('RushService', () => {
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
   let mockChatService: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
   let mockPipeline: jest.Mocked<
-    Pick<RushPipelineService, 'stageForNewCandidate'>
+    Pick<RushPipelineService, 'stageForNewCandidate' | 'listStages'>
   >;
 
   const baseCandidate: RushCandidate = {
@@ -63,6 +64,10 @@ describe('RushService', () => {
 
     mockPipeline = {
       stageForNewCandidate: jest.fn().mockResolvedValue('new'),
+      listStages: jest.fn().mockResolvedValue([
+        { key: 'new', label: 'New' } as RushStage,
+        { key: 'met', label: 'Met' } as RushStage,
+      ]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -115,6 +120,53 @@ describe('RushService', () => {
       });
       expect(result).toEqual(baseCandidate);
       expect('card_posted' in result).toBe(false);
+    });
+
+    it('reads the one prospect a name matches', async () => {
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate]);
+      mockRushRepo.viewerHasVoted.mockResolvedValue(false);
+      await expect(
+        service.findViewByName('ch-1', sees('user-1'), '  JANE doe '),
+      ).resolves.toMatchObject({ id: baseCandidate.id });
+      expect(mockRushRepo.findByNameKey).toHaveBeenCalledWith(
+        'ch-1',
+        'jane doe',
+      );
+    });
+
+    it('409s with every match when a name matches several, never picking one', async () => {
+      const second = {
+        ...baseCandidate,
+        id: 'cand-2',
+        stage: 'met',
+        created_at: '2026-11-20T00:00:00Z',
+      };
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate, second]);
+      const refusal = await service
+        .findViewByName('ch-1', sees('user-1'), baseCandidate.display_name)
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ConflictException);
+      expect((refusal as ConflictException).getResponse()).toEqual({
+        code: 'rush.several_match',
+        message: 'Several prospects match',
+        candidates: [
+          {
+            id: baseCandidate.id,
+            display_name: baseCandidate.display_name,
+            stage: baseCandidate.stage,
+            stage_label: 'New',
+            created_at: baseCandidate.created_at,
+          },
+          {
+            id: 'cand-2',
+            display_name: baseCandidate.display_name,
+            stage: 'met',
+            stage_label: 'Met',
+            created_at: '2026-11-20T00:00:00Z',
+          },
+        ],
+      });
+      expect(mockRushRepo.viewerHasVoted).not.toHaveBeenCalled();
     });
 
     it('rejects a blank name', async () => {
@@ -296,10 +348,57 @@ describe('RushService', () => {
 
   describe('findViewByName', () => {
     it('404s when the name is unknown', async () => {
-      mockRushRepo.findByNameKey.mockResolvedValue(null);
+      mockRushRepo.findByNameKey.mockResolvedValue([]);
       await expect(
         service.findViewByName('ch-1', sees('user-1'), 'Nobody'),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('reads the one prospect a name matches', async () => {
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate]);
+      mockRushRepo.viewerHasVoted.mockResolvedValue(false);
+      await expect(
+        service.findViewByName('ch-1', sees('user-1'), '  JANE doe '),
+      ).resolves.toMatchObject({ id: baseCandidate.id });
+      expect(mockRushRepo.findByNameKey).toHaveBeenCalledWith(
+        'ch-1',
+        'jane doe',
+      );
+    });
+
+    it('409s with every match when a name matches several, never picking one', async () => {
+      const second = {
+        ...baseCandidate,
+        id: 'cand-2',
+        stage: 'met',
+        created_at: '2026-11-20T00:00:00Z',
+      };
+      mockRushRepo.findByNameKey.mockResolvedValue([baseCandidate, second]);
+      const refusal = await service
+        .findViewByName('ch-1', sees('user-1'), baseCandidate.display_name)
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ConflictException);
+      expect((refusal as ConflictException).getResponse()).toEqual({
+        code: 'rush.several_match',
+        message: 'Several prospects match',
+        candidates: [
+          {
+            id: baseCandidate.id,
+            display_name: baseCandidate.display_name,
+            stage: baseCandidate.stage,
+            stage_label: 'New',
+            created_at: baseCandidate.created_at,
+          },
+          {
+            id: 'cand-2',
+            display_name: baseCandidate.display_name,
+            stage: 'met',
+            stage_label: 'Met',
+            created_at: '2026-11-20T00:00:00Z',
+          },
+        ],
+      });
+      expect(mockRushRepo.viewerHasVoted).not.toHaveBeenCalled();
     });
 
     it('rejects a blank name', async () => {

@@ -42,6 +42,19 @@ export interface RushViewer {
   canViewResults: Promise<boolean>;
 }
 
+/** The 409's `code` when a name lookup matches several prospects. */
+export const RUSH_SEVERAL_MATCH_CODE = 'rush.several_match';
+
+/** One prospect a name matched, enough to tell two apart in a picker. */
+export interface RushNameMatch {
+  id: string;
+  display_name: string;
+  stage: string;
+  /** The stage's name in this chapter, for the picker. */
+  stage_label: string;
+  created_at: string;
+}
+
 export type CreateRushCandidateResult = RushCandidate & {
   card_posted?: boolean;
 };
@@ -79,11 +92,31 @@ export class RushService {
     if (!nameKey) {
       throw new BadRequestException('Candidate name is required');
     }
-    const candidate = await this.rushRepo.findByNameKey(chapterId, nameKey);
-    if (!candidate) {
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewer);
+    // Two prospects can share a name once candidates link to PNMs, so a
+    // lookup never picks one silently: it answers 409 with each match, and
+    // the slash command offers a picker (`ifc-recruitment.md` § Name lookup).
+    if (matches.length > 1) {
+      const stages = await this.pipelineService.listStages(chapterId);
+      const labelOf = new Map(stages.map((stage) => [stage.key, stage.label]));
+      throw new ConflictException({
+        code: RUSH_SEVERAL_MATCH_CODE,
+        message: 'Several prospects match',
+        candidates: matches.map(
+          (match): RushNameMatch => ({
+            id: match.id,
+            display_name: match.display_name,
+            stage: match.stage,
+            stage_label: labelOf.get(match.stage) ?? match.stage,
+            created_at: match.created_at,
+          }),
+        ),
+      });
+    }
+    return this.toView(matches[0], viewer);
   }
 
   async create(

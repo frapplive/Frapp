@@ -21,6 +21,7 @@ export type RushNote = components["schemas"]["RushNoteDto"];
 export type RushContact = components["schemas"]["RushContactDto"];
 export type RushContactKind = RushContact["kind"];
 export type RushSettings = components["schemas"]["RushSettingsDto"];
+export type RushSettingsPatch = components["schemas"]["SaveRushSettingsDto"];
 export type RushManualClosedReason = NonNullable<
   components["schemas"]["MoveRushCandidateStageDto"]["closed_reason"]
 >;
@@ -32,6 +33,8 @@ export const rushPipelineKeys = {
     ["rush", chapterId, "notes", candidateId] as const,
   contacts: (chapterId: string | null, candidateId: string) =>
     ["rush", chapterId, "contacts", candidateId] as const,
+  settings: (chapterId: string | null) =>
+    ["rush", chapterId, "settings"] as const,
 };
 
 /** Stages, tags and every prospect, for the board, the list and the phone. */
@@ -609,20 +612,47 @@ export function useClearRushFollowUp() {
 }
 
 /**
- * Save the chapter's stale days (`rush:manage`). The pipeline carries the
- * value (`stale_days`), so it is the one read refreshed.
+ * The Recruitment settings page's own settings (`rush:view`, #5973): the
+ * new-member role and its default, the contacts Group with who in it is
+ * skipped, and the card channel. The stale days ride on the pipeline read.
  */
-export function useSaveRushSettings() {
+export function useRushSettings(options?: { enabled?: boolean }) {
   const client = useFrappClient();
-  const invalidate = useRushInvalidate();
-  return useMutation({
-    mutationKey: ["rush", "save-settings"],
-    mutationFn: async (settings: RushSettings) => {
-      const { data, error } = await client.PUT("/v1/rush/settings", {
-        body: settings,
+  const chapterId = useActiveChapterId();
+  return useQuery({
+    queryKey: rushPipelineKeys.settings(chapterId),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await client.GET("/v1/rush/settings", {
+        signal,
       });
       if (error) throw error;
       return data;
+    },
+    enabled: (options?.enabled ?? true) && !!chapterId,
+  });
+}
+
+/**
+ * Save the fields named, leaving the rest (`rush:manage`). The answer is the
+ * whole settings, written straight into the settings read; the pipeline
+ * carries `stale_days`, so it is refreshed too.
+ */
+export function useSaveRushSettings() {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  const queryClient = useQueryClient();
+  const invalidate = useRushInvalidate();
+  return useMutation({
+    mutationKey: ["rush", "save-settings"],
+    mutationFn: async (patch: RushSettingsPatch) => {
+      const { data, error } = await client.PUT("/v1/rush/settings", {
+        body: patch,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(rushPipelineKeys.settings(chapterId), settings);
     },
     onSettled: invalidate,
   });

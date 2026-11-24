@@ -13,6 +13,7 @@ import type {
   RushCandidateView,
 } from '#domain/entities/rush-candidate.entity';
 import type { AssertNever } from './drift-guard';
+import type { RushNameMatch } from '../../application/services/rush.service';
 
 export class CreateRushCandidateDto {
   @ApiProperty({ maxLength: 200 })
@@ -172,3 +173,38 @@ export type RushCandidateViewDtoMissingFields = AssertNever<
 export type RushCandidateViewDtoExtraFields = AssertNever<
   Exclude<keyof RushCandidateViewDto, keyof RushCandidateView>
 >;
+
+export class RushNameMatchDto implements RushNameMatch {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty()
+  display_name: string;
+
+  @ApiProperty({ description: 'The stage key.' })
+  stage: string;
+
+  @ApiProperty({
+    description: "The stage's name in this chapter, to tell two matches apart.",
+  })
+  stage_label: string;
+
+  @ApiProperty({ format: 'date-time' })
+  created_at: string;
+}
+
+/**
+ * The 409 a name lookup answers when the name matches several prospects
+ * (`spec/behavior/ifc-recruitment.md` § Name lookup). The slash command shows
+ * a picker of `candidates` and runs again with the chosen id.
+ */
+export class RushSeveralMatchDto {
+  @ApiProperty({ enum: ['rush.several_match'] })
+  code: 'rush.several_match';
+
+  @ApiProperty({ example: 'Several prospects match' })
+  message: string;
+
+  @ApiProperty({ type: [RushNameMatchDto] })
+  candidates: RushNameMatchDto[];
+}

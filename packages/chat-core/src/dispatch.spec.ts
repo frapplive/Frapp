@@ -1429,6 +1429,87 @@ describe("dispatchRush — vote and bid", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("offers a picker, and runs nothing, when a name matches several prospects", async () => {
+    const first = "11111111-1111-4111-8111-111111111111";
+    const second = "22222222-2222-4222-8222-222222222222";
+    const get = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: {
+        code: "rush.several_match",
+        message: "Several prospects match",
+        candidates: [
+          {
+            id: first,
+            display_name: "Jake Smith",
+            stage: "new",
+            stage_label: "New",
+            created_at: "2026-11-02T12:00:00Z",
+          },
+          {
+            id: second,
+            display_name: "Jake Smith",
+            stage: "met",
+            stage_label: "Met",
+            created_at: "2026-11-20T12:00:00Z",
+          },
+        ],
+      },
+      response: { status: 409 },
+    });
+    const post = vi.fn();
+    const ctx: ChatActionContext = {
+      ...buildCtx(post),
+      apiClient: {
+        POST: post,
+        GET: get,
+      } as unknown as ChatActionContext["apiClient"],
+    };
+
+    const result = await dispatchRushVoteCmd(ctx, "vote Jake Smith");
+
+    expect(result.ok).toBe(false);
+    expect(result.choices).toEqual({
+      title: 'Several prospects match "Jake Smith"',
+      options: [
+        { label: "Jake Smith", detail: "New · added Nov 2", args: `vote ${first}` },
+        { label: "Jake Smith", detail: "Met · added Nov 20", args: `vote ${second}` },
+      ],
+    });
+    expect(post).not.toHaveBeenCalled();
+
+    // The pick runs the same command by id, with no second lookup.
+    post.mockResolvedValue({ data: {}, error: null, response: { status: 200 } });
+    await expect(
+      dispatchRushVoteCmd(ctx, result.choices!.options[1]!.args),
+    ).resolves.toEqual({ ok: true });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
+      "/v1/rush/candidates/{id}/vote",
+      expect.objectContaining({ params: { path: { id: second } } }),
+    );
+  });
+
+  it("treats any other 409 from the lookup as no match", async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: { message: "Conflict" },
+      response: { status: 409 },
+    });
+    const post = vi.fn();
+    const ctx: ChatActionContext = {
+      ...buildCtx(post),
+      apiClient: {
+        POST: post,
+        GET: get,
+      } as unknown as ChatActionContext["apiClient"],
+    };
+    const result = await dispatchRushVoteCmd(ctx, "vote Jake");
+    expect(result).toEqual({
+      ok: false,
+      error: "No candidate matches that name",
+    });
+  });
+
   it("extends a bid by name without a placeholder", async () => {
     const get = vi.fn().mockResolvedValue({
       data: { id: "cand-1" },

@@ -62,7 +62,7 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
     const found = await harness.expectTenantScoped(CHAPTER_B, () =>
       repo.findByNameKey(CHAPTER_B, 'jane doe'),
     );
-    expect(found?.id).toBe(CANDIDATE_B);
+    expect(found.map((row) => row.id)).toEqual([CANDIDATE_B]);
   });
 
   it('setBidExtended refuses an id belonging to another chapter', async () => {

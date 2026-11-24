@@ -44,6 +44,8 @@ import type {
   RushPipeline,
   RushPipelineCandidate,
   RushSettings,
+  RushSettingsPatch,
+  RushSettingsSkippedMember,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
@@ -367,6 +369,14 @@ export class RushNoteDto implements RushNoteView {
   updated_at: string;
 }
 
+export class RushSettingsSkippedMemberDto implements RushSettingsSkippedMember {
+  @ApiProperty({ format: 'uuid' })
+  user_id: string;
+
+  @ApiProperty()
+  display_name: string;
+}
+
 export class RushSettingsDto implements RushSettings {
   @ApiProperty({
     minimum: RUSH_STALE_DAYS_MIN,
@@ -374,10 +384,89 @@ export class RushSettingsDto implements RushSettings {
     description:
       'Days without a logged contact before an open prospect needs a follow-up.',
   })
+  stale_days: number;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The role an accepted PNM’s invite carries, as picked. Null means the default.',
+  })
+  new_member_role_id: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role.',
+  })
+  default_new_member_role_id: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The recruitment contacts Group, told about each interest-form submission.',
+  })
+  contacts_group_id: string | null;
+
+  @ApiProperty({
+    type: [RushSettingsSkippedMemberDto],
+    description:
+      'Members of the contacts Group who lack `rush:view` and so are skipped.',
+  })
+  contacts_group_skipped: RushSettingsSkippedMemberDto[];
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Where an interest-form submission’s candidate card is posted. Null posts none.',
+  })
+  card_channel_id: string | null;
+}
+
+/** A settings save: each field it names is written; one left out is kept. */
+export class SaveRushSettingsDto implements RushSettingsPatch {
+  @ApiPropertyOptional({
+    minimum: RUSH_STALE_DAYS_MIN,
+    maximum: RUSH_STALE_DAYS_MAX,
+  })
+  @IsOptional()
   @IsInt()
   @Min(RUSH_STALE_DAYS_MIN)
   @Max(RUSH_STALE_DAYS_MAX)
-  stale_days: number;
+  stale_days?: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'A role of this chapter; null goes back to the default.',
+  })
+  @IsOptional()
+  @IsUUID()
+  new_member_role_id?: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  contacts_group_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'A channel everyone who can read holds `rush:view`; null posts no card.',
+  })
+  @IsOptional()
+  @IsUUID()
+  card_channel_id?: string | null;
 }
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

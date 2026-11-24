@@ -18,8 +18,6 @@ import {
   RUSH_RATING_MIN,
   RUSH_TAG_LABEL_MAX,
   RUSH_STALE_DAYS_DEFAULT,
-  RUSH_STALE_DAYS_MAX,
-  RUSH_STALE_DAYS_MIN,
   RUSH_TAGS_MAX,
   firstVisibleRushStage,
   isRushContactKind,
@@ -49,7 +47,6 @@ import type {
   RushNoteView,
   RushPipeline,
   RushPipelineCandidate,
-  RushSettings,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
@@ -185,7 +182,7 @@ export class RushPipelineService {
       ratings,
       votes,
       results,
-      settings,
+      staleDays,
     ] = await Promise.all([
       this.listStages(chapterId),
       this.pipelineRepo.listTags(chapterId),
@@ -194,7 +191,7 @@ export class RushPipelineService {
       this.pipelineRepo.listRatings(chapterId),
       this.pipelineRepo.listVotes(chapterId),
       viewer.canViewResults,
-      this.getSettings(chapterId),
+      this.staleDays(chapterId),
     ]);
 
     const names = await this.userNames(
@@ -215,7 +212,7 @@ export class RushPipelineService {
     return {
       stages,
       tags,
-      stale_days: settings.stale_days,
+      stale_days: staleDays,
       candidates: candidates.map((candidate): RushPipelineCandidate => {
         const own = ratingsBy.get(candidate.id) ?? [];
         const ballots = votesBy.get(candidate.id) ?? [];
@@ -484,27 +481,13 @@ export class RushPipelineService {
 
   // Contacts, owner, follow-ups and the stale setting (#5934) ---------------
 
-  /** The chapter's recruitment settings; no row reads as the defaults. */
-  async getSettings(chapterId: string): Promise<RushSettings> {
+  /**
+   * The chapter's stale days, the one setting the pipeline reads; no row reads
+   * as the default. The rest of the settings page is `RushSettingsService`'s.
+   */
+  async staleDays(chapterId: string): Promise<number> {
     const row = await this.pipelineRepo.findSettings(chapterId);
-    return { stale_days: row?.stale_days ?? RUSH_STALE_DAYS_DEFAULT };
-  }
-
-  async saveSettings(
-    chapterId: string,
-    staleDays: number,
-  ): Promise<RushSettings> {
-    if (
-      !Number.isInteger(staleDays) ||
-      staleDays < RUSH_STALE_DAYS_MIN ||
-      staleDays > RUSH_STALE_DAYS_MAX
-    ) {
-      throw new BadRequestException(
-        `Pick from ${RUSH_STALE_DAYS_MIN} to ${RUSH_STALE_DAYS_MAX} days`,
-      );
-    }
-    const row = await this.pipelineRepo.saveSettings(chapterId, staleDays);
-    return { stale_days: row.stale_days };
+    return row?.stale_days ?? RUSH_STALE_DAYS_DEFAULT;
   }
 
   /**
