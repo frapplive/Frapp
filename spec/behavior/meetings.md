@@ -120,7 +120,7 @@ Asked by Paul, 2026-11-17 (#5290): "it should probably have better grouping, you
 
 ### Where minutes live
 
-Settled 2026-11-12 with the meetings schema (#4312, [#3290](https://github.com/pdcarlson/Frapp/issues/3290)'s storage question). Minutes are their own record (`meetings`), at most one per event, not the event's notes field. The notes field stays the event's own notes ([`events.md` § Event Creation](events.md#event-creation)): while the meetings module is on, the event sheet labels it "Notes" and shows the event's minutes beside it. Starting minutes copies the event's notes into the Summary once, so nothing typed there is typed twice; after that the two are separate. A chapter with the module off keeps using the notes field as before.
+Settled 2026-11-12 with the meetings schema (#4312, [#3290](https://github.com/pdcarlson/Frapp/issues/3290)'s storage question). Minutes are their own record (`meetings`), at most one per event, not the event's notes field. Posted minutes are also filed in Documents as a row that opens them, under this file's read rule ([`chapter-docs.md` § Minutes](chapter-docs.md#minutes); Paul, 2026-11-24, #5949), and the web's Meetings page and the phone's Minutes list are gone: Documents' Minutes filter lists posted minutes, and the rest of what those lists held is in Activity's To do. The notes field stays the event's own notes ([`events.md` § Event Creation](events.md#event-creation)): while the meetings module is on, the event sheet labels it "Notes" and shows the event's minutes beside it. Starting minutes copies the event's notes into the Summary once, so nothing typed there is typed twice; after that the two are separate. A chapter with the module off keeps using the notes field as before.
 
 ## Reading minutes
 

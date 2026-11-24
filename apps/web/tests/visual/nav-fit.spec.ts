@@ -71,11 +71,11 @@ test("the sidebar fits a 1024×768 window with every row showing", async ({
   await expect(nav).toBeVisible();
   // If either stub above ever stops reaching the nav, rows go missing and the
   // test says so instead of passing on a shorter list. Directory, the last
-  // row, needs the permissions stub. Backwork needs both: its permission,
-  // and its module, which a failed chapter read would switch off with every
-  // other module row.
+  // row, needs the permissions stub. Resources needs the chapter stub: its
+  // modules, which a failed chapter read would switch off with every other
+  // module row (it is one row for Documents, minutes and Backwork, #5949).
   await expect(nav.getByRole("link", { name: "Directory" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Backwork" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Resources" })).toBeVisible();
 
   // This sessionless page has no Frapp Intelligence. A member with Ask gets the same
   // nav region: the bar shares the collapse toggle's 34px row at the foot
