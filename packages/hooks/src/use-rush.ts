@@ -5,12 +5,9 @@ import type { components } from "@repo/api-sdk";
 import { isCardReadMiss } from "./card-read-miss";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { rushPipelineKeys } from "./use-rush-pipeline";
+import { rushKeys } from "./rush-keys";
 
-export const rushKeys = {
-  all: ["rush"] as const,
-  detail: (chapterId: string | null, id: string) =>
-    ["rush", chapterId, "detail", id] as const,
-};
+export { rushKeys };
 
 /** A candidate as the rush routes return it. Voter names are never on it. */
 export type RushCandidateView = components["schemas"]["RushCandidateViewDto"];
@@ -80,8 +77,9 @@ export function useVoteRushCandidate() {
 }
 
 /**
- * Extend a bid to a candidate (`rush:bid`). Idempotent on the server. The
- * returned view replaces the card's live read.
+ * Extend a bid to a candidate (`rush:bid`). Taken only with no bid out or an
+ * expired one; any other state is a 409 that says why (#5973). The returned
+ * view replaces the card's live read.
  */
 export function useBidRushCandidate() {
   const client = useFrappClient();
@@ -101,7 +99,15 @@ export function useBidRushCandidate() {
     },
     onSuccess: (view) => {
       queryClient.setQueryData(rushKeys.detail(chapterId, view.id), view);
-      // The pipeline shows the bid too (#5924).
+    },
+    // Refreshed after a refusal too: a 409 means someone else moved the bid,
+    // so the card and the pipeline (#5924) both read stale.
+    onSettled: (_view, error, id) => {
+      if (error) {
+        void queryClient.invalidateQueries({
+          queryKey: rushKeys.detail(chapterId, id),
+        });
+      }
       void queryClient.invalidateQueries({
         queryKey: rushPipelineKeys.pipeline(chapterId),
       });

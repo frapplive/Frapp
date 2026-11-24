@@ -17,6 +17,7 @@ import type {
 } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
 import { RushPipelineService } from './rush-pipeline.service';
+import { RushBidService } from './rush-bid.service';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 
 export interface CreateRushCandidateInput {
@@ -42,6 +43,19 @@ export interface RushViewer {
   canViewResults: Promise<boolean>;
 }
 
+/** The 409's `code` when a name lookup matches several prospects. */
+const RUSH_SEVERAL_MATCH_CODE = 'rush.several_match';
+
+/** One prospect a name matched, enough to tell two apart in a picker. */
+export interface RushNameMatch {
+  id: string;
+  display_name: string;
+  stage: string;
+  /** The stage's name in this chapter, for the picker. */
+  stage_label: string;
+  created_at: string;
+}
+
 export type CreateRushCandidateResult = RushCandidate & {
   card_posted?: boolean;
 };
@@ -56,6 +70,7 @@ export class RushService {
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly chatService: ChatService,
     private readonly pipelineService: RushPipelineService,
+    private readonly bidService: RushBidService,
   ) {}
 
   async findView(
@@ -79,11 +94,47 @@ export class RushService {
     if (!nameKey) {
       throw new BadRequestException('Candidate name is required');
     }
-    const candidate = await this.rushRepo.findByNameKey(chapterId, nameKey);
-    if (!candidate) {
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) {
       throw new NotFoundException('Candidate not found');
     }
-    return this.toView(candidate, viewer);
+    // Two prospects can share a name once candidates link to PNMs, so a
+    // lookup never picks one silently: it answers 409 `rush.several_match`,
+    // and the slash command reads `findNameMatches` for its picker
+    // (`ifc-recruitment.md` § Name lookup). The matches aren't on the 409
+    // itself: the API's error body carries a code and a message only.
+    if (matches.length > 1) {
+      throw new ConflictException({
+        code: RUSH_SEVERAL_MATCH_CODE,
+        message: 'Several prospects match',
+      });
+    }
+    return this.toView(matches[0], viewer);
+  }
+
+  /**
+   * Every prospect a name matches, oldest first, each with what tells it
+   * apart: the slash command's picker after a `rush.several_match` 409.
+   */
+  async findNameMatches(
+    chapterId: string,
+    name: string,
+  ): Promise<RushNameMatch[]> {
+    const nameKey = lowerTrim(name ?? '');
+    if (!nameKey) {
+      throw new BadRequestException('Candidate name is required');
+    }
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    if (matches.length === 0) return [];
+    const stages = await this.pipelineService.listStages(chapterId);
+    const labelOf = new Map(stages.map((stage) => [stage.key, stage.label]));
+    return matches.map((match) => ({
+      id: match.id,
+      display_name: match.display_name,
+      stage: match.stage,
+      stage_label: labelOf.get(match.stage) ?? match.stage,
+      created_at: match.created_at,
+    }));
   }
 
   async create(
@@ -110,6 +161,7 @@ export class RushService {
         ),
         closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: input.created_by,
       });
     } catch (error) {
@@ -145,14 +197,13 @@ export class RushService {
     chapterId: string,
     viewer: RushViewer,
   ): Promise<RushCandidateView> {
-    const existing = await this.rushRepo.findById(id, chapterId);
-    if (!existing) {
+    // Extend only from `none` or `expired`; anything else is 409, so an old
+    // card's Extend can't undo an answer (`ifc-recruitment.md` § Bids).
+    await this.bidService.extend(id, chapterId, viewer.id);
+    const candidate = await this.rushRepo.findById(id, chapterId);
+    if (!candidate) {
       throw new NotFoundException('Candidate not found');
     }
-    const candidate =
-      existing.bid_status === 'extended'
-        ? existing
-        : await this.rushRepo.setBidExtended(id, chapterId);
     return this.toView(candidate, viewer);
   }
 

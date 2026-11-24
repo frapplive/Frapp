@@ -242,6 +242,8 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
           'id, chapter_id, display_name, follow_up_on, follow_up_note, follow_up_user_id',
         )
         .is('closed_reason', null)
+        // An accepted bid closes the work (#5973, `isRushWorkOpen`).
+        .neq('bid_state', 'accepted')
         .not('follow_up_user_id', 'is', null)
         .gte('follow_up_on', dueOnOrAfter)
         .lte('follow_up_on', dueOnOrBefore)
@@ -261,6 +263,14 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
     );
   }
 
+  async expireRushBids(now: string): Promise<number> {
+    const { data, error } = await this.supabase.rpc('expire_rush_bids', {
+      p_now: now,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return typeof data === 'number' ? data : 0;
+  }
+
   async findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]> {
     const rows = await this.fetchAllPages<
       Omit<SweepRushOwnedRow, 'owner_id'> & { owner_id: string | null }
@@ -268,9 +278,10 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
       this.supabase
         .from('rush_candidates')
         .select(
-          'id, chapter_id, display_name, owner_id, closed_reason, last_contact_on, created_at',
+          'id, chapter_id, display_name, owner_id, closed_reason, bid_state, last_contact_on, created_at',
         )
         .is('closed_reason', null)
+        .neq('bid_state', 'accepted')
         .not('owner_id', 'is', null)
         .order('id', { ascending: true })
         .range(from, to),

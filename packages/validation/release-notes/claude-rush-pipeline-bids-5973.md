@@ -1,0 +1,1 @@
+Recruitment now tracks bids: extend one, record an acceptance or a decline, and see a recorded acceptance wait until the prospect confirms it from an email or an officer does. A new Summary view beside the list shows the whole pipeline at a glance.

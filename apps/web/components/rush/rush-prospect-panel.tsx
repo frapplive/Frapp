@@ -34,7 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { FieldRow, StaticValue } from "@/components/tasks/task-panel";
 import { toastFailure } from "@/lib/failure-toast";
@@ -44,6 +43,7 @@ import { RushNotes } from "./rush-notes";
 import { LogContactMenu, RushContactHistory } from "./rush-contacts";
 import { RushFollowUpControl } from "./rush-follow-up";
 import { RushOwnerControl } from "./rush-owner";
+import { RushBidControl } from "./rush-bid";
 
 export interface RushProspectPanelProps {
   candidate: RushPipelineCandidate | null;
@@ -225,11 +225,15 @@ function ProspectBody({
             />
           </FieldRow>
         )}
-        {candidate.bid_status === "extended" ? (
+        {access.bid || candidate.bid_state !== "none" ? (
           <FieldRow label="Bid">
-            <span className="px-2 py-1.5">
-              <Badge variant="success">Extended</Badge>
-            </span>
+            <RushBidControl
+              candidate={candidate}
+              access={access}
+              writable={writable}
+              viewerId={viewerId}
+              today={today}
+            />
           </FieldRow>
         ) : null}
         <FieldRow label="Added">

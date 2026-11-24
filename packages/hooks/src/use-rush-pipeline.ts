@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
+import { rushKeys } from "./rush-keys";
 
 /**
  * The recruitment pipeline's reads and writes (#5924), for web's Rush page,
@@ -21,6 +22,7 @@ export type RushNote = components["schemas"]["RushNoteDto"];
 export type RushContact = components["schemas"]["RushContactDto"];
 export type RushContactKind = RushContact["kind"];
 export type RushSettings = components["schemas"]["RushSettingsDto"];
+export type RushSettingsPatch = components["schemas"]["SaveRushSettingsDto"];
 export type RushManualClosedReason = NonNullable<
   components["schemas"]["MoveRushCandidateStageDto"]["closed_reason"]
 >;
@@ -32,6 +34,8 @@ export const rushPipelineKeys = {
     ["rush", chapterId, "notes", candidateId] as const,
   contacts: (chapterId: string | null, candidateId: string) =>
     ["rush", chapterId, "contacts", candidateId] as const,
+  settings: (chapterId: string | null) =>
+    ["rush", chapterId, "settings"] as const,
 };
 
 /** Stages, tags and every prospect, for the board, the list and the phone. */
@@ -609,21 +613,162 @@ export function useClearRushFollowUp() {
 }
 
 /**
- * Save the chapter's stale days (`rush:manage`). The pipeline carries the
- * value (`stale_days`), so it is the one read refreshed.
+ * The Recruitment settings page's own settings (`rush:view`, #5973): the
+ * new-member role and its default, the contacts Group with who in it is
+ * skipped, and the card channel. The stale days ride on the pipeline read.
  */
-export function useSaveRushSettings() {
+export function useRushSettings(options?: { enabled?: boolean }) {
   const client = useFrappClient();
-  const invalidate = useRushInvalidate();
-  return useMutation({
-    mutationKey: ["rush", "save-settings"],
-    mutationFn: async (settings: RushSettings) => {
-      const { data, error } = await client.PUT("/v1/rush/settings", {
-        body: settings,
+  const chapterId = useActiveChapterId();
+  return useQuery({
+    queryKey: rushPipelineKeys.settings(chapterId),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await client.GET("/v1/rush/settings", {
+        signal,
       });
       if (error) throw error;
       return data;
     },
+    enabled: (options?.enabled ?? true) && !!chapterId,
+  });
+}
+
+/**
+ * Save the fields named, leaving the rest (`rush:manage`). The answer is the
+ * whole settings, written straight into the settings read; the pipeline
+ * carries `stale_days`, so it is refreshed too.
+ */
+export function useSaveRushSettings() {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  const queryClient = useQueryClient();
+  const invalidate = useRushInvalidate();
+  return useMutation({
+    mutationKey: ["rush", "save-settings"],
+    mutationFn: async (patch: RushSettingsPatch) => {
+      const { data, error } = await client.PUT("/v1/rush/settings", {
+        body: patch,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(rushPipelineKeys.settings(chapterId), settings);
+    },
     onSettled: invalidate,
+  });
+}
+
+// ── Bids (#5973) ─────────────────────────────────────────────────────────────
+
+export type RushBid = components["schemas"]["RushBidDto"];
+export type RushBidConfirmationPreview =
+  components["schemas"]["RushBidConfirmationPreviewDto"];
+
+type BidAnswer = "decline" | "accept" | "confirm" | "rescind";
+
+/**
+ * One bid answer on a prospect: record a decline or an acceptance
+ * (`rush:bid`), confirm a recorded acceptance or rescind (`rush:manage`).
+ * Each refreshes the pipeline and the chat card's read, which shows the bid.
+ * A 409 says, in words, why the bid can't take it now. Extend is
+ * `useBidRushCandidate`, the chat card's write.
+ */
+function useRushBidAnswer<V>(
+  answer: BidAnswer,
+  body: (vars: V) => Record<string, unknown> | undefined,
+) {
+  const client = useFrappClient();
+  const chapterId = useActiveChapterId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["rush", "bid", answer],
+    mutationFn: async (vars: V & { candidateId: string }) => {
+      const path = `/v1/rush/candidates/{id}/bid/${answer}` as const;
+      const { data, error } = await client.POST(path, {
+        params: { path: { id: vars.candidateId } },
+        // Each route types its own body; this one helper sends all four.
+        body: body(vars) as never,
+      });
+      if (error) throw error;
+      return data as RushBid;
+    },
+    onSettled: (_data, _error, vars) =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: rushPipelineKeys.pipeline(chapterId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: rushKeys.detail(chapterId, vars.candidateId),
+        }),
+      ]),
+  });
+}
+
+/** Record a decline the PNM gave on paper or aloud (`rush:bid`). */
+export function useRecordRushDecline() {
+  return useRushBidAnswer<object>("decline", () => undefined);
+}
+
+/**
+ * Record an acceptance (`rush:bid`): it waits, "Waiting to confirm", and
+ * the PNM is emailed a one-tap link at once when there is an email.
+ */
+export function useRecordRushAcceptance() {
+  return useRushBidAnswer<{ email: string | null }>("accept", (vars) => ({
+    email: vars.email,
+  }));
+}
+
+/** Confirm a recorded acceptance (`rush:manage`); the PNM is invited. */
+export function useConfirmRushAcceptance() {
+  return useRushBidAnswer<object>("confirm", () => undefined);
+}
+
+/** Take back an open bid, with a reason (`rush:manage`). */
+export function useRescindRushBid() {
+  return useRushBidAnswer<{ reason: string }>("rescind", (vars) => ({
+    reason: vars.reason,
+  }));
+}
+
+/**
+ * The PNM's one-tap page (#5973): what the emailed link's token shows, with
+ * no account. A 404 means the link no longer confirms anything.
+ */
+export function useRushBidConfirmationPreview(token: string | null) {
+  const client = useFrappClient();
+  return useQuery({
+    queryKey: ["rush", "bid-confirmation", token],
+    queryFn: async ({ signal }) => {
+      const { data, error } = await client.POST(
+        "/v1/rush/bid-confirmations/preview",
+        { body: { token: token! }, signal },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!token,
+    retry: false,
+  });
+}
+
+/** The PNM's tap: confirms the acceptance a member recorded. */
+export function useConfirmRushBidByToken() {
+  const client = useFrappClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ["rush", "bid-confirmation", "confirm"],
+    mutationFn: async (token: string) => {
+      const { data, error } = await client.POST(
+        "/v1/rush/bid-confirmations/confirm",
+        { body: { token } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (preview, token) => {
+      queryClient.setQueryData(["rush", "bid-confirmation", token], preview);
+    },
   });
 }

@@ -162,7 +162,7 @@ describeIntegration('Recruitment follow-ups against live PostgREST', () => {
     );
     expect(owned.map((row) => row.id)).toEqual([open]);
 
-    await pipeline.saveSettings(chapterId, 4);
+    await pipeline.saveSettings(chapterId, { stale_days: 4 });
     const chapters = await sweeps.findRushChapters([chapterId]);
     expect(chapters.staleDays.get(chapterId)).toBe(4);
     expect(chapters.enabledModules.has(chapterId)).toBe(true);

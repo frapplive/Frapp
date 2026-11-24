@@ -756,6 +756,103 @@ export class InviteService {
   }
 
   /**
+   * The invite a confirmed bid acceptance sends (#5973,
+   * `spec/behavior/ifc-recruitment.md` § Bids): one emailed invite to the
+   * PNM, carrying the chapter's new-member role, through the same token,
+   * email and daily ceilings as any emailed invite.
+   *
+   * It is sent as from the first of `senders` (whoever confirmed it, then
+   * whoever recorded or extended the bid) who may invite someone into the
+   * role now: the redeem checks its sender the same way
+   * ({@link resolveRedeemRoles}), so an invite from anyone else would be
+   * refused when the PNM opens it. With none, nothing is sent. Best-effort,
+   * like every invite email: a refusal at the ceiling or a failed send
+   * answers `false`, and the acceptance stands either way.
+   */
+  async createForAcceptedProspect(input: {
+    chapterId: string;
+    senders: readonly string[];
+    roleId: string;
+    email: string;
+  }): Promise<boolean> {
+    try {
+      const [role] = await this.roleRepo.findByIds(
+        [input.roleId],
+        input.chapterId,
+      );
+      if (!role || role.permissions.includes('*')) return false;
+      const createdBy = await this.firstSenderFor(
+        input.chapterId,
+        input.senders,
+        role.id,
+      );
+      if (!createdBy) return false;
+      const origin = resolveAppOrigin(this.config);
+      assertHttpsJoinOrigin(new URL(origin));
+      const data = this.prepareInviteData(
+        input.chapterId,
+        createdBy,
+        role.name,
+        input.email.trim().toLowerCase(),
+      );
+      const [invites, chapter, inviter] = await Promise.all([
+        this.insertWithinDailyCeilings(input.chapterId, createdBy, [data]),
+        this.chapterRepo.findById(input.chapterId).catch(() => null),
+        this.userRepo.findById(createdBy).catch(() => null),
+      ]);
+      const invite = invites[0];
+      if (!invite) return false;
+      const sent = await this.emailProvider
+        .sendInviteEmail({
+          to: data.email as string,
+          joinUrl: buildJoinUrl(invite.token, origin),
+          role: role.system_key === SystemRoleKeys.EVERYONE ? null : role.name,
+          validDays: INVITE_DAYS,
+          chapterName: chapter?.name ?? null,
+          inviterName: inviter?.display_name ?? null,
+        })
+        .catch(() => false);
+      if (!sent) {
+        await this.inviteRepo
+          .markEmailFailed(input.chapterId, [invite.id])
+          .catch(() => undefined);
+      }
+      return sent;
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Accepted prospect's invite was not sent (chapter ${input.chapterId})`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * The first of `senders` who may invite someone into `roleId` now: holds
+   * `members:invite` (or everything) and reaches the role by rank, as the
+   * redeem requires of an invite's sender.
+   */
+  private async firstSenderFor(
+    chapterId: string,
+    senders: readonly string[],
+    roleId: string,
+  ): Promise<string | null> {
+    for (const sender of [...new Set(senders)]) {
+      const context = await this.rbac.getRankContext(chapterId, sender);
+      const role = context.roles.find((r) => r.id === roleId);
+      const mayInvite =
+        context.reach.wildcard ||
+        context.reach.permissions.has(SystemPermissions.MEMBERS_INVITE);
+      if (role && mayInvite && inviteRefusal(context, role) === null) {
+        return sender;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Inserts the batch only when it fits under the daily emailed-invite
    * ceilings (`daily-send-limits.ts`): the chapter's, and the sender's across
    * all their chapters, each counting the emailed invites of the last 24

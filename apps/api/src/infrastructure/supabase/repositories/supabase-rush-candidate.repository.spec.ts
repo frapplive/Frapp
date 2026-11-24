@@ -62,20 +62,7 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
     const found = await harness.expectTenantScoped(CHAPTER_B, () =>
       repo.findByNameKey(CHAPTER_B, 'jane doe'),
     );
-    expect(found?.id).toBe(CANDIDATE_B);
-  });
-
-  it('setBidExtended refuses an id belonging to another chapter', async () => {
-    await expect(
-      harness.expectTenantScoped(CHAPTER_B, () =>
-        repo.setBidExtended(CANDIDATE_A, CHAPTER_B),
-      ),
-    ).rejects.toMatchObject({ code: 'PGRST116' });
-
-    expect(
-      harness.rows('rush_candidates').find((r) => r.id === CANDIDATE_A)
-        ?.bid_status,
-    ).toBe('none');
+    expect(found.map((row) => row.id)).toEqual([CANDIDATE_B]);
   });
 
   it('countVotes and viewerHasVoted filter by chapter', async () => {
@@ -131,6 +118,7 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
         stage: 'new',
         closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: USER_SHARED,
       }),
     );

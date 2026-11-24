@@ -33,6 +33,7 @@ function live(overrides: Partial<LiveRushCandidate> = {}): LiveRushCandidate {
     vote_count: 3,
     viewer_has_voted: false,
     bid_extended: false,
+    bid_state: "none",
     ...overrides,
   };
 }
@@ -46,7 +47,22 @@ describe("readLiveRushCandidate", () => {
         bid_status: "extended",
         viewer_has_voted: true,
       }),
-    ).toEqual(live({ bid_extended: true, viewer_has_voted: true }));
+    ).toEqual(
+      live({
+        bid_extended: true,
+        bid_state: "extended",
+        viewer_has_voted: true,
+      }),
+    );
+    // The full state when the API sends it (#5973): an acceptance reads as
+    // extended in `bid_status`, for shipped cards.
+    expect(
+      readLiveRushCandidate({
+        ...VIEW,
+        bid_status: "extended",
+        bid_state: "accepted",
+      }),
+    ).toMatchObject({ bid_extended: true, bid_state: "accepted" });
   });
 
   it("is null before the read lands, after a 403 or 404, or for a shape it can't draw", () => {
@@ -132,8 +148,19 @@ describe("rushCardControls", () => {
     ]);
   });
 
-  it("drops Extend bid once a bid is out", () => {
-    expect(controls({ live: live({ bid_extended: true }) })).toEqual(["vote"]);
+  it("drops Extend bid once a bid is out, answered or rescinded, not once it expired (#5973)", () => {
+    for (const state of [
+      "extended",
+      "accepted",
+      "declined",
+      "rescinded",
+    ] as const) {
+      expect(controls({ live: live({ bid_state: state }) })).toEqual(["vote"]);
+    }
+    expect(controls({ live: live({ bid_state: "expired" }) })).toEqual([
+      "vote",
+      "bid",
+    ]);
   });
 
   // #4084: a role without the key isn't offered what the server refuses.
@@ -160,10 +187,16 @@ describe("rushCardControls", () => {
 });
 
 describe("rushCardBadgeLabel", () => {
-  it("says whether a bid is out", () => {
+  it("says where the bid stands", () => {
     expect(rushCardBadgeLabel(live())).toBe("Open");
-    expect(rushCardBadgeLabel(live({ bid_extended: true }))).toBe(
-      "Bid extended",
+    expect(
+      rushCardBadgeLabel(live({ bid_extended: true, bid_state: "extended" })),
+    ).toBe("Bid extended");
+    expect(rushCardBadgeLabel(live({ bid_state: "accepted" }))).toBe(
+      "Accepted",
+    );
+    expect(rushCardBadgeLabel(live({ bid_state: "declined" }))).toBe(
+      "Declined",
     );
   });
 });
