@@ -1,6 +1,6 @@
 /**
  * A chapter's interest form (#5977, `ifc-recruitment.md` § Chapter interest
- * forms; `20261124144042_chapter_interest_forms.sql`). Every table is RLS on
+ * forms; `20261124210747_chapter_interest_forms.sql`). Every table is RLS on
  * with no policies, reached only through the service-role client.
  */
 import type { FormQuestion } from '../utils/form-card-rules';

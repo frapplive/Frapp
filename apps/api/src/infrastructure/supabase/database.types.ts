@@ -605,7 +605,7 @@ export interface Database {
         }[];
       };
       /**
-       * `20261124144042` (#5977). Checks a code typed on an interest form and,
+       * `20261124210747` (#5977). Checks a code typed on an interest form and,
        * on a match, stores the hash of the proof the submission spends.
        */
       confirm_interest_form_code: {
@@ -1181,7 +1181,7 @@ export interface Database {
         };
         Returns: PredictionStake;
       };
-      /** `20261124144042` (#5977). What the withdraw link's page shows. */
+      /** `20261124210747` (#5977). What the withdraw link's page shows. */
       preview_interest_form_withdrawal: {
         Args: { p_token_hash: string };
         Returns: Json;
@@ -1192,7 +1192,7 @@ export interface Database {
         Returns: number;
       };
       /**
-       * `20261124144042` (#5977). A chapter's form PNMs join its council's
+       * `20261124210747` (#5977). A chapter's form PNMs join its council's
        * master list once the link is accepted and a season is open.
        */
       push_up_chapter_form_interests: {
@@ -1365,7 +1365,7 @@ export interface Database {
         Args: { p_chapter_id: string; p_ids: string[]; p_fixed_ids: string[] };
         Returns: RoleTier[];
       };
-      /** `20261124144042` (#5977). Replaces a chapter's live interest form in one transaction. */
+      /** `20261124210747` (#5977). Replaces a chapter's live interest form in one transaction. */
       replace_interest_form: {
         Args: { p_chapter_id: string; p_slug: string; p_actor: string };
         Returns: ChapterInterestForm;
@@ -1640,7 +1640,7 @@ export interface Database {
         };
         Returns: string;
       };
-      /** `20261124144042` (#5977). Records an interest form's code under its ceilings. */
+      /** `20261124210747` (#5977). Records an interest form's code under its ceilings. */
       start_interest_form_code: {
         Args: {
           p_form_id: string;
@@ -1678,7 +1678,7 @@ export interface Database {
         };
         Returns: Json;
       };
-      /** `20261124144042` (#5977). The whole interest-form submission, in one transaction. */
+      /** `20261124210747` (#5977). The whole interest-form submission, in one transaction. */
       submit_interest_form: {
         Args: {
           p_form_id: string;
@@ -1755,7 +1755,7 @@ export interface Database {
         Args: { p_event_id: string; p_user_id: string; p_chapter_id: string };
         Returns: EventExcuse[];
       };
-      /** `20261124144042` (#5977). Withdraws from one chapter, or deletes everywhere. */
+      /** `20261124210747` (#5977). Withdraws from one chapter, or deletes everywhere. */
       withdraw_interest_form: {
         Args: { p_token_hash: string; p_scope: string };
         Returns: Json;
