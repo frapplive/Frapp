@@ -70,7 +70,10 @@ export interface MasterListView {
   season: CouncilRecruitmentSeason;
   /** True while counts stand in for which chapters (the season isn't closed). */
   counts_only: boolean;
-  /** Per accepted chapter: how many PNMs on this list showed interest. */
+  /**
+   * Per accepted chapter: how many PNMs on this list showed interest. Empty
+   * until the season closes (Winston, 2026-11-24).
+   */
   chapter_totals: { chapter_id: string; name: string; interested: number }[];
   pnms: MasterListRow[];
 }
@@ -234,11 +237,16 @@ export class PnmService {
     return {
       season,
       counts_only: countsOnly,
-      chapter_totals: accepted.map((chapter) => ({
-        chapter_id: chapter.id,
-        name: chapter.name,
-        interested: interests.filter((i) => i.chapter_id === chapter.id).length,
-      })),
+      // Per-chapter totals wait for the close too: beside each PNM's count
+      // they can tell where a PNM signed up (Winston, 2026-11-24).
+      chapter_totals: countsOnly
+        ? []
+        : accepted.map((chapter) => ({
+            chapter_id: chapter.id,
+            name: chapter.name,
+            interested: interests.filter((i) => i.chapter_id === chapter.id)
+              .length,
+          })),
       pnms: records
         .map((pnm) => {
           const chapterIds = chaptersByPnm.get(pnm.id) ?? [];

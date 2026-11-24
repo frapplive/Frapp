@@ -158,10 +158,9 @@ describe('PnmService — the master list', () => {
     const pat = list.pnms.find((r) => r.id === 'pnm-1')!;
     expect(pat.interest_count).toBe(2);
     expect(pat.has_phone).toBe(true);
-    expect(list.chapter_totals).toEqual([
-      { chapter_id: CH_A, name: 'Alpha', interested: 2 },
-      { chapter_id: CH_B, name: 'Beta', interested: 1 },
-    ]);
+    // No per-chapter totals in season: beside the counts they could tell
+    // where a PNM signed up (Winston, 2026-11-24).
+    expect(list.chapter_totals).toEqual([]);
     expect(JSON.stringify(list)).not.toContain('5550001111');
     // Interests only in the council's accepted chapters, never a proposed one.
     expect(pnms.findInterests).toHaveBeenCalledWith(
@@ -186,6 +185,7 @@ describe('PnmService — the master list', () => {
     expect(list.pnms.every((r) => r.interested_chapter_ids === null)).toBe(
       true,
     );
+    expect(list.chapter_totals).toEqual([]);
   });
 
   it('after the season closes, shows which member chapters', async () => {
@@ -198,6 +198,10 @@ describe('PnmService — the master list', () => {
     expect(
       list.pnms.find((r) => r.id === 'pnm-1')!.interested_chapter_ids,
     ).toEqual([CH_A, CH_B]);
+    expect(list.chapter_totals).toEqual([
+      { chapter_id: CH_A, name: 'Alpha', interested: 2 },
+      { chapter_id: CH_B, name: 'Beta', interested: 1 },
+    ]);
   });
 
   it('logs one row per PNM shown before returning them', async () => {

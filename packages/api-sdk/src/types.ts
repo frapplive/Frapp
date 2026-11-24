@@ -15453,6 +15453,7 @@ export interface components {
             season: components["schemas"]["RecruitmentSeasonDto"];
             /** @description True while the season isn't closed: interests are counts only. */
             counts_only: boolean;
+            /** @description Interest per accepted chapter. Empty until the season is closed: beside each PNM's count, totals could tell where a PNM signed up. */
             chapter_totals: components["schemas"]["ChapterTotalDto"][];
             pnms: components["schemas"]["MasterListRowDto"][];
         };

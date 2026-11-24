@@ -46931,6 +46931,7 @@
             "description": "True while the season isn't closed: interests are counts only."
           },
           "chapter_totals": {
+            "description": "Interest per accepted chapter. Empty until the season is closed: beside each PNM's count, totals could tell where a PNM signed up.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChapterTotalDto"

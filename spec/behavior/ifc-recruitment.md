@@ -190,6 +190,7 @@ An IFC officer is usually a brother in one of the chapters the council covers. I
 
 - **Interests and bids show as counts per PNM.** For example, "interested in 3 chapters" or "2 bids outstanding".
 - **Per-chapter aggregates show as totals.** For example, "Chapter A: 40 interested, 12 bids".
+  - Changed by Winston, 2026-11-24 (#5977): per-chapter interest totals wait for the close too. While a season is open or planned, the master list shows each PNM's count only, because totals beside the counts could tell where a PNM signed up.
 - **Which chapter a PNM chose shows only for acceptances.** An acceptance is public to the chapters anyway, as "Accepted elsewhere".
 - **Held bid-day bids show only as counts per chapter** before release.
 - **Per-PNM, per-chapter detail** (who is interested where, who bid on whom) opens to the council when the season closes, for reports.
