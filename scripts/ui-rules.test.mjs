@@ -151,6 +151,60 @@ test("web: the action menu's home draws its own ⋯", async () => {
   );
 });
 
+test("web: a page's views are never a boxed switch in its header", async () => {
+  const cases = [
+    'export const A = () => <PageActions><SegmentedChoice label="Whose tasks" options={[]} value="mine" onChange={() => {}} /></PageActions>;',
+    // Nested under a gate or a fragment is still in the header.
+    'export const A = () => <PageActions><Can permission="x"><><SegmentedChoice label="Show" /></></Can></PageActions>;',
+    'export const A = () => <PageViews><SegmentedChoice label="Show" /></PageViews>;',
+    'export const A = () => <PageActions><ListLayoutToggle screen="directory" /></PageActions>;',
+  ];
+  for (const code of cases) {
+    assert.ok(
+      has(await uiHits("web", WEB_FILE, code), "No boxed switch"),
+      code,
+    );
+  }
+  // The plain labels, and a short pick inside a form, stay legal.
+  for (const code of [
+    'export const A = () => <PageViews><ViewLabels label="Whose tasks" options={[]} value="mine" onChange={() => {}} /></PageViews>;',
+    'export const A = () => <form><SegmentedChoice label="Repeat" options={[]} value="NONE" onChange={() => {}} /></form>;',
+  ]) {
+    assert.deepEqual(await uiHits("web", WEB_FILE, code), [], code);
+  }
+  // Tasks is held by another open PR, so its header waits for the sweep and
+  // is excused from this rule alone.
+  const tasks = "components/tasks/tasks-board.tsx";
+  assert.deepEqual(await uiHits("web", tasks, cases[0]), []);
+  assert.ok(
+    has(
+      await uiHits("web", tasks, "export const A = () => <select />;"),
+      "native <select>",
+    ),
+  );
+});
+
+test("mobile: a screen's views are never a boxed switch in its header", async () => {
+  const cases = [
+    'export const A = () => <ScreenShell title="Tasks" headerAction={<Segmented options={[]} value="mine" onChange={() => {}} accessibilityLabel="Whose" />}><View /></ScreenShell>;',
+    'export const A = () => <ScreenShell title="Tasks" back={BACK} backAction={<View><Segmented options={[]} /></View>}><View /></ScreenShell>;',
+  ];
+  for (const code of cases) {
+    assert.ok(
+      has(await uiHits("mobile", MOBILE_FILE, code), "No boxed switch"),
+      code,
+    );
+  }
+  assert.deepEqual(
+    await uiHits(
+      "mobile",
+      MOBILE_FILE,
+      'export const A = () => <ScreenShell title="Notifications" views={{ accessibilityLabel: "Show", options: [], value: "all", onChange: () => {} }}><Segmented options={[]} value="NONE" onChange={() => {}} accessibilityLabel="Repeat" /></ScreenShell>;',
+    ),
+    [],
+  );
+});
+
 test("mobile: one action menu, never the system's", async () => {
   const cases = [
     'import { ActionSheetIOS } from "react-native";\nexport const a = ActionSheetIOS;',

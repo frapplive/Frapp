@@ -29,6 +29,8 @@ export const MINUTES_READ_COPY = {
   allTopics: (count: number) => `Show all ${count} topics`,
   mine: "Mine",
   all: (count: number) => `All ${count}`,
+  /** What Mine and All are views of, for a screen reader. */
+  whoseActionItems: "Whose action items",
   done: (count: number) => `${count} done`,
   points: (count: number) => (count === 1 ? "1 point" : `${count} points`),
   nobodyNamed: "Nobody named yet",

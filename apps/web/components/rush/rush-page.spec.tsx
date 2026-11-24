@@ -306,7 +306,7 @@ describe("the recruitment page", () => {
   it("shows the same prospects as a list", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("Jake Smith")).toBeInTheDocument();
     expect(
@@ -318,7 +318,7 @@ describe("the recruitment page", () => {
     permissions.current = MEMBER.filter((key) => key !== "rush:view_results");
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "List" }));
+    await user.click(screen.getByRole("tab", { name: "List" }));
     expect(
       screen.queryByRole("columnheader", { name: /Rating/ }),
     ).not.toBeInTheDocument();

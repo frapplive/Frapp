@@ -30,7 +30,7 @@ import { InlineNote } from "@/components/shared/inline-note";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { cn } from "@/lib/utils";
 import { meetingDueLabel, voteLine } from "@/components/meetings/meeting-copy";
 
@@ -290,8 +290,9 @@ export function ActionChecklist({
       {mineCount > 0 || done > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {mineCount > 0 ? (
-            <SegmentedChoice
-              label={MINUTES_READ_COPY.mine}
+            <ViewLabels
+              flush
+              label={MINUTES_READ_COPY.whoseActionItems}
               value={filter}
               onChange={setFilter}
               options={[

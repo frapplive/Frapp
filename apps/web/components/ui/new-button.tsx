@@ -18,7 +18,10 @@ import { cn } from "@/lib/utils";
  *
  * Where it is narrow, in a page header beside chat, the words go and the +
  * stays (the name is still read out), so the page's title keeps its room.
- * That keys off the nearest `@container`: the tool page header is one.
+ * That keys off the nearest `@container`: the tool page header is one. A
+ * header that also holds the page's views (`PageViews`, #5947) needs the room
+ * sooner, so there the words go below 36rem rather than 26rem: the title and
+ * the view words keep their text, and the + says the rest.
  *
  * Forwards its ref and props, so it works as a dialog or popover trigger
  * (`asChild`) and takes a gate's `controlProps()`.
@@ -37,12 +40,15 @@ export const NewButton = React.forwardRef<HTMLButtonElement, NewButtonProps>(
         variant="action"
         className={cn(
           "shrink-0 gap-2 @max-[26rem]:w-9 @max-[26rem]:px-0 @max-[26rem]:pointer-coarse:w-11",
+          "group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:w-9 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:px-0 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:pointer-coarse:w-11",
           className,
         )}
         {...props}
       >
         <Plus className="h-4 w-4" aria-hidden="true" />
-        <span className="@max-[26rem]:sr-only">{newLabel(thing)}</span>
+        <span className="@max-[26rem]:sr-only group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:sr-only">
+          {newLabel(thing)}
+        </span>
       </Button>
     );
   },
