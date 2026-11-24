@@ -212,8 +212,6 @@ export * from "./other-account";
 // API serves it at `GET /v1/roles/permissions-catalog`; web and mobile read
 // the same list from here (#4069).
 export * from "./permission-registry";
-// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
-export * from "./rush-pipeline";
 // Client-side RBAC gates, shared by apps/web and apps/mobile. Moved out of
 // `apps/web/lib/auth/can.ts` with #994 so the wildcard rule has one definition.
 export * from "./permissions";
@@ -257,6 +255,8 @@ export * from "./repeat-draft";
 export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).
