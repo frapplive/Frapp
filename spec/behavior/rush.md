@@ -25,14 +25,14 @@ Recruitment has its own permissions (#4070, 2026-11-10). Every REST route needs 
 
 | Permission | Lets a role | Gates today |
 | --- | --- | --- |
-| `rush:view` | Look up a prospect and see their bid status; open the pipeline and see stages and tags | `GET /v1/rush/candidates`, `GET /v1/rush/candidates/:id`; `/<vocab> vote` and `bid` by name, which look the prospect up first; `GET /v1/rush/pipeline`, `GET /v1/rush/stages` |
-| `rush:add` | Add a prospect and move them between stages ("Add and work prospects") | `POST /v1/rush/candidates`, `/<vocab> add`, `PATCH /v1/rush/candidates/:id/stage` |
+| `rush:view` | Look up a prospect and see their bid status; open the pipeline and see stages, tags, owners, contacts and follow-ups | `GET /v1/rush/candidates`, `GET /v1/rush/candidates/:id`; `/<vocab> vote` and `bid` by name, which look the prospect up first; `GET /v1/rush/pipeline`, `GET /v1/rush/stages`, `GET /v1/rush/settings`, `GET /v1/rush/candidates/:id/contacts` |
+| `rush:add` | Add a prospect and work them ("Add and work prospects"): move stages, log contacts, claim an unowned prospect or let go of their own, set and clear follow-ups | `POST /v1/rush/candidates`, `/<vocab> add`, `PATCH /v1/rush/candidates/:id/stage`, `POST …/contacts`, `PUT …/owner` (claim or let go), `PUT`/`DELETE …/follow-up` |
 | `rush:vote` | Vote on a prospect and rate them | `POST /v1/rush/candidates/:id/vote`, `/<vocab> vote`, the card's Vote; `PUT /v1/rush/candidates/:id/rating` |
 | `rush:bid` | Record a bid | `POST /v1/rush/candidates/:id/bid`, `/<vocab> bid`, the card's Extend bid |
 | `rush:view_results` | See how many votes a prospect has and their average rating | No route: without it, `vote_count` is left out of every prospect read and of the vote and bid responses, and the card shows no count ([#4084](https://github.com/pdcarlson/Frapp/issues/4084)); the pipeline leaves out `vote_count`, `rating_average` and `rating_count` the same way |
 | `rush:notes` | Write notes on a prospect and tag them | `POST /v1/rush/candidates/:id/notes`, editing and deleting their own (`PATCH`/`DELETE …/notes/:noteId`), `PUT /v1/rush/candidates/:id/tags` |
 | `rush:read_notes` | Read notes on prospects ([§ Notes](#notes)) | `GET /v1/rush/candidates/:id/notes` |
-| `rush:manage` | Edit the chapter's stages and tags, and delete anyone's note | `PUT /v1/rush/stages`, `POST`/`PATCH`/`DELETE /v1/rush/tags`, `DELETE …/notes/:noteId` for a note that isn't theirs. Deleting prospects and exporting the list are not built yet ([`ifc-recruitment.md`](ifc-recruitment.md), #5833) |
+| `rush:manage` | Edit the chapter's stages, tags and stale days, assign any prospect's owner, and delete anyone's note | `PUT /v1/rush/stages`, `POST`/`PATCH`/`DELETE /v1/rush/tags`, `PUT /v1/rush/settings`, `PUT …/owner` for anyone, `DELETE …/notes/:noteId` for a note that isn't theirs. Deleting prospects and exporting the list are not built yet ([`ifc-recruitment.md`](ifc-recruitment.md), #5833) |
 
 **Default: today's behaviour** (Paul, 2026-11-10, [#4068](https://github.com/pdcarlson/Frapp/issues/4068) decision 12). Before these keys, any member with `members:view` could look up, add, vote and record a bid. So the seeded Member role holds every key but `rush:manage` (and `rush:read_notes`, which came later, [§ Notes](#notes)) (`RUSH_MEMBER_PERMISSIONS` in `@repo/validation`), and migration `20261111010000_rush_permissions_backfill.sql` gave the same six to every existing role and custom role that held `members:view` in a chapter with the module on. A chapter tightens it by taking a key off a role. `rush:manage` is held only through `*`.
 
@@ -64,7 +64,7 @@ Stage, fit rating and bid status are three separate things, because a chapter ac
 
   The defaults are written the first time the chapter's stages are read. A default stage's key is its category's, so every prospect added before stages existed (`stage = 'new'`) is in New.
 - **A holder of `rush:manage` renames, adds, reorders and hides stages within a category,** on the Recruitment page of Chapter settings. A stage never changes category and is never deleted, because prospects point at it; hiding takes it off the board and the stage pickers. **New** and **Closed** must each keep at least one visible stage. A hidden stage that still holds prospects keeps its board column, so nobody goes missing.
-- **Anything automatic goes by category, never by name.** An automatic move lands in the first visible stage of its category. Today the only one is adding a prospect, which lands in the first visible New stage, whatever the chapter calls it. The other automatic moves (on a first logged contact, on attendance at an event) come with later slices ([`ifc-recruitment.md` § Stages](ifc-recruitment.md#stages)).
+- **Anything automatic goes by category, never by name.** An automatic move lands in the first visible stage of its category, and is skipped when every stage there is hidden. Adding a prospect lands them in the first visible New stage, whatever the chapter calls it. The first logged contact moves a prospect still in a New stage to the first visible Contacted stage (#5934); a prospect already past New stays where they are. The move on attendance at an event comes with a later slice ([`ifc-recruitment.md` § Stages](ifc-recruitment.md#stages)).
 - **Moving a prospect needs `rush:add`.** Any visible stage can be chosen; the board also takes a drag.
 - **A Closed stage needs a reason.** A member picks one of: Not interested, Not eligible, Chapter passed, No response. Leaving Closed clears it. Three more reasons (Accepted elsewhere, Withdrew, Deleted their information) are set only by the system, in later slices.
 - **On the board, every Closed stage folds into one Closed column** at the end, so the board fits a laptop window. Dropping a card there asks for the reason, and for which Closed stage when there is more than one.
@@ -92,6 +92,22 @@ Stage, fit rating and bid status are three separate things, because a chapter ac
 - **The author edits or deletes their own note; `rush:manage` deletes any.**
 - **Notes never appear on the chat card or in a push.**
 - Notes stay when their author deletes their account, as their chat messages do, under the name "Deleted User".
+
+### Contacts, owner and follow-ups
+
+Built in #5934 (slice 2 of #5833). The reasoning and the recruitment week they're checked against: [`ifc-recruitment.md` § Contact tracking and follow-ups](ifc-recruitment.md#contact-tracking-and-follow-ups).
+
+- **Log a contact** (`rush:add`): the kind (text, call, in person, social DM, email, at an event), the day (today by default; any day back to 120 days, never a later one), and an optional note of up to 500 characters. Who logged it is recorded. On the phone it is two taps from the prospect: Log contact, then the kind.
+  - The prospect's **last contact** is the newest logged day and who logged it ("Last contacted Tue · by Chris"). A contact dated earlier than the last one doesn't move it back.
+  - Logging any contact **clears the follow-up**.
+  - A contact's note reads like a recruitment note: only with `rush:read_notes`, and never on a prospect linked to the reader. Everyone with `rush:view` sees that the contact happened. Nobody logs a contact with themself.
+  - Contacts stay when the member who logged them deletes their account, under "Deleted User", as notes do.
+- **Owner**: one member is a prospect's main point of contact. A holder of `rush:add` claims an unowned prospect or lets go of their own; assigning someone else, or taking a prospect over, needs `rush:manage`. The owner must hold `rush:add`. Two claims at once leave one owner; the other is told someone claimed them first. Deleting an account clears the prospects it owned.
+- **Follow-up**: one per prospect, a day (today up to 180 days ahead), what to do (up to 120 characters, "invite to house dinner"), and who it's for: the owner by default, else whoever sets it. It needs `rush:add` to set or clear, and whoever it's for must hold `rush:add`. A closed prospect takes none.
+  - **The push:** that member gets a push and an inbox item on the morning it's due (9 AM to noon in their own time zone, as task and dues reminders go out), once per follow-up day, while recruitment is on and they still hold `rush:add`. It opens the prospect.
+- **The stale alert:** an open prospect with no logged contact for the chapter's **stale days** (default 7, from 1 to 60, set on the Recruitment settings page with `rush:manage`) **needs a follow-up**: counted from the last contact, or from the day they were added when nobody has logged one. The screens flag it. Its owner is told once, on their morning, per stretch without contact; a prospect with no owner is only flagged.
+- **The pushes have no switch** in notification settings (category `rush`): each is a follow-up someone set for the member or a prospect they own, so muting it would drop the work rather than the noise. Neither push carries a note.
+- **Where they show:** web's page header and the phone list's title say "N follow-ups due today" (the viewer's own, due today or earlier). The phone list opens on a **Follow up** chip: the viewer's due follow-ups and the stale prospects they own. Screens: [`spec/ui/web-dashboard/README.md` § Recruitment](../ui/web-dashboard/README.md#recruitment) and [`spec/ui/mobile/screens.md` § Recruitment](../ui/mobile/screens.md#recruitment).
 
 ## Funnel
 

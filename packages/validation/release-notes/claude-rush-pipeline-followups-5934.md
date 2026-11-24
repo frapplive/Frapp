@@ -1,0 +1,1 @@
+Recruitment now tracks who's talked to each prospect: log a text or call in two taps, give a prospect an owner, set a follow-up that reminds its owner the morning it's due, and see who has gone quiet too long.

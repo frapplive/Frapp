@@ -361,3 +361,20 @@ export function formatRushDay(day: string, today: string): string {
   if (diff > -7 && diff < 7) return WEEKDAYS[at.getUTCDay()]!;
   return `${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
 }
+
+/**
+ * How many follow-ups are due for `viewerId` today or earlier, on open
+ * prospects: the "N follow-ups due today" both headers say.
+ */
+export function rushFollowUpsDueCount(
+  candidates: readonly Pick<
+    RushWorkLike & { follow_up_user_id: string | null },
+    "closed_reason" | "follow_up_on" | "follow_up_user_id"
+  >[],
+  viewerId: string,
+  today: string,
+): number {
+  return candidates.filter(
+    (c) => c.follow_up_user_id === viewerId && isRushFollowUpDue(c, today),
+  ).length;
+}

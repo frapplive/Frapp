@@ -13,6 +13,7 @@ import {
   isRushFollowUpForViewer,
   isRushManualClosedReason,
   rushDaysBetween,
+  rushFollowUpsDueCount,
   rushStaleOn,
   shiftRushDayKey,
   rushStagesProblem,
@@ -250,6 +251,29 @@ describe("contacts, follow-ups and the stale alert (#5934)", () => {
     expect(formatRushDay("2026-11-03", today)).toBe("Nov 3");
     expect(shiftRushDayKey("2026-12-31", 1)).toBe("2027-01-01");
     expect(rushDaysBetween("2026-11-24", "2026-12-01")).toBe(7);
+  });
+
+  it("counts the viewer's follow-ups due today or earlier", () => {
+    const today = "2026-11-24";
+    const row = (on: string | null, who: string | null, closed = false) => ({
+      closed_reason: closed ? ("withdrew" as const) : null,
+      follow_up_on: on,
+      follow_up_user_id: who,
+    });
+    expect(
+      rushFollowUpsDueCount(
+        [
+          row("2026-11-24", "me"),
+          row("2026-11-20", "me"),
+          row("2026-11-25", "me"),
+          row("2026-11-24", "you"),
+          row("2026-11-24", "me", true),
+          row(null, "me"),
+        ],
+        "me",
+        today,
+      ),
+    ).toBe(2);
   });
 
   it("knows the contact kinds", () => {
