@@ -26,7 +26,7 @@ import { ASK_ROUTE, isAskRoute } from "@/components/layout/shell-layout";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 
 /**
- * Ask Frapp's front door on web: the Ask bar, the phone's bar on web
+ * Frapp Intelligence's front door on web: the Ask bar, the phone's bar on web
  * (`ask-bar.tsx`; #5476, Paul's pick of 2026-11-18), at the sidebar's foot
  * from `lg` up and floating at the bottom of the page below it (#5560).
  *

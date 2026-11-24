@@ -6,6 +6,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RUSH_CLOSED_REASONS, type RushClosedReason } from '@repo/validation';
 import type {
   RushBidStatus,
   RushCandidate,
@@ -79,6 +80,13 @@ export class CreateRushCandidateResponseDto implements RushCandidate {
   @ApiProperty()
   stage: string;
 
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
+
   @ApiProperty({ enum: ['none', 'extended'] })
   bid_status: RushBidStatus;
 
@@ -114,6 +122,13 @@ export class RushCandidateViewDto implements RushCandidateView {
   @ApiProperty()
   stage: string;
 
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
+
   @ApiProperty({ enum: ['none', 'extended'] })
   bid_status: RushBidStatus;
 
@@ -123,8 +138,11 @@ export class RushCandidateViewDto implements RushCandidateView {
   @ApiProperty({ format: 'date-time' })
   created_at: string;
 
-  @ApiProperty({ description: 'Ballot count. Voter names are never returned.' })
-  vote_count: number;
+  @ApiPropertyOptional({
+    description:
+      'Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0.',
+  })
+  vote_count?: number;
 
   @ApiProperty({
     description: 'Whether the authenticated caller has already voted.',

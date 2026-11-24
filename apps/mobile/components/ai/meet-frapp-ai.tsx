@@ -16,7 +16,7 @@ import { FRAPP_AI_COPY, joinNames, type FrappAiPoint } from "@repo/validation";
 import { ChatGlyph, TasksGlyph } from "@/components/tab-glyphs";
 import { Frame, paint } from "@/components/glyph-recipe";
 import { OnboardingPrimaryButton } from "@/components/onboarding/onboarding-primary-button";
-import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import {
   SHEET_STACK_BEHAVIOR,
   SheetBackToClose,
@@ -32,8 +32,8 @@ import { pageSurfaces } from "@/lib/surfaces";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
 
 /**
- * Meet Frapp AI on the phone (#4790, Paul 2026-11-13): the one screen where
- * a member turns Frapp AI on (`spec/behavior/ai.md` § Consent).
+ * Meet Frapp Intelligence on the phone (#4790, Paul 2026-11-13): the one screen where
+ * a member turns Frapp Intelligence on (`spec/behavior/ai.md` § Consent).
  *
  * Three lines of what it does, one line naming the companies it works with
  * and saying that Continue turns it on, with the privacy policy one tap
@@ -50,7 +50,7 @@ import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
  *   on, whether they never answered or chose Not now
  *   ({@link useAiConsentGate}), as a sheet over the feature. A member who
  *   joined meets it here, not in s03 (#5627).
- * - **Settings**, when the Frapp AI switch is turned on.
+ * - **Settings**, when the Frapp Intelligence switch is turned on.
  *
  * Signet gold, not the chapter accent, as the notifications step: Frapp is
  * asking on its own behalf.
@@ -122,8 +122,6 @@ export function MeetFrappAiActions({
   onContinue: () => void;
   onNotNow: () => void;
 }) {
-  const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
   return (
     <>
       <OnboardingPrimaryButton
@@ -132,15 +130,11 @@ export function MeetFrappAiActions({
         disabled={busy || disabled}
         busy={busy}
       />
-      <OnboardingPressable
-        accessibilityRole="button"
+      <OnboardingQuietButton
+        label={FRAPP_AI_COPY.notNow}
         onPress={onNotNow}
         disabled={busy || disabled}
-        quiet
-        style={styles.quietButton}
-      >
-        <Text style={styles.quietButtonText}>{FRAPP_AI_COPY.notNow}</Text>
-      </OnboardingPressable>
+      />
     </>
   );
 }
@@ -206,7 +200,7 @@ export interface MeetFrappAiSheetProps {
 }
 
 /**
- * Meet Frapp AI as a sheet, over an AI feature or over the chat home. Its
+ * Meet Frapp Intelligence as a sheet, over an AI feature or over the chat home. Its
  * title, body and two answers are the onboarding beat's. Swiping it away is
  * not an answer.
  */
@@ -302,8 +296,8 @@ export const MeetFrappAiSheet = forwardRef<
  * once in the screen. Mobile's half of web's `useAiConsentGate`
  * (`apps/web/components/ai/meet-frapp-ai.tsx`), with the same contract:
  *
- * - `true` at once for a member who has Frapp AI on;
- * - Meet Frapp AI for anyone else, resolving `true` on Continue and `false`
+ * - `true` at once for a member who has Frapp Intelligence on;
+ * - Meet Frapp Intelligence for anyone else, resolving `true` on Continue and `false`
  *   on Not now or a swipe away;
  * - `false` when the server has no AI;
  * - a rejection when the answer can't be read (offline, a failed request), so
@@ -418,18 +412,6 @@ function createStyles(tokens: SignetTokens) {
     error: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.semantic.destructiveText,
-    },
-    quietButton: {
-      alignSelf: "center",
-      minHeight: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
-      justifyContent: "center",
-      marginTop: tokens.spacing.xs,
-    },
-    quietButtonText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.mutedForeground,
-      textDecorationLine: "underline",
     },
     sheetBody: {
       paddingHorizontal: tokens.spacing.lg,

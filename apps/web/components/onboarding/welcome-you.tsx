@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   useActiveChapterId,
+  useCurrentChapter,
   useCurrentUser,
+  useMySchools,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
@@ -15,6 +17,7 @@ import {
   ONBOARDING_YOU_COPY,
   initialNameField,
   isDisplayNameLocked,
+  needsAboutYou,
   typedNameMissing,
 } from "@repo/validation";
 import { AuthScreen } from "@/components/auth/auth-screen";
@@ -28,13 +31,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchoolStep } from "@/components/onboarding/school-step";
+import { WelcomeAbout } from "@/components/onboarding/welcome-about";
+import type { ProfileFields } from "@/components/profile/profile-save-body";
 import { markWelcomeDue } from "@/lib/onboarding/welcome-due";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { initials } from "@/lib/utils";
 
-type Me = {
+type Me = ProfileFields & {
   id?: string;
-  display_name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
 };
@@ -45,13 +50,21 @@ type Me = {
  * then notifications"). The phone's s03 shows the same screen, in the same
  * order and words (`apps/mobile/app/(auth)/welcome.tsx`); the phone then asks
  * about notifications, which the web has no second screen for, so here the
- * one button goes to chat.
+ * one button goes to chat, or to the school step below.
  *
  * The name is pre-filled when sign-in carried a real one (Apple or Google). A
  * name that is only the API's `Member` or the email before the `@` starts
  * empty (`needsName` in `@repo/validation`), and a typed name is required (`typedNameMissing`), because every
  * message the member sends carries it. The photo is optional and saves on its
  * own, as it does on Profile.
+ *
+ * Then **About you** (#5284), when phone, major, graduation year or birthday
+ * is empty (`needsAboutYou`): optional, with Skip for now
+ * (`welcome-about.tsx`). The name's button says Continue when it follows.
+ *
+ * Then, for a member with no verified school, "Where do you go to school?"
+ * (#5929, `school-step.tsx`), which can be skipped. The name's button says
+ * Continue when either follows.
  *
  * Leaving marks onboarding done (`has_completed_onboarding`), as the phone's
  * s03 does, so the Directory stops listing the member as pending. The phone
@@ -65,11 +78,25 @@ export function WelcomeYou() {
   const updateUser = useUpdateUser();
   const updateOnboarding = useUpdateOnboarding();
   const chapterId = useActiveChapterId();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
   const me = userQuery.data as Me | undefined;
+  // The school step, once the name is saved (#5929).
+  const [askingSchool, setAskingSchool] = useState(false);
   // `null` until typed in: the field shows the loaded name until then.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [step, setStep] = useState<"you" | "about">("you");
+
+  if (askingSchool) {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        onLeave={() => router.replace("/chat")}
+      />
+    );
+  }
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -112,7 +139,16 @@ export function WelcomeYou() {
     ? storedName
     : (nameDraft ?? initialNameField(me.display_name, me.email ?? null));
 
-  // Validated on Go to chat, not per keystroke. A name that didn't change
+  // Decided from the profile as loaded; once on About you it stays there.
+  const askAbout = needsAboutYou({
+    phone: me.phone,
+    major: me.major,
+    graduationYear: me.graduation_year,
+    birthdayMonth: me.birthday_month,
+    birthdayDay: me.birthday_day,
+  });
+
+  // Validated on Continue or Go to chat, not per keystroke. A name that didn't change
   // isn't sent again; one that did is saved first, so a failure keeps the
   // member here with the reason rather than losing the name.
   async function leave(event: React.FormEvent<HTMLFormElement>) {
@@ -133,6 +169,16 @@ export function WelcomeYou() {
         return;
       }
     }
+    if (askAbout) {
+      setLeaving(false);
+      setStep("about");
+      return;
+    }
+    await finish();
+  }
+
+  async function finish() {
+    setLeaving(true);
     try {
       await updateOnboarding.mutateAsync({ has_completed_onboarding: true });
     } catch {
@@ -140,8 +186,26 @@ export function WelcomeYou() {
     }
     // The welcome card in the default channel shows once (#5627).
     if (me?.id && chapterId) markWelcomeDue(me.id, chapterId);
-    // Stays busy: the page is on its way to chat.
-    router.replace("/chat");
+    // A member already verified at a school goes straight to chat; anyone
+    // else is asked, and can skip (#5929). A list still loading is waited
+    // for, not read as "no school"; a failed read asks, since the step can
+    // be skipped.
+    const schools =
+      mySchools.data ??
+      (await mySchools.refetch().catch(() => undefined))?.data;
+    if ((schools?.length ?? 0) > 0) {
+      // Stays busy: the page is on its way to chat.
+      router.replace("/chat");
+      return;
+    }
+    setLeaving(false);
+    setAskingSchool(true);
+  }
+
+  if (step === "about") {
+    return (
+      <WelcomeAbout saved={me} leaving={leaving} onDone={() => void finish()} />
+    );
   }
 
   return (
@@ -220,7 +284,9 @@ export function WelcomeYou() {
           {leaving ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {ONBOARDING_YOU_COPY.goToChat}
+          {askAbout || (mySchools.data?.length ?? 0) === 0
+            ? ONBOARDING_YOU_COPY.continue
+            : ONBOARDING_YOU_COPY.goToChat}
         </Button>
       </form>
     </AuthScreen>

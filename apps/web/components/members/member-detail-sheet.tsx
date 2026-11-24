@@ -23,7 +23,11 @@ import {
   formatBirthday,
   phoneHref,
 } from "@repo/validation";
-import { formatDay, formatPhone } from "@repo/formatting";
+import {
+  formatCustomFieldValue,
+  formatDay,
+  formatPhone,
+} from "@repo/formatting";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -76,12 +80,7 @@ type CustomFieldValue = {
 function formatCustomValue(
   field: CustomFieldValue & { value: string },
 ): string {
-  if (field.type === "boolean") {
-    return field.value === "true" ? "Yes" : "No";
-  }
-  // A chapter's own phone field reads like the member's Phone row (#5798).
-  if (field.type === "phone") return formatPhone(field.value);
-  return field.value;
+  return formatCustomFieldValue(field.type, field.value) ?? field.value;
 }
 
 /**
@@ -205,7 +204,8 @@ type MemberDetailSheetProps = {
  *
  * **Edit name and graduation year** (#4367) is in the same `⋯`, for an officer
  * the API says may fix them (`viewer_can_edit_profile`: `roles:manage`, the
- * member ranks below them, and is in no other chapter). It opens
+ * member ranks below them or at their own rank (#5900), and is in no other
+ * chapter). It opens
  * `MemberCorrectionDialog`. Nothing else on someone's profile is an officer's
  * to change.
  */

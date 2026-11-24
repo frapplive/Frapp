@@ -101,10 +101,20 @@ export const OptionSheet = forwardRef<
     selected: string | null;
     /** The pick. The sheet closes itself after it, so the host doesn't dismiss. */
     onSelect: (value: string | null) => void;
+    /**
+     * Several picks instead of one (a prospect's tags, #5924): a check on
+     * each value listed here, and a tap that hands `onSelect` the row to put
+     * on or take off while the sheet stays up, as Gmail's label picker does.
+     * `selected` is ignored.
+     */
+    checked?: readonly string[];
     /** The sheet closed, however it closed. */
     onDismiss?: () => void;
   }
->(function OptionSheet({ title, options, selected, onSelect, onDismiss }, ref) {
+>(function OptionSheet(
+  { title, options, selected, onSelect, onDismiss, checked },
+  ref,
+) {
   const closeSheet = useSheetClose(ref);
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
@@ -114,18 +124,21 @@ export const OptionSheet = forwardRef<
   const fits = fitsContent(options);
   const bottomPad = { paddingBottom: insets.bottom + tokens.spacing.md };
 
+  const many = checked !== undefined;
   const rows = options.map((option, index) => {
-    const on = option.value === selected;
+    const on = many
+      ? option.value !== null && checked.includes(option.value)
+      : option.value === selected;
     const row = (
       <Pressable
         key={option.value ?? "any"}
-        accessibilityRole="radio"
+        accessibilityRole={many ? "checkbox" : "radio"}
         accessibilityState={{ checked: on }}
         accessibilityLabel={option.accessibilityLabel ?? option.label}
         accessibilityHint={option.accessibilityHint}
         onPress={() => {
           onSelect(option.value);
-          closeSheet();
+          if (!many) closeSheet();
         }}
         style={({ pressed }) => [
           styles.row,
@@ -177,7 +190,7 @@ export const OptionSheet = forwardRef<
       <SheetBackToClose onClose={closeSheet} />
       {fits ? (
         <BottomSheetView
-          accessibilityRole="radiogroup"
+          accessibilityRole={many ? undefined : "radiogroup"}
           onAccessibilityEscape={closeSheet}
           style={[styles.body, bottomPad]}
         >
@@ -186,7 +199,7 @@ export const OptionSheet = forwardRef<
         </BottomSheetView>
       ) : (
         <BottomSheetScrollView
-          accessibilityRole="radiogroup"
+          accessibilityRole={many ? undefined : "radiogroup"}
           onAccessibilityEscape={closeSheet}
           contentContainerStyle={[styles.body, bottomPad]}
         >

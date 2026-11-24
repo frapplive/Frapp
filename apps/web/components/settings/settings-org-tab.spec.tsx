@@ -23,7 +23,9 @@ const baseProps = {
 
 describe("SettingsOrgTab", () => {
   it("falls back to the IFC archetype for an unknown key (no crash)", () => {
-    render(<SettingsOrgTab archetypeKey="bogus-key" {...baseProps} />);
+    render(
+      <SettingsOrgTab archetypeKey="bogus-key" {...baseProps} page="type" />,
+    );
     expect(
       screen.getByRole("button", { name: /IFC Fraternity/i }),
     ).toHaveTextContent("Current");
@@ -31,12 +33,14 @@ describe("SettingsOrgTab", () => {
 
   it("shows archetype-appropriate vocabulary placeholders (IFC vs NPHC)", () => {
     const { rerender } = render(
-      <SettingsOrgTab archetypeKey="ifc" {...baseProps} />,
+      <SettingsOrgTab archetypeKey="ifc" {...baseProps} page="vocabulary" />,
     );
     expect(screen.getByPlaceholderText("Rush")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Pledge class")).toBeInTheDocument();
 
-    rerender(<SettingsOrgTab archetypeKey="nphc" {...baseProps} />);
+    rerender(
+      <SettingsOrgTab archetypeKey="nphc" {...baseProps} page="vocabulary" />,
+    );
     expect(screen.getByPlaceholderText("Intake")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Line")).toBeInTheDocument();
   });
@@ -54,6 +58,7 @@ describe("SettingsOrgTab", () => {
           order: "Fraternal order",
         }}
         onPatchConfig={onPatchConfig}
+        page="vocabulary"
       />,
     );
     // What the chapter calls a tier of roles (#4068 decision 5).
@@ -87,6 +92,7 @@ describe("SettingsOrgTab", () => {
         archetypeKey="ifc"
         {...baseProps}
         onPatchConfig={onPatchConfig}
+        page="type"
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /NPHC/i }));
@@ -117,9 +123,13 @@ describe("SettingsOrgTab", () => {
         onSaveProfile={onSaveProfile}
       />,
     );
+    // Save profile waits for a change to save.
+    fireEvent.change(screen.getByLabelText(/chapter name/i), {
+      target: { value: "Test Chapter II" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
     expect(onSaveProfile).toHaveBeenCalledWith({
-      name: "Test Chapter",
+      name: "Test Chapter II",
       university: "State U",
       donation_url: "",
     });
@@ -133,6 +143,7 @@ describe("SettingsOrgTab", () => {
         {...baseProps}
         branding={{ greek_letters: "ΣΦΕ", designation: "Cal Eta" }}
         onPatchConfig={onPatchConfig}
+        page="identity"
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /save identity/i }));
@@ -153,6 +164,10 @@ describe("SettingsOrgTab", () => {
         canEditProfile
       />,
     );
+    // Save profile waits for a change, so make one: what's left is the gate.
+    fireEvent.change(screen.getByLabelText(/university/i), {
+      target: { value: "State University" },
+    });
     expect(screen.getByRole("button", { name: /save profile/i })).toBeEnabled();
     rerender(
       <SettingsOrgTab
@@ -167,23 +182,48 @@ describe("SettingsOrgTab", () => {
     ).toBeDisabled();
   });
 
+  it("keeps an unsaved short name when the officer leaves the mark page and comes back", () => {
+    const { rerender } = render(
+      <SettingsOrgTab archetypeKey="ifc" {...baseProps} page="mark" />,
+    );
+    fireEvent.change(screen.getByLabelText("Short name"), {
+      target: { value: "Fiji draft" },
+    });
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...baseProps} page={null} />);
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...baseProps} page="mark" />);
+    expect(screen.getByLabelText("Short name")).toHaveValue("Fiji draft");
+  });
+
   it("says the role can't change settings, never which permission key it lacks", () => {
-    render(
+    // The mark page stays mounted, hidden, while another page shows, so
+    // count only what is on screen.
+    const hints = () =>
+      screen
+        .getAllByText(
+          (_, node) =>
+            node?.tagName === "P" &&
+            node.textContent === "Your role can't change chapter settings.",
+        )
+        .filter((node) => !node.closest("[hidden]"));
+    const { rerender } = render(
       <SettingsOrgTab
         archetypeKey="ifc"
         {...baseProps}
         canEditProfile={false}
       />,
     );
-    // Twice: under the profile save and under the Chapter mark's logo
-    // controls, which the same routes' permissions gate.
-    expect(
-      screen.getAllByText(
-        (_, node) =>
-          node?.tagName === "P" &&
-          node.textContent === "Your role can't change chapter settings.",
-      ),
-    ).toHaveLength(2);
+    // Once under the profile save, and once under the Chapter mark's logo
+    // controls (on its own page), which the same routes' permissions gate.
+    expect(hints()).toHaveLength(1);
+    rerender(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        canEditProfile={false}
+        page="mark"
+      />,
+    );
+    expect(hints()).toHaveLength(1);
   });
 
   it("sends an emptied identity field as an empty string, so the clear saves", () => {
@@ -196,6 +236,7 @@ describe("SettingsOrgTab", () => {
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ", designation: "Tau Nu" }}
         onPatchConfig={onPatchConfig}
+        page="identity"
       />,
     );
     fireEvent.change(screen.getByLabelText(/^greek letters$/i), {
@@ -205,6 +246,40 @@ describe("SettingsOrgTab", () => {
     expect(onPatchConfig).toHaveBeenCalledWith({
       branding: { greek_letters: "", designation: "Tau Nu" },
     });
+  });
+});
+
+describe("SettingsOrgTab's root page", () => {
+  it("links a row to each page and holds Save profile until a field changes", () => {
+    render(<SettingsOrgTab archetypeKey="ifc" {...baseProps} />);
+    for (const [label, page] of [
+      [/^chapter mark/i, "mark"],
+      [/^accent color/i, "accent"],
+      [/^identity & founding/i, "identity"],
+      [/^organization type/i, "type"],
+      [/^vocabulary/i, "vocabulary"],
+    ] as const) {
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute(
+        "href",
+        `/settings?tab=org&page=${page}`,
+      );
+    }
+    // The pages' own forms stay on their pages.
+    expect(
+      screen.queryByRole("button", { name: /save identity/i }),
+    ).not.toBeInTheDocument();
+
+    const save = screen.getByRole("button", { name: /save profile/i });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/donation link/i), {
+      target: { value: "https://give.example.edu" },
+    });
+    expect(save).toBeEnabled();
+    // Back to the stored (empty) link: nothing to save again.
+    fireEvent.change(screen.getByLabelText(/donation link/i), {
+      target: { value: "" },
+    });
+    expect(save).toBeDisabled();
   });
 });
 
@@ -219,6 +294,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         archetypeKey="ifc"
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ", short_name: "FIJI" }}
+        page="mark"
       />,
     );
     expect(tile()).toHaveTextContent("FIJI");
@@ -231,6 +307,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         archetypeKey="ifc"
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ" }}
+        page="mark"
       />,
     );
     expect(tile()).toHaveTextContent("ΦΓΔ");
@@ -248,6 +325,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ", short_name: "FIJI" }}
         mark={{ ...baseMark, logoUrl: "https://storage.example/logo.png" }}
+        page="mark"
       />,
     );
     expect(screen.getByTestId("chapter-mark-logo")).toHaveAttribute(
@@ -265,6 +343,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ" }}
         onPatchConfig={onPatchConfig}
+        page="mark"
       />,
     );
     await user.type(screen.getByLabelText(/short name/i), "FIJI");
@@ -286,6 +365,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ short_name: "FIJI" }}
         onPatchConfig={onPatchConfig}
+        page="mark"
       />,
     );
     await user.clear(screen.getByLabelText(/short name/i));
@@ -303,6 +383,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         archetypeKey="ifc"
         {...baseProps}
         mark={{ ...baseMark, onUploadLogo }}
+        page="mark"
       />,
     );
     const file = new File(["png"], "crest.png", { type: "image/png" });
@@ -322,6 +403,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         archetypeKey="ifc"
         {...baseProps}
         mark={{ ...baseMark, onUploadLogo }}
+        page="mark"
       />,
     );
     await user.upload(
@@ -339,17 +421,20 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
   it("refuses an oversized file with the shared size label, keeping other drafts", async () => {
     const user = userEvent.setup();
     const onUploadLogo = vi.fn(async () => {});
-    render(
-      <SettingsOrgTab
-        archetypeKey="ifc"
-        {...baseProps}
-        branding={{ designation: "Tau Nu" }}
-        mark={{ ...baseMark, onUploadLogo }}
-      />,
+    const props = {
+      ...baseProps,
+      branding: { designation: "Tau Nu" },
+      mark: { ...baseMark, onUploadLogo },
+    };
+    // The designation is typed on its own page, then the officer goes to the
+    // mark's page to pick the logo.
+    const { rerender } = render(
+      <SettingsOrgTab archetypeKey="ifc" {...props} page="identity" />,
     );
-    await user.type(screen.getByLabelText(/short name/i), "FIJI");
     await user.clear(screen.getByLabelText(/chapter designation/i));
     await user.type(screen.getByLabelText(/chapter designation/i), "Tau Nu II");
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...props} page="mark" />);
+    await user.type(screen.getByLabelText(/short name/i), "FIJI");
     const huge = new File(["x"], "crest.png", { type: "image/png" });
     Object.defineProperty(huge, "size", { value: 26 * 1024 * 1024 });
     await user.upload(screen.getByLabelText(/^logo$/i), huge);
@@ -361,6 +446,8 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/short name/i)).toHaveValue("FIJI");
+
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...props} page="identity" />);
     expect(screen.getByLabelText(/chapter designation/i)).toHaveValue(
       "Tau Nu II",
     );
@@ -370,20 +457,44 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
     // The page rebuilds `branding` and `profile` on every render. A logo
     // upload starting re-renders it; that must not throw away typed edits.
     const user = userEvent.setup();
-    const { rerender } = render(
+    const markPage = render(
       <SettingsOrgTab
         archetypeKey="ifc"
         {...baseProps}
         branding={{ greek_letters: "ΦΓΔ" }}
+        page="mark"
       />,
     );
     await user.type(screen.getByLabelText(/short name/i), "FIJI");
     await user.click(
       screen.getByRole("switch", { name: /show greek letters/i }),
     );
-    await user.type(screen.getByLabelText(/chapter name/i), " II");
+    markPage.rerender(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        profile={{ ...baseProps.profile }}
+        branding={{ greek_letters: "ΦΓΔ" }}
+        mark={{ ...baseMark, logoPending: true }}
+        page="mark"
+      />,
+    );
+    expect(screen.getByLabelText(/short name/i)).toHaveValue("FIJI");
+    expect(
+      screen.getByRole("switch", { name: /show greek letters/i }),
+    ).toHaveAttribute("aria-checked", "false");
+    markPage.unmount();
 
-    rerender(
+    // The profile's fields are on the tab's own page.
+    const rootPage = render(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        branding={{ greek_letters: "ΦΓΔ" }}
+      />,
+    );
+    await user.type(screen.getByLabelText(/chapter name/i), " II");
+    rootPage.rerender(
       <SettingsOrgTab
         archetypeKey="ifc"
         {...baseProps}
@@ -392,11 +503,6 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         mark={{ ...baseMark, logoPending: true }}
       />,
     );
-
-    expect(screen.getByLabelText(/short name/i)).toHaveValue("FIJI");
-    expect(
-      screen.getByRole("switch", { name: /show greek letters/i }),
-    ).toHaveAttribute("aria-checked", "false");
     expect(screen.getByLabelText(/chapter name/i)).toHaveValue(
       "Test Chapter II",
     );
@@ -417,12 +523,23 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ ...stored }}
         vocabulary={{ recruitment: "Rush" }}
+        page="identity"
       />,
     );
     await user.clear(screen.getByLabelText(/chapter designation/i));
     await user.type(screen.getByLabelText(/chapter designation/i), "Tau Nu II");
     await user.clear(screen.getByLabelText(/founded year/i));
     await user.type(screen.getByLabelText(/founded year/i), "1894");
+
+    rerender(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        branding={{ ...stored }}
+        vocabulary={{ recruitment: "Rush" }}
+        page="vocabulary"
+      />,
+    );
     await user.clear(screen.getByLabelText(/recruitment process/i));
     await user.type(
       screen.getByLabelText(/recruitment process/i),
@@ -435,16 +552,26 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ ...stored }}
         vocabulary={{ recruitment: "Rush" }}
+        page="vocabulary"
       />,
     );
+    expect(screen.getByLabelText(/recruitment process/i)).toHaveValue(
+      "Recruitment",
+    );
 
+    rerender(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        branding={{ ...stored }}
+        vocabulary={{ recruitment: "Rush" }}
+        page="identity"
+      />,
+    );
     expect(screen.getByLabelText(/chapter designation/i)).toHaveValue(
       "Tau Nu II",
     );
     expect(screen.getByLabelText(/founded year/i)).toHaveValue(1894);
-    expect(screen.getByLabelText(/recruitment process/i)).toHaveValue(
-      "Recruitment",
-    );
   });
 
   it("refuses to save an emptied founded year instead of silently keeping it", async () => {
@@ -456,6 +583,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         branding={{ founded_at: 1893 }}
         onPatchConfig={onPatchConfig}
+        page="identity"
       />,
     );
     await user.clear(screen.getByLabelText(/founded year/i));
@@ -478,7 +606,14 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
 
   it("waits for the member to leave the founded year before refusing it", async () => {
     const user = userEvent.setup();
-    render(<SettingsOrgTab archetypeKey="ifc" {...baseProps} branding={{}} />);
+    render(
+      <SettingsOrgTab
+        archetypeKey="ifc"
+        {...baseProps}
+        branding={{}}
+        page="identity"
+      />,
+    );
     const field = screen.getByLabelText(/founded year/i);
 
     await user.type(field, "18");
@@ -494,29 +629,42 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
   });
 
   it("re-seeds the drafts when the stored values really change", () => {
+    const changed = {
+      ...baseProps,
+      profile: { ...baseProps.profile, name: "Tau Nu" },
+      branding: {
+        short_name: "FIJI",
+        show_greek_letters: false,
+        designation: "Tau Nu",
+      },
+      vocabulary: { recruitment: "Rush" },
+    };
+    // The values change while the mark's page is open; every page then shows
+    // the new ones, though only the mark's page was drawn when they arrived.
     const { rerender } = render(
-      <SettingsOrgTab archetypeKey="ifc" {...baseProps} branding={{}} />,
-    );
-    rerender(
       <SettingsOrgTab
         archetypeKey="ifc"
         {...baseProps}
-        profile={{ ...baseProps.profile, name: "Tau Nu" }}
-        branding={{
-          short_name: "FIJI",
-          show_greek_letters: false,
-          designation: "Tau Nu",
-        }}
-        vocabulary={{ recruitment: "Rush" }}
+        branding={{}}
+        page="mark"
       />,
     );
-    expect(screen.getByLabelText(/chapter name/i)).toHaveValue("Tau Nu");
-    expect(screen.getByLabelText(/chapter designation/i)).toHaveValue("Tau Nu");
-    expect(screen.getByLabelText(/recruitment process/i)).toHaveValue("Rush");
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...changed} page="mark" />);
     expect(screen.getByLabelText(/short name/i)).toHaveValue("FIJI");
     expect(
       screen.getByRole("switch", { name: /show greek letters/i }),
     ).toHaveAttribute("aria-checked", "false");
+
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...changed} />);
+    expect(screen.getByLabelText(/chapter name/i)).toHaveValue("Tau Nu");
+    rerender(
+      <SettingsOrgTab archetypeKey="ifc" {...changed} page="identity" />,
+    );
+    expect(screen.getByLabelText(/chapter designation/i)).toHaveValue("Tau Nu");
+    rerender(
+      <SettingsOrgTab archetypeKey="ifc" {...changed} page="vocabulary" />,
+    );
+    expect(screen.getByLabelText(/recruitment process/i)).toHaveValue("Rush");
   });
 
   it("offers replace and remove once a logo is set", async () => {
@@ -531,6 +679,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
           logoUrl: "https://storage.example/logo.png",
           onRemoveLogo,
         }}
+        page="mark"
       />,
     );
     expect(
@@ -549,6 +698,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         canEditProfile={false}
         canManage
+        page="mark"
       />,
     );
     expect(screen.getByRole("button", { name: /upload logo/i })).toBeDisabled();
@@ -560,6 +710,7 @@ describe("SettingsOrgTab chapter mark (#2876, #2591)", () => {
         {...baseProps}
         canEditProfile
         canManage={false}
+        page="mark"
       />,
     );
     expect(screen.getByRole("button", { name: /upload logo/i })).toBeEnabled();
@@ -584,14 +735,17 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
   };
 
   it("draws neither for a chapter whose name adds to the organization's", () => {
-    render(
-      <SettingsOrgTab
-        archetypeKey="ifc"
-        {...fiji}
-        profile={{ ...fiji.profile, name: "Phi Gamma Delta Tau Nu" }}
-      />,
+    const props = {
+      ...fiji,
+      profile: { ...fiji.profile, name: "Phi Gamma Delta Tau Nu" },
+    };
+    const { rerender } = render(
+      <SettingsOrgTab archetypeKey="ifc" {...props} page="identity" />,
     );
     expect(screen.queryByLabelText(/^greek letters$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ΦΓΔ/)).not.toBeInTheDocument();
+
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...props} page="mark" />);
     expect(
       screen.queryByRole("switch", { name: /show greek letters/i }),
     ).not.toBeInTheDocument();
@@ -599,8 +753,13 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
   });
 
   it("draws neither the letters field nor the switch, and the mark skips them", () => {
-    render(<SettingsOrgTab archetypeKey="ifc" {...fiji} />);
+    const { rerender } = render(
+      <SettingsOrgTab archetypeKey="ifc" {...fiji} page="identity" />,
+    );
     expect(screen.queryByLabelText(/^greek letters$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ΦΓΔ/)).not.toBeInTheDocument();
+
+    rerender(<SettingsOrgTab archetypeKey="ifc" {...fiji} page="mark" />);
     expect(
       screen.queryByRole("switch", { name: /show greek letters/i }),
     ).not.toBeInTheDocument();
@@ -618,6 +777,7 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
         archetypeKey="ifc"
         {...fiji}
         onPatchConfig={onPatchConfig}
+        page="mark"
       />,
     );
     await user.type(screen.getByLabelText(/short name/i), "FIJI");
@@ -634,6 +794,7 @@ describe("SettingsOrgTab for an organization that hides its letters", () => {
         archetypeKey="ifc"
         {...fiji}
         onPatchConfig={onPatchConfig}
+        page="identity"
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /save identity/i }));

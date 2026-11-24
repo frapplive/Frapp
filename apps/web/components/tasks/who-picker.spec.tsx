@@ -344,4 +344,98 @@ describe("WhoPicker", () => {
       screen.getByRole("button", { name: "Who: Sam Ortiz" }),
     ).toBeInTheDocument();
   });
+
+  it("picks several people only, with who has it fixed, and adds them (#5905)", async () => {
+    const onChange = vi.fn();
+    const onDone = vi.fn();
+    function PeopleHarness() {
+      const [value, setValue] = useState<TaskWho | null>(null);
+      return (
+        <WhoPicker
+          allow="people"
+          label="Add people"
+          value={value}
+          onChange={(next) => {
+            setValue(next);
+            onChange(next);
+          }}
+          marked={new Set(["u-paul"])}
+          markedNote="has it"
+          doneLabel={(count) => (count === 0 ? "Add" : `Add ${count}`)}
+          onDone={onDone}
+        />
+      );
+    }
+    render(<PeopleHarness />);
+    await userEvent.click(screen.getByRole("button", { name: /^add people/i }));
+
+    // People only: no Everyone, no roles and groups tab.
+    expect(
+      screen.getByRole("textbox", { name: "Search people" }),
+    ).toHaveFocus();
+    expect(
+      screen.queryByRole("checkbox", { name: /Everyone in the chapter/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: "Roles and groups" }),
+    ).toBeNull();
+    // Who already has a copy is ticked and can't be unticked.
+    const paul = screen.getByRole("checkbox", {
+      name: /Paul Carlson\s*has it/,
+    });
+    expect(paul).toHaveAttribute("aria-checked", "true");
+    expect(paul).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /Sam Ortiz/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Alex Kim/ }));
+    // Two ticked stays open, with no mode to choose.
+    expect(
+      screen.queryByRole("radiogroup", { name: "How it's given" }),
+    ).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith({
+      kind: "each",
+      target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Add 2" }));
+
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("textbox", { name: "Search people" })).toBeNull();
+  });
+
+  it("drops Add people's picks when it closes without Add (#5905)", async () => {
+    const onChange = vi.fn();
+    function PeopleHarness() {
+      const [value, setValue] = useState<TaskWho | null>(null);
+      return (
+        <WhoPicker
+          allow="people"
+          label="Add people"
+          value={value}
+          onChange={(next) => {
+            setValue(next);
+            onChange(next);
+          }}
+          marked={new Set(["u-paul"])}
+          markedNote="has it"
+          doneLabel={(count) => (count === 0 ? "Add" : `Add ${count}`)}
+        />
+      );
+    }
+    render(<PeopleHarness />);
+    const open = () =>
+      userEvent.click(screen.getByRole("button", { name: /^add people/i }));
+    await open();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Sam Ortiz/ }));
+    expect(screen.getByRole("button", { name: "Add 1" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
+
+    expect(onChange).toHaveBeenLastCalledWith(null);
+    await open();
+    expect(screen.getByRole("checkbox", { name: /Sam Ortiz/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+  });
 });

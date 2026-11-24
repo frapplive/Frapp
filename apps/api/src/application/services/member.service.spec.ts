@@ -1172,9 +1172,9 @@ describe('MemberService', () => {
       ).rejects.toThrow(/billing:view/);
     });
 
-    it('stops a chair taking a role away from an officer who outranks them', async () => {
+    it("stops a chair taking an officer's own role away from an officer who outranks them", async () => {
       await expect(
-        save(TIERED_MEMBER.vicePresident, [ROLE.vicePresident], USER.riskChair),
+        save(TIERED_MEMBER.vicePresident, [ROLE.brother], USER.riskChair),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
@@ -1300,37 +1300,6 @@ describe('MemberService', () => {
         expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
       });
 
-      it('still refuses even a lower role on a member ranked above the caller', async () => {
-        await expect(
-          save(
-            TIERED_MEMBER.vicePresident,
-            [ROLE.vicePresident, ROLE.brother, ROLE.pledge],
-            USER.riskChair,
-          ),
-        ).rejects.toBeInstanceOf(ForbiddenException);
-        await expect(
-          save(
-            TIERED_MEMBER.vicePresident,
-            [ROLE.vicePresident],
-            USER.riskChair,
-          ),
-        ).rejects.toBeInstanceOf(ForbiddenException);
-        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
-      });
-
-      it("never reaches the President, though `*` sits in the cabinet's own tier", async () => {
-        // The President's role is in the Cabinet tier with the Vice
-        // President's, but `*` ranks above every tier.
-        await expect(
-          save(
-            TIERED_MEMBER.president,
-            [ROLE.president, ROLE.pledge],
-            USER.vicePresident,
-          ),
-        ).rejects.toBeInstanceOf(ForbiddenException);
-        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
-      });
-
       it("leaves the President unaffected: `*` still gives and takes any role, a cabinet officer's included", async () => {
         await save(
           TIERED_MEMBER.vicePresident,
@@ -1378,11 +1347,13 @@ describe('MemberService', () => {
         expect(mockRepo.setRoleIds).toHaveBeenCalledTimes(1);
       });
 
-      it('still stops a chair touching an officer ranked above them, or giving an officer role', async () => {
+      it('still stops a chair giving an officer ranked above them a chair-level role, or anyone an officer role', async () => {
+        // Their own rank is reachable on a peer or below, never on a member
+        // ranked above them (#5903).
         await expect(
           save(
             TIERED_MEMBER.vicePresident,
-            [ROLE.vicePresident],
+            [ROLE.vicePresident, ROLE.brother, ROLE.socialChair],
             USER.riskChair,
             OWN,
           ),
@@ -1407,6 +1378,151 @@ describe('MemberService', () => {
             OWN,
           ),
         ).rejects.toThrow(/billing:view/);
+      });
+    });
+
+    // #5903 (Paul's option 3, relayed by Shawn, 2026-11-23): on a member
+    // ranked above them, the President included, an officer gives and takes
+    // only roles ranked below their own. Never one at or above it, never `*`.
+    describe('on a member ranked above the caller (#5903)', () => {
+      const PRESIDENT_ON_FLOOR = 'member-president-on-floor';
+      const PRESIDENT_TREASURER = 'member-president-treasurer';
+      beforeAll(() => {
+        members.push(
+          {
+            ...memberRow(TIERED_MEMBER.president),
+            id: PRESIDENT_ON_FLOOR,
+            user_id: 'user-president-on-floor',
+            role_ids: [ROLE.president, ROLE.brother],
+          },
+          {
+            ...memberRow(TIERED_MEMBER.president),
+            id: PRESIDENT_TREASURER,
+            user_id: 'user-president-treasurer',
+            role_ids: [ROLE.president, ROLE.treasurer],
+          },
+        );
+      });
+
+      it('lets a cabinet officer give the President a lower role', async () => {
+        await save(
+          TIERED_MEMBER.president,
+          [ROLE.president, ROLE.socialChair],
+          USER.vicePresident,
+        );
+        expect(mockRepo.setRoleIds).toHaveBeenCalledWith(
+          expect.any(String),
+          TIERED_MEMBER.president,
+          expect.any(Array),
+          [ROLE.president, ROLE.socialChair],
+        );
+      });
+
+      it('lets a cabinet officer take a lower role away from the President', async () => {
+        await save(PRESIDENT_ON_FLOOR, [ROLE.president], USER.vicePresident);
+        expect(mockRepo.setRoleIds).toHaveBeenCalledWith(
+          expect.any(String),
+          PRESIDENT_ON_FLOOR,
+          expect.any(Array),
+          [ROLE.president],
+        );
+      });
+
+      it('lets a chair give and take a lower role on an officer ranked above them', async () => {
+        await save(
+          TIERED_MEMBER.vicePresident,
+          [ROLE.vicePresident, ROLE.brother, ROLE.pledge],
+          USER.riskChair,
+        );
+        await save(
+          TIERED_MEMBER.vicePresident,
+          [ROLE.vicePresident],
+          USER.riskChair,
+        );
+        expect(mockRepo.setRoleIds).toHaveBeenCalledTimes(2);
+      });
+
+      it("refuses giving the President a role at the officer's own rank, even with roles:assign_own_level", async () => {
+        for (const extra of [[], ['roles:assign_own_level']]) {
+          const refusal = await save(
+            TIERED_MEMBER.president,
+            [ROLE.president, ROLE.treasurer],
+            USER.vicePresident,
+            extra,
+          ).catch((error: unknown) => error);
+          expect((refusal as ForbiddenException).getResponse()).toMatchObject({
+            code: 'role.assign_out_of_reach',
+          });
+        }
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("refuses taking a role at the officer's own rank from the President, even with roles:assign_own_level", async () => {
+        await expect(
+          save(PRESIDENT_TREASURER, [ROLE.president], USER.vicePresident, [
+            'roles:assign_own_level',
+          ]),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("refuses taking a role at or above the caller's rank from a member above them", async () => {
+        await expect(
+          save(TIERED_MEMBER.vicePresident, [ROLE.brother], USER.riskChair),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it("never moves the President's `*` role", async () => {
+        await expect(
+          save(PRESIDENT_ON_FLOOR, [ROLE.brother], USER.vicePresident),
+        ).rejects.toThrow(/presidency-transfer/);
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
+      });
+
+      it('refuses a lower base role whose swap would take one at or above the caller from the President', async () => {
+        // A chapter that put its Actives role in the Cabinet tier: giving
+        // the President New Member would take Actives away (`rolesAfterSave`).
+        const actives = {
+          ...roles.find((role) => role.id === ROLE.vicePresident)!,
+          id: 'role-actives',
+          name: 'Actives',
+          system_key: 'MEMBER',
+          is_system: true,
+          permissions: ['members:view'],
+        };
+        const newMember = {
+          ...roles.find((role) => role.id === ROLE.pledge)!,
+          id: 'role-new-member',
+          name: 'New Member',
+          system_key: 'NEW_MEMBER',
+          is_system: true,
+          permissions: ['members:view'],
+        };
+        mockRepo.findById.mockResolvedValue({
+          ...memberRow(TIERED_MEMBER.president),
+          role_ids: [ROLE.president, actives.id],
+        });
+        mockRoleRepo.findByChapter.mockResolvedValue([
+          ...roles,
+          actives,
+          newMember,
+        ]);
+        mockRbacService.getRankContext.mockResolvedValue(
+          tieredRankContext(USER.vicePresident),
+        );
+        const refusal = await service
+          .updateRoles(
+            TIERED_MEMBER.president,
+            [ROLE.president, actives.id, newMember.id],
+            CHAPTER_ID,
+            USER.vicePresident,
+          )
+          .catch((error: unknown) => error);
+        expect((refusal as ForbiddenException).getResponse()).toMatchObject({
+          code: 'role.assign_out_of_reach',
+        });
+        expect(mockRepo.setRoleIds).not.toHaveBeenCalled();
       });
     });
 
@@ -1706,6 +1822,8 @@ describe('MemberService', () => {
       expect(mockRepo.delete).not.toHaveBeenCalled();
     });
 
+    // #5903 opened the President's lower roles and class to an officer, not
+    // removal, which still needs the member to rank below the caller.
     it('stops an officer removing the President', async () => {
       await expect(
         removeAs(TIERED_MEMBER.president, USER.vicePresident),
@@ -1887,11 +2005,38 @@ describe('MemberService', () => {
           display_name: 'Someone',
         }),
       ).rejects.toThrow(
-        'You can only edit the profiles of members ranked below you.',
+        'You can only edit the profiles of members ranked below you or at your own rank.',
       );
       expect(mockUserRepo.update).not.toHaveBeenCalled();
     });
 
+    // #5900 (Paul's go, relayed by Shawn, 2026-11-23): a peer at the
+    // caller's own rank is in reach, as for roles (#5843).
+    it("lets a chair fix a fellow chair's name and year", async () => {
+      const peer = {
+        ...memberRow(TIERED_MEMBER.riskChair),
+        id: 'member-social-chair',
+        user_id: 'user-social-chair',
+        role_ids: [ROLE.socialChair, ROLE.brother],
+      };
+      mockRepo.findById.mockResolvedValue(peer);
+      mockUserRepo.findById.mockResolvedValue(
+        userFixture({ id: peer.user_id, graduation_year: 2026 }),
+      );
+      mockUserRepo.update.mockResolvedValue(userFixture());
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(USER.riskChair),
+      );
+      await service.correctProfile(peer.id, CHAPTER_ID, USER.riskChair, {
+        graduation_year: 2027,
+      });
+      expect(mockUserRepo.update).toHaveBeenCalledWith(peer.user_id, {
+        graduation_year: 2027,
+      });
+    });
+
+    // #5903 opened the President's lower roles and class to an officer, not
+    // their name or graduation year.
     it('stops an officer renaming the President', async () => {
       await expect(
         correctAs(TIERED_MEMBER.president, USER.vicePresident, {
@@ -1957,6 +2102,32 @@ describe('MemberService', () => {
         ['members:view', 'roles:manage'],
       );
       expect(profile.viewer_can_edit_profile).toBe(true);
+    });
+
+    it('is true for a chair viewing a fellow chair (#5900), while removal stays below only', async () => {
+      const peer = {
+        ...memberRow(TIERED_MEMBER.riskChair),
+        id: 'member-social-chair',
+        user_id: 'user-social-chair',
+        role_ids: [ROLE.socialChair, ROLE.brother],
+      };
+      mockRepo.findById.mockResolvedValue(peer);
+      mockUserRepo.findById.mockResolvedValue(userFixture());
+      mockRbacService.getEffectivePermissions.mockResolvedValue([
+        'members:view',
+        'roles:manage',
+        'members:remove',
+      ]);
+      mockRbacService.getRankContext.mockResolvedValue(
+        tieredRankContext(USER.riskChair),
+      );
+      const profile = await service.findProfileById(
+        peer.id,
+        CHAPTER_ID,
+        USER.riskChair,
+      );
+      expect(profile.viewer_can_edit_profile).toBe(true);
+      expect(profile.viewer_can_remove).toBe(false);
     });
 
     it('is false for that officer viewing the President', async () => {

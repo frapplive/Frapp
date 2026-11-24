@@ -327,6 +327,65 @@ describe('HealthController', () => {
       await expect(controller.ready()).rejects.toThrow(
         ServiceUnavailableException,
       );
+      // One liveness probe, then readiness's probe and its confirming one.
+      expect(supabase.from).toHaveBeenCalledTimes(3);
+    });
+
+    it("confirms a first probe that timed out, and answers within the uptime monitor's 5 seconds", async () => {
+      jest.useFakeTimers();
+      try {
+        supabase.from.mockImplementationOnce(() => ({
+          select: jest.fn(() => ({
+            limit: jest.fn(() => new Promise(() => undefined)),
+          })),
+        }));
+        const answer = controller.ready();
+        await jest.advanceTimersByTimeAsync(3000);
+        await expect(answer).resolves.toMatchObject({ status: 'ok' });
+        expect(supabase.from).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("answers a real outage as a 503 within 4.5 seconds, under the uptime monitor's timeout", async () => {
+      jest.useFakeTimers();
+      try {
+        supabase.from.mockImplementation(() => ({
+          select: jest.fn(() => ({
+            limit: jest.fn(() => new Promise(() => undefined)),
+          })),
+        }));
+        const answer = controller.ready();
+        const settled = expect(answer).rejects.toThrow(
+          ServiceUnavailableException,
+        );
+        await jest.advanceTimersByTimeAsync(4500);
+        await settled;
+      } finally {
+        jest.useRealTimers();
+        supabase.from.mockImplementation(() => ({
+          select: jest.fn(() => ({
+            limit: jest.fn(() => Promise.resolve({ error: dbError })),
+          })),
+        }));
+      }
+    });
+
+    // A lone probe that missed its bound while the instance was busy
+    // answered 503 and sent an error event with nothing down (FRAPP-API-7).
+    it('probes once more before calling a dependency degraded', async () => {
+      supabase.from.mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          limit: jest.fn(() =>
+            Promise.resolve({ error: { message: 'timeout' } }),
+          ),
+        })),
+      }));
+
+      await expect(controller.ready()).resolves.toMatchObject({
+        status: 'ok',
+      });
       expect(supabase.from).toHaveBeenCalledTimes(2);
     });
 
@@ -351,7 +410,7 @@ describe('HealthController', () => {
         await expect(controller.ready()).rejects.toThrow(
           ServiceUnavailableException,
         );
-        expect(supabase.from).toHaveBeenCalledTimes(2);
+        expect(supabase.from).toHaveBeenCalledTimes(3);
       });
 
       it('keeps a degraded probe only as long, so a recovery shows within the TTL', async () => {

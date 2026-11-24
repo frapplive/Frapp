@@ -26,6 +26,17 @@ import {
   tieredChapterMembers,
   tieredRankContext,
 } from '#test/helpers/tiered-chapter.fixture';
+import { OUTSIDE_TIERS_RANK } from '#domain/utils/role-rank';
+import type { RankContext } from './rbac.service';
+
+const OUTSIDE_TIERS_REFUSAL =
+  "Your role isn't in any tier, so you can't change another member's class.";
+
+/** The risk chair's context with their roles moved outside every tier. */
+function outsideTiers(): RankContext {
+  const context = tieredRankContext(USER.riskChair);
+  return { ...context, reach: { ...context.reach, rank: OUTSIDE_TIERS_RANK } };
+}
 
 const CHAPTER = 'ch-1';
 
@@ -273,20 +284,26 @@ describe('PledgeClassService', () => {
         expect(rbac.memberHasAnyPermission).not.toHaveBeenCalled();
       });
 
-      it('refuses a class that holds a member ranked at or above the officer, and deletes nothing', async () => {
+      // #5903 (Paul's option 3, relayed by Shawn, 2026-11-23): a class
+      // holding a member ranked above the officer, the President included,
+      // is in reach too.
+      it('lets a chair delete a class that holds the President', async () => {
         members = members.map((m) =>
-          m.id === MEMBER.vicePresident ? withClass(m, 'CLASS-NEW', 2) : m,
+          m.id === MEMBER.president ? withClass(m, 'CLASS-NEW', 2) : m,
         );
+
+        await service.remove('class-new', CHAPTER_ID, USER.riskChair);
+
+        expect(repo.delete).toHaveBeenCalledWith('class-new', CHAPTER_ID);
+      });
+
+      it('refuses a caller outside the tiers a class holding anyone else, and deletes nothing', async () => {
+        rbac.getRankContext.mockResolvedValueOnce(outsideTiers());
 
         await expect(
           service.remove('class-new', CHAPTER_ID, USER.riskChair),
-        ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
-        );
+        ).rejects.toThrow(OUTSIDE_TIERS_REFUSAL);
         expect(repo.delete).not.toHaveBeenCalled();
-        // The President reaches everyone.
-        await service.remove('class-new', CHAPTER_ID, USER.president);
-        expect(repo.delete).toHaveBeenCalledTimes(1);
       });
 
       it("needs channels:manage when a channel's list names the class", async () => {
@@ -434,39 +451,69 @@ describe('PledgeClassService', () => {
         expect(rbac.memberHasAnyPermission).not.toHaveBeenCalled();
       });
 
-      it('refuses a member ranked at or above the officer, and writes nothing', async () => {
+      // #5903 (Paul's option 3, relayed by Shawn, 2026-11-23): a member
+      // ranked above the officer, the President included, is in reach for
+      // the class and number, though not for their name (#5900 keeps that).
+      it("lets a chair set the President's and a higher officer's class and number", async () => {
+        await service.assign(CHAPTER, USER.riskChair, [
+          {
+            member_id: MEMBER.president,
+            pledge_class_id: 'class-new',
+            order_number: 1,
+          },
+          {
+            member_id: MEMBER.vicePresident,
+            pledge_class_id: null,
+            order_number: 3,
+          },
+        ]);
+        expect(repo.assignMembers).toHaveBeenCalled();
+      });
+
+      it('refuses a caller outside the tiers anyone but themselves, and writes nothing', async () => {
+        rbac.getRankContext.mockResolvedValueOnce(outsideTiers());
+
         await expect(
           service.assign(CHAPTER, USER.riskChair, [
             {
-              member_id: pledge.id,
+              member_id: MEMBER.brother,
               pledge_class_id: 'class-new',
               order_number: 1,
             },
-            {
-              member_id: MEMBER.vicePresident,
-              pledge_class_id: null,
-              order_number: 3,
-            },
           ]),
-        ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
-        );
+        ).rejects.toThrow(OUTSIDE_TIERS_REFUSAL);
         expect(repo.assignMembers).not.toHaveBeenCalled();
       });
 
-      it('refuses renumbering a higher-ranked member within their class', async () => {
-        await expect(
-          service.assign(CHAPTER, USER.riskChair, [
-            {
-              member_id: MEMBER.vicePresident,
-              pledge_class_id: 'class-old',
-              order_number: 4,
-            },
-          ]),
-        ).rejects.toThrow(
-          'You can only set the class of members ranked below you, and your own.',
-        );
-        expect(repo.assignMembers).not.toHaveBeenCalled();
+      // #5900 (Paul's go, relayed by Shawn, 2026-11-23): a peer at the
+      // officer's own rank is in reach, as for roles (#5843).
+      it("lets a chair set a fellow chair's class and number", async () => {
+        const socialChair = {
+          ...pledge,
+          id: 'member-social-chair',
+          user_id: 'user-social-chair',
+          role_ids: [ROLE.socialChair, ROLE.brother],
+        } as Member;
+        members = [...members, socialChair];
+        await service.assign(CHAPTER, USER.riskChair, [
+          {
+            member_id: socialChair.id,
+            pledge_class_id: 'class-new',
+            order_number: 7,
+          },
+        ]);
+        expect(repo.assignMembers).toHaveBeenCalled();
+      });
+
+      it('lets a chair renumber a higher-ranked member within their class (#5903)', async () => {
+        await service.assign(CHAPTER, USER.riskChair, [
+          {
+            member_id: MEMBER.vicePresident,
+            pledge_class_id: 'class-old',
+            order_number: 4,
+          },
+        ]);
+        expect(repo.assignMembers).toHaveBeenCalled();
       });
 
       it('lets an officer set their own class, and the President anyone', async () => {

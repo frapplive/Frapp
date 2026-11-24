@@ -42,6 +42,7 @@ import {
 } from '../dtos/chapter.dto';
 import { ChapterOnboardingDto } from '../dtos/chapter-onboarding.dto';
 import {
+  ChapterMembershipSummaryDto,
   CurrentChapterResponseDto,
   UpdateChapterResponseDto,
 } from '../dtos/chapter-response.dto';
@@ -125,7 +126,10 @@ export class ChapterController {
   @UseGuards(SupabaseAuthGuard)
   @UseInterceptors(AuthSyncInterceptor)
   @ApiOperation({ summary: 'List chapters for current user' })
-  async listForCurrentUser(@CurrentUser('id') userId: string) {
+  @ApiOkResponse({ type: [ChapterMembershipSummaryDto] })
+  async listForCurrentUser(
+    @CurrentUser('id') userId: string,
+  ): Promise<ChapterMembershipSummaryDto[]> {
     return this.chapterService.listForUser(userId);
   }
 

@@ -252,4 +252,48 @@ describe('ResendEmailProvider', () => {
     expect(body.html).not.toContain('<script>');
     expect(body.html).toContain('&lt;script&gt;');
   });
+
+  describe('school codes (#5929)', () => {
+    const school = {
+      to: 'student@rpi.edu',
+      code: '042917',
+      schoolName: 'Rensselaer Polytechnic Institute',
+      validMinutes: 10,
+    };
+
+    it('sends the code in the subject and body, and no link', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const provider = new ResendEmailProvider({
+        apiKey: 're_test',
+        fromAddress: 'Frapp <invites@mail.frapp.live>',
+      });
+
+      await expect(provider.sendSchoolCodeEmail(school)).resolves.toBe(true);
+
+      const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+      expect(body.to).toBe('student@rpi.edu');
+      expect(body.subject).toBe(
+        '042917 is your Frapp code for Rensselaer Polytechnic Institute',
+      );
+      expect(body.html).toContain('042917');
+      expect(body.html).not.toContain('<a ');
+      expect(body.text).toContain('042917');
+      expect(body.text).toContain('It works for 10 minutes.');
+    });
+
+    it('reports a refused send as false, never throwing', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 403 }));
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const provider = new ResendEmailProvider({
+        apiKey: 're_test',
+        fromAddress: 'Frapp <invites@mail.frapp.live>',
+      });
+
+      await expect(provider.sendSchoolCodeEmail(school)).resolves.toBe(false);
+    });
+  });
 });

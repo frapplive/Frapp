@@ -1,7 +1,8 @@
 /**
- * The "You" screen: the first of the two screens a member sees after joining
+ * The "You" screen: the first of the screens a member sees after joining
  * (#5627, epic #5624; Paul's pick 2026-11-19, "Two: name, then
- * notifications"). The same screen on web and the phone (s03): the name,
+ * notifications"; About you (#5284) and the optional school step (#5929,
+ * `school-verification.ts`) joined since). The same screen on web and the phone (s03): the name,
  * pre-filled when sign-in carried a real one, and an optional photo.
  *
  * Every message a member sends carries their name and photo, so a member
@@ -26,7 +27,7 @@ export const ONBOARDING_YOU_COPY = {
   namePlaceholder: "First and last name",
   nameRequired: "Add your name so the chapter knows who's talking.",
   saveFailed: "Couldn't save your name. Check your connection and try again.",
-  /** When the notifications screen follows (phone only). */
+  /** When the school step or (phone only) the notifications screen follows. */
   continue: "Continue",
   /** When chat is next. */
   goToChat: "Go to chat",

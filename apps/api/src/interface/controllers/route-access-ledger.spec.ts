@@ -37,6 +37,9 @@ import { SystemPermissions } from '#domain/constants/permissions';
  *   `PermissionsGuard`): any member of the chapter. Listed below with why.
  * - **User-scoped** (`SupabaseAuthGuard`, no `ChapterGuard`) and **public**
  *   (no `SupabaseAuthGuard`): listed below with why.
+ * - **School-scoped** (`SupabaseAuthGuard` → `SchoolGuard`, never with
+ *   `ChapterGuard`): a campus page's routes, served to the school's live
+ *   members only (ADR-27 decision 3, #5929). Listed below with why.
  *
  * A new route in a listed tier is a line here, which is the point: it is a
  * decision someone wrote down, in the diff a reviewer reads.
@@ -92,6 +95,15 @@ const USER_ROUTES: Record<string, string> = {
   'ChapterController.listForCurrentUser': "The caller's own chapters.",
   'ChapterController.activate':
     'Activates a chapter the caller is creating; the service checks ownership.',
+  'SchoolController.search':
+    'Schools are global reference data, searched before the caller has verified anywhere (#5929).',
+  'SchoolController.listMine': "The caller's own school memberships (#5929).",
+  'SchoolController.startVerification':
+    "Sends a code to the caller's own school address; ceilings per address, IP and account are counted by the database (#5929).",
+  'SchoolController.confirmVerification':
+    "Checks the caller's own code and writes only the caller's membership (#5929).",
+  'TenantController.resolve':
+    "One of the caller's own tenants by its slug; the service answers 404 for anyone else's (ADR-27, #5918).",
   'InviteController.preview':
     'Reads an invite by its token before the caller has joined.',
   'InviteController.redeem':
@@ -117,6 +129,12 @@ const USER_ROUTES: Record<string, string> = {
   'UserController.updateMe': 'The caller.',
   'UserController.deleteMe': "The caller's own account deletion.",
   'UserController.removeAvatar': "The caller's own photo.",
+};
+
+/** Campus routes behind `SchoolGuard`: any live member of the named school. */
+const SCHOOL_ROUTES: Record<string, string> = {
+  'SchoolPageController.get':
+    "The school in x-school-id and the caller's own membership there (#5929).",
 };
 
 /** Chapter routes any member may call, with no permission beyond membership. */
@@ -252,11 +270,36 @@ describe('API route access ledger', () => {
 
   it('every signed-in route outside a chapter is a listed user route', () => {
     const unlisted = routes
-      .filter((r) => has(r, 'SupabaseAuthGuard') && !has(r, 'ChapterGuard'))
+      .filter(
+        (r) =>
+          has(r, 'SupabaseAuthGuard') &&
+          !has(r, 'ChapterGuard') &&
+          !has(r, 'SchoolGuard'),
+      )
       .map((r) => r.key)
       .filter((key) => !(key in USER_ROUTES));
 
     expect(unlisted).toEqual([]);
+  });
+
+  it('every route behind SchoolGuard is a listed school route, after auth and never with ChapterGuard', () => {
+    // SchoolGuard reads the user SupabaseAuthGuard attached; beside
+    // ChapterGuard a request would act in a school and a chapter at once.
+    const school = routes.filter((r) => has(r, 'SchoolGuard'));
+    const wrong = school
+      .filter(
+        (r) =>
+          !(r.key in SCHOOL_ROUTES) ||
+          has(r, 'ChapterGuard') ||
+          has(r, 'PermissionsGuard') ||
+          r.guards.indexOf('SupabaseAuthGuard') < 0 ||
+          r.guards.indexOf('SupabaseAuthGuard') >
+            r.guards.indexOf('SchoolGuard'),
+      )
+      .map((r) => `${r.key}: ${r.guards.join(' → ')}`);
+
+    expect(school.length).toBeGreaterThan(0);
+    expect(wrong).toEqual([]);
   });
 
   it('every chapter route checks permissions, or is listed as membership only', () => {
@@ -345,6 +388,10 @@ describe('API route access ledger', () => {
       ...Object.keys(USER_ROUTES).filter((key) => {
         const r = byKey.get(key);
         return !r || !has(r, 'SupabaseAuthGuard') || has(r, 'ChapterGuard');
+      }),
+      ...Object.keys(SCHOOL_ROUTES).filter((key) => {
+        const r = byKey.get(key);
+        return !r || !has(r, 'SchoolGuard');
       }),
       ...Object.keys(MEMBERSHIP_ONLY_ROUTES).filter((key) => {
         const r = byKey.get(key);

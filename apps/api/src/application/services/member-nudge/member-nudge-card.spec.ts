@@ -46,6 +46,7 @@ function task(overrides: Partial<Task> = {}): Task {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: at(-5 * DAY),
     ...overrides,
   };

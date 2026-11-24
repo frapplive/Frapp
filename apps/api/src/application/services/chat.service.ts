@@ -242,7 +242,7 @@ const SERVER_ONLY_KINDS: ReadonlySet<ChatMessageKind> = new Set([
   // policy, and it short-circuits the push worker. A client that could post one
   // would have a message that never notifies and never appears live.
   'imported',
-  // An Ask Frapp answer posted to the channel (#4713). Written only by
+  // A Frapp Intelligence answer posted to the channel (#4713). Written only by
   // `AskPostService`, from an answer the server itself sealed, under the
   // Frapp sender. A client that could post one would be writing in Frapp's
   // name with sources it made up.

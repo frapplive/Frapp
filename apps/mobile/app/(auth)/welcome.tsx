@@ -4,17 +4,25 @@ import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  useChapterMajors,
+  useCurrentChapter,
   useCurrentUser,
+  useFieldReveal,
+  useMySchools,
+  usePermissionList,
   useUpdateOnboarding,
   useUpdateUser,
 } from "@repo/hooks";
 import { SignetTokens } from "@repo/theme/signet";
 import {
+  can,
   DISPLAY_NAME_MAX_LENGTH,
+  ONBOARDING_ABOUT_COPY,
   ONBOARDING_PROFILE_ANSWERED_EVENT,
   NAME_LOCK_COPY,
   ONBOARDING_YOU_COPY,
   initialNameField,
+  needsAboutYou,
   needsName,
   typedNameMissing,
   onboardingProfileAnsweredProperties,
@@ -30,6 +38,20 @@ import {
   OnboardingTextInput,
 } from "@/components/onboarding/onboarding-field";
 import { ProfilePhoto } from "@/components/profile/profile-photo";
+import { AboutYouFields } from "@/components/onboarding/about-you-fields";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
+import { SchoolStep } from "@/components/onboarding/school-step";
+import {
+  aboutYouPatch,
+  applyEdit,
+  draftFromProfile,
+  hasChanges,
+  tidiedPhone,
+  typedPhone,
+  type ProfileDraft,
+  type ProfileDraftField,
+  type ProfileEdits,
+} from "@/lib/more/edit-profile";
 import {
   ONBOARDING_COLUMN_WIDTH,
   OnboardingPrimaryButton,
@@ -43,7 +65,7 @@ import { useLatestTrack } from "@/lib/use-latest-track";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * s03, the two screens after a member joins (`spec/ui/mobile/screens.md`,
+ * s03, the screens after a member joins (`spec/ui/mobile/screens.md`,
  * #5627; Paul's pick 2026-11-19, "Two: name, then notifications"):
  *
  * 1. **How the chapter sees you**, always: the name, pre-filled when sign-in
@@ -52,12 +74,22 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *    (`needsName` in `@repo/validation`); a typed name is required
  *    (`typedNameMissing`). Web shows the same
  *    screen after a join (`apps/web/app/(auth)/welcome`).
- * 2. **Turn on notifications**, when this build can push and push isn't on
+ * 2. **About you** (#5284), when phone, major, graduation year or birthday is
+ *    empty (`needsAboutYou`): optional, the Edit sheet's fields and rules
+ *    (`aboutYouPatch`). Continue saves only what changed; Skip for now saves
+ *    nothing. Web asks the same after its name screen.
+ * 3. **Where do you go to school?**, for a member with no verified school
+ *    (#5929, `components/onboarding/school-step.tsx`): the school, its email,
+ *    the code, then "You're verified at <school>", with "Not a student? Skip
+ *    for now" throughout. Web asks the same after About you. Changed for
+ *    #5929 by gampheadband, 2026-11-23: Paul's "Two: name, then
+ *    notifications" gains this optional beat before notifications.
+ * 4. **Turn on notifications**, when this build can push and push isn't on
  *    yet (`shouldOfferPrimer`, #2299). Either answer goes to chat; a "Not
  *    now" comes back once, days later, on the chat home (`usePushReminder`).
  *
  * The rest waits until the member wants it: chat display in Preferences,
- * roles in the Directory's Add roles, and Meet Frapp AI at the first use of
+ * roles in the Directory's Add roles, and Meet Frapp Intelligence at the first use of
  * an AI feature (`useAiConsentGate`). They were three more beats here until
  * #5627.
  *
@@ -71,7 +103,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  */
 const DECIDE_TIMEOUT_MS = 4_000;
 
-type Beat = "you" | "notifications";
+type Beat = "you" | "about" | "school" | "notifications";
 
 export default function Welcome() {
   const { tokens } = useFrappTheme();
@@ -89,6 +121,11 @@ export default function Welcome() {
   const [waitedOut, setWaitedOut] = useState(false);
   const userQuery = useCurrentUser();
   const updateUser = useUpdateUser();
+  const mySchools = useMySchools();
+  const chapter = useCurrentChapter();
+  // Whether the school beat was shown, so back from notifications returns
+  // to it rather than skipping over it (#5929).
+  const [askedSchool, setAskedSchool] = useState(false);
   const profile = useMemo(
     () => selectViewerProfile(userQuery.data),
     [userQuery.data],
@@ -104,6 +141,39 @@ export default function Welcome() {
   // A member already settled in a chapter that locks names (#5801) keeps the
   // name they have: it shows read-only, and isn't sent.
   const nameLocked = profile?.nameLocked === true;
+  // About you (#5284): shown when one of its fields is empty, decided from
+  // the profile as it stands when the member leaves the name.
+  const askAbout =
+    profile !== null &&
+    needsAboutYou({
+      phone: profile.phone,
+      major: profile.major,
+      graduationYear: profile.graduationYear,
+      birthdayMonth: profile.birthdayMonth,
+      birthdayDay: profile.birthdayDay,
+    });
+  // What About you opened on (so a refetch underneath doesn't move it), what
+  // was typed over it, and whether it was shown, for Android's back.
+  const [aboutOriginal, setAboutOriginal] = useState<ProfileDraft | null>(null);
+  const [aboutEdits, setAboutEdits] = useState<ProfileEdits | null>(null);
+  const [aboutFailed, setAboutFailed] = useState(false);
+  const [savingAbout, setSavingAbout] = useState(false);
+  const reveal = useFieldReveal<ProfileDraftField>();
+  const canViewMembers = can("members:view", usePermissionList());
+  const chapterMajors = useChapterMajors({
+    enabled: canViewMembers && step === "about",
+  });
+  const aboutShown: ProfileDraft | null = aboutOriginal
+    ? { ...aboutOriginal, ...aboutEdits }
+    : null;
+  const aboutResult =
+    aboutOriginal && aboutShown
+      ? aboutYouPatch(aboutOriginal, aboutShown)
+      : null;
+  const aboutRefusal =
+    aboutResult && !aboutResult.ok && reveal.shows(aboutResult.field)
+      ? aboutResult
+      : null;
   const nameValue = nameLocked
     ? (profile?.displayName ?? "")
     : (nameDraft ??
@@ -138,7 +208,7 @@ export default function Welcome() {
   // answer is stored before the OS dialog opens and before the PATCH, and
   // the step must stay on screen (busy) until the member has left for chat.
   const asking = step === "notifications";
-  const answering = primer.isRequesting || leaving || savingName;
+  const answering = primer.isRequesting || leaving || savingName || savingAbout;
 
   useEffect(() => {
     const timer = setTimeout(() => setWaitedOut(true), DECIDE_TIMEOUT_MS);
@@ -148,7 +218,11 @@ export default function Welcome() {
   const profileKnown =
     userQuery.data !== undefined || userQuery.isError || waitedOut;
   const primerKnown = primer.ready || waitedOut;
-  if (step === "deciding" && profileKnown && primerKnown) {
+  // Whether the school beat comes next waits on the member's schools too, so
+  // a list still loading isn't read as "no school" (#5929).
+  const schoolsKnown = mySchools.isFetched || mySchools.isError || waitedOut;
+  const hasSchool = (mySchools.data?.length ?? 0) > 0;
+  if (step === "deciding" && profileKnown && primerKnown && schoolsKnown) {
     setHadPhoto(!!profile?.photoUrl);
     setStep("you");
   }
@@ -185,22 +259,100 @@ export default function Welcome() {
         nameChanged,
       }),
     );
+    if (askAbout && profile) {
+      setAboutOriginal(draftFromProfile(profile));
+      setStep("about");
+    } else afterAbout();
+  }
+
+  // Notifications when there is one to ask, else chat.
+  function afterAbout() {
+    // A member already verified at a school isn't asked again; a failed or
+    // given-up read asks, since the beat can be skipped (#5929).
+    if (askedSchool || !hasSchool) {
+      setAskedSchool(true);
+      setStep("school");
+      return;
+    }
+    leaveSchool();
+  }
+
+  function leaveSchool() {
     if (primer.showPrimer) setStep("notifications");
     else void finish();
   }
 
-  // Android's back on the notifications screen returns to the name, as a
-  // back gesture between two screens would; it never leaves onboarding half
-  // done. Held while an answer is on its way out. The first screen leaves
-  // Android's back alone.
+  function editAbout(field: ProfileDraftField, value: string) {
+    if (!aboutOriginal) return;
+    setAboutFailed(false);
+    // The phone formats as it is typed (#5798), as on the Edit sheet.
+    const next =
+      field === "phone" ? typedPhone(value, aboutShown?.phone ?? "") : value;
+    setAboutEdits((latest) => applyEdit(latest, aboutOriginal, field, next));
+  }
+
+  function leaveAboutField(field: ProfileDraftField) {
+    reveal.blur(field);
+    // A 7-digit local number reads `555-0142` once the member leaves it.
+    const tidy =
+      field === "phone" ? tidiedPhone(aboutShown?.phone ?? "") : null;
+    if (tidy !== null && aboutOriginal) {
+      setAboutEdits((latest) =>
+        applyEdit(latest, aboutOriginal, "phone", tidy),
+      );
+    }
+  }
+
+  // Continue: only what changed, after the Edit sheet's checks; a refusal or
+  // a failed save keeps the member here with the reason and what they typed.
+  async function leaveAbout() {
+    if (savingAbout || leaving || !aboutResult) return;
+    if (!aboutResult.ok) {
+      reveal.submit();
+      return;
+    }
+    if (hasChanges(aboutResult.patch)) {
+      setSavingAbout(true);
+      setAboutFailed(false);
+      try {
+        await updateUser.mutateAsync(aboutResult.patch);
+      } catch {
+        setAboutFailed(true);
+        return;
+      } finally {
+        setSavingAbout(false);
+      }
+      // What was saved is the new baseline, so a return here from
+      // notifications compares against it: clearing a saved field then
+      // sends the clear rather than reading as no change.
+      if (aboutShown) setAboutOriginal(aboutShown);
+      setAboutEdits(null);
+    }
+    afterAbout();
+  }
+
+  // Android's back steps back a screen, to whichever beat came before
+  // (notifications to the school beat, About you or the name; the school beat
+  // to About you or the name; About you to the name), as a back gesture
+  // between screens would; it never leaves onboarding half done. Held while
+  // an answer is on its way out. The first screen leaves Android's back alone.
+  const cameThroughAbout = aboutOriginal !== null;
   useEffect(() => {
-    if (step !== "notifications") return;
+    if (step === "deciding" || step === "you") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!answering) setStep("you");
+      if (!answering) {
+        const before =
+          step === "notifications" && askedSchool
+            ? "school"
+            : step !== "about" && cameThroughAbout
+              ? "about"
+              : "you";
+        setStep(before);
+      }
       return true;
     });
     return () => sub.remove();
-  }, [step, answering]);
+  }, [step, answering, cameThroughAbout, askedSchool]);
 
   if (status === "unauthenticated") {
     return <Redirect href="/(auth)/sign-in" />;
@@ -210,6 +362,17 @@ export default function Welcome() {
   // spinner, and no screen that the next read would swap out.
   if (step === "deciding") {
     return <View style={styles.container} testID="welcome-deciding" />;
+  }
+
+  if (step === "school") {
+    return (
+      <SchoolStep
+        initialQuery={chapter.data?.university ?? ""}
+        alreadyVerified={mySchools.data?.[0]?.school ?? null}
+        busy={leaving}
+        onLeave={leaveSchool}
+      />
+    );
   }
 
   return (
@@ -236,6 +399,26 @@ export default function Welcome() {
               <View style={styles.channels}>
                 <PushAskBody />
               </View>
+            </>
+          ) : step === "about" && aboutShown ? (
+            <>
+              <Text accessibilityRole="header" style={styles.title}>
+                {ONBOARDING_ABOUT_COPY.title}
+              </Text>
+              <Text style={styles.subtitle}>{ONBOARDING_ABOUT_COPY.lede}</Text>
+              <AboutYouFields
+                draft={aboutShown}
+                onEdit={editAbout}
+                onLeave={leaveAboutField}
+                refusal={aboutRefusal}
+                majors={chapterMajors}
+                editable={!answering}
+              />
+              {aboutFailed ? (
+                <Text style={styles.error} accessibilityRole="alert">
+                  {ONBOARDING_ABOUT_COPY.saveFailed}
+                </Text>
+              ) : null}
             </>
           ) : (
             <>
@@ -284,8 +467,9 @@ export default function Welcome() {
         </ScrollView>
 
         {/*
-        One gold button per screen. On the name it moves on: to notifications
-        when there is one to ask, else to chat. On notifications it asks, and
+        One gold button per screen. On the name it moves on: to About you or
+        the school beat when either is asked, else to notifications when there
+        is one to ask, else to chat. On notifications it asks, and
         Not now is the quiet line under it; either answer leaves for chat,
         after the OS dialog closes.
       */}
@@ -305,10 +489,28 @@ export default function Welcome() {
                 });
               }}
             />
+          ) : step === "about" ? (
+            <>
+              <OnboardingPrimaryButton
+                label={
+                  primer.showPrimer || askedSchool || !hasSchool
+                    ? ONBOARDING_ABOUT_COPY.continue
+                    : ONBOARDING_ABOUT_COPY.goToChat
+                }
+                disabled={answering}
+                busy={answering}
+                onPress={() => void leaveAbout()}
+              />
+              <OnboardingQuietButton
+                label={ONBOARDING_ABOUT_COPY.skip}
+                disabled={answering}
+                onPress={afterAbout}
+              />
+            </>
           ) : (
             <OnboardingPrimaryButton
               label={
-                primer.showPrimer
+                primer.showPrimer || askAbout || askedSchool || !hasSchool
                   ? ONBOARDING_YOU_COPY.continue
                   : ONBOARDING_YOU_COPY.goToChat
               }

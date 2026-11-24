@@ -25,7 +25,7 @@ export {
 // `isModuleEnabled`, and `subscriptionWriteState`.
 export * from "./analytics-opt-out";
 export * from "./api-error-codes";
-// Ask Frapp (#450): the request, the versioned stream format, and its copy.
+// Frapp Intelligence (#450): the request, the versioned stream format, and its copy.
 export * from "./ask";
 // People and channels named in an Ask answer (#4904).
 export * from "./ask-cards";
@@ -35,7 +35,7 @@ export * from "./ask-entities";
 export * from "./ask-feedback";
 // What Ask opens on: the day, a greeting, the first-open starter (#4904).
 export * from "./ask-greeting";
-// An Ask Frapp answer posted to a channel (#4713).
+// A Frapp Intelligence answer posted to a channel (#4713).
 export * from "./ask-post";
 export * from "./ask-source-chip";
 // Ask's working state as a list of steps (#5427).
@@ -55,6 +55,7 @@ export * from "./chapter-groups";
 export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
+export * from "./chapter-settings-copy";
 // The audit log (#3909): what may change on a line already in it.
 export * from "./chat-audit-log";
 export * from "./chat-backgrounds";
@@ -76,6 +77,8 @@ export * from "./coming-up-tracking";
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
 // this used to be two copies of the same scanner.
@@ -129,6 +132,7 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -193,6 +197,7 @@ export * from "./notification-categories";
 // `useNotifications` must agree on (#4962).
 export * from "./notification-inbox";
 // The "You" screen after joining, web and phone (#5627).
+export * from "./onboarding-about";
 export * from "./onboarding-you";
 // ── Ops-setup nudges (issue #492) ────────────────────────────────────────────
 // Shared for the same reason as the categories above: each `key` is written
@@ -253,7 +258,14 @@ export * from "./repeat-draft";
 export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
+// School-email verification (#5929): limits, refusal codes and the step's words.
+export * from "./school-verification";
 export * from "./screen-copy";
+// The names of the app's places and of what New starts, one list for web and
+// the phone (#5943).
+export * from "./sections";
 // Roles members pick themselves (#4958): the safety rule and its words.
 export * from "./self-assignable-roles";
 export * from "./service-points";
@@ -278,6 +290,8 @@ export * from "./task-proof";
 export * from "./task-row-facts";
 // Who a suggested task names, guessed from its own words (Paul, 2026-11-18).
 export * from "./task-suggestion-guess";
+// Tenant kinds and URL slugs (ADR-27 decision 5, #5918).
+export * from "./tenant-slug";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";

@@ -129,7 +129,8 @@ export const MemberCorrectionSheet = forwardRef<
           setSaveError(
             errorCopy(error, "That didn't save. Try again in a moment.", {
               // The route's refusals are sentences for members ("You can only
-              // edit the profiles of members ranked below you.").
+              // edit the profiles of members ranked below you or at your own
+              // rank.").
               serverWritesForMembers: true,
             }),
           ),

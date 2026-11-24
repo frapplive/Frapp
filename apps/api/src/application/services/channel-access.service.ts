@@ -409,7 +409,7 @@ export class ChannelAccessService {
    * Every chapter member who can read `channel`, with what each holds: the
    * audience behind {@link listChannelMembers}, for a caller that has to ask
    * something of each reader (whether everyone in the channel could open
-   * what an Ask Frapp answer drew on, `AskPostService`, #4713). The caller
+   * what a Frapp Intelligence answer drew on, `AskPostService`, #4713). The caller
    * authorizes the channel first; this decides nothing about the caller.
    */
   async channelReaders(

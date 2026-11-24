@@ -134,7 +134,7 @@ export default function AppLayout() {
       <Stack.Screen name="invite" options={{ title: SCREEN_TITLES.invite }} />
       {/* Presents the Ask sheet for a `frapp://ask` link, or pops to Chat
           home for a member without Ask. */}
-      <Stack.Screen name="ask" options={{ title: "Ask" }} />
+      <Stack.Screen name="ask" options={{ title: "Frapp Intelligence" }} />
       {/* A message's link, `app.frapp.live/chat?channel=…&message=…`
           (#3723): hands off to the thread and draws nothing itself. */}
       <Stack.Screen name="chat" options={{ title: "Chat" }} />
@@ -195,6 +195,13 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["role-tier"] }}
       />
       <Stack.Screen name="role" options={{ title: SCREEN_TITLES.role }} />
+      {/* The recruitment pipeline (#5924), from its row on You, and one
+          prospect from a row of it. */}
+      <Stack.Screen name="rush" options={{ title: SCREEN_TITLES.rush }} />
+      <Stack.Screen
+        name="rush-prospect"
+        options={{ title: SCREEN_TITLES["rush-prospect"] }}
+      />
     </Stack>
   );
 }

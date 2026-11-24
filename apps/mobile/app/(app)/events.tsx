@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { localIsoDate, startOfMonth } from "@repo/formatting";
-import { EVENTS_COPY } from "@repo/validation";
+import { EVENTS_COPY, SECTION_NAMES } from "@repo/validation";
 import {
   useActiveChapterId,
   useChapterRoster,
@@ -214,7 +214,7 @@ export default function EventsScreen() {
     <View style={styles.frame}>
       <ScreenShell
         back={BACK_TO_ACTIVITY}
-        title="Calendar"
+        title={SECTION_NAMES.calendar}
         refresh={refresh}
         createAction={
           chapterId && canCreateEvents

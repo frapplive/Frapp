@@ -31,8 +31,8 @@ import { Member } from '#domain/entities/member.entity';
 import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
-  canAssignAt,
-  canAssignToMemberAt,
+  canAssignRoleOnMemberAt,
+  canCorrectProfileAt,
   canReach,
   holderRank,
   roleRank,
@@ -392,14 +392,16 @@ export class MemberService {
    * Set a member's roles, behind the rank rules (#4071) for `actorUserId`
    * unless they hold `*`:
    *
-   * - every role added or taken away must rank below the caller's own;
-   * - the member must rank below the caller or at the caller's own rank
-   *   (`canAssignToMemberAt`, #5843), so a cabinet officer can give a fellow
-   *   cabinet officer a committee role but a chair cannot strip an
-   *   officer's roles;
+   * - every role added or taken away must rank below the caller's own
+   *   (`canAssignRoleOnMemberAt`), whoever the member is: one below the
+   *   caller, a peer at their own rank (#5843), or one ranked above them,
+   *   the President included (#5903), so a cabinet officer can put the
+   *   President on a committee but a chair cannot strip an officer's
+   *   officer role;
    * - a caller holding `roles:assign_own_level` also reaches their own rank
-   *   for the roles (`canAssignAt`, #5725), so a cabinet officer can make
-   *   another cabinet officer Stewardship Chair;
+   *   for the roles (`canAssignAt`, #5725) on a member at or below that
+   *   rank, so a cabinet officer can make another cabinet officer
+   *   Stewardship Chair, but never on a member ranked above them;
    * - on their own row, the caller may not end up holding a permission they
    *   did not already hold, so nobody hands themselves a lower role that
    *   carries more than they have.
@@ -537,10 +539,20 @@ export class MemberService {
     ].filter((role) => role.system_key !== SystemRoleKeys.EVERYONE);
     if (changed.length === 0) return;
 
-    const isSelf = reach.memberId === member.id;
+    // A base-role swap `rolesAfterSave` made is in `changed` too, so giving
+    // the President a lower base role can't take away one at or above the
+    // caller. The caller's own row ranks at their own rank, so it takes the
+    // same rule as a peer's.
+    const memberRank = holderRank(before, positions);
     if (
-      changed.some((role) => !canAssignAt(reach, roleRank(role, positions))) ||
-      (!isSelf && !canAssignToMemberAt(reach, holderRank(before, positions)))
+      changed.some(
+        (role) =>
+          !canAssignRoleOnMemberAt(
+            reach,
+            roleRank(role, positions),
+            memberRank,
+          ),
+      )
     ) {
       throw new ForbiddenException({
         code: ROLE_ASSIGN_OUT_OF_REACH_CODE,
@@ -768,11 +780,12 @@ export class MemberService {
         member,
         actorUserId,
         await rankContextOrSkip(member, actorUserId, rankContext),
+        'below',
       )
     ) {
       case 'self':
         return "You can't remove yourself from the chapter.";
-      case 'not-below':
+      case 'out-of-reach':
         return 'You can only remove members ranked below you.';
       default:
         return null;
@@ -812,8 +825,10 @@ export class MemberService {
    *
    * - not your own profile: you change yours from your profile, where the
    *   rest of it lives;
-   * - only members ranked below you (#4071, `spec/behavior/rbac.md` § Rank),
-   *   so a chair can't rename the President;
+   * - only members ranked below you or at your own rank (#4071,
+   *   `spec/behavior/rbac.md` § Rank; a peer since #5900), so a chair can't
+   *   rename the President but a cabinet officer can fix a fellow cabinet
+   *   officer's year;
    * - only a member of this chapter alone. The name and year live on `users`,
    *   shared by every chapter a person is in, and one chapter's officers must
    *   not change what another chapter shows. A member in two chapters keeps
@@ -831,11 +846,11 @@ export class MemberService {
       rankContextOrSkip(member, actorUserId, rankContext),
       this.isInAnotherChapter(member),
     ]);
-    switch (rankBlock(member, actorUserId, context)) {
+    switch (rankBlock(member, actorUserId, context, 'peer')) {
       case 'self':
         return 'Change your own name and graduation year from your profile.';
-      case 'not-below':
-        return 'You can only edit the profiles of members ranked below you.';
+      case 'out-of-reach':
+        return 'You can only edit the profiles of members ranked below you or at your own rank.';
     }
     if (inAnotherChapter) return IN_ANOTHER_CHAPTER_REFUSAL;
     return null;
@@ -1258,20 +1273,30 @@ function sharedBirthday(
 /**
  * Whether the rank rules (#4071, `spec/behavior/rbac.md` § Rank) let
  * `actorUserId` act on `member`: `'self'` for their own membership,
- * `'not-below'` when `member` doesn't rank below them, `null` when they may.
- * Removal and correction share it, so they never disagree on who ranks below
- * whom. A `null` context means the self check already answered.
+ * `'out-of-reach'` when `member` is out of reach, `null` when they may.
+ * Removal and correction share it, so they never disagree on who ranks where.
+ * A `null` context means the self check already answered.
+ *
+ * `reach` says who is in reach: `'below'`, only members ranked below the
+ * caller (removal); `'peer'`, those or a member at the caller's own rank
+ * (correction, Paul's go relayed by Shawn, 2026-11-23, #5900;
+ * `canCorrectProfileAt`). Neither reaches a member ranked above the caller,
+ * though roles and pledge class do since #5903.
  */
 function rankBlock(
   member: Member,
   actorUserId: string,
   context: RankContext | null,
-): 'self' | 'not-below' | null {
+  reach: 'below' | 'peer',
+): 'self' | 'out-of-reach' | null {
   if (!context || member.user_id === actorUserId) return 'self';
   if (context.reach.memberId === member.id) return 'self';
-  return canReach(context.reach, memberRankIn(context, member))
-    ? null
-    : 'not-below';
+  const rank = memberRankIn(context, member);
+  const reachable =
+    reach === 'peer'
+      ? canCorrectProfileAt(context.reach, rank)
+      : canReach(context.reach, rank);
+  return reachable ? null : 'out-of-reach';
 }
 
 /** The rank context, or `null` without a read when `member` is the actor. */

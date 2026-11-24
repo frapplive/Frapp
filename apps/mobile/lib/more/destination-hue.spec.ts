@@ -4,6 +4,7 @@ import { ROLE_COLOR_HEXES } from "@repo/validation";
 import { signetDarkTokens } from "@repo/theme/signet";
 import {
   destinationHue,
+  SHARED_HUE_PAIRS,
   YOU_DESTINATION_HUE,
   type YouDestination,
 } from "./destination-hue";
@@ -51,7 +52,12 @@ describe("the You tab's place hues", () => {
       const hue = destinationHue(place);
       byHue.set(hue, [...(byHue.get(hue) ?? []), place]);
     }
-    const shared = [...byHue.values()].filter((group) => group.length > 1);
+    const allowed = new Set(
+      SHARED_HUE_PAIRS.map((pair) => [...pair].sort().join("+")),
+    );
+    const shared = [...byHue.values()]
+      .filter((group) => group.length > 1)
+      .filter((group) => !allowed.has([...group].sort().join("+")));
     expect(shared).toEqual([]);
   });
 });

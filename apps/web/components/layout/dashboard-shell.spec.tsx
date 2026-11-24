@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { NewButton } from "@/components/ui/new-button";
 import { hydrateRoot } from "react-dom/client";
 
@@ -100,6 +101,11 @@ vi.mock("@/components/chat/chat-page", () => ({
       ) : null}
     </>
   ),
+}));
+
+// Desktop-only, with its own spec; here only that the shell mounts it.
+vi.mock("@/components/layout/desktop-runtime", () => ({
+  DesktopRuntime: () => <span data-testid="desktop-runtime" />,
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => {
@@ -312,6 +318,15 @@ describe("DashboardShell", () => {
       device.phone = null;
       window.localStorage.removeItem("frapp.web.get-the-app-dismissed");
     }
+  });
+
+  it("mounts the desktop app's runtime, which decides for itself where it runs (#4842)", () => {
+    render(
+      <DashboardShell>
+        <p>route content</p>
+      </DashboardShell>,
+    );
+    expect(screen.getByTestId("desktop-runtime")).toBeInTheDocument();
   });
 
   it("renders the route inside a main landmark", () => {
@@ -538,7 +553,9 @@ describe("DashboardShell", () => {
     // bottom of the page (the next test).
     expect(
       within(banner)
-        .queryAllByRole("button", { name: /ask/i })
+        .queryAllByRole("button", {
+          name: /ask|frapp intelligence|what do you need/i,
+        })
         .filter((button) => !/^(Find|Search)/.test(button.textContent ?? "")),
     ).toHaveLength(0);
   });
@@ -596,10 +613,15 @@ describe("DashboardShell", () => {
    * of chat itself: the padding just reappears around a layout that still
    * "works".
    */
-  it("floats Ask Frapp's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
+  it("floats Frapp Intelligence's bar at the bottom of a tool page, for a member with Ask only (#5476)", () => {
     mockPathname.value = "/events";
     const view = render(<DashboardShell>content</DashboardShell>);
-    expect(screen.queryByRole("button", { name: /^Ask Frapp/ })).toBeNull();
+    // Neither bar: the sidebar's reads the name, the floating one its words.
+    expect(
+      screen.queryByRole("button", {
+        name: /^(Frapp Intelligence|What do you need)/,
+      }),
+    ).toBeNull();
     let page = view.container.querySelector("[data-tool-page]") as HTMLElement;
     expect(page.className).not.toContain("pb-24");
     view.unmount();
@@ -607,7 +629,7 @@ describe("DashboardShell", () => {
     askEntry.current = { open: false, openAsk: vi.fn() };
     const { container } = render(<DashboardShell>content</DashboardShell>);
     // Named by its own words (WCAG 2.5.3).
-    const bar = screen.getByRole("button", { name: "Ask Frapp anything" });
+    const bar = screen.getByRole("button", { name: "What do you need?" });
     expect(screen.getByRole("banner")).not.toContainElement(bar);
     const column = container.querySelector("[data-tool-column]") as HTMLElement;
     expect(column).toContainElement(bar);
@@ -627,7 +649,7 @@ describe("DashboardShell", () => {
     const { container } = render(<DashboardShell>content</DashboardShell>);
     const column = container.querySelector("[data-tool-column]") as HTMLElement;
     expect(
-      within(column).queryByRole("button", { name: "Ask Frapp anything" }),
+      within(column).queryByRole("button", { name: "What do you need?" }),
     ).toBeNull();
     const page = container.querySelector("[data-tool-page]") as HTMLElement;
     expect(page.className).not.toContain("pb-24");
@@ -674,6 +696,54 @@ describe("DashboardShell", () => {
       expect(header.className).toContain(
         "has-[[data-page-actions]:not(:empty)]:flex",
       );
+      unmount();
+    }
+  });
+
+  it("seats a page's views beside its title in the header, never in the body (Paul, 2026-11-24)", () => {
+    mockPathname.value = "/events";
+    for (const width of [1440, 800]) {
+      setWindowWidth(width);
+      const { container, unmount } = render(
+        <DashboardShell>
+          <PageViews>
+            <ViewLabels
+              label="Whose events"
+              options={[
+                { value: "mine", label: "Mine" },
+                { value: "all", label: "Everyone's" },
+              ]}
+              value="mine"
+              onChange={() => {}}
+            />
+          </PageViews>
+          <p>list</p>
+        </DashboardShell>,
+      );
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      const views = header.querySelector(
+        "[data-tool-page-views]",
+      ) as HTMLElement;
+      const page = container.querySelector("[data-tool-page]") as HTMLElement;
+      expect(
+        within(views).getByRole("tablist", { name: "Whose events" }),
+      ).toBeInTheDocument();
+      expect(within(page).queryByRole("tablist")).toBeNull();
+      // Before the actions slot, so the words sit beside the title.
+      const actions = header.querySelector("[data-tool-page-actions]")!;
+      expect(
+        views.compareDocumentPosition(actions) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Below the side-by-side width the header shows while it holds views,
+      // even with no actions.
+      expect(header.className).toContain(
+        "has-[[data-tool-page-views]:not(:empty)]:flex",
+      );
+      // The group NewButton reads to give way sooner beside views.
+      expect(header.className).toContain("group/page-header");
       unmount();
     }
   });
@@ -1289,7 +1359,7 @@ describe("DashboardShell", () => {
       expect(document.cookie).toContain("frapp_chat_width=375");
     });
 
-    it("keeps Ask Frapp in the sidebar's foot, not over the home view (#5560)", () => {
+    it("keeps Frapp Intelligence in the sidebar's foot, not over the home view (#5560)", () => {
       setWindowWidth(1440);
       mockPathname.value = "/chat";
       askEntry.current = { open: false, openAsk: vi.fn() };
@@ -1298,10 +1368,12 @@ describe("DashboardShell", () => {
       );
       const home = container.querySelector("[data-chapter-home]")!;
       expect(home.parentElement).not.toContainElement(
-        screen.queryByRole("button", { name: "Ask Frapp anything" }),
+        screen.queryByRole("button", { name: "What do you need?" }),
       );
       const nav = screen.getByRole("navigation", { name: "Primary" });
-      const sidebarAsk = screen.getByRole("button", { name: "Ask Frapp" });
+      const sidebarAsk = screen.getByRole("button", {
+        name: "Frapp Intelligence",
+      });
       expect(nav.parentElement).toContainElement(sidebarAsk);
     });
 

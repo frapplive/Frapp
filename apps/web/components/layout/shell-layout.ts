@@ -76,10 +76,10 @@ export function isChatRoute(pathname: string | null): boolean {
  */
 export const ESCAPE_LEAVES_ATTRIBUTE = "data-escape-leaves";
 
-/** Ask Frapp's page (Paul's pick of 2026-11-22), opened by the Ask bar. */
+/** Frapp Intelligence's page (Paul's pick of 2026-11-22), opened by the Ask bar. */
 export const ASK_ROUTE = "/ask";
 
-/** Whether `pathname` is Ask Frapp's page. */
+/** Whether `pathname` is Frapp Intelligence's page. */
 export function isAskRoute(pathname: string | null): boolean {
   return (
     pathname === ASK_ROUTE || Boolean(pathname?.startsWith(`${ASK_ROUTE}/`))

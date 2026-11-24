@@ -70,9 +70,10 @@ export type SettingsTab = {
     the last section of Plan and billing now, where a president looking for
     "cancel" goes. `?tab=danger` lands there (`SETTINGS_TAB_ALIASES`).
 
-  - **Accent is not a row any more.** It is a section of Chapter, under the
-    chapter mark: both decide how the chapter looks. `?tab=theme` still lands
-    there (`SETTINGS_TAB_ALIASES`).
+  - **Accent is not a row any more.** It is a page of Chapter, opened from
+    the Accent color row beside Chapter mark: both decide how the chapter
+    looks. `?tab=theme` still lands there (`SETTINGS_TAB_ALIASES` opens
+    Chapter, and the settings page opens its Accent color page).
   - **No `joincode`.** The board `4d` rail drew it; `apps/web` has no
     join-code surface. The board's `subscription` row is Plan and billing.
   - **One row per module** (#4073). The Modules group used to be three rows:

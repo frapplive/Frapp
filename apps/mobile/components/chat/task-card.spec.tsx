@@ -453,10 +453,10 @@ describe("TaskCard — actions", () => {
     expect(actions(render("admin-2"))).toEqual(["Confirmed"]);
   });
 
-  it("never offers Confirm on the admin's own task (#1056)", () => {
+  it("never offers Confirm or Send back on the admin's own task (#1056, #5917)", () => {
     state.permissions = ["tasks:manage"];
     state.live = liveTask({ status: "COMPLETED", stored_status: "COMPLETED" });
-    expect(actions(render(ASSIGNEE))).toEqual(["Send back"]);
+    expect(actions(render(ASSIGNEE))).toEqual([]);
   });
 
   it("leaves a disabled Confirmed indicator once points are awarded", () => {

@@ -661,7 +661,7 @@ export function TasksBoard() {
 
     let drawn: TaskGroup[];
     if (view === "mine") {
-      // Today (overdue first), This week and Later hold what is still to
+      // Overdue, Today, This week and Later hold what is still to
       // do; what waits on an officer is done from the member's side, so it
       // follows them, as Asana's My tasks moves finished work out of the
       // day lists.
@@ -1313,8 +1313,9 @@ export function TasksBoard() {
                 const tiles = group.groupTiles ?? [];
                 const count = group.tasks.length + tiles.length;
                 // In List, a group with nothing in it draws nothing: four
-                // empty headings would push the work down the page. No due
-                // date (#5761) draws nothing empty in Board either.
+                // empty headings would push the work down the page. Overdue
+                // (#5906) and No due date (#5761) draw nothing empty in Board
+                // either.
                 if ((!isGrid || group.empty === null) && count === 0) {
                   return null;
                 }
@@ -1494,6 +1495,9 @@ export function TasksBoard() {
         onReject={(task) => rejectCompletion(task)}
         onDelete={(task) => void removeTask(task)}
         onDeleteGroup={(tile) => void removeGroup(tile)}
+        groupCopies={(groupId) =>
+          tasks.filter((row) => row.group_id === groupId)
+        }
       />
       {canManage ? (
         <OpenTaskPanel
@@ -1754,9 +1758,9 @@ function TaskCard({
              * 403, and the optimistic write would flip the label to
              * "Confirmed" and snap back. A confirmed task carries neither
              * control: it sits in the Confirmed list, which says so, and the
-             * API refuses a reject once points are awarded. Reject stays on
-             * your own unconfirmed task: it withholds points rather than
-             * awarding them, so the self-confirm rule does not cover it.
+             * API refuses a reject once points are awarded. Send back is
+             * hidden on your own task too (#5917): the API refuses it, and
+             * Mark not done takes your own "done" back.
              */}
             {cannotConfirm || !needsSignOff ? null : (
               <Button
@@ -1769,16 +1773,18 @@ function TaskCard({
                 {TASK_ACTION_LABELS.confirm}
               </Button>
             )}
-            <Button
-              size="toolbar"
-              variant="secondary"
-              className="gap-1.5"
-              {...gate.controlProps(lifecycleWritePending)}
-              onClick={onReject}
-            >
-              <Undo2 className="h-4 w-4" />
-              {TASK_ACTION_LABELS.reject}
-            </Button>
+            {cannotConfirm ? null : (
+              <Button
+                size="toolbar"
+                variant="secondary"
+                className="gap-1.5"
+                {...gate.controlProps(lifecycleWritePending)}
+                onClick={onReject}
+              >
+                <Undo2 className="h-4 w-4" />
+                {TASK_ACTION_LABELS.reject}
+              </Button>
+            )}
           </>
         ) : null}
         {/*

@@ -4,7 +4,12 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useHiddenUnsetFeatures } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { ChapterNavHeader } from "@/components/layout/chapter-nav-header";
-import { DASHBOARD_NAV, type NavItem } from "@/components/layout/nav-config";
+import {
+  DASHBOARD_NAV,
+  withChapterWords,
+  type NavItem,
+} from "@/components/layout/nav-config";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import type { ChatView } from "@/components/layout/shell-prefs";
 import {
   isNavItemVisible,
@@ -173,11 +178,15 @@ export function AppNav({
   // Study hours with no active zone, and Documents with nothing in it for a
   // viewer who can't upload, leave the nav (`nav-config.ts`, Setup gating).
   const hiddenFeatures = useHiddenUnsetFeatures(permissions, isModuleEnabled);
+  // A row named in the chapter's own word (Recruitment's Rush / Intake).
+  const vocabulary = useChapterVocabulary();
 
   const sections = DASHBOARD_NAV.map((section) => {
-    const visibleItems = section.items.filter((item) =>
-      isNavItemVisible(item, permissions, isModuleEnabled, hiddenFeatures),
-    );
+    const visibleItems = section.items
+      .filter((item) =>
+        isNavItemVisible(item, permissions, isModuleEnabled, hiddenFeatures),
+      )
+      .map((item) => withChapterWords(item, vocabulary));
     if (visibleItems.length === 0) return null;
 
     return (
@@ -309,7 +318,7 @@ export function AppNav({
       {isCollapsed ? null : <LiveMeetingCard />}
       {isDrawer || !hasAsk || sharedFoot ? null : (
         /*
-         * Ask Frapp's one home from `lg` up (#5560, Paul's pick of
+         * Frapp Intelligence's one home from `lg` up (#5560, Paul's pick of
          * 2026-11-19): the foot of the column on every layout, so it never
          * moves as panes open and close and covers no page. In the rail it is
          * the crest alone above the expand toggle; with a toggle in the
@@ -337,7 +346,7 @@ export function AppNav({
          * and the tooltip.
          *
          * Changed in #5560 (Paul's pick, 2026-11-19): for a member with Ask
-         * the expanded column's foot is one row, Ask Frapp's bar filling it
+         * the expanded column's foot is one row, Frapp Intelligence's bar filling it
          * and the toggle a 34px glyph at its end, named by its label and
          * tooltip. A second row cost the 48px a full sidebar doesn't have at
          * 1024x768 (`tests/visual/nav-fit.spec.ts`).

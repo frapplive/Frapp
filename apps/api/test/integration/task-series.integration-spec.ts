@@ -70,6 +70,7 @@ describeIntegration('Repeating tasks against live PostgREST (#5119)', () => {
       point_reward: 5,
       proof_kind: 'none',
       subtask_titles: ['Wipe', 'Mop'],
+      attachments: [],
       due_time: '21:00:00',
       recurrence_rule: RULE,
       first_due_date: '2026-11-16',

@@ -108,7 +108,7 @@ test.describe("pre-auth routes hold the 375px floor", () => {
  * collected nothing at all. It does not read what the floor spec does with the
  * list: a `.slice()`, a `.skip` or a removed assertion there still passes.
  */
-test("the dashboard floor suite still exists and still measures all fifteen routes", () => {
+test("the dashboard floor suite still exists and still measures every dashboard route", () => {
   // `new URL(..., import.meta.url)` rather than `__dirname`: Playwright loads
   // these specs as ES modules, where `__dirname` is not defined at all.
   const sibling = new URL("./responsive-floor.spec.ts", import.meta.url);
@@ -125,5 +125,6 @@ test("the dashboard floor suite still exists and still measures all fifteen rout
     // study zones moved into Settings: `/geofences` redirects there too.
     // Thirteen since #3837: `/reports` and `/discord-import` redirect into
     // Chapter settings as well.
-  ).toHaveLength(13);
+    // Fourteen since #5924: `/rush`, the recruitment pipeline.
+  ).toHaveLength(14);
 });

@@ -41,6 +41,11 @@ export interface SlashPaletteProps {
   /** `false` leaves `/announce` out (`filterSlashCommands`, #3414). */
   canAnnounce?: boolean;
   /**
+   * The member's permission list, so `/rush` offers only the subcommands
+   * their role holds (`filterSlashCommands`, #4084). Absent offers all.
+   */
+  permissions?: readonly string[];
+  /**
    * Reflects the state of the read behind the module gate, the member view
    * (`useChapterModuleGateState`), so the palette can fail closed while
    * modules are still loading, can't be checked offline, or errored. Never
@@ -78,6 +83,7 @@ export function SlashPalette({
   isModuleEnabled,
   recruitmentVocab,
   canAnnounce,
+  permissions,
   status = "ready",
   onRetry,
   onSelect,
@@ -91,9 +97,10 @@ export function SlashPalette({
         ? filterSlashCommands(query, isModuleEnabled, {
             recruitment: recruitmentVocab,
             canAnnounce,
+            permissions,
           })
         : [],
-    [query, isModuleEnabled, status, recruitmentVocab, canAnnounce],
+    [query, isModuleEnabled, status, recruitmentVocab, canAnnounce, permissions],
   );
 
   return (

@@ -163,14 +163,16 @@ describe("base roles (2026-11-21)", () => {
     expect(rows.find((r) => r.name === "Grads")?.disabledReason).toBe(
       ASSIGN_CAPTIONS.ranksAbove,
     );
-    // A member ranked above the viewer: the member rule disables every row.
+    // A member ranked above the viewer (#5903): New Member sits at the
+    // chair's own rank, so it isn't theirs to give there, and the pick would
+    // take Grads, ranked above them, away.
     const above = sections({
       roles: highGrads,
       heldRoleIds: ["r-alumni"],
       reach: { ...VP_REACH, rank: 2 },
     })[0]!.rows;
     expect(above.find((r) => r.name === "New Member")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
+      ASSIGN_CAPTIONS.ranksAbove,
     );
     // A member holding a reachable base role: the pick is open.
     const open = sections({ roles: withBase, heldRoleIds: ["r-actives"] })[0]!
@@ -178,6 +180,28 @@ describe("base roles (2026-11-21)", () => {
     expect(
       open.find((r) => r.name === "New Member")?.disabledReason,
     ).toBeNull();
+  });
+
+  it("on a member ranked above the viewer, says a pick would take away their base role at the viewer's own rank, even with roles:assign_own_level (#5903)", () => {
+    // New Member sits outside the tiers, below the chair, so it is theirs to
+    // give; picking it would take Brothers (the chairs' own tier) away from
+    // a member ranked above them, which own-level doesn't reach there.
+    const lowNew = withBase.map((r) =>
+      r.id === "r-new" ? { ...r, tier_id: null } : r,
+    );
+    const rows = sections({
+      roles: lowNew,
+      heldRoleIds: ["r-vp", "r-actives"],
+      userId: "u-vp",
+      reach: {
+        ...VP_REACH,
+        rank: 2,
+        held: new Set([...VP_REACH.held, "roles:assign_own_level"]),
+      },
+    })[0]!.rows;
+    expect(rows.find((r) => r.name === "New Member")?.disabledReason).toBe(
+      ASSIGN_CAPTIONS.takesAwayAbove,
+    );
   });
 
   it("says when a member holds no base role", () => {
@@ -351,11 +375,14 @@ describe("memberAssignmentSections", () => {
       userId: "u-other",
     }).flatMap((s) => s.rows);
     expect(rows.find((r) => r.name === "Past Cor Sec")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
+      ASSIGN_CAPTIONS.outsideTiers,
     );
   });
 
-  it("never lets the viewer reach a member ranked above them", () => {
+  // #5903 (Paul's option 3, relayed by Shawn, 2026-11-23): on a member
+  // ranked above them, the President included, the viewer gives and takes
+  // only roles ranked below their own.
+  it("lets the viewer give a member ranked above them only roles below the viewer, even with roles:assign_own_level", () => {
     const rows = sections({
       reach: {
         ...VP_REACH,
@@ -365,9 +392,58 @@ describe("memberAssignmentSections", () => {
       heldRoleIds: ["r-vp"],
       userId: "u-vp",
     }).flatMap((s) => s.rows);
-    expect(rows.find((r) => r.name === "Rush Chair")?.disabledReason).toBe(
-      ASSIGN_CAPTIONS.memberAbove,
-    );
+    const reason = (name: string) =>
+      rows.find((r) => r.name === name)?.disabledReason;
+    expect(reason("Past Cor Sec")).toBeNull();
+    expect(reason("Rush Chair")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+    expect(reason("Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+  });
+
+  it("lets a cabinet officer give the President a lower role, never their own rank's or `*`", () => {
+    const rows = sections({
+      heldRoleIds: ["r-pres"],
+      userId: "u-pres",
+    }).flatMap((s) => s.rows);
+    const reason = (name: string) =>
+      rows.find((r) => r.name === name)?.disabledReason;
+    expect(reason("Rush Chair")).toBeNull();
+    expect(reason("Vice President")).toBe(ASSIGN_CAPTIONS.ranksAbove);
+    expect(reason("President")).toBe(ASSIGN_CAPTIONS.presidency);
+  });
+
+  it("offers no remove on a chip at the viewer's own rank on a member above them, even with roles:assign_own_level (#5903)", () => {
+    const chips = memberRoleChips({
+      roles: ROLES,
+      tiers: TIERS,
+      heldRoleIds: ["r-vp", "r-rush", "r-past"],
+      reach: {
+        ...VP_REACH,
+        rank: 2,
+        held: new Set([...VP_REACH.held, "roles:assign_own_level"]),
+      },
+      canManageRoles: true,
+      userId: "u-vp",
+    });
+    expect(chips.map((c) => [c.name, c.removable])).toEqual([
+      ["Vice President", false],
+      ["Rush Chair", false],
+      ["Past Cor Sec", true],
+    ]);
+  });
+
+  it("lets a cabinet officer take a lower role chip off the President, never `*`", () => {
+    const chips = memberRoleChips({
+      roles: ROLES,
+      tiers: TIERS,
+      heldRoleIds: ["r-pres", "r-rush"],
+      reach: VP_REACH,
+      canManageRoles: true,
+      userId: "u-pres",
+    });
+    expect(chips.map((c) => [c.name, c.removable])).toEqual([
+      ["President", false],
+      ["Rush Chair", true],
+    ]);
   });
 
   it("treats the viewer's own profile as reachable", () => {

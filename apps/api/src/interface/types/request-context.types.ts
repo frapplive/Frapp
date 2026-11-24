@@ -4,6 +4,7 @@ import type {
 } from '@supabase/supabase-js';
 import type { Request } from 'express';
 import type { SubscriptionStatus } from '#domain/entities/chapter.entity';
+import type { SchoolMember } from '#domain/entities/school.entity';
 
 export interface AppUserContext {
   id: string;
@@ -39,10 +40,9 @@ export interface RequestContext extends Request {
   /**
    * Verified claims from the caller's access token, including the
    * `active_chapter_id` claim issued by `custom_access_token_hook`.
-   * Undefined when the token could not be decoded locally — `ChapterGuard`
-   * then falls back to the `x-chapter-id` header, which
-   * spec/behavior/multi-tenancy.md explicitly allows for clients that have not
-   * refreshed their token yet.
+   * Undefined when the token could not be decoded locally. The claim is only
+   * the default anyway: `ChapterGuard` serves an `x-chapter-id` header first
+   * (ADR-27, #5918), and without either it auto-resolves a sole membership.
    */
   jwtClaims?: JwtPayload;
   /**
@@ -72,6 +72,12 @@ export interface RequestContext extends Request {
   appUserLookup?: () => Promise<string | null>;
   member?: MemberContext;
   chapterId?: string;
+  /**
+   * Set by `SchoolGuard` (ADR-27 decision 3, #5929): the school a campus
+   * request named in `x-school-id`, and the caller's live membership there.
+   */
+  schoolId?: string;
+  schoolMember?: SchoolMember;
   subscriptionStatus?: SubscriptionStatus;
   /**
    * `chapters.enabled_modules` as `ChapterGuard` read it. `null` is a chapter
@@ -115,10 +121,12 @@ export function getHeaderValue(
 
 /**
  * Chapter id in context for routes that must not require ChapterGuard
- * (identity still works before a chapter is selected). JWT claim wins; the
- * `x-chapter-id` header is the unrefreshed-token fallback. A mismatch does
- * **not** 403 here — identity must still return the user pseudonym for Sentry.
- * Shape/HMAC validation lives in AnalyticsService, not this reader.
+ * (identity still works before a chapter is selected). The `x-chapter-id`
+ * header wins and the JWT claim is the default, the order `ChapterGuard`
+ * reads them in (ADR-27 decision 3, #5918), so each tab's analytics group is
+ * its own tenant's. Nothing here checks membership or refuses anything:
+ * identity must still return the user pseudonym for Sentry. Shape/HMAC
+ * validation lives in AnalyticsService, not this reader.
  */
 export function getOptionalChapterId(
   request: Pick<RequestContext, 'chapterId' | 'jwtClaims' | 'headers'>,
@@ -126,9 +134,10 @@ export function getOptionalChapterId(
   if (typeof request.chapterId === 'string' && request.chapterId.length > 0) {
     return request.chapterId;
   }
-  const jwtChapterId = getActiveChapterClaim(request.jwtClaims);
-  if (jwtChapterId) return jwtChapterId;
-  return getHeaderValue(request.headers, 'x-chapter-id');
+  return (
+    getHeaderValue(request.headers, 'x-chapter-id') ||
+    getActiveChapterClaim(request.jwtClaims)
+  );
 }
 
 /**

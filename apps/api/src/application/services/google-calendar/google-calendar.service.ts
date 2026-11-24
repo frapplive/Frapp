@@ -8,10 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
-import {
-  GOOGLE_CALENDAR_SIGN_IN_COPY,
-  isProductionSupabaseUrl,
-} from '@repo/validation';
+import { GOOGLE_CALENDAR_SIGN_IN_COPY } from '@repo/validation';
 import {
   GOOGLE_CALENDAR_API,
   GOOGLE_CALENDAR_SCOPE,
@@ -23,6 +20,11 @@ import {
 } from '#domain/repositories/google-calendar.repository.interface';
 import type { GoogleCalendarConnection } from '#domain/entities/google-calendar-connection.entity';
 import type { AiTextKeyRing } from '#domain/utils/ai-text-cipher';
+import {
+  devAppsAllowed,
+  isAppReturnUrl,
+  withQueryParams,
+} from '#domain/utils/app-return-url';
 import { googleCalendarTokenKeyRing } from '../../../config/google-calendar-config';
 import { resolveAppOrigin } from '../../../infrastructure/email/invite-link.util';
 import { toReportableError } from '../../../infrastructure/observability/reportable-error';
@@ -80,7 +82,11 @@ export interface GoogleCalendarStatus {
  * therefore gets nothing: the member's browser lands in the member's own
  * session, which is refused. The sign-in also holds a PKCE verifier that
  * Google demands when the code is traded, so a code that leaks on its way
- * back (another app claiming `frapp://`, a browser history) is useless.
+ * back (another app claiming `frapp://`, a browser history) is useless to
+ * anyone but the member who started the sign-in. Not to that member: one who
+ * sends their sign-in link to someone else, with an app on that person's
+ * phone claiming `frapp://`, could connect that person's Google account to
+ * their own Frapp account (the custom scheme's limit, `isAppReturnUrl`).
  */
 @Injectable()
 export class GoogleCalendarService {
@@ -88,7 +94,7 @@ export class GoogleCalendarService {
   private readonly apiBase: string | null;
   private readonly appOrigin: string;
   private readonly keyRing: AiTextKeyRing | null;
-  private readonly allowExpoGo: boolean;
+  private readonly allowDevApps: boolean;
 
   constructor(
     @Inject(GOOGLE_CALENDAR_REPOSITORY)
@@ -105,10 +111,9 @@ export class GoogleCalendarService {
         'GOOGLE_CALENDAR_TOKEN_KEY',
       ),
     });
-    // Expo Go's `exp://` return address exists only on a developer's
-    // machine. Production accepts the app's own scheme alone.
-    const supabaseUrl = config.get<string>('SUPABASE_URL');
-    this.allowExpoGo = !(supabaseUrl && isProductionSupabaseUrl(supabaseUrl));
+    // The staging app and Expo Go exist only off production. Production
+    // accepts the app's own scheme alone.
+    this.allowDevApps = devAppsAllowed(config.get<string>('SUPABASE_URL'));
   }
 
   isAvailable(): boolean {
@@ -198,17 +203,17 @@ export class GoogleCalendarService {
         );
       }
     }
-    if (!returnTo) return withParams(fallback, { gcal: 'expired' });
+    if (!returnTo) return withQueryParams(fallback, { gcal: 'expired' });
     if (query.error) {
       // `access_denied` is the member pressing Cancel on Google's page.
-      return withParams(returnTo, {
+      return withQueryParams(returnTo, {
         gcal: query.error === 'access_denied' ? 'denied' : 'failed',
       });
     }
     if (typeof query.code !== 'string' || query.code.length === 0) {
-      return withParams(returnTo, { gcal: 'failed' });
+      return withQueryParams(returnTo, { gcal: 'failed' });
     }
-    return withParams(returnTo, {
+    return withQueryParams(returnTo, {
       gcal: 'confirm',
       gcal_code: query.code,
       gcal_state: stateId,
@@ -325,22 +330,12 @@ export class GoogleCalendarService {
   }
 
   /**
-   * The phone app's return address: its own `frapp://` scheme, or, outside
-   * production, the staging variant's `frapp-staging://` (Frapp Staging,
-   * `apps/mobile/app.config.js`) or Expo Go's on this computer or the local
-   * network. Production takes neither: a staging app must not finish a
-   * production member's sign-in. Anything
-   * else would hand Google's code to a page the member's own app doesn't
-   * control: Expo Go runs whatever server an `exp://` address names.
+   * The phone app's return address, as `isAppReturnUrl` allows it: the app's
+   * own scheme, and the staging app and Expo Go outside production.
    */
   private appReturnUrl(value: string | null): string {
     const url = value ?? '';
-    const allowed =
-      url.startsWith('frapp://') ||
-      (this.allowExpoGo &&
-        (url.startsWith('frapp-staging://') || isLocalExpoGoUrl(url)));
-    // eslint-disable-next-line no-control-regex
-    if (!allowed || /[\u0000-\u001F\u007F\s]/.test(url) || url.length > 512) {
+    if (!isAppReturnUrl(url, { allowDevApps: this.allowDevApps })) {
       throw new BadRequestException(
         'return_url must be the app’s own address.',
       );
@@ -358,31 +353,4 @@ function sameAccount(
     email !== null &&
     connection.google_email.toLowerCase() === email.toLowerCase()
   );
-}
-
-/**
- * An Expo Go address served from this computer or the local network: the
- * only place a developer's Expo Go points.
- */
-function isLocalExpoGoUrl(url: string): boolean {
-  if (!url.startsWith('exp://') && !url.startsWith('exps://')) return false;
-  let host: string;
-  try {
-    host = new URL(url).hostname;
-  } catch {
-    return false;
-  }
-  return (
-    host === 'localhost' ||
-    /^127\.\d+\.\d+\.\d+$/.test(host) ||
-    /^10\.\d+\.\d+\.\d+$/.test(host) ||
-    /^192\.168\.\d+\.\d+$/.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host)
-  );
-}
-
-/** `url` with `params` added to its query, kept if it already has one. */
-function withParams(url: string, params: Record<string, string>): string {
-  const query = new URLSearchParams(params).toString();
-  return `${url}${url.includes('?') ? '&' : '?'}${query}`;
 }

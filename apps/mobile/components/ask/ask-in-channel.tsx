@@ -311,7 +311,7 @@ function AskChannelTurnActions({
   const dismiss = (
     <TurnAction
       label={ASK_COPY.dismiss}
-      hint="Takes this answer out of the channel. It stays in Ask Frapp."
+      hint="Takes this answer out of the channel. It stays in Frapp Intelligence."
       onPress={onDismiss}
     />
   );
