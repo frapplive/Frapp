@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { LanguageModelError } from '#domain/adapters/language-model.interface';
 import { stripLoneSurrogates } from '#domain/utils/corpus-chunker';
 import type { CorpusCandidate } from '#domain/entities/corpus.entity';
 import {
@@ -11,7 +12,11 @@ import {
   reciprocalRankFusion,
   recencyWeight,
 } from '#domain/utils/corpus-ranking';
-import { AiGatewayService, type AiUnavailable } from '../ai/ai-gateway.service';
+import {
+  AiGatewayService,
+  type AiEmbeddingResult,
+  type AiUnavailable,
+} from '../ai/ai-gateway.service';
 import { CHAT_SOURCE_TYPE } from './chat-message-corpus-source';
 import {
   CORPUS_SOURCE_ADAPTERS,
@@ -153,6 +158,8 @@ export type CorpusRetrievalResult =
  */
 @Injectable()
 export class CorpusRetrievalService {
+  private readonly logger = new Logger(CorpusRetrievalService.name);
+
   constructor(
     @Inject(CORPUS_REPOSITORY) private readonly corpus: ICorpusRepository,
     @Inject(CORPUS_SOURCE_ADAPTERS)
@@ -221,30 +228,16 @@ export class CorpusRetrievalService {
       MAX_LIMIT,
     );
 
-    const embedded = await this.gateway.embed(
-      // Not `corpus.embed`: a question is the asker's own use of AI, and
-      // this task makes the gateway ask for their yes.
-      'ask.embed-query',
-      {
-        texts: [query],
-        promptVersion: CORPUS_QUERY_PROMPT_VERSION,
-        purpose: 'query',
-        signal: request.signal,
-      },
-      {
-        chapterId: request.chapterId,
-        actingUserId: request.actingUserId,
-        ...(request.runId === undefined ? {} : { runId: request.runId }),
-      },
-    );
-    if (embedded.status !== 'ok') return embedded;
+    // Null when the provider failed: the search goes on by words alone.
+    const embedded = await this.embedQuery(query, request);
+    if (embedded !== null && embedded.status !== 'ok') return embedded;
 
     const candidates = await this.corpus.match({
       chapterId: request.chapterId,
       userId: request.actingUserId,
       query,
-      embedding: embedded.vectors[0],
-      embeddingModel: embedded.model,
+      embedding: embedded?.vectors[0] ?? null,
+      embeddingModel: embedded?.model ?? null,
       limit: CANDIDATES_PER_HALF,
       ...(request.filter === undefined ? {} : { filter: request.filter }),
     });
@@ -268,6 +261,51 @@ export class CorpusRetrievalService {
       passages,
       leftOutMessages: this.leftOut(passages, admitted, withheldBySource),
     };
+  }
+
+  /**
+   * The question's embedding, the gateway's refusal, or null when the
+   * provider itself failed.
+   *
+   * A provider failure is thrown only after the gateway admitted the call,
+   * so the server switch, the chapter's switch, the member's yes and the
+   * caps have all passed by then. The search then runs on its words half
+   * alone instead of failing the member's question (FRAPP-API-V, 2026-11-24:
+   * every embedding call was rejected and Ask could not search). A refusal
+   * is never worked around, and neither is a call the member cancelled.
+   */
+  private async embedQuery(
+    query: string,
+    request: CorpusRetrievalRequest,
+  ): Promise<AiEmbeddingResult | null> {
+    try {
+      return await this.gateway.embed(
+        // Not `corpus.embed`: a question is the asker's own use of AI, and
+        // this task makes the gateway ask for their yes.
+        'ask.embed-query',
+        {
+          texts: [query],
+          promptVersion: CORPUS_QUERY_PROMPT_VERSION,
+          purpose: 'query',
+          signal: request.signal,
+        },
+        {
+          chapterId: request.chapterId,
+          actingUserId: request.actingUserId,
+          ...(request.runId === undefined ? {} : { runId: request.runId }),
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof LanguageModelError) || error.kind === 'aborted') {
+        throw error;
+      }
+      // The gateway already wrote the failed call to the ledger and its
+      // telemetry; this line says what the search did about it.
+      this.logger.warn(
+        `Question embedding failed (${error.kind}); searching by words only.`,
+      );
+      return null;
+    }
   }
 
   /**

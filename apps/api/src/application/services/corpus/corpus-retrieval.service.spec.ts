@@ -3,6 +3,7 @@ import type { ICorpusRepository } from '#domain/repositories/corpus.repository.i
 import type { AiGatewayService } from '../ai/ai-gateway.service';
 import { CorpusRetrievalService } from './corpus-retrieval.service';
 import type { CorpusSourceAdapter } from './corpus-source';
+import { LanguageModelError } from '#domain/adapters/language-model.interface';
 
 const CHAPTER = '11111111-1111-4111-8111-111111111111';
 const ASKER = '44444444-4444-4444-8444-444444444444';
@@ -91,6 +92,38 @@ describe('CorpusRetrievalService', () => {
       embedding: VECTOR,
       embeddingModel: 'gemini-embedding-001',
       limit: 40,
+    });
+  });
+
+  describe('when the embedding provider fails', () => {
+    it('searches by words alone instead of failing the question', async () => {
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(
+        new LanguageModelError('invalid_request', 'google', { status: 400 }),
+      );
+      const result = await retrieve();
+      expect(result.status).toBe('ok');
+      expect(corpus.match).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: 'What are dues?',
+          embedding: null,
+          embeddingModel: null,
+        }),
+      );
+    });
+
+    it('does not go on when the member cancelled', async () => {
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(new LanguageModelError('aborted', 'google'));
+      await expect(retrieve()).rejects.toBeInstanceOf(LanguageModelError);
+      expect(corpus.match).not.toHaveBeenCalled();
+    });
+
+    it('lets any other failure through', async () => {
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(new Error('database is down'));
+      await expect(retrieve()).rejects.toThrow('database is down');
+      expect(corpus.match).not.toHaveBeenCalled();
     });
   });
 

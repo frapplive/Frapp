@@ -278,6 +278,24 @@ describe('SupabaseCorpusRepository — tenant scope', () => {
     ]);
   });
 
+  it('match with no embedding names a model no passage has, so only words match', async () => {
+    await repo.match({
+      chapterId: CHAPTER_B,
+      userId: USER_A,
+      query: 'dues',
+      embedding: null,
+      embeddingModel: null,
+      limit: 40,
+    });
+    const args = harness.rpcCalls[0].args as {
+      p_embedding: string;
+      p_embedding_model: string;
+    };
+    expect(args.p_embedding_model).toBe('');
+    // A vector of the column's width, so the function's cast parses.
+    expect(JSON.parse(args.p_embedding)).toHaveLength(1536);
+  });
+
   it('writeChunks names the source and its revision; the function takes the chapter from the source', async () => {
     await expect(
       repo.writeChunks(SOURCE, 3, true, 'gemini-embedding-001', [
