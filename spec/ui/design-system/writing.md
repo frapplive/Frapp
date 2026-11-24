@@ -179,7 +179,7 @@ Short forms that stay, each for a reason:
 - The Messages list's last-sent time (`formatConversationTime`: `Nov 6`), at the end of a name line as a messaging inbox puts it (#5519).
 - Calendar grids' column headings (`Fri` over a column) and date tiles (`NOV` over `6`), which are a calendar's own drawing, not text a member reads as a sentence.
 
-Not yet converted (tracked in [#5696](https://github.com/frapplive/Frapp/issues/5696), not exceptions): the phone's Minutes list row time, push notification bodies, and a repeat pattern's weekdays (`Every Mon and Thu`).
+Not yet converted (tracked in [#5696](https://github.com/frapplive/Frapp/issues/5696), not exceptions): the phone's minutes series row time (`minutesRowTime`, the Minutes list's until #5949), push notification bodies, and a repeat pattern's weekdays (`Every Mon and Thu`).
 
 ## 6. Trust copy rules
 
