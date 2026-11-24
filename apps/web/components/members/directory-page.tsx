@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MembersDirectory } from "@/components/members/members-directory";
 import { AlumniDirectory } from "@/components/alumni/alumni-directory";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { DirectoryBodySkeleton } from "@/components/members/directory-skeleton";
 import { ListLayoutToggle } from "@/components/shared/list-layout-toggle";
 
@@ -55,12 +56,27 @@ function DirectoryPageContent() {
       ? tabParam
       : DEFAULT_TAB;
 
+  // A council has no alumni (no Alumni role, and its routes refuse the
+  // alumni read), so its Directory is the one list, with no tab row (#5933).
+  const isCouncil = useIsCouncil();
+
   function selectTab(next: string) {
     const params = new URLSearchParams(searchParams);
     params.set("tab", next);
     // `replace`, not `push`: flipping a tab is not a navigation a member
     // expects the back button to unwind one step at a time.
     router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  if (isCouncil) {
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-end border-b border-border">
+          <ListLayoutToggle screen="directory" className="mb-1" />
+        </div>
+        <MembersDirectory />
+      </div>
+    );
   }
 
   return (

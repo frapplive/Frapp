@@ -30,6 +30,8 @@ import { memberLabel } from "@repo/hooks/display-names";
 import { formatPoints, parseInstant } from "@repo/formatting";
 import { vocab } from "@repo/org-archetypes";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
@@ -270,7 +272,14 @@ export function MembersDirectory() {
   // directory screen's guard against firing a request per keystroke.
   const deferredQuery = useDeferredValue(trimmedQuery);
   const membersQuery = useMembers();
-  const classesQuery = usePledgeClasses();
+  // Points and pledge classes are a chapter's (#5933). A council keeps
+  // neither: its routes refuse both reads, so the Directory draws no points
+  // and no class there, as for a chapter with Points off. Points fail open
+  // while the module gate loads, as the nav does.
+  const tenantKind = useTenantKind();
+  const isModuleEnabled = useChapterModuleGate();
+  const pointsOn = isModuleEnabled?.("points") !== false;
+  const classesQuery = usePledgeClasses({ enabled: tenantKind === "chapter" });
   const searchQuery = useMemberSearch(deferredQuery);
   const rolesQuery = useRoles();
   const leaderboardQuery = useLeaderboard();
@@ -492,23 +501,29 @@ export function MembersDirectory() {
     usesFraternalOrder(pledgeClasses, membersQuery.data);
   const sortOptions = useMemo(
     () =>
-      offersOrderSort
+      (offersOrderSort
         ? [
             ...SORT_OPTIONS,
             // The chapter's own word, as typed: "Fraternal order", "Roll number".
             { value: ORDER_SORT, label: vocab("order", chapterWords) } as const,
           ]
-        : SORT_OPTIONS,
-    [offersOrderSort, chapterWords],
+        : SORT_OPTIONS
+      ).filter((option) => pointsOn || !option.value.startsWith("points:")),
+    [offersOrderSort, chapterWords, pointsOn],
   );
   // A sort the chapter no longer offers (its last class was deleted while the
   // page was open) falls back to the default rather than ordering by nothing.
   const effectiveSort: SortValue =
-    sort === ORDER_SORT && !offersOrderSort ? DEFAULT_SORT : sort;
+    (sort === ORDER_SORT && !offersOrderSort) ||
+    (!pointsOn && sort.startsWith("points:"))
+      ? DEFAULT_SORT
+      : sort;
   const { key: sortKey, dir: sortDir } = parseSort(effectiveSort);
 
   const pointsOf = (member: MemberProfile) =>
     pointsByUserId.get(member.user_id) ?? 0;
+  const shownPointsOf = (member: MemberProfile): number | null =>
+    pointsOn ? pointsOf(member) : null;
   // `null` until presence has resolved for this chapter — the dot renders
   // nothing rather than claiming Offline, which would be a statement about the
   // member sourced from our own unfinished join.
@@ -729,7 +744,7 @@ export function MembersDirectory() {
     const className = member.pledge_class_id
       ? (classNameById.get(member.pledge_class_id) ?? null)
       : null;
-    const points = pointsOf(member);
+    const points = shownPointsOf(member);
     const status = presenceStatusOf(member);
     const customLine = customLineOf(member);
     // The member's reach, shown on the row only while the Phone app filter is
@@ -744,7 +759,7 @@ export function MembersDirectory() {
       name,
       roleName,
       className,
-      `${points} points`,
+      points !== null ? `${points} points` : null,
       joined ? `joined ${joined}` : null,
       member.email || null,
       customLine,
@@ -859,7 +874,14 @@ export function MembersDirectory() {
    * "looks healthy while quietly broken" state the comment on those guards
    * exists to prevent.
    */
-  if (isOffline && anyReadUncached(activeQuery, rolesQuery, leaderboardQuery)) {
+  if (
+    isOffline &&
+    anyReadUncached(
+      activeQuery,
+      rolesQuery,
+      ...(pointsOn ? [leaderboardQuery] : []),
+    )
+  ) {
     return (
       <NestedOffline
         sole
@@ -908,11 +930,11 @@ export function MembersDirectory() {
   // each row's meta line and points sorting. If either query fails silently the
   // directory still looks healthy while those features are quietly broken, so
   // surface their load state.
-  if (rolesQuery.isLoading || leaderboardQuery.isLoading) {
+  if (rolesQuery.isLoading || (pointsOn && leaderboardQuery.isLoading)) {
     return <MembersRosterSkeleton />;
   }
 
-  if (rolesQuery.isError || leaderboardQuery.isError) {
+  if (rolesQuery.isError || (pointsOn && leaderboardQuery.isError)) {
     return (
       <NestedError
         sole
@@ -949,7 +971,12 @@ export function MembersDirectory() {
           }
         >
           {/* A search spans both tabs (see `members` above), so say so. */}
-          {usingSearch ? "Actives and alumni" : "Actives"}
+          {tenantKind === "council"
+            ? // A council has members, not actives and alumni (#5933).
+              "Members"
+            : usingSearch
+              ? "Actives and alumni"
+              : "Actives"}
         </SectionLabel>
         <div className="flex flex-wrap items-center gap-2">
           {/*
@@ -1394,9 +1421,11 @@ export function MembersDirectory() {
                           {reachText}
                         </span>
                       ) : null}
-                      <span className="shrink-0 text-caption tabular-nums text-muted">
-                        {formatPoints(points)}
-                      </span>
+                      {points !== null ? (
+                        <span className="shrink-0 text-caption tabular-nums text-muted">
+                          {formatPoints(points)}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -1469,7 +1498,7 @@ export function MembersDirectory() {
         onOpenChange={setDetailSheetOpen}
         userId={activeUserId}
         initialMember={activeMember}
-        points={activeMember ? pointsOf(activeMember) : null}
+        points={activeMember ? shownPointsOf(activeMember) : null}
         docked
         backLabel="Back to directory"
       />

@@ -53,10 +53,19 @@ type Stage = "pick" | "email" | "code" | "done";
 export function SchoolStep({
   initialQuery,
   onLeave,
+  doneLabel = SCHOOL_STEP_COPY.goToChat,
+  skipLabel = SCHOOL_STEP_COPY.skip,
 }: {
   /** The chapter's school name, so the member's school is usually first. */
   initialQuery: string;
   onLeave: () => void;
+  /**
+   * The button that leaves once verified, or past a school that can't verify
+   * yet: "Go to chat" after a join, "Continue" back on Start a council (#5933).
+   */
+  doneLabel?: string;
+  /** The way out at every stage: "Not a student? Skip for now" after a join. */
+  skipLabel?: string;
 }) {
   const [stage, setStage] = useState<Stage>("pick");
   const [query, setQuery] = useState(initialQuery);
@@ -144,7 +153,7 @@ export function SchoolStep({
       onClick={leave}
       disabled={leaving}
     >
-      {SCHOOL_STEP_COPY.skip}
+      {skipLabel}
     </Button>
   );
 
@@ -161,7 +170,7 @@ export function SchoolStep({
           {leaving ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {SCHOOL_STEP_COPY.goToChat}
+          {doneLabel}
         </Button>
       </AuthScreen>
     );
@@ -373,7 +382,7 @@ export function SchoolStep({
             onClick={leave}
             disabled={leaving}
           >
-            {SCHOOL_STEP_COPY.goToChat}
+            {doneLabel}
           </Button>
         </div>
       ) : (

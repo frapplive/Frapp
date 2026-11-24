@@ -5,7 +5,12 @@ import { Search } from "lucide-react";
 import { useChannels } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
-import { FindDialog, FIND_PLACEHOLDER } from "@/components/layout/find-dialog";
+import {
+  COUNCIL_FIND_PLACEHOLDER,
+  FindDialog,
+  FIND_PLACEHOLDER,
+} from "@/components/layout/find-dialog";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 
 /**
  * The top bar's Find entry: a field-shaped button that opens the centered Find
@@ -35,7 +40,9 @@ export function FindBar({ className }: { className?: string }) {
   const [query, setQuery] = useState("");
   // False only when a keystroke on the field opened the dialog; see FindDialog.
   const [selectOnOpen, setSelectOnOpen] = useState(true);
-  const placeholder = FIND_PLACEHOLDER;
+  const placeholder = useIsCouncil()
+    ? COUNCIL_FIND_PLACEHOLDER
+    : FIND_PLACEHOLDER;
   /*
    * Read here, while the dialog is closed, on purpose. It keeps `["channels"]`
    * warm on every dashboard route, so the dialog's Channels group is instant

@@ -46,8 +46,10 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { useConfirmDropBulkUploads } from "@/components/backwork/bulk/use-confirm-drop-bulk-uploads";
 import { asArray } from "@/lib/utils";
 import { isLockedOutOfChapter } from "@/lib/auth/no-access";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
 import {
   CREATE_CHAPTER_PATH,
+  START_COUNCIL_PATH,
   JOIN_FROM_SIGN_IN_PATH,
   WELCOME_PATH,
   isJoinSkipCandidate,
@@ -561,15 +563,27 @@ function JoinWithoutInvite() {
 
 /** Shared with the Suspense fallback, so the column does not grow on hydration. */
 const JOIN_FOOTER = (
-  <p>
-    {INVITE_PASTE_COPY.startingPrompt}{" "}
-    <Link
-      href={CREATE_CHAPTER_PATH}
-      className="font-semibold text-accent-text hover:underline"
-    >
-      {INVITE_PASTE_COPY.startingAction}
-    </Link>
-  </p>
+  <>
+    <p>
+      {INVITE_PASTE_COPY.startingPrompt}{" "}
+      <Link
+        href={CREATE_CHAPTER_PATH}
+        className="font-semibold text-accent-text hover:underline"
+      >
+        {INVITE_PASTE_COPY.startingAction}
+      </Link>
+    </p>
+    {/* Beside starting a chapter, for a school's council (#5933). */}
+    <p>
+      {START_COUNCIL_ENTRY.prompt}{" "}
+      <Link
+        href={START_COUNCIL_PATH}
+        className="font-semibold text-accent-text hover:underline"
+      >
+        {START_COUNCIL_ENTRY.action}
+      </Link>
+    </p>
+  </>
 );
 
 export default function JoinPage() {

@@ -1,3 +1,4 @@
+import type { TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import {
   DASHBOARD_NAV_ITEMS,
@@ -44,10 +45,19 @@ export type PageTitle = {
  * off the account menu; Chapter settings opens from the chapter menu atop the
  * nav, under the words that menu item uses; Ask Frapp from the Ask bar.
  */
+/**
+ * Settings' name in each tenant kind, as the chapter menu's item and the top
+ * bar both say it: a council's is "Council settings" (#5933).
+ */
+export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
+  chapter: "Chapter settings",
+  council: "Council settings",
+};
+
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/profile": "Profile",
   "/preferences": "Settings",
-  "/settings": "Chapter settings",
+  "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
   // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
   [ASK_ROUTE]: "Ask Frapp",
@@ -77,12 +87,18 @@ function matchesRoute(pathname: string, href: string): boolean {
  * @param isNavItemVisible whether the nav shows a row to this viewer
  *   (`isNavItemVisible` in `protected-nav-item.tsx`, bound to their
  *   permissions and modules). Omitted, every parent shows.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
+  if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {
+    return { title: SETTINGS_TITLE.council };
+  }
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
     matchesRoute(pathname, item.href),

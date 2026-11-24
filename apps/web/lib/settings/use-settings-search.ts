@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { aiAvailableFrom, useAiConsent, usePermissionList } from "@repo/hooks";
 import { searchSettings, type SettingMatch } from "@repo/hooks/settings-search";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 
 /**
  * Settings search for this viewer on web: what they can change, found by the
@@ -15,14 +16,19 @@ export function useSettingsSearch(): (query: string) => SettingMatch[] {
   const permissions = usePermissionList();
   const aiAvailable = aiAvailableFrom(useAiConsent()) === true;
   const isModuleEnabled = useChapterModuleGate();
+  // The index names a chapter's settings; a council's few are on one page
+  // with no search (#5933).
+  const isCouncil = useIsCouncil();
   return useCallback(
     (query: string) =>
-      searchSettings(query, {
-        permissions,
-        platform: "web",
-        aiAvailable,
-        isModuleEnabled,
-      }),
-    [permissions, aiAvailable, isModuleEnabled],
+      isCouncil
+        ? []
+        : searchSettings(query, {
+            permissions,
+            platform: "web",
+            aiAvailable,
+            isModuleEnabled,
+          }),
+    [permissions, aiAvailable, isModuleEnabled, isCouncil],
   );
 }

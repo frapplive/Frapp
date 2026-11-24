@@ -2,6 +2,7 @@
 
 import { BILLING_SETTINGS_PATH } from "@/components/billing/billing-paths";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
@@ -64,7 +65,11 @@ import { TermsAcceptance } from "@/components/auth/terms-acceptance";
 import { SignedInAs } from "@/components/auth/signed-in-as";
 import { OtherAccountLine } from "@/components/auth/other-account-line";
 import { useSignOutToSignIn } from "@/components/auth/use-sign-out";
-import { JOIN_FROM_SIGN_IN_PATH } from "@/lib/auth/join-visit";
+import {
+  JOIN_FROM_SIGN_IN_PATH,
+  START_COUNCIL_PATH,
+} from "@/lib/auth/join-visit";
+import { START_COUNCIL_ENTRY } from "@/components/councils/council-copy";
 import { SearchGlyph } from "@/components/profile/profile-glyphs";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { EYEBROW } from "@/components/ui/typography";
@@ -371,6 +376,16 @@ export function ChapterWizard({ onComplete }: { onComplete: () => void }) {
                     signingOut={otherAccount.signingOut}
                     failed={otherAccount.failed}
                   />
+                  {/* Here for a school's council instead (#5933). */}
+                  <p className="mt-2 text-center text-sm text-muted-foreground">
+                    {START_COUNCIL_ENTRY.prompt}{" "}
+                    <Link
+                      href={START_COUNCIL_PATH}
+                      className="font-semibold text-accent-text hover:underline"
+                    >
+                      {START_COUNCIL_ENTRY.action}
+                    </Link>
+                  </p>
                 </div>
               ) : null}
 
