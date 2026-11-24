@@ -15925,6 +15925,85 @@
         ]
       }
     },
+    "/v1/interest-forms/withdrawal/preview": {
+      "post": {
+        "description": "The token rides the body, never a URL a log keeps. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.",
+        "operationId": "PublicInterestFormController_previewWithdrawal_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterestFormWithdrawTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormWithdrawalPreviewDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "What the \"Withdraw or delete my info\" link is for: the chapter, with no account needed",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/withdrawal": {
+      "post": {
+        "description": "Spends the token. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.",
+        "operationId": "PublicInterestFormController_withdraw_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterestFormWithdrawDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Withdraw from the chapter, or delete the recruitment information everywhere",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
     "/v1/interest-forms/{slug}": {
       "get": {
         "operationId": "PublicInterestFormController_get_v1",
@@ -38419,6 +38498,57 @@
         },
         "required": [
           "submission"
+        ]
+      },
+      "InterestFormWithdrawTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the \"Withdraw or delete my info\" link in the confirmation email.",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "InterestFormWithdrawalPreviewDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          },
+          "at_school": {
+            "type": "boolean",
+            "description": "Whether the address has a school-wide recruitment record that `everywhere` deletes."
+          }
+        },
+        "required": [
+          "chapter_name",
+          "at_school"
+        ]
+      },
+      "InterestFormWithdrawDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the \"Withdraw or delete my info\" link in the confirmation email.",
+            "maxLength": 64
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "everywhere"
+            ],
+            "description": "`chapter` withdraws from the form's chapter; `everywhere` deletes the recruitment information."
+          }
+        },
+        "required": [
+          "token",
+          "scope"
         ]
       },
       "PublicInterestFormChapterDto": {

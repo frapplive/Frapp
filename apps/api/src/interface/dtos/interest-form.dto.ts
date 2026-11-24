@@ -4,6 +4,7 @@ import {
   Equals,
   IsArray,
   IsEmail,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -220,6 +221,27 @@ export class SubmitInterestFormDto {
   @IsStrictBoolean()
   @Equals(true, { message: 'agree must be true' })
   agree: boolean;
+}
+
+export class InterestFormWithdrawTokenDto {
+  @ApiProperty({
+    description:
+      'The token from the "Withdraw or delete my info" link in the confirmation email.',
+    maxLength: 64,
+  })
+  @IsString()
+  @MaxLength(64)
+  token: string;
+}
+
+export class InterestFormWithdrawDto extends InterestFormWithdrawTokenDto {
+  @ApiProperty({
+    enum: ['chapter', 'everywhere'],
+    description:
+      "`chapter` withdraws from the form's chapter; `everywhere` deletes the recruitment information.",
+  })
+  @IsIn(['chapter', 'everywhere'])
+  scope: 'chapter' | 'everywhere';
 }
 
 // Responses -----------------------------------------------------------------------
@@ -521,4 +543,15 @@ export class CandidateFormDto {
     description: "The candidate's newest form submission; null for none.",
   })
   submission: CandidateFormSubmissionDto | null;
+}
+
+export class InterestFormWithdrawalPreviewDto {
+  @ApiProperty()
+  chapter_name: string;
+
+  @ApiProperty({
+    description:
+      'Whether the address has a school-wide recruitment record that `everywhere` deletes.',
+  })
+  at_school: boolean;
 }

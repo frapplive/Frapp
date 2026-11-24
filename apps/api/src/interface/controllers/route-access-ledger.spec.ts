@@ -86,6 +86,10 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "Checks the form code (#5977); a match answers a proof and the address's own last details, nothing else.",
   'PublicInterestFormController.submit':
     'Submits the form (#5977); the single-use proof a matched code minted is the credential, checked in submit_interest_form.',
+  'PublicInterestFormController.previewWithdrawal':
+    'What a "Withdraw or delete my info" link is for (#5977); the single-purpose emailed token is the credential, and it answers only the chapter\'s name.',
+  'PublicInterestFormController.withdraw':
+    'Withdraws from a chapter or deletes the recruitment information (#5977); the single-purpose emailed token is the credential, spent by the call.',
   'DevLogController.post':
     'Posts to the dev-log channel; guarded by DevLogTokenGuard (a shared secret), not a user session.',
 };

@@ -4734,6 +4734,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/interest-forms/withdrawal/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What the "Withdraw or delete my info" link is for: the chapter, with no account needed
+         * @description The token rides the body, never a URL a log keeps. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.
+         */
+        post: operations["PublicInterestFormController_previewWithdrawal_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/withdrawal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw from the chapter, or delete the recruitment information everywhere
+         * @description Spends the token. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.
+         */
+        post: operations["PublicInterestFormController_withdraw_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/interest-forms/{slug}": {
         parameters: {
             query?: never;
@@ -12368,6 +12408,24 @@ export interface components {
         CandidateFormDto: {
             /** @description The candidate's newest form submission; null for none. */
             submission: components["schemas"]["CandidateFormSubmissionDto"] | null;
+        };
+        InterestFormWithdrawTokenDto: {
+            /** @description The token from the "Withdraw or delete my info" link in the confirmation email. */
+            token: string;
+        };
+        InterestFormWithdrawalPreviewDto: {
+            chapter_name: string;
+            /** @description Whether the address has a school-wide recruitment record that `everywhere` deletes. */
+            at_school: boolean;
+        };
+        InterestFormWithdrawDto: {
+            /** @description The token from the "Withdraw or delete my info" link in the confirmation email. */
+            token: string;
+            /**
+             * @description `chapter` withdraws from the form's chapter; `everywhere` deletes the recruitment information.
+             * @enum {string}
+             */
+            scope: "chapter" | "everywhere";
         };
         PublicInterestFormChapterDto: {
             name: string;
@@ -25993,6 +26051,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CandidateFormDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_previewWithdrawal_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterestFormWithdrawTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormWithdrawalPreviewDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_withdraw_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterestFormWithdrawDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

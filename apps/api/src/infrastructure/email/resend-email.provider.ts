@@ -171,7 +171,6 @@ function interestFormReceiptLines(
     council
       ? `Your name, email, class year and phone also went to ${council}, which keeps one recruitment list for your school.`
       : null,
-    `To withdraw or delete your recruitment information, reply to a member of ${chapter} or write to team@frapp.live, and we'll remove it.`,
   ].filter((line): line is string => !!line);
 }
 
@@ -188,6 +187,7 @@ function interestFormReceiptEmailHtml(
           `<p style="margin:0 0 12px;font-size:16px">${escapeHtml(line)}</p>`,
       )
       .join('') +
+    `<p style="margin:0 0 12px;font-size:16px"><a href="${escapeHtml(params.withdrawUrl)}">Withdraw or delete my info</a></p>` +
     `<p style="margin:12px 0 0;font-size:13px;color:#5d5a6b">The form: <a href="${escapeHtml(params.formUrl)}">${escapeHtml(params.formUrl)}</a></p>` +
     `</div>`
   );
@@ -197,7 +197,7 @@ function interestFormReceiptEmailText(
   params: SendInterestFormReceiptEmailParams,
 ): string {
   const chapter = clipName(params.chapterName) ?? 'The chapter';
-  return `You're on ${chapter}'s list\n\n${interestFormReceiptLines(params).join('\n\n')}\n\nThe form: ${params.formUrl}`;
+  return `You're on ${chapter}'s list\n\n${interestFormReceiptLines(params).join('\n\n')}\n\nWithdraw or delete my info: ${params.withdrawUrl}\n\nThe form: ${params.formUrl}`;
 }
 
 function interestFormPushedUpLines(
@@ -208,7 +208,7 @@ function interestFormPushedUpLines(
   return [
     `${chapter} has joined ${council} on Frapp. As the form you filled in said, your name, email, class year and phone now also go to ${council}, which keeps one recruitment list for your school.`,
     `The council sees how many chapters you've signed up with, and which one you join. Other chapters don't see that you signed up with ${chapter}.`,
-    `To withdraw or delete your recruitment information, reply to a member of ${chapter} or write to team@frapp.live, and we'll remove it.`,
+    `To withdraw or delete your recruitment information, use the "Withdraw or delete my info" link in the confirmation email ${chapter}'s form sent you.`,
   ];
 }
 

@@ -227,3 +227,45 @@ export function interestFormErrorCopy(
   }
   return errorCopy(error, fallback);
 }
+
+// The withdraw link ------------------------------------------------------------
+
+export type InterestFormWithdrawalScope =
+  components["schemas"]["InterestFormWithdrawDto"]["scope"];
+
+/** What a "Withdraw or delete my info" link is for: the chapter. */
+export function useInterestFormWithdrawalPreview(token: string | null) {
+  const client = useFrappClient();
+  return useQuery({
+    queryKey: ["interest-form", "withdrawal", token],
+    queryFn: async () => {
+      const { data, error } = await client.POST(
+        "/v1/interest-forms/withdrawal/preview",
+        { body: { token: token ?? "" } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!token,
+    retry: false,
+    // The link is single-use: never refetch behind the person's back.
+    staleTime: Infinity,
+  });
+}
+
+/** Withdraws from the chapter, or deletes everywhere. Spends the link. */
+export function useWithdrawInterestForm() {
+  const client = useFrappClient();
+  return useMutation({
+    mutationKey: ["interest-form", "withdraw"],
+    mutationFn: async (body: {
+      token: string;
+      scope: InterestFormWithdrawalScope;
+    }) => {
+      const { error } = await client.POST("/v1/interest-forms/withdrawal", {
+        body,
+      });
+      if (error) throw error;
+    },
+  });
+}

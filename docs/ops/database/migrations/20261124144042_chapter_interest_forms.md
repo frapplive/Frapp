@@ -9,7 +9,7 @@ The chapter interest form at `/f/<form-slug>` (#5977): its tables, its one-time 
 
 ## Promotion
 
-- **Purpose**: adds `chapter_interest_forms`, `chapter_interest_form_labels`, `interest_form_verifications` and `interest_form_submissions` (RLS on, no policies) and the service-role functions `start_interest_form_code`, `confirm_interest_form_code`, `submit_interest_form`, `push_up_chapter_form_interests` and `replace_interest_form`. `rush_candidates.created_by` becomes optional for a candidate the PNM's own form created (`origin = 'pnm'`), and the name rule `rush_candidates_chapter_name_key` is rebuilt as `rush_candidates_chapter_manual_name_key`, partial on `origin = 'manual'` (`school-layer.md` § 2.5). Writes no rows.
+- **Purpose**: adds `chapter_interest_forms`, `chapter_interest_form_labels`, `interest_form_verifications` and `interest_form_submissions` (RLS on, no policies) and the service-role functions `start_interest_form_code`, `confirm_interest_form_code`, `submit_interest_form`, `push_up_chapter_form_interests`, `replace_interest_form`, and the withdraw link's `preview_interest_form_withdrawal` and `withdraw_interest_form`. `rush_candidates.created_by` becomes optional for a candidate the PNM's own form created (`origin = 'pnm'`), and the name rule `rush_candidates_chapter_name_key` is rebuilt as `rush_candidates_chapter_manual_name_key`, partial on `origin = 'manual'` (`school-layer.md` § 2.5). Writes no rows.
 - **Checks**: `select count(*) from chapter_interest_forms;` is 0; `select indexdef from pg_indexes where indexname = 'rush_candidates_chapter_manual_name_key';` shows `WHERE (origin = 'manual'::text)`; `select is_nullable from information_schema.columns where table_name = 'rush_candidates' and column_name = 'created_by';` is `YES`.
 - **Promoter notes**: apply before the API that calls the functions; the API before it only ever writes `created_by`, so the dropped `NOT NULL` changes nothing for it. Needs `20261124082248_school_layer_affiliations_and_pnms.sql` and `20261124065057_rush_pipeline.sql` first.
 
@@ -18,9 +18,11 @@ The chapter interest form at `/f/<form-slug>` (#5977): its tables, its one-time 
 Reverting is worth it only if the form must come out entirely. A forward migration drops the new objects; restoring `NOT NULL` and the full name index fails while any form-created candidate exists or two of them share a name, so delete those first (they're PNM data the chapter received through the form).
 
 ```sql
+drop function if exists public.withdraw_interest_form(text, text);
+drop function if exists public.preview_interest_form_withdrawal(text);
 drop function if exists public.replace_interest_form(uuid, text, uuid);
 drop function if exists public.push_up_chapter_form_interests(uuid);
-drop function if exists public.submit_interest_form(uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[]);
+drop function if exists public.submit_interest_form(uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[], text, integer);
 drop function if exists public.confirm_interest_form_code(uuid, uuid, text, text, integer, integer);
 drop function if exists public.start_interest_form_code(uuid, text, text, text, text, integer, integer, integer, integer, integer);
 drop function if exists public.interest_form_push_target(uuid, uuid);

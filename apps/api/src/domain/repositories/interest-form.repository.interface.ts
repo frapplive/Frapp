@@ -4,6 +4,9 @@ import type {
   ConfirmInterestFormCodeResult,
   InterestFormSubmission,
   InterestFormVerification,
+  InterestFormWithdrawalPreview,
+  InterestFormWithdrawalResult,
+  InterestFormWithdrawalScope,
   PushUpChapterFormResult,
   StartInterestFormCodeResult,
   SubmitInterestFormResult,
@@ -132,7 +135,15 @@ export interface IInterestFormRepository {
     sourceLabel: string | null;
     consentVersion: string;
     consentBoxes: string[];
+    withdrawTokenHash: string;
+    withdrawTtlSeconds: number;
   }): Promise<SubmitInterestFormResult>;
+
+  previewWithdrawal(tokenHash: string): Promise<InterestFormWithdrawalPreview>;
+  withdraw(
+    tokenHash: string,
+    scope: InterestFormWithdrawalScope,
+  ): Promise<InterestFormWithdrawalResult>;
 
   pushUpChapter(chapterId: string): Promise<PushUpChapterFormResult>;
 

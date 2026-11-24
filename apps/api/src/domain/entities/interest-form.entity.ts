@@ -76,6 +76,9 @@ export interface InterestFormSubmission {
   source_label: string | null;
   consent_version: string;
   consent_boxes: string[];
+  /** The emailed withdraw link's token, hashed; spent by the withdrawal. */
+  withdraw_token_hash: string | null;
+  withdraw_expires_at: string | null;
   consented_at: string;
   created_at: string;
 }
@@ -129,4 +132,22 @@ export interface PushedUpPnm {
 export interface PushUpChapterFormResult {
   council_id: string | null;
   pushed: PushedUpPnm[];
+}
+
+/** What `preview_interest_form_withdrawal` answers. */
+export interface InterestFormWithdrawalPreview {
+  ok: boolean;
+  reason?: 'bad_token';
+  chapter_name?: string;
+  /** Whether the address has a school-wide record "everywhere" deletes. */
+  at_school?: boolean;
+}
+
+export type InterestFormWithdrawalScope = 'chapter' | 'everywhere';
+
+/** What `withdraw_interest_form` answers. */
+export interface InterestFormWithdrawalResult {
+  ok: boolean;
+  reason?: 'bad_token' | 'bad_scope';
+  candidates?: number;
 }

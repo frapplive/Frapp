@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
@@ -38,11 +39,18 @@ import {
   InterestFormSettingsDto,
   InterestFormSubmittedDto,
   InterestFormVerifiedDto,
+  InterestFormWithdrawalPreviewDto,
+  InterestFormWithdrawDto,
+  InterestFormWithdrawTokenDto,
   PublicInterestFormDto,
   StartInterestFormCodeDto,
   SubmitInterestFormDto,
   UpdateInterestFormDto,
 } from '../dtos/interest-form.dto';
+import {
+  ThrottleExpensiveWrite,
+  ThrottlePublicTokenRead,
+} from '../decorators/throttle-profiles.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
 import type { RequestContext } from '../types/request-context.types';
 
@@ -160,6 +168,37 @@ export class InterestFormController {
 @Controller('interest-forms')
 export class PublicInterestFormController {
   constructor(private readonly forms: InterestFormService) {}
+
+  // Static paths before `:slug`, so `withdrawal` is never read as a slug.
+  @Post('withdrawal/preview')
+  @HttpCode(HttpStatus.OK)
+  @ThrottlePublicTokenRead()
+  @ApiOperation({
+    summary:
+      'What the "Withdraw or delete my info" link is for: the chapter, with no account needed',
+    description:
+      'The token rides the body, never a URL a log keeps. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.',
+  })
+  @ApiOkResponse({ type: InterestFormWithdrawalPreviewDto })
+  previewWithdrawal(
+    @Body() body: InterestFormWithdrawTokenDto,
+  ): Promise<InterestFormWithdrawalPreviewDto> {
+    return this.forms.previewWithdrawal(body.token);
+  }
+
+  @Post('withdrawal')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ThrottleExpensiveWrite()
+  @ApiOperation({
+    summary:
+      'Withdraw from the chapter, or delete the recruitment information everywhere',
+    description:
+      'Spends the token. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.',
+  })
+  @ApiNoContentResponse()
+  async withdraw(@Body() body: InterestFormWithdrawDto): Promise<void> {
+    await this.forms.withdraw(body.token, body.scope);
+  }
 
   @Get(':slug')
   @ApiOperation({

@@ -174,6 +174,10 @@ create table if not exists public.interest_form_submissions (
   source_label           text,
   consent_version        text not null,
   consent_boxes          text[] not null,
+  -- The emailed "Withdraw or delete my info" link's token, hashed; spent by
+  -- the withdrawal, and gone with the row.
+  withdraw_token_hash    text,
+  withdraw_expires_at    timestamptz,
   consented_at           timestamptz not null default now(),
   created_at             timestamptz not null default now(),
   constraint interest_form_submissions_names_len check (
@@ -195,6 +199,10 @@ create index if not exists idx_interest_form_submissions_candidate_id
   on public.interest_form_submissions (candidate_id, created_at desc) where candidate_id is not null;
 create index if not exists idx_interest_form_submissions_pnm_id
   on public.interest_form_submissions (pnm_id) where pnm_id is not null;
+create unique index if not exists interest_form_submissions_withdraw_token_key
+  on public.interest_form_submissions (withdraw_token_hash) where withdraw_token_hash is not null;
+create index if not exists idx_interest_form_submissions_email
+  on public.interest_form_submissions (email);
 create index if not exists idx_interest_form_submissions_form_id
   on public.interest_form_submissions (form_id);
 create index if not exists idx_interest_form_submissions_referrer_user_id
@@ -518,7 +526,9 @@ create or replace function public.submit_interest_form(
   p_referrer_text   text,
   p_source_label    text,
   p_consent_version text,
-  p_consent_boxes   text[]
+  p_consent_boxes   text[],
+  p_withdraw_token_hash   text,
+  p_withdraw_ttl_seconds  integer
 )
 returns jsonb
 language plpgsql
@@ -671,13 +681,15 @@ begin
   insert into public.interest_form_submissions (
     form_id, chapter_id, pnm_id, candidate_id, email, first_name, last_name,
     preferred_name, class_year, phone, answers, questions, referrer_text, referrer_user_id,
-    link_candidate_id, source_label, consent_version, consent_boxes
+    link_candidate_id, source_label, consent_version, consent_boxes,
+    withdraw_token_hash, withdraw_expires_at
   ) values (
     p_form_id, v_form.chapter_id, v_pnm_id, v_candidate_id, v_email, btrim(p_first_name),
     btrim(p_last_name), nullif(btrim(p_preferred_name), ''), p_class_year,
     nullif(btrim(p_phone), ''), coalesce(p_answers, '{}'::jsonb), v_form.questions,
     nullif(btrim(p_referrer_text), ''), v_referrer_id, v_link_id, v_label,
-    p_consent_version, p_consent_boxes
+    p_consent_version, p_consent_boxes,
+    p_withdraw_token_hash, now() + make_interval(secs => p_withdraw_ttl_seconds)
   )
   returning id into v_submission_id;
 
@@ -697,11 +709,130 @@ end;
 $$;
 
 revoke all on function public.submit_interest_form(
-  uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[]
+  uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[], text, integer
 ) from public, anon, authenticated;
 grant execute on function public.submit_interest_form(
-  uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[]
+  uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[], text, integer
 ) to service_role;
+
+-- The withdraw link (#5977; ifc-recruitment.md § The PNM's own view). The
+-- receipt email carries a token that does one thing: withdraw this address
+-- from the chapter, or delete its recruitment information everywhere. It
+-- reads nothing else and expires. Spending it deletes the row that holds it.
+
+-- What the link's page shows before the choice: the chapter, and whether the
+-- address has a school-wide record that "everywhere" would delete.
+create or replace function public.preview_interest_form_withdrawal(p_token_hash text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce(
+    (select jsonb_build_object(
+              'ok', true,
+              'chapter_name', c.name,
+              'at_school', s.pnm_id is not null)
+       from public.interest_form_submissions s
+       join public.chapters c on c.id = s.chapter_id
+      where s.withdraw_token_hash = p_token_hash
+        and s.withdraw_expires_at > now()),
+    jsonb_build_object('ok', false, 'reason', 'bad_token'));
+$$;
+
+revoke all on function public.preview_interest_form_withdrawal(text) from public, anon, authenticated;
+grant execute on function public.preview_interest_form_withdrawal(text) to service_role;
+
+-- `chapter`: the interest is withdrawn, the chapter's candidate moves to a
+-- Closed stage with reason "Withdrew", and the details the PNM supplied there
+-- (every submission from the address at that chapter) are deleted.
+-- `everywhere`: the PNM record (with its interests and registrations) and
+-- every submission from the address are deleted; each chapter's candidate
+-- moves to Closed with "Deleted their information", unlinked, and one their
+-- form created is renamed "Withdrawn prospect" (a hand-added one keeps the
+-- name a member typed). Reasons: `bad_token`, `bad_scope`.
+create or replace function public.withdraw_interest_form(
+  p_token_hash text,
+  p_scope      text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_sub public.interest_form_submissions;
+  v_pnm uuid;
+  v_candidates uuid[];
+  v_reason text;
+begin
+  if p_scope not in ('chapter', 'everywhere') then
+    return jsonb_build_object('ok', false, 'reason', 'bad_scope');
+  end if;
+  select * into v_sub
+    from public.interest_form_submissions
+   where withdraw_token_hash = p_token_hash and withdraw_expires_at > now()
+   for update;
+  if v_sub.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'bad_token');
+  end if;
+  v_pnm := public.pnm_survivor(v_sub.pnm_id);
+
+  if p_scope = 'chapter' then
+    v_reason := 'withdrew';
+    select array_agg(distinct x.id) into v_candidates from (
+      select candidate_id as id from public.interest_form_submissions
+       where chapter_id = v_sub.chapter_id and email = v_sub.email and candidate_id is not null
+      union
+      select id from public.rush_candidates
+       where chapter_id = v_sub.chapter_id and v_pnm is not null and pnm_id = v_pnm
+    ) x;
+    if v_pnm is not null then
+      update public.pnm_interests set withdrawn_at = now()
+       where pnm_id = v_pnm and chapter_id = v_sub.chapter_id and withdrawn_at is null;
+    end if;
+    delete from public.interest_form_submissions
+     where chapter_id = v_sub.chapter_id and email = v_sub.email;
+  else
+    v_reason := 'deleted_info';
+    select array_agg(distinct x.id) into v_candidates from (
+      select candidate_id as id from public.interest_form_submissions
+       where email = v_sub.email
+         and (pnm_id is null or pnm_id = v_sub.pnm_id)
+         and candidate_id is not null
+      union
+      select id from public.rush_candidates where v_pnm is not null and pnm_id = v_pnm
+    ) x;
+    update public.rush_candidates
+       set display_name = 'Withdrawn prospect'
+     where id = any(coalesce(v_candidates, '{}')) and origin = 'pnm';
+    delete from public.interest_form_submissions
+     where email = v_sub.email and (pnm_id is null or pnm_id = v_sub.pnm_id);
+    if v_pnm is not null then
+      perform public.delete_pnm(v_pnm);
+    end if;
+  end if;
+
+  -- Into each chapter's first Closed stage (the default's key is `closed`).
+  update public.rush_candidates rc
+     set stage = coalesce(
+           (select st.key from public.rush_stages st
+             where st.chapter_id = rc.chapter_id and st.category = 'closed'
+             order by st.position limit 1),
+           'closed'),
+         closed_reason = v_reason
+   where rc.id = any(coalesce(v_candidates, '{}'));
+
+  return jsonb_build_object(
+    'ok', true,
+    'candidates', coalesce(array_length(v_candidates, 1), 0)
+  );
+end;
+$$;
+
+revoke all on function public.withdraw_interest_form(text, text) from public, anon, authenticated;
+grant execute on function public.withdraw_interest_form(text, text) to service_role;
 
 -- Replaces the chapter's live form in one transaction: the old slug stops
 -- answering, and a new one takes its place with the same settings, open

@@ -108,6 +108,12 @@ function setup() {
       email: 'a@rpi.edu',
       display_name: 'Alex Smith',
     }),
+    previewWithdrawal: jest.fn().mockResolvedValue({
+      ok: true,
+      chapter_name: 'Phi Gamma Delta',
+      at_school: true,
+    }),
+    withdraw: jest.fn().mockResolvedValue({ ok: true, candidates: 1 }),
     pushUpChapter: jest
       .fn()
       .mockResolvedValue({ council_id: null, pushed: [] }),
@@ -520,6 +526,8 @@ describe('InterestFormService — a submission', () => {
       sourceLabel: 'tabling-quad',
       consentVersion: INTEREST_FORM_CONSENT_VERSION,
       consentBoxes: [INTEREST_FORM_AGREE_BOX],
+      withdrawTokenHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      withdrawTtlSeconds: 365 * 24 * 60 * 60,
     });
   });
 
@@ -555,7 +563,16 @@ describe('InterestFormService — a submission', () => {
       chapterName: 'Phi Gamma Delta',
       formUrl: `https://app.frapp.live/f/${SLUG}`,
       councilName: 'RPI IFC',
+      withdrawUrl: expect.stringMatching(
+        /^https:\/\/app\.frapp\.live\/withdraw#[A-Za-z0-9_-]{43}$/,
+      ),
     });
+    // The link's token is never stored: only its hash, which it matches.
+    const { withdrawUrl } = email.sendInterestFormReceiptEmail.mock.calls[0][0];
+    const token = withdrawUrl.split('#')[1];
+    expect(forms.submit.mock.calls[0][0].withdrawTokenHash).toBe(
+      hashInterestFormSecret('interest-form-withdraw', token),
+    );
   });
 
   it('says "updated" for a repeat submission, which the database matched', async () => {
@@ -611,5 +628,41 @@ describe('InterestFormService — the push-up', () => {
     const { service, forms } = setup();
     forms.pushUpChapter.mockRejectedValue(new Error('db down'));
     await expect(service.pushUpChapter(CHAPTER)).resolves.toBe(0);
+  });
+});
+
+describe('InterestFormService — the withdraw link', () => {
+  const TOKEN = 'b'.repeat(43);
+
+  it('shows the chapter for a live token, looked up by its hash', async () => {
+    const { service, forms } = setup();
+    await expect(service.previewWithdrawal(TOKEN)).resolves.toEqual({
+      chapter_name: 'Phi Gamma Delta',
+      at_school: true,
+    });
+    expect(forms.previewWithdrawal).toHaveBeenCalledWith(
+      hashInterestFormSecret('interest-form-withdraw', TOKEN),
+    );
+  });
+
+  it('answers one refusal for a malformed, unknown or spent token', async () => {
+    const { service, forms } = setup();
+    await expect(service.previewWithdrawal('short')).rejects.toMatchObject({
+      response: { code: 'interest_form.withdraw.invalid' },
+    });
+    expect(forms.previewWithdrawal).not.toHaveBeenCalled();
+    forms.withdraw.mockResolvedValueOnce({ ok: false, reason: 'bad_token' });
+    await expect(service.withdraw(TOKEN, 'chapter')).rejects.toMatchObject({
+      response: { code: 'interest_form.withdraw.invalid' },
+    });
+  });
+
+  it('withdraws or deletes in the scope the person picked', async () => {
+    const { service, forms } = setup();
+    await service.withdraw(TOKEN, 'everywhere');
+    expect(forms.withdraw).toHaveBeenCalledWith(
+      hashInterestFormSecret('interest-form-withdraw', TOKEN),
+      'everywhere',
+    );
   });
 });

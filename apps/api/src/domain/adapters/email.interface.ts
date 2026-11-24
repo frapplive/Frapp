@@ -47,6 +47,8 @@ export interface SendInterestFormReceiptEmailParams {
   formUrl: string;
   /** The council their details also went to, or null for none. */
   councilName: string | null;
+  /** "Withdraw or delete my info": the single-purpose link (#5977). */
+  withdrawUrl: string;
 }
 
 export interface SendInterestFormPushedUpEmailParams {

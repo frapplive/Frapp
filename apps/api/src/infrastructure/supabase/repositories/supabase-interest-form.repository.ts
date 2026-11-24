@@ -9,6 +9,9 @@ import type {
   ConfirmInterestFormCodeResult,
   InterestFormSubmission,
   InterestFormVerification,
+  InterestFormWithdrawalPreview,
+  InterestFormWithdrawalResult,
+  InterestFormWithdrawalScope,
   PushUpChapterFormResult,
   StartInterestFormCodeResult,
   SubmitInterestFormResult,
@@ -338,6 +341,8 @@ export class SupabaseInterestFormRepository implements IInterestFormRepository {
     sourceLabel: string | null;
     consentVersion: string;
     consentBoxes: string[];
+    withdrawTokenHash: string;
+    withdrawTtlSeconds: number;
   }): Promise<SubmitInterestFormResult> {
     const { data, error } = await this.supabase.rpc('submit_interest_form', {
       p_form_id: params.formId,
@@ -353,9 +358,34 @@ export class SupabaseInterestFormRepository implements IInterestFormRepository {
       p_source_label: params.sourceLabel,
       p_consent_version: params.consentVersion,
       p_consent_boxes: params.consentBoxes,
+      p_withdraw_token_hash: params.withdrawTokenHash,
+      p_withdraw_ttl_seconds: params.withdrawTtlSeconds,
     });
     if (error) throw new SupabaseQueryError(error);
     return data as unknown as SubmitInterestFormResult;
+  }
+
+  async previewWithdrawal(
+    tokenHash: string,
+  ): Promise<InterestFormWithdrawalPreview> {
+    const { data, error } = await this.supabase.rpc(
+      'preview_interest_form_withdrawal',
+      { p_token_hash: tokenHash },
+    );
+    if (error) throw new SupabaseQueryError(error);
+    return data as unknown as InterestFormWithdrawalPreview;
+  }
+
+  async withdraw(
+    tokenHash: string,
+    scope: InterestFormWithdrawalScope,
+  ): Promise<InterestFormWithdrawalResult> {
+    const { data, error } = await this.supabase.rpc('withdraw_interest_form', {
+      p_token_hash: tokenHash,
+      p_scope: scope,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return data as unknown as InterestFormWithdrawalResult;
   }
 
   async pushUpChapter(chapterId: string): Promise<PushUpChapterFormResult> {

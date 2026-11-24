@@ -46,6 +46,20 @@ export const INTEREST_FORM_CODES_PER_IP = 200;
 /** How long a matched code's proof lets the person finish the form. */
 export const INTEREST_FORM_PROOF_TTL_SECONDS = 30 * 60;
 
+/**
+ * How long the emailed "Withdraw or delete my info" link works: a year, past
+ * any season's close plus the longest record retention (180 days).
+ */
+export const INTEREST_FORM_WITHDRAW_TTL_SECONDS = 365 * 24 * 60 * 60;
+
+/** The withdraw link's page. The token rides the fragment, never a server log. */
+export const INTEREST_FORM_WITHDRAW_PATH = "/withdraw";
+
+/** The link the receipt email carries. */
+export function interestFormWithdrawUrl(origin: string, token: string): string {
+  return `${origin.replace(/\/+$/, "")}${INTEREST_FORM_WITHDRAW_PATH}#${token}`;
+}
+
 /** The required box's value as stored on the submission. */
 export const INTEREST_FORM_AGREE_BOX = "agree_18";
 
@@ -207,6 +221,7 @@ export const INTEREST_FORM_REFUSAL = {
   labelExists: "interest_form.label.exists",
   tooManyLabels: "interest_form.label.too_many",
   notOffered: "interest_form.not_offered",
+  withdrawInvalid: "interest_form.withdraw.invalid",
   groupNotFound: "interest_form.group.not_found",
 } as const;
 
@@ -269,6 +284,35 @@ export const INTEREST_FORM_REFUSAL_COPY = {
 export function interestFormDoneLine(chapterName: string): string {
   return `${chapterName} has your details and will be in touch. We've emailed you a copy.`;
 }
+
+/** The withdraw link's page (`/withdraw`). */
+export const INTEREST_FORM_WITHDRAW_COPY = {
+  title: "Your recruitment information",
+  intro: (chapter: string) =>
+    `You filled in ${chapter}'s interest form. Choose what to do with what you shared.`,
+  chapter: (chapter: string) => `Withdraw from ${chapter}`,
+  chapterLine: (chapter: string) =>
+    `${chapter} stops recruiting you and loses the details you gave them.`,
+  everywhere: "Delete my information everywhere",
+  everywhereLine:
+    "Deletes your recruitment record, your interest in every chapter and every form answer. Chapters keep only a name a member typed.",
+  everywhereLineNoSchool: (chapter: string) =>
+    `Deletes every form answer you gave on Frapp, starting with ${chapter}'s.`,
+  continue: "Continue",
+  confirmChapter: (chapter: string) =>
+    `Withdraw from ${chapter}? This can't be undone. You can fill in the form again later.`,
+  confirmEverywhere:
+    "Delete your recruitment information everywhere? This can't be undone.",
+  confirm: "Confirm",
+  back: "Back",
+  working: "Working…",
+  doneChapter: (chapter: string) => `You've withdrawn from ${chapter}.`,
+  doneEverywhere: "Your recruitment information is deleted.",
+  invalidTitle: "This link doesn't work",
+  invalidBody:
+    "It may have expired or been used already. Write to team@frapp.live and we'll remove your information.",
+  failed: "Couldn't do that. Check your connection and try again.",
+} as const;
 
 /** The Recruitment module page's words for the form's settings. */
 export const INTEREST_FORM_SETTINGS_COPY = {

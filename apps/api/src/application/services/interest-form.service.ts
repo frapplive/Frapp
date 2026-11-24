@@ -33,6 +33,9 @@ import {
   INTEREST_FORM_REFUSAL,
   INTEREST_FORM_REFUSAL_COPY,
   INTEREST_FORM_SETTINGS_COPY,
+  INTEREST_FORM_WITHDRAW_COPY,
+  INTEREST_FORM_WITHDRAW_TTL_SECONDS,
+  interestFormWithdrawUrl,
   INTEREST_FORM_COPY,
   interestFormConsentText,
   interestFormPath,
@@ -53,6 +56,7 @@ import type {
   ChapterInterestForm,
   ChapterInterestFormLabel,
   InterestFormSubmission,
+  InterestFormWithdrawalScope,
 } from '#domain/entities/interest-form.entity';
 import {
   CHAPTER_GROUP_REPOSITORY,
@@ -711,6 +715,9 @@ export class InterestFormService {
     }
 
     const checked = normalizeFormAnswers(form.questions, input.answers ?? {});
+    // The emailed "Withdraw or delete my info" link's token: only its hash
+    // is stored, and spending it deletes the row that holds it.
+    const withdrawToken = randomBytes(32).toString('base64url');
     if ('error' in checked) {
       throw new BadRequestException({
         code: INTEREST_FORM_REFUSAL.invalidAnswers,
@@ -732,6 +739,8 @@ export class InterestFormService {
       sourceLabel: input.source_label?.trim() || null,
       consentVersion: INTEREST_FORM_CONSENT_VERSION,
       consentBoxes: [INTEREST_FORM_AGREE_BOX],
+      withdrawTokenHash: hashWithdrawToken(withdrawToken),
+      withdrawTtlSeconds: INTEREST_FORM_WITHDRAW_TTL_SECONDS,
     });
     if (!result.ok || !result.candidate_id || !result.email) {
       switch (result.reason) {
@@ -765,8 +774,45 @@ export class InterestFormService {
       chapterName: chapter.name,
       formUrl: `${resolveAppOrigin(this.config)}${interestFormPath(form.slug)}`,
       councilName: council?.name ?? null,
+      withdrawUrl: interestFormWithdrawUrl(
+        resolveAppOrigin(this.config),
+        withdrawToken,
+      ),
     });
     return { chapter_name: chapter.name };
+  }
+
+  // The withdraw link ----------------------------------------------------------------
+
+  /**
+   * What the link's page shows before the choice (§ The PNM's own view):
+   * the chapter, and whether "everywhere" reaches a school-wide record. The
+   * token reads nothing else.
+   */
+  async previewWithdrawal(
+    token: string,
+  ): Promise<{ chapter_name: string; at_school: boolean }> {
+    if (!WITHDRAW_TOKEN_SHAPE.test(token)) throw badWithdrawToken();
+    const result = await this.forms.previewWithdrawal(hashWithdrawToken(token));
+    if (!result.ok || !result.chapter_name) throw badWithdrawToken();
+    return {
+      chapter_name: result.chapter_name,
+      at_school: result.at_school === true,
+    };
+  }
+
+  /**
+   * Withdraws the address from the chapter, or deletes its recruitment
+   * information everywhere (`withdraw_interest_form`, one transaction). The
+   * token is spent either way.
+   */
+  async withdraw(
+    token: string,
+    scope: InterestFormWithdrawalScope,
+  ): Promise<void> {
+    if (!WITHDRAW_TOKEN_SHAPE.test(token)) throw badWithdrawToken();
+    const result = await this.forms.withdraw(hashWithdrawToken(token), scope);
+    if (!result.ok) throw badWithdrawToken();
   }
 
   // Internals ---------------------------------------------------------------------
@@ -947,6 +993,21 @@ export class InterestFormService {
     if (!chapterTakesInterest(chapter)) throw formNotFound();
     return { form, chapter };
   }
+}
+
+/** 32 random bytes, base64url: what the receipt email's link carries. */
+const WITHDRAW_TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
+function hashWithdrawToken(token: string): string {
+  return hashInterestFormSecret('interest-form-withdraw', token);
+}
+
+/** An unknown, spent or expired link: one answer, so it tells a guesser nothing. */
+function badWithdrawToken(): BadRequestException {
+  return new BadRequestException({
+    code: INTEREST_FORM_REFUSAL.withdrawInvalid,
+    message: INTEREST_FORM_WITHDRAW_COPY.invalidBody,
+  });
 }
 
 function badProof(): BadRequestException {

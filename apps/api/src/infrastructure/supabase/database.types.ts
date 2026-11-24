@@ -1177,6 +1177,11 @@ export interface Database {
         };
         Returns: PredictionStake;
       };
+      /** `20261124144042` (#5977). What the withdraw link's page shows. */
+      preview_interest_form_withdrawal: {
+        Args: { p_token_hash: string };
+        Returns: Json;
+      };
       /** `20261124082248` (#5974) — the PNM retention sweep; returns the count. */
       purge_expired_pnms: {
         Args: { p_now: string };
@@ -1685,6 +1690,8 @@ export interface Database {
           p_source_label: string | null;
           p_consent_version: string;
           p_consent_boxes: string[];
+          p_withdraw_token_hash: string;
+          p_withdraw_ttl_seconds: number;
         };
         Returns: Json;
       };
@@ -1743,6 +1750,11 @@ export interface Database {
       withdraw_event_excuse: {
         Args: { p_event_id: string; p_user_id: string; p_chapter_id: string };
         Returns: EventExcuse[];
+      };
+      /** `20261124144042` (#5977). Withdraws from one chapter, or deletes everywhere. */
+      withdraw_interest_form: {
+        Args: { p_token_hash: string; p_scope: string };
+        Returns: Json;
       };
       /**
        * `20261112165050` (#720) — one batch of a source's passages, written

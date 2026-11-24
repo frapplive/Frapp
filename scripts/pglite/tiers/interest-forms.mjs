@@ -146,10 +146,12 @@ try {
       codeHash,
       proof,
     ]);
+  let tokens = 0;
   const submit = (formId, id, proof, first, last, extra = {}) =>
     fn(
       `select public.submit_interest_form($1, $2, $3, $4, $5, null, 2030::smallint,
-                                          $6, $7::jsonb, $8, $9, '2026-11-24', array['agree_18'])`,
+                                          $6, $7::jsonb, $8, $9, '2026-11-24', array['agree_18'],
+                                          $10, 31536000)`,
       [
         formId,
         id,
@@ -160,6 +162,7 @@ try {
         JSON.stringify(extra.answers ?? { q1: "Physics" }),
         extra.referrer ?? null,
         extra.label ?? null,
+        extra.token ?? `tok-${(tokens += 1)}`,
       ],
     );
   /** A code sent, matched and spent: the whole verify-first path. */
@@ -201,6 +204,7 @@ try {
     "proof-l2",
     "Lee",
     "Solo",
+    { token: "tok-lone" },
   );
   // ── Ceilings ──
   const startWith = (formId, email, ip, perAddress, perIp, cooldown) =>
@@ -285,6 +289,7 @@ try {
     "proof-2",
     "Patrick",
     "Doe",
+    { token: "tok-pat-a" },
   );
   const afterAgain = await one(
     `select
@@ -351,6 +356,7 @@ try {
     "proof-b2",
     "Bo",
     "Kay",
+    { token: "tok-bo" },
   );
   const beforeAccept = await one(
     `select count(*)::int as n from pnm_interests where chapter_id = $1 and registration_id is not null`,
@@ -375,6 +381,57 @@ try {
        (select count(*)::int from rush_candidates where chapter_id = $1 and pnm_id is null) as unlinked,
        (select count(*)::int from pnm_interests where chapter_id = $1) as interests`,
     [CH_LONE],
+  );
+
+  // ── The withdraw link ──
+  const preview = (token) =>
+    fn(`select public.preview_interest_form_withdrawal($1)`, [token]);
+  const withdrawWith = (token, scope) =>
+    fn(`select public.withdraw_interest_form($1, $2)`, [token, scope]);
+  const previewPat = await preview("tok-pat-a");
+  const previewLone = await preview("tok-lone");
+  const badScope = await withdrawWith("tok-pat-a", "both");
+  const patOut = await withdrawWith("tok-pat-a", "chapter");
+  const patAgain = await withdrawWith("tok-pat-a", "chapter");
+  const afterPat = await one(
+    `select
+       (select stage || ':' || closed_reason from rush_candidates
+         where chapter_id = $1 and name_key = 'patrick doe') as a_candidate,
+       (select withdrawn_at is not null from pnm_interests i join pnms p on p.id = i.pnm_id
+         where i.chapter_id = $1 and p.school_email = 'pat@fts-tier.edu') as a_withdrawn,
+       (select count(*)::int from interest_form_submissions
+         where chapter_id = $1 and email = 'pat@fts-tier.edu') as a_answers,
+       (select count(*)::int from interest_form_submissions
+         where chapter_id = $2 and email = 'pat@fts-tier.edu') as b_answers,
+       (select count(*)::int from pnms where school_email = 'pat@fts-tier.edu') as pnm`,
+    [CH_A, CH_B],
+  );
+  const boGone = await withdrawWith("tok-bo", "everywhere");
+  const afterBo = await one(
+    `select
+       (select count(*)::int from pnms where school_email = 'bo@fts-tier.edu') as pnm,
+       (select count(*)::int from interest_form_submissions where email = 'bo@fts-tier.edu') as answers,
+       (select display_name || ':' || stage || ':' || closed_reason || ':' || (pnm_id is null)
+          from rush_candidates where chapter_id = $1 and name_key = 'withdrawn prospect') as candidate`,
+    [CH_B],
+  );
+  const loneGone = await withdrawWith("tok-lone", "everywhere");
+  const afterLone = await one(
+    `select
+       (select count(*)::int from interest_form_submissions where email = 'anyone@gmail.com') as answers,
+       (select display_name || ':' || closed_reason from rush_candidates where chapter_id = $1) as candidate`,
+    [CH_LONE],
+  );
+  await db.query(
+    `update interest_form_submissions set withdraw_expires_at = now() - interval '1 second'
+      where candidate_id = $1`,
+    [jordan1.candidate_id],
+  );
+  const expired = await preview("tok-expired-not-real");
+  const expiredReal = await one(
+    `select public.withdraw_interest_form(withdraw_token_hash, 'chapter') as r
+       from interest_form_submissions where candidate_id = $1 limit 1`,
+    [jordan1.candidate_id],
   );
 
   // ── Replacing a form ──
@@ -408,11 +465,13 @@ try {
         cross join (values
           ('public.start_interest_form_code(uuid, text, text, text, text, integer, integer, integer, integer, integer)'),
           ('public.confirm_interest_form_code(uuid, uuid, text, text, integer, integer)'),
-          ('public.submit_interest_form(uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[])'),
+          ('public.submit_interest_form(uuid, uuid, text, text, text, text, smallint, text, jsonb, text, text, text, text[], text, integer)'),
           ('public.push_up_chapter_form_interests(uuid)'),
           ('public.interest_form_push_target(uuid, uuid)'),
           ('public.interest_form_school_for(uuid, text)'),
-          ('public.replace_interest_form(uuid, text, uuid)')
+          ('public.replace_interest_form(uuid, text, uuid)'),
+          ('public.preview_interest_form_withdrawal(text)'),
+          ('public.withdraw_interest_form(text, text)')
         ) as f(name)
        where r.rolname in ('anon', 'authenticated')
          and has_function_privilege(r.rolname, f.name, 'execute')`)
@@ -420,6 +479,55 @@ try {
 
   const reason = (r) => (r.ok ? "ok" : r.reason);
   const checks = [
+    {
+      name: "the withdraw link shows only the chapter, and refuses an unknown scope",
+      got: [
+        previewPat,
+        previewLone.at_school,
+        reason(badScope),
+        reason(expired),
+      ],
+      want: [
+        { ok: true, at_school: true, chapter_name: "Form Alpha" },
+        false,
+        "bad_scope",
+        "bad_token",
+      ],
+    },
+    {
+      name: "withdrawing from one chapter closes its candidate, drops its answers, spends the link, and leaves the rest",
+      got: [reason(patOut), reason(patAgain), afterPat],
+      want: [
+        "ok",
+        "bad_token",
+        {
+          a_candidate: "closed:withdrew",
+          a_withdrawn: true,
+          a_answers: 0,
+          b_answers: 1,
+          pnm: 1,
+        },
+      ],
+    },
+    {
+      name: "deleting everywhere removes the record and every answer; the candidate is a closed, unlinked Withdrawn prospect",
+      got: [reason(boGone), afterBo, reason(loneGone), afterLone],
+      want: [
+        "ok",
+        {
+          pnm: 0,
+          answers: 0,
+          candidate: "Withdrawn prospect:closed:deleted_info:true",
+        },
+        "ok",
+        { answers: 0, candidate: "Withdrawn prospect:deleted_info" },
+      ],
+    },
+    {
+      name: "an expired withdraw link does nothing",
+      got: reason(expiredReal.r),
+      want: "bad_token",
+    },
     {
       name: "the ceilings hold: a resend cooldown, per address (any case), per IP, and five tries a code",
       got: [
