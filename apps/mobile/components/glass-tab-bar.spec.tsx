@@ -32,7 +32,9 @@ const rereadOnTab = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/activity/use-activity-reread", () => ({
   useActivityRereadOnTab: rereadOnTab,
 }));
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  activityCountChip: (await importOriginal<typeof import("@repo/hooks")>())
+    .activityCountChip,
   useActivity: () => ({ data: activity.data }),
 }));
 // Messages' count has its own spec (`lib/chat/unread-conversations.spec.tsx`);

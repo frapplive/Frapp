@@ -165,7 +165,7 @@ describe("the panel at rest", () => {
 describe("editing in place", () => {
   it("puts a remove control on each placed action", () => {
     const tree = render(["message", "invite"], true);
-    act(() => byLabel(tree.root, "Remove Message")!.props.onPress());
+    act(() => byLabel(tree.root, "Remove New message")!.props.onPress());
     expect(props.onSave).toHaveBeenCalledWith(["invite"]);
   });
 
