@@ -190,11 +190,11 @@ describe("shipped options", () => {
     const { version } = JSON.parse(
       readFileSync(join(sdk, "package.json"), "utf8"),
     ) as { version: string };
-    expect(version).toBe("8.35.0");
+    expect(version).toBe("8.36.0");
     const podspec = readFileSync(join(sdk, "RNSentry.podspec"), "utf8");
     const gradle = readFileSync(join(sdk, "android", "build.gradle"), "utf8");
     expect(podspec.match(/sentry_cocoa_version = '([^']+)'/)?.[1]).toBe(
-      "9.34.0",
+      "9.35.0",
     );
     expect(gradle.match(/def sentryAndroidVersion = '([^']+)'/)?.[1]).toBe(
       "8.64.0",
