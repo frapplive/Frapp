@@ -121,6 +121,15 @@ type NavPermissionRule =
       requireAllOf: readonly string[];
     };
 
+/**
+ * One view a row opens (Resources' Documents and Backwork, #2956): the route,
+ * the modules of which any one being on offers it, and who may open it.
+ */
+export type NavView = {
+  href: string;
+  anyModule: readonly string[];
+} & NavPermissionRule;
+
 export type NavItem = {
   id: string;
   label: string;
@@ -131,11 +140,13 @@ export type NavItem = {
   /** `enabled_modules` key that gates this item; omit for always-on items. */
   module?: string;
   /**
-   * `enabled_modules` keys of which any one being on shows this item: for a
-   * row that holds several modules' views (Resources, #2956). An item sets
-   * this or `module`, never both.
+   * For a row that holds several modules' views (Resources, #2956): the row
+   * shows while the viewer can open any one of them, and opens the first they
+   * can (`navItemTarget`), so a chapter with only Backwork on still reaches it
+   * from the row. `href` is then the first view's, the row's target before
+   * permissions answer. An item sets this or `module`, never both.
    */
-  anyModule?: readonly string[];
+  views?: readonly NavView[];
   /**
    * Other routes whose pages sit under this row, beside `href` and the pages
    * below it: the row is lit on them and names their parent
@@ -194,15 +205,29 @@ export type NavSection = {
 /** Where the Resources row opens: Documents, the page's first view. */
 export const RESOURCES_HREF = "/documents";
 
+/** Resources' views, in the order its header names them. */
+export const RESOURCES_VIEWS: readonly NavView[] = [
+  { href: RESOURCES_HREF, anyModule: ["documents", "meetings"] },
+  {
+    href: "/backwork",
+    anyModule: ["backwork"],
+    requireAnyOf: ["backwork:upload", "backwork:admin"],
+  },
+];
+
 /**
  * Whether `pathname` is the item's own page or one under it: its `href`, a
  * page below that, or one of its `routes` and the pages below those.
  */
 export function navItemHolds(
-  item: Pick<NavItem, "href" | "routes">,
+  item: Pick<NavItem, "href" | "routes" | "views">,
   pathname: string,
 ): boolean {
-  return [item.href, ...(item.routes ?? [])].some(
+  return [
+    item.href,
+    ...(item.views ?? []).map((view) => view.href),
+    ...(item.routes ?? []),
+  ].some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
 }
@@ -323,13 +348,15 @@ export const DASHBOARD_NAV: NavSection[] = [
         icon: DocumentsGlyph,
         href: RESOURCES_HREF,
         description: "Documents, minutes and backwork.",
-        // Shown while any of the three is on: the page offers each view only
-        // to a member who can open it. No permission and no setup gate: every
-        // member reads Documents, and an empty one is an officer's to start.
-        anyModule: ["documents", "meetings", "backwork"],
-        // Backwork and its Bulk upload, and a meeting's minutes, are pages
-        // under this row, so it stays lit on them (rulebook § 8).
-        routes: ["/backwork", "/meetings"],
+        // Documents while Documents or Meetings is on (minutes are filed
+        // there), for every member: no permission and no setup gate, since
+        // an empty library is an officer's to start. Backwork for a member
+        // who can browse it (the API's gate). The row shows while either
+        // view is open, and opens the first that is.
+        views: RESOURCES_VIEWS,
+        // A meeting's minutes are pages under this row, as are Backwork's
+        // Bulk upload and the views, so it stays lit on them (rulebook § 8).
+        routes: ["/meetings"],
       },
     ],
   },

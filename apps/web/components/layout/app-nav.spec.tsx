@@ -214,12 +214,26 @@ describe("AppNav", () => {
     );
   });
 
-  it("keeps Resources while any of its modules is on, and drops it when all three are off", () => {
+  it("keeps Resources while any of its views is open, and drops it when all three modules are off", () => {
+    // Only Backwork on: the row opens Backwork for a member who can browse
+    // it, and isn't drawn for one who can't.
     const { unmount } = renderNav({
+      permissions: ["members:view", "backwork:upload"],
       isModuleEnabled: (key) => key === "backwork",
     });
-    expect(screen.getByRole("link", { name: "Resources" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+      "href",
+      "/backwork",
+    );
     unmount();
+    const { unmount: unmountMember } = renderNav({
+      permissions: ["members:view"],
+      isModuleEnabled: (key) => key === "backwork",
+    });
+    expect(
+      screen.queryByRole("link", { name: "Resources" }),
+    ).not.toBeInTheDocument();
+    unmountMember();
     renderNav({
       isModuleEnabled: (key) =>
         !["documents", "meetings", "backwork"].includes(key),

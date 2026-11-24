@@ -1179,6 +1179,23 @@ export class ActivityWeekQueryDto {
 }
 
 /**
+ * `GET /v1/activity`'s query: the week, and whether the client draws the
+ * Minutes run (#5949). A build from before it gets no `minutes` rows and no
+ * count of them, so its badge never counts a row it can't show.
+ */
+export class ActivityQueryDto extends ActivityWeekQueryDto {
+  @ApiProperty({
+    required: false,
+    enum: ['true'],
+    description:
+      '`true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949).',
+  })
+  @IsOptional()
+  @IsIn(['true'])
+  minutes?: 'true';
+}
+
+/**
  * The recap's week, named by the client's clock (#4983). Only `week_start`
  * is the standing's; the two below let the client say where its last week
  * began and on which day, which the server can't work out across a clock

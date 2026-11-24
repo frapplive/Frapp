@@ -1356,7 +1356,8 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     await user.type(screen.getByLabelText("Search documents"), "week one");
 
     await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule"]));
-    expect(documentsArgs.value).toBeUndefined();
+    // The one list read, with the minutes rows (#5949) and no search.
+    expect(documentsArgs.value).toEqual({ minutes: true });
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
   });
 
@@ -3513,6 +3514,28 @@ describe("DocumentsPage minutes rows (#5949)", () => {
     render(<DocumentsPage />);
     expect(await screen.findByText("Chapter Meeting")).toBeInTheDocument();
     expect(screen.queryByText("Chapter bylaws")).not.toBeInTheDocument();
+  });
+
+  it("says a chapter has no minutes yet on the Minutes filter, and offers New minutes to whoever records them", async () => {
+    const user = userEvent.setup();
+    linkedType.current = "minutes";
+    documentsQuery.data = [BYLAWS];
+    const { unmount } = render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/No minutes yet\. Posted minutes are filed here\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/match these filters/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New minutes" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    recordGate.granted = true;
+    render(<DocumentsPage />);
+    await user.click(await screen.findByRole("button", { name: "New minutes" }));
+    expect(
+      screen.getByRole("dialog", { name: "New minutes" }),
+    ).toBeInTheDocument();
   });
 
   it("offers New minutes in the add menu only to a member who records minutes", async () => {

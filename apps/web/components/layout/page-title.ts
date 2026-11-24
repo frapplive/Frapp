@@ -68,12 +68,10 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Pages under a nav row that read as their own step, titled under that row
- * ("Backwork › Bulk upload"), shown only when that row is.
- */
-/**
- * Pages under a nav row, each with the page it goes back to: Bulk upload goes
- * back to Backwork, the view it was opened from (#5949, Resources).
+ * Pages under a nav row that read as their own step, each with the page it
+ * goes back to, titled under that row ("Resources › Bulk upload") and linked
+ * only for a viewer who can open that page: Bulk upload goes back to
+ * Backwork, the view it was opened from (#5949, Resources).
  */
 const SUB_PAGE_TITLES: Readonly<Record<string, { title: string; back: string }>> =
   {
@@ -82,7 +80,7 @@ const SUB_PAGE_TITLES: Readonly<Record<string, { title: string; back: string }>>
 
 /**
  * Pages one record deep under a nav row, matched by prefix: any
- * `/meetings/<id>` is that meeting's "Minutes", under Meetings.
+ * `/meetings/<id>` is that meeting's "Minutes", under Resources.
  */
 const RECORD_PAGE_TITLES: Readonly<
   Record<string, { title: string; back: string }>
@@ -128,7 +126,17 @@ export function resolvePageTitle(
         pathname.startsWith(prefix) && pathname.length > prefix.length,
     );
   if (navItem && subPage) {
-    return isNavItemVisible(navItem)
+    // The link goes to the view the page came from, so it shows only to a
+    // viewer who can open that view: Bulk upload's crumb leads to Backwork,
+    // which the Resources row's other view (Documents) doesn't vouch for.
+    const backPath = subPage[1].back.split("?")[0] ?? subPage[1].back;
+    const backView = navItem.views?.find((view) =>
+      matchesRoute(backPath, view.href),
+    );
+    const parentShown = isNavItemVisible(
+      backView ? { ...navItem, views: [backView] } : navItem,
+    );
+    return parentShown
       ? {
           title: subPage[1].title,
           parent: {

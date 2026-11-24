@@ -3,6 +3,7 @@ import {
   Meeting,
   MeetingLiveRecording,
   MeetingTemplate,
+  PostedMeetingSummary,
 } from '../entities/meeting.entity';
 
 export const MEETING_REPOSITORY = 'MEETING_REPOSITORY';
@@ -28,6 +29,14 @@ export interface IMeetingRepository {
   findById(chapterId: string, id: string): Promise<Meeting | null>;
   /** The chapter's minutes among `ids`, in no order; missing ids are left out. */
   findByIds(chapterId: string, ids: readonly string[]): Promise<Meeting[]>;
+  /**
+   * Of `ids`, the posted minutes in `chapterId`, without their transcripts
+   * (#5949): what a Documents list needs of each, read on every open.
+   */
+  findPostedSummaries(
+    chapterId: string,
+    ids: readonly string[],
+  ): Promise<PostedMeetingSummary[]>;
   findByEvent(chapterId: string, eventId: string): Promise<Meeting | null>;
   /** The chapter's minutes, newest meeting first, at most `limit`. */
   findByChapter(chapterId: string, limit: number): Promise<Meeting[]>;

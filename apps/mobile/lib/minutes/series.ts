@@ -1,5 +1,5 @@
 import type { MeetingSummary } from "@repo/hooks";
-import { minutesWeekStart } from "@repo/validation";
+import { localWeekStart } from "@repo/validation";
 
 /**
  * One repeating meeting's minutes, for the series screen
@@ -31,7 +31,7 @@ export function minutesRowTime(start: string, now: number): string {
   const at = new Date(start);
   if (Number.isNaN(at.getTime())) return "";
   // A weekday names one day only inside this calendar week.
-  const week = minutesWeekStart(now);
+  const week = localWeekStart(new Date(now)).getTime();
   if (at.getTime() >= week && at.getTime() < week + 7 * DAY_MS) {
     return at.toLocaleString("en-US", {
       weekday: "short",

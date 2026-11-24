@@ -139,12 +139,10 @@ export class ActivityMinutesService {
     // which have minutes, so that read names only these.
     const ended = minutesToWrite(events, new Set(), now).needs;
     if (ended.length === 0) return [];
+    const endedIds = ended.map((event) => event.id);
     const [started, marked] = await Promise.all([
-      this.meetings.eventIdsWithMinutes(
-        chapterId,
-        ended.map((event) => event.id),
-      ),
-      this.noMinutes.list(chapterId),
+      this.meetings.eventIdsWithMinutes(chapterId, endedIds),
+      this.noMinutes.listFor(chapterId, endedIds),
     ]);
     const skipped = new Set(marked.map((mark) => mark.event_id));
     return ended

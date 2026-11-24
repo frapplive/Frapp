@@ -13,7 +13,7 @@ Files each meeting's posted minutes as a row in `chapter_documents` (#5949, step
   - a `chapter_documents` row is a file (`storage_path` and `uploaded_by` set, `meeting_id` null) or a meeting's minutes (`meeting_id` set, the other two null), never both (`chapter_documents_file_or_minutes`), at most one row per meeting (`chapter_documents_meeting_id_key`), and always the same chapter as its meeting (`chapter_documents_meeting_fkey` on `(meeting_id, chapter_id)`, `on delete cascade`, so deleting minutes removes their row);
   - `file_minutes_document(chapter, meeting)` files posted minutes: in the chapter's Minutes folder (`minutes_series_key = 'root'`; an open folder already named "Minutes" or "Meeting Minutes" is taken as it), or for a repeating meeting in that series' folder under it, made on first use. The API calls it when minutes post and on each later save;
   - a minutes row is never indexed as a `chapter_document` for the assistant (`corpus_follow_chapter_document` skips it): posted minutes are already indexed as `meeting_minutes`, read under the meeting's own rule;
-  - a series folder whose last minutes are deleted is removed when it holds nothing else (`trg_chapter_documents_minutes_folder`).
+  - a series folder whose last minutes are deleted or moved out is removed when it holds nothing else, checked as the change commits so a folder rename is not mistaken for it (`trg_chapter_documents_minutes_folder`, a deferred constraint trigger).
 
   Who sees a minutes row is decided by the API from the meeting's own rule each time it is read. Nothing about the audience is stored on the row.
 - **Checks**:

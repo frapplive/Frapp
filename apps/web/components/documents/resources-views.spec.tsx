@@ -82,4 +82,14 @@ describe("ResourcesViews", () => {
     render(<ResourcesViews />);
     expect(screen.getByRole("tab", { name: "Documents" })).toBeInTheDocument();
   });
+
+  it("offers no Documents view, and so no labels, in a chapter with only Backwork on", () => {
+    // The nav row opens Backwork there (`navItemTarget`); a Documents label
+    // would lead to a module that is off.
+    nav.pathname = "/backwork";
+    modules.off = new Set(["documents", "meetings"]);
+    render(<ResourcesViews />);
+    expect(screen.queryByRole("tab", { name: "Documents" })).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
 });

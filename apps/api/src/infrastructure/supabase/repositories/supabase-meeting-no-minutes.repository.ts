@@ -21,6 +21,20 @@ export class SupabaseMeetingNoMinutesRepository implements IMeetingNoMinutesRepo
     return data ?? [];
   }
 
+  async listFor(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<MeetingNoMinutes[]> {
+    if (eventIds.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from('meeting_no_minutes')
+      .select('event_id, chapter_id, marked_by, created_at')
+      .eq('chapter_id', chapterId)
+      .in('event_id', [...eventIds]);
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
+  }
+
   async mark(
     chapterId: string,
     eventId: string,

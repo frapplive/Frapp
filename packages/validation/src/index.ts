@@ -177,7 +177,6 @@ export * from "./minutes-flow";
 export * from "./minutes-read";
 export * from "./minutes-request-copy";
 // Which meetings on the calendar need minutes, and the next one coming.
-export * from "./minutes-timeline";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";

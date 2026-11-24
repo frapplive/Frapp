@@ -41,6 +41,7 @@ import {
   NO_DOCUMENT_FILTERS,
   deleteDocumentTitle,
   documentFolderHues,
+  isMarkFiltering,
   isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
@@ -132,7 +133,7 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
       : NO_DOCUMENT_FILTERS,
   );
   const [sort, setSort] = useState<DocumentSort>("name");
-  const documentsQuery = useDocuments();
+  const documentsQuery = useDocuments({ minutes: true });
   const foldersQuery = useDocumentFolders();
   const deleteDoc = useDeleteDocument();
 
@@ -287,6 +288,17 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
   */
   const showStrip =
     activeFolder === null && !filtering && deferredSearch === "";
+  // The Minutes filter and nothing else: an empty list there is a chapter
+  // with no minutes filed, not a search that missed (#5949).
+  const minutesOnly =
+    activeFolder === null &&
+    deferredSearch === "" &&
+    effectiveFilters.kind === "minutes" &&
+    effectiveFilters.uploader === null &&
+    effectiveFilters.date === null &&
+    !isMarkFiltering(effectiveFilters.marks);
+  // The add menu's New minutes, opened from that empty line.
+  const openNewMinutes = useRef<(() => void) | null>(null);
   // The tiers and the cards come from the builders mobile's s12 uses too
   // (`@repo/hooks/document-library`), so the two apps can't disagree.
   const { starred: starredIds } = marks;
@@ -498,6 +510,7 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
           canUpload={canUpload}
           canManage={canManageTypes}
           canStartMinutes={canStartMinutes}
+          minutesOpenerRef={openNewMinutes}
         />
         <Can permission="chapter_docs:upload">
           <DocumentsPageDropTarget
@@ -623,6 +636,10 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
             onDelete={(doc) => void handleDelete(doc)}
             onShowAllFiles={() => setActiveFolder(null)}
             onUpload={canUpload ? () => upload.openPanel() : undefined}
+            minutesOnly={minutesOnly}
+            onNewMinutes={
+              canStartMinutes ? () => openNewMinutes.current?.() : undefined
+            }
             marks={marks}
             onHoldRow={hold}
             isLimited={isLimited}

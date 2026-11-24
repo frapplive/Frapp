@@ -45,6 +45,14 @@ describe("resolvePageTitle", () => {
     ).toEqual({
       title: "Bulk upload",
     });
+    // The crumb asks whether the viewer can open Backwork, the view it goes
+    // back to, not only the row: the row with Documents alone is no door.
+    const asked: string[][] = [];
+    resolvePageTitle("/backwork/upload", (item) => {
+      asked.push((item.views ?? []).map((view) => view.href));
+      return true;
+    });
+    expect(asked).toEqual([["/backwork"]]);
   });
 
   it("titles Profile, which is not a nav row", () => {

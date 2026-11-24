@@ -7215,7 +7215,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The events this officer can see that are marked "No minutes", so the Meetings list stops asking for them */
+        /**
+         * The events this officer can see that are marked "No minutes"
+         * @description Read by the phone Minutes list of builds from before #5949, which stops asking for these. A current client reads Activity's Minutes run instead, where the server leaves marked meetings out.
+         */
         get: operations["MeetingNoMinutesController_list_v1"];
         put?: never;
         post?: never;
@@ -27187,6 +27190,8 @@ export interface operations {
             query?: {
                 /** @description Where the caller’s week begins, in their own time zone (the Study screen’s week: Sunday at midnight). Between eight days ago and a day from now: outside that, the standing answers 400 and `GET /v1/activity` counts the default week. Omitted: last Sunday at midnight UTC. */
                 week_start?: string;
+                /** @description `true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949). */
+                minutes?: "true";
             };
             header?: never;
             path?: never;

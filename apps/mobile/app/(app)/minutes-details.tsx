@@ -30,6 +30,7 @@ import {
   useDeleteMeeting,
   useMeeting,
   useMeetingActionItemTasks,
+  useMeetings,
   useMeetingDraft,
   useMeetingRecording,
   useMemberDisplayNames,
@@ -130,6 +131,7 @@ import {
   recorderBusy,
   recordingPipeline,
 } from "@/lib/minutes/recorder/row-view";
+import { seriesRows } from "@/lib/minutes/series";
 import { useMeetingRecorder } from "@/lib/minutes/recorder/session";
 import { useMinutesEditor } from "@/lib/minutes/use-minutes-editor";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -358,6 +360,17 @@ function LoadedMinutes({
   const suggested = (suggestions.data?.items ?? []).filter(
     (item) => item.kind === "task" && item.task !== null,
   ).length;
+
+  // A repeating meeting's series screen: its minutes and their open action
+  // items. This row is its way in since the Minutes list, whose Series row
+  // it was, went into Documents (#5949, #5984). Posted minutes only, and
+  // only once the series holds more than these.
+  const minutesList = useMeetings({ enabled: !isDraft });
+  const seriesKey =
+    minutesList.data?.find((row) => row.id === meeting.id)?.series_key ?? null;
+  const seriesCount = seriesKey
+    ? seriesRows(minutesList.data ?? [], seriesKey).length
+    : 0;
 
   const content = useMemo(
     () => readMeetingContent(meeting.content),
@@ -1130,6 +1143,22 @@ function LoadedMinutes({
               />
             </ListSection>
           </View>
+        ) : null}
+
+        {!editing && seriesKey && seriesCount > 1 ? (
+          <ListSection>
+            <ListRow
+              label={MEETING_LIST_COPY.series}
+              value={MEETING_LIST_COPY.minutesCount(seriesCount)}
+              accessibilityHint="Opens this meeting's other minutes and their open action items."
+              onPress={() =>
+                router.push({
+                  pathname: "/minutes-series",
+                  params: { key: seriesKey },
+                })
+              }
+            />
+          </ListSection>
         ) : null}
 
         {/* Under the minutes, so its arrival after the read moves nothing

@@ -1,22 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { codeOf } from "@repo/api-sdk";
 import {
   activityMinutesMeeting,
   useSetMeetingNoMinutes,
-  useStartMeeting,
   type ActivityRow,
 } from "@repo/hooks";
-import {
-  MEETING_ENTRY_COPY,
-  MEETING_LIST_COPY,
-  guessMeetingType,
-} from "@repo/validation";
+import { MEETING_LIST_COPY } from "@repo/validation";
 import type { RowMenuEntry } from "@/components/shared/row-menu";
 import { ToastAction } from "@/components/ui/toast";
-import { meetingHref } from "@/components/meetings/meeting-copy";
+import { useStartMinutesFor } from "@/components/meetings/use-start-minutes-for";
 import { useToast } from "@/lib/hooks/use-toast";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -51,9 +44,8 @@ export interface ActivityMinutesActions {
 export function useActivityMinutesActions(
   reread: () => Promise<unknown>,
 ): ActivityMinutesActions {
-  const router = useRouter();
   const { toast } = useToast();
-  const start = useStartMeeting();
+  const { startFor } = useStartMinutesFor(reread);
   const setNoMinutes = useSetMeetingNoMinutes();
   const [startingId, setStartingId] = useState<string | null>(null);
 
@@ -62,26 +54,7 @@ export function useActivityMinutesActions(
     const event = activityMinutesMeeting(row);
     setStartingId(event.id);
     try {
-      const meeting = await start.mutateAsync({
-        event_id: event.id,
-        meeting_type: guessMeetingType(event.name),
-      });
-      void reread();
-      router.push(meetingHref(meeting.id));
-    } catch (error) {
-      if (codeOf(error) === "meeting.already_started") {
-        void reread();
-        toast({
-          title: MEETING_ENTRY_COPY.alreadyStartedTitle,
-          description: MEETING_ENTRY_COPY.alreadyStartedBody,
-        });
-        return;
-      }
-      toast({
-        title: MEETING_ENTRY_COPY.startFailed,
-        description: getErrorMessage(error, "Try again in a moment."),
-        variant: "destructive",
-      });
+      if (await startFor(event)) void reread();
     } finally {
       setStartingId(null);
     }

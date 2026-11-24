@@ -15,6 +15,7 @@ describe("the app's section names and New actions", () => {
       calendar: "Calendar",
       directory: "Directory",
       messages: "Messages",
+      resources: "Resources",
       search: "Search",
     });
   });

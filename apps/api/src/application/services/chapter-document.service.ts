@@ -9,8 +9,11 @@ import {
 } from '@nestjs/common';
 import {
   isAllowedUploadMime,
+  isModuleEnabled,
   normalizeChannelAccessList,
 } from '@repo/validation';
+import { CHAPTER_REPOSITORY } from '#domain/repositories/chapter.repository.interface';
+import type { IChapterRepository } from '#domain/repositories/chapter.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import {
@@ -155,6 +158,8 @@ export class ChapterDocumentService {
     private readonly rbac: RbacService,
     private readonly accessLists: ChannelAccessListService,
     private readonly meetings: MeetingService,
+    @Inject(CHAPTER_REPOSITORY)
+    private readonly chapterRepo: IChapterRepository,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -199,6 +204,29 @@ export class ChapterDocumentService {
   }
 
   /**
+   * The minutes rows among `documents` that `userId` may read, by the
+   * meeting's own rule, and none while the chapter has Meetings off: a row
+   * then opens minutes the app has put away, so it is shown to no one, as a
+   * link to minutes is (`frappLinkModuleOn`). The chapter is read only when a
+   * minutes row is in play.
+   */
+  private async readableMinutes(
+    chapterId: string,
+    userId: string,
+    documents: readonly ChapterDocument[],
+  ): Promise<Map<string, PostedMinutesFacts>> {
+    const meetingIds = documents.flatMap((doc) =>
+      doc.meeting_id ? [doc.meeting_id] : [],
+    );
+    if (meetingIds.length === 0) return new Map();
+    const chapter = await this.chapterRepo.findById(chapterId);
+    if (!isModuleEnabled(chapter?.enabled_modules ?? null, 'meetings')) {
+      return new Map();
+    }
+    return this.meetings.readablePosted(chapterId, userId, meetingIds);
+  }
+
+  /**
    * `visibleTo`, with the minutes it read to decide: for each minutes row
    * kept, what its row shows.
    */
@@ -211,11 +239,7 @@ export class ChapterDocumentService {
     minutes: ReadonlyMap<string, PostedMinutesFacts>;
   }> {
     if (documents.length === 0) return { documents: [], minutes: new Map() };
-    const minutes = await this.meetings.readablePosted(
-      chapterId,
-      userId,
-      documents.flatMap((doc) => (doc.meeting_id ? [doc.meeting_id] : [])),
-    );
+    const minutes = await this.readableMinutes(chapterId, userId, documents);
     // The meeting's rule first, before any shortcut below can skip it.
     const candidates = documents.filter(
       (doc) => doc.meeting_id === null || minutes.has(doc.meeting_id),

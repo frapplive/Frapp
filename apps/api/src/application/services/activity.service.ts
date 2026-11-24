@@ -981,7 +981,7 @@ export class ActivityService {
     chapterId: string,
     userId: string,
     enabledModules: EnabledModules,
-    options: { weekStart?: Date; now?: Date } = {},
+    options: { weekStart?: Date; now?: Date; minutes?: boolean } = {},
   ): Promise<ActivityView> {
     const permissions = await this.rbacService.getEffectivePermissions(
       chapterId,
@@ -1130,9 +1130,10 @@ export class ActivityService {
           : Promise.resolve(null),
       ),
       // What the Meetings list page asked of an officer (#5949), while the
-      // chapter has Meetings on.
+      // chapter has Meetings on, for a client that draws it: a build from
+      // before it gets none, so its badge never counts rows it can't show.
       this.settle('minutes', chapterId, () =>
-        on('meetings')
+        options.minutes && on('meetings')
           ? this.minutesService.listFor(chapterId, userId, permissions, now)
           : Promise.resolve(NO_MINUTES),
       ),

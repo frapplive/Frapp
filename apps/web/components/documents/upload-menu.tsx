@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ChevronDown, FilePlus2, FolderSync, FolderUp } from "lucide-react";
 import { useGoogleDriveStatus, type DocumentTypeRow } from "@repo/hooks";
 import { useKeptPanel } from "@repo/hooks/kept-drafts";
@@ -54,6 +54,7 @@ export function UploadMenu({
   canUpload,
   canManage,
   canStartMinutes,
+  minutesOpenerRef,
 }: {
   gate: SubscriptionGate;
   upload: DocumentUpload;
@@ -74,8 +75,22 @@ export function UploadMenu({
    * Documents.
    */
   canStartMinutes: boolean;
+  /**
+   * Set to open New minutes from elsewhere on the page: the Minutes filter's
+   * empty line offers it (#5949). Null while it isn't offered.
+   */
+  minutesOpenerRef?: MutableRefObject<(() => void) | null>;
 }) {
   const [startingMinutes, setStartingMinutes] = useState(false);
+  useEffect(() => {
+    if (!minutesOpenerRef) return;
+    minutesOpenerRef.current = canStartMinutes
+      ? () => setStartingMinutes(true)
+      : null;
+    return () => {
+      minutesOpenerRef.current = null;
+    };
+  }, [canStartMinutes, minutesOpenerRef]);
   // Reopens on return when the page was left mid-form (#4593).
   useKeptPanel({
     page: "documents",

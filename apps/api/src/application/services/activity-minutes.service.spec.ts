@@ -74,7 +74,7 @@ function build() {
     ownDrafts: jest.fn().mockResolvedValue({ rows: [], facts: new Map() }),
     draftsVisibleTo: jest.fn().mockResolvedValue([]),
   };
-  const noMinutes = { list: jest.fn().mockResolvedValue([]) };
+  const noMinutes = { listFor: jest.fn().mockResolvedValue([]) };
   const notes = { findByUser: jest.fn().mockResolvedValue([]) };
   const memberRepo = {
     findChapterMemberIdentities: jest.fn().mockResolvedValue([
@@ -173,11 +173,15 @@ describe('ActivityMinutesService (#5949)', () => {
         event('marked', 'Chapter meeting', 2),
         event('open', 'Exec meeting', 3),
       ]);
-      noMinutes.list.mockResolvedValue([{ event_id: 'marked' }]);
+      noMinutes.listFor.mockResolvedValue([{ event_id: 'marked' }]);
 
       const minutes = await service.listFor(CHAPTER, ME, RECORDER, NOW);
 
-      expect(noMinutes.list).toHaveBeenCalledWith(CHAPTER);
+      // Only the meetings in the window, not the chapter's whole history.
+      expect(noMinutes.listFor).toHaveBeenCalledWith(
+        CHAPTER,
+        expect.arrayContaining(['marked', 'open']),
+      );
       expect(minutes.to_write.map((row) => row.event_id)).toEqual(['open']);
     });
 
@@ -197,7 +201,7 @@ describe('ActivityMinutesService (#5949)', () => {
       expect(minutes.to_write).toEqual([]);
       expect(events.findByChapter).not.toHaveBeenCalled();
       expect(meetings.eventIdsWithMinutes).not.toHaveBeenCalled();
-      expect(noMinutes.list).not.toHaveBeenCalled();
+      expect(noMinutes.listFor).not.toHaveBeenCalled();
     });
 
     it('asks nothing more when no meeting ended in the window', async () => {
@@ -207,7 +211,7 @@ describe('ActivityMinutesService (#5949)', () => {
 
       expect(minutes.to_write).toEqual([]);
       expect(meetings.eventIdsWithMinutes).not.toHaveBeenCalled();
-      expect(noMinutes.list).not.toHaveBeenCalled();
+      expect(noMinutes.listFor).not.toHaveBeenCalled();
     });
   });
 

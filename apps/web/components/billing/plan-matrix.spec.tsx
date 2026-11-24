@@ -34,7 +34,7 @@ const SHIPPED = new Set<string>([
   ...DASHBOARD_NAV_ITEMS.flatMap((item) => [
     ...(item.module ? [item.module] : []),
     // Resources holds Documents, Meetings and Backwork in one row (#5949).
-    ...(item.anyModule ?? []),
+    ...(item.views ?? []).flatMap((view) => view.anyModule),
   ]),
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",

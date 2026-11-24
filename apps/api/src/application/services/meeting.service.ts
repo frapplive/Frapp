@@ -39,6 +39,7 @@ import type { IMemberRepository } from '#domain/repositories/member.repository.i
 import {
   LIVE_RECORDING_STALE_MS,
   type Meeting,
+  type PostedMeetingSummary,
 } from '#domain/entities/meeting.entity';
 import type { Event } from '#domain/entities/event.entity';
 import { SystemPermissions } from '#domain/constants/permissions';
@@ -162,6 +163,9 @@ export interface UpdateMeetingInput {
   other_label?: string | null;
   content?: MeetingContentPatch;
 }
+
+/** What the read rule (`readable`) looks at on a set of minutes. */
+type MeetingReadFacts = Pick<Meeting, 'event_id' | 'status' | 'created_by'>;
 
 interface ViewerAccess {
   canEditAny: boolean;
@@ -464,11 +468,11 @@ export class MeetingService {
    * `readableRows`, with the events it read to decide: the ones the viewer
    * may see, which the Minutes list's facts reuse.
    */
-  private async readableWithEvents(
+  private async readableWithEvents<Row extends MeetingReadFacts>(
     chapterId: string,
     viewerId: string,
-    rows: Meeting[],
-  ): Promise<{ rows: Meeting[]; events: Map<string, Event> }> {
+    rows: Row[],
+  ): Promise<{ rows: Row[]; events: Map<string, Event> }> {
     if (rows.length === 0) return { rows: [], events: new Map() };
     const access = await this.access(chapterId, viewerId);
     // Only the events these rows point at, never the whole calendar: a
@@ -561,9 +565,12 @@ export class MeetingService {
   ): Promise<Map<string, PostedMinutesFacts>> {
     const ids = [...new Set(meetingIds)];
     if (ids.length === 0) return new Map();
-    const found: Meeting[] = [];
+    // Read without transcripts: this runs on every Documents open.
+    const found: PostedMeetingSummary[] = [];
     for (const chunk of chunkIds(ids)) {
-      found.push(...(await this.meetingRepo.findByIds(chapterId, chunk)));
+      found.push(
+        ...(await this.meetingRepo.findPostedSummaries(chapterId, chunk)),
+      );
     }
     const { rows } = await this.readableWithEvents(
       chapterId,
@@ -583,7 +590,7 @@ export class MeetingService {
             other_label: row.other_label,
             decision_count: content.decisions.length,
             action_item_count: content.action_items.length,
-            recorded: row.transcript !== null,
+            recorded: row.has_transcript,
             gist: minutesGist(content.tldr),
           },
         ];
@@ -924,7 +931,7 @@ export class MeetingService {
   }
 
   private readable(
-    meeting: Meeting,
+    meeting: MeetingReadFacts,
     viewerId: string,
     access: ViewerAccess,
     eventVisible: (eventId: string) => boolean,

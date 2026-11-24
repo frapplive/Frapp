@@ -164,6 +164,16 @@ describe('MeetingService', () => {
       findByIds: jest.fn(async (_chapterId: string, ids: readonly string[]) =>
         ids.flatMap((id) => rows.get(id) ?? []),
       ),
+      // As the repository answers it: posted rows only, no transcript.
+      findPostedSummaries: jest.fn(
+        async (_chapterId: string, ids: readonly string[]) =>
+          ids.flatMap((id) => {
+            const row = rows.get(id);
+            if (!row || row.status !== 'posted') return [];
+            const { transcript, ...rest } = row;
+            return [{ ...rest, has_transcript: transcript !== null }];
+          }),
+      ),
       findByEvent: jest.fn(
         async (_chapterId, eventId) =>
           [...rows.values()].find((row) => row.event_id === eventId) ?? null,

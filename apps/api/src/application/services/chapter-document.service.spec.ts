@@ -30,6 +30,7 @@ import type {
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import { RbacService } from './rbac.service';
 import { MeetingService } from './meeting.service';
+import { CHAPTER_REPOSITORY } from '#domain/repositories/chapter.repository.interface';
 import { ChannelAccessListService } from './channel-access-list.service';
 import type { ChannelAccessHolder } from '#domain/utils/channel-access';
 
@@ -47,6 +48,7 @@ describe('ChapterDocumentService', () => {
   };
   let mockAccessLists: { normalize: jest.Mock; listOptions: jest.Mock };
   let mockMeetings: { readablePosted: jest.Mock };
+  let mockChapterRepo: { findById: jest.Mock };
 
   /** What the caller holds for lists: nothing, unless a test says so. */
   const holder = (
@@ -171,6 +173,11 @@ describe('ChapterDocumentService', () => {
       deleteFiles: jest.fn(),
     };
 
+    // Every module on (`enabled_modules` unset), unless a test turns one off.
+    mockChapterRepo = {
+      findById: jest.fn().mockResolvedValue({ id: 'ch-1' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChapterDocumentService,
@@ -193,6 +200,7 @@ describe('ChapterDocumentService', () => {
         { provide: RbacService, useValue: mockRbac },
         { provide: ChannelAccessListService, useValue: mockAccessLists },
         { provide: MeetingService, useValue: mockMeetings },
+        { provide: CHAPTER_REPOSITORY, useValue: mockChapterRepo },
       ],
     }).compile();
 
@@ -2075,6 +2083,24 @@ describe('ChapterDocumentService', () => {
         minutes: true,
       });
       expect(shown.map((doc) => doc.id)).toEqual(['doc-1', 'doc-minutes']);
+    });
+
+    it('shows it to no one while the chapter has Meetings off, and reads the chapter only when one is in play', async () => {
+      invited(true);
+      mockChapterRepo.findById.mockResolvedValue({
+        id: 'ch-1',
+        enabled_modules: { meetings: false },
+      });
+      const off = await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(off.map((doc) => doc.id)).toEqual(['doc-1']);
+      expect(mockMeetings.readablePosted).not.toHaveBeenCalled();
+
+      mockChapterRepo.findById.mockClear();
+      mockDocumentRepo.findByChapter.mockResolvedValue([baseDocument]);
+      await service.findByChapter('ch-1', 'user-1', undefined);
+      expect(mockChapterRepo.findById).not.toHaveBeenCalled();
     });
 
     it('hides it without reading any who-can-see list: no list is in play here', async () => {

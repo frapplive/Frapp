@@ -224,9 +224,18 @@ begin
   end if;
 
   -- One filing at a time per chapter, so two posts never both make the
-  -- Minutes folder or the same series folder.
+  -- Minutes folder or the same series folder. The look for an existing row
+  -- is made again once the lock is held: a filing of the same meeting that
+  -- held it first (a post racing the sweep, or two API instances sweeping)
+  -- has committed its row by then, and this one returns it.
   perform pg_advisory_xact_lock(
     hashtextextended('minutes-folders:' || p_chapter_id::text, 0));
+  select id into v_document_id
+    from public.chapter_documents
+   where meeting_id = p_meeting_id and chapter_id = p_chapter_id;
+  if found then
+    return v_document_id;
+  end if;
 
   select * into v_root
     from public.chapter_document_folders
@@ -327,14 +336,24 @@ begin
     v_type,
     p_meeting_id,
     coalesce(v_meeting.posted_at, now()))
+  -- A filing in another chapter's lock can't race this meeting (the meeting
+  -- has one chapter), so this only answers a row that landed regardless.
+  on conflict (meeting_id) where meeting_id is not null do nothing
   returning id into v_document_id;
+  if v_document_id is null then
+    select id into v_document_id
+      from public.chapter_documents
+     where meeting_id = p_meeting_id and chapter_id = p_chapter_id;
+  end if;
   return v_document_id;
 end;
 $$;
 
--- When the last minutes leave a series folder (the minutes were deleted),
--- the folder goes too, unless it holds anything else. The chapter's Minutes
--- folder stays.
+-- When the last minutes leave a series folder (the minutes were deleted, or
+-- an officer moved them out), the folder goes too, unless it holds anything
+-- else. The chapter's Minutes folder stays. A series folder shows only to a
+-- member who can see something in it, so one left empty would be shown to
+-- nobody, officers included, and its name stay taken.
 create or replace function public.drop_empty_minutes_series_folder()
 returns trigger
 language plpgsql
@@ -342,6 +361,11 @@ security invoker
 set search_path = public, pg_temp
 as $$
 begin
+  if tg_op = 'UPDATE' then
+    if new.folder is not distinct from old.folder then
+      return null;
+    end if;
+  end if;
   if old.meeting_id is not null and old.folder is not null then
     delete from public.chapter_document_folders f
      where f.chapter_id = old.chapter_id
@@ -353,21 +377,27 @@ begin
           where d.chapter_id = old.chapter_id and d.folder = old.folder
        );
   end if;
-  return old;
+  return null;
 end;
 $$;
 
 drop trigger if exists trg_chapter_documents_minutes_folder
   on public.chapter_documents;
-create trigger trg_chapter_documents_minutes_folder
-  after delete on public.chapter_documents
+-- Checked when the transaction commits, not row by row: renaming a folder
+-- (`rename_document_folder`) moves its rows to the new name before it renames
+-- the folder, and a row-time check would take the folder for emptied and
+-- drop it mid-rename. By commit the folder carries the new name, so only a
+-- folder the rows really left is found empty.
+create constraint trigger trg_chapter_documents_minutes_folder
+  after delete or update of folder on public.chapter_documents
+  deferrable initially deferred
   for each row execute function public.drop_empty_minutes_series_folder();
 
 -- ─── Minutes posted before this, and any a save missed ─────────────────────
 --
 -- Files up to p_limit posted minutes that have no row yet, oldest meeting
--- first, and returns how many it filed. The API runs it when it starts and
--- every few minutes after (`MinutesDocumentSweepService`), which is also the
+-- first, and returns how many it filed. The API runs it every five minutes
+-- (`MinutesDocumentSweepService`), which is also the
 -- backfill: nothing is filed by this migration itself, because the API
 -- before #5949 would list a filed row to every member who can open
 -- Documents, and production migrates before it ships the API.

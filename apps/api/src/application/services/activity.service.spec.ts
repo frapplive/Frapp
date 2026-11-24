@@ -3249,7 +3249,10 @@ describe('ActivityService', () => {
         taking_notes: [taking('m2', false), taking('m3', true)],
       });
 
-      const view = await service.getActivity(CHAPTER, ME, null, { now: NOW });
+      const view = await service.getActivity(CHAPTER, ME, null, {
+        now: NOW,
+        minutes: true,
+      });
 
       expect(minutesService.listFor).toHaveBeenCalledWith(
         CHAPTER,
@@ -3269,10 +3272,32 @@ describe('ActivityService', () => {
       expect(view.unavailable).toEqual([]);
     });
 
+    it('serves and counts no minutes rows to a build that does not draw them', async () => {
+      const { service, minutesService } = build([
+        SystemPermissions.MEETINGS_RECORD,
+      ]);
+      minutesService.listFor.mockResolvedValue({
+        to_write: [toWrite('a')],
+        drafts: [],
+        taking_notes: [],
+      });
+
+      const view = await service.getActivity(CHAPTER, ME, null, { now: NOW });
+
+      expect(minutesService.listFor).not.toHaveBeenCalled();
+      expect(view.minutes.to_write).toEqual([]);
+      expect(view.needs_you_count).toBe(0);
+    });
+
     it('reads nothing while the chapter has Meetings off', async () => {
       const { service, minutesService } = build();
 
-      const view = await service.getActivity(CHAPTER, ME, { meetings: false });
+      const view = await service.getActivity(
+        CHAPTER,
+        ME,
+        { meetings: false },
+        { minutes: true },
+      );
 
       expect(minutesService.listFor).not.toHaveBeenCalled();
       expect(view.minutes).toEqual({
@@ -3286,7 +3311,9 @@ describe('ActivityService', () => {
       const { service, minutesService } = build();
       minutesService.listFor.mockRejectedValue(new Error('db down'));
 
-      const view = await service.getActivity(CHAPTER, ME, null);
+      const view = await service.getActivity(CHAPTER, ME, null, {
+        minutes: true,
+      });
 
       expect(view.minutes).toEqual({
         to_write: [],

@@ -407,6 +407,53 @@ describe("DashboardShell", () => {
     ).toHaveAttribute("href", "/backwork");
   });
 
+  it("offers no crumb to Backwork to a member who can't open Backwork", () => {
+    // Bulk upload's crumb leads to Backwork; the Resources row showing for
+    // Documents doesn't make that a door a member can open.
+    mockPathname.value = "/backwork/upload";
+    mockPermissions.value = ["members:view"];
+    render(
+      <DashboardShell>
+        <p>route content</p>
+      </DashboardShell>,
+    );
+    const banner = screen.getByRole("banner");
+    expect(within(banner).getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Bulk upload",
+    );
+    expect(
+      within(banner).queryByRole("link", { name: "Resources" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers no crumb to Backwork while permissions are still loading (#3854)", () => {
+    // An officer's crumb arrives with the answer; a member must never get a
+    // door to click before it.
+    mockPathname.value = "/backwork/upload";
+    mockPermissions.value = undefined;
+    const { rerender } = render(
+      <DashboardShell>
+        <p>route content</p>
+      </DashboardShell>,
+    );
+    expect(
+      within(screen.getByRole("banner")).queryByRole("link", {
+        name: "Resources",
+      }),
+    ).not.toBeInTheDocument();
+    mockPermissions.value = ["members:view", "backwork:admin"];
+    rerender(
+      <DashboardShell>
+        <p>route content</p>
+      </DashboardShell>,
+    );
+    expect(
+      within(screen.getByRole("banner")).getByRole("link", {
+        name: "Resources",
+      }),
+    ).toHaveAttribute("href", "/backwork");
+  });
+
   it("offers no crumb to a member the nav hides the parent row from", () => {
     // The parent follows its row's own gates: with every module Resources
     // holds switched off, the page's title shows and no door the nav closed.

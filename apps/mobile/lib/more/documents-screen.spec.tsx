@@ -885,11 +885,20 @@ describe("Documents search, filters, sort and delete, as web's (#3938)", () => {
       "Budget FY2026",
       "Chapter bylaws",
     ]);
-    // The whole library, unnarrowed on the wire: no `search`, no `folder`.
+    // The whole library with its minutes rows (#5949), unnarrowed on the
+    // wire: no `search`, no `folder`.
     expect(documentsArgs.length).toBeGreaterThan(0);
-    expect(documentsArgs.every((args) => args.length === 0)).toBe(true);
+    expect(
+      documentsArgs.every(
+        (args) => JSON.stringify(args) === JSON.stringify([{ minutes: true }]),
+      ),
+    ).toBe(true);
     act(() => byLabel(tree, "Search documents").props.onChangeText("budget"));
-    expect(documentsArgs.every((args) => args.length === 0)).toBe(true);
+    expect(
+      documentsArgs.every(
+        (args) => JSON.stringify(args) === JSON.stringify([{ minutes: true }]),
+      ),
+    ).toBe(true);
     act(() => byLabel(tree, "Search documents").props.onChangeText(""));
     expect(screenText(tree)).toContain(
       "Uploaded October 1 by Ana Ruiz · Finance · Spreadsheet",
@@ -1954,6 +1963,17 @@ describe("Documents with minutes filed in it (#5949)", () => {
     params.mockReturnValue({});
     const plain = render();
     expect(labels(plain)).toEqual(["Bylaws", "Chapter meeting"]);
+  });
+
+  it("says no minutes are filed yet on the Minutes type, not that a filter missed", () => {
+    params.mockReturnValue({ type: "minutes" });
+    documentRows = [FILE];
+    const tree = render();
+    expect(screenText(tree)).toContain(
+      "No minutes yet. Posted minutes are filed here.",
+    );
+    expect(screenText(tree)).not.toContain("No documents match");
+    params.mockReturnValue({});
   });
 
   it("is titled Resources, as the You row and web's page are", () => {

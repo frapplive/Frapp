@@ -15,9 +15,14 @@ import {
   type Meeting,
   type MeetingLiveRecording,
   type MeetingTemplate,
+  type PostedMeetingSummary,
 } from '#domain/entities/meeting.entity';
 import { SupabaseQueryError } from '../supabase-query-error';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
+
+/** `meetings` without `transcript` (`findPostedSummaries`). */
+const SUMMARY_COLUMNS =
+  'id, chapter_id, event_id, event_name, event_start_time, meeting_type, other_label, status, content, created_by, updated_by, posted_by, posted_at, created_at, updated_at';
 
 @Injectable()
 export class SupabaseMeetingRepository implements IMeetingRepository {
@@ -49,6 +54,39 @@ export class SupabaseMeetingRepository implements IMeetingRepository {
       .in('id', [...ids]);
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
+  }
+
+  async findPostedSummaries(
+    chapterId: string,
+    ids: readonly string[],
+  ): Promise<PostedMeetingSummary[]> {
+    if (ids.length === 0) return [];
+    // Every column but `transcript`, and the ids that have one as a second,
+    // id-only read: PostgREST can't select "is not null" as a column.
+    const [rows, transcribed] = await Promise.all([
+      this.supabase
+        .from('meetings')
+        .select(SUMMARY_COLUMNS)
+        .eq('chapter_id', chapterId)
+        .eq('status', 'posted')
+        .in('id', [...ids]),
+      this.supabase
+        .from('meetings')
+        .select('id')
+        .eq('chapter_id', chapterId)
+        .eq('status', 'posted')
+        .in('id', [...ids])
+        .not('transcript', 'is', null),
+    ]);
+    if (rows.error) throw new SupabaseQueryError(rows.error);
+    if (transcribed.error) throw new SupabaseQueryError(transcribed.error);
+    const withTranscript = new Set(
+      (transcribed.data ?? []).map((row) => row.id),
+    );
+    return ((rows.data ?? []) as Omit<Meeting, 'transcript'>[]).map((row) => ({
+      ...row,
+      has_transcript: withTranscript.has(row.id),
+    }));
   }
 
   async findByEvent(

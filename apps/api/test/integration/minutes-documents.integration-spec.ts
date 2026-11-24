@@ -19,6 +19,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { SupabaseChapterDocumentRepository } from '../../src/infrastructure/supabase/repositories/supabase-chapter-document.repository';
+import { SupabaseMeetingRepository } from '../../src/infrastructure/supabase/repositories/supabase-meeting.repository';
 import type { FrappSupabaseClient } from '../../src/infrastructure/supabase/database.types';
 import { createServiceRoleClient, describeIntegration } from './stack';
 
@@ -267,6 +268,76 @@ describeIntegration('Posted minutes filed as documents (#5949)', () => {
     expect(after.some((folder) => folder.minutes_series_key === 'root')).toBe(
       true,
     );
+  });
+
+  it('drops a series folder its minutes were moved out of, and keeps one that is renamed', async () => {
+    const moved = await addEvent('Housing Committee', 6, {
+      recurrence_rule: 'FREQ=WEEKLY',
+    });
+    const movedMinutes = await addMinutes(moved, 'Housing Committee', 'posted');
+    const movedRow = await repo.fileMinutes(chapterId, movedMinutes);
+    await repo.updateFiling(movedRow as string, chapterId, { folder: null });
+    expect(
+      (await foldersOf()).some((folder) => folder.minutes_series_key === moved),
+    ).toBe(false);
+
+    const renamed = await addEvent('Social Committee', 6, {
+      recurrence_rule: 'FREQ=WEEKLY',
+    });
+    const renamedMinutes = await addMinutes(
+      renamed,
+      'Social Committee',
+      'posted',
+    );
+    await repo.fileMinutes(chapterId, renamedMinutes);
+    const folder = (await foldersOf()).find(
+      (row) => row.minutes_series_key === renamed,
+    );
+    assertOk(
+      'rename folder',
+      (
+        await supabase.rpc('rename_document_folder', {
+          p_chapter_id: chapterId,
+          p_folder_id: folder?.id as string,
+          p_name: 'Social',
+        })
+      ).error,
+    );
+    expect(
+      (await foldersOf()).filter((row) => row.minutes_series_key === renamed),
+    ).toMatchObject([{ name: 'Social' }]);
+    expect((await rowsOf(renamedMinutes))[0].folder).toBe('Social');
+  });
+
+  it('files a meeting once when two filings of it run at the same time', async () => {
+    const eventId = await addEvent('Budget review', 7);
+    const meetingId = await addMinutes(eventId, 'Budget review', 'posted');
+    const [one, two] = await Promise.all([
+      repo.fileMinutes(chapterId, meetingId),
+      repo.fileMinutes(chapterId, meetingId),
+    ]);
+    expect(one).toBe(two);
+    expect(await rowsOf(meetingId)).toHaveLength(1);
+  });
+
+  it('reads posted minutes for a Documents list without their transcripts', async () => {
+    const eventId = await addEvent('Officer retreat', 8);
+    const meetingId = await addMinutes(eventId, 'Officer retreat', 'posted');
+    assertOk(
+      'transcript',
+      (
+        await supabase
+          .from('meetings')
+          .update({ transcript: 'Speaker 1: welcome back' } as never)
+          .eq('id', meetingId)
+      ).error,
+    );
+    const meetings = new SupabaseMeetingRepository(supabase);
+    const [summary] = await meetings.findPostedSummaries(chapterId, [
+      meetingId,
+    ]);
+    expect(summary).toMatchObject({ id: meetingId, has_transcript: true });
+    expect('transcript' in summary).toBe(false);
   });
 
   it('refuses a row that is both a file and minutes, and a second row for one meeting', async () => {

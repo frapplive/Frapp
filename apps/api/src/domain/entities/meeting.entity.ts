@@ -35,6 +35,15 @@ export interface Meeting {
   transcript: string | null;
 }
 
+/**
+ * Posted minutes as a Documents row reads them (#5949): every column but the
+ * transcript, which can run to a few hundred kilobytes, and whether there is
+ * one.
+ */
+export type PostedMeetingSummary = Omit<Meeting, 'transcript'> & {
+  has_transcript: boolean;
+};
+
 /** A chapter's minutes template (`meeting_templates`). */
 export interface MeetingTemplate {
   chapter_id: string;

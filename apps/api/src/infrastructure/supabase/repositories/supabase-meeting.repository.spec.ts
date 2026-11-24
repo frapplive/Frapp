@@ -206,6 +206,37 @@ describe('SupabaseMeetingRepository — tenant scope', () => {
     expect(found.map((r) => r.id)).toEqual(['mine-b']);
   });
 
+  // That the transcript column is left out is the real database's to show
+  // (this fake ignores a select's columns): minutes-documents.integration-spec.
+  it("findPostedSummaries reads only the caller chapter's posted minutes, and which have a transcript (#5949)", async () => {
+    const posted = { ...row, status: 'posted' };
+    harness = createTenantHarness({
+      tables: {
+        meetings: [
+          { ...posted, id: 'heard', transcript: 'Speaker 1: hello' },
+          { ...posted, id: 'quiet', transcript: null },
+          { ...row, id: 'draft', transcript: null },
+        ].flatMap((item) => [
+          inA({ ...item, id: `${item.id}-a`, event_id: null }),
+          inB({ ...item, id: `${item.id}-b`, event_id: null }),
+        ]),
+      },
+    });
+    repo = new SupabaseMeetingRepository(harness.client);
+    const found = await harness.expectTenantScoped(CHAPTER_B, () =>
+      repo.findPostedSummaries(CHAPTER_B, [
+        'heard-a',
+        'heard-b',
+        'quiet-b',
+        'draft-b',
+      ]),
+    );
+    expect(found.map((r) => [r.id, r.has_transcript]).sort()).toEqual([
+      ['heard-b', true],
+      ['quiet-b', false],
+    ]);
+  });
+
   it("findById misses another chapter's minutes", async () => {
     const found = await harness.expectTenantScoped(CHAPTER_B, () =>
       repo.findById(CHAPTER_B, MEETING_A),

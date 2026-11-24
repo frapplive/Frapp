@@ -15,6 +15,7 @@ import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import type { ChatView } from "@/components/layout/shell-prefs";
 import {
   isNavItemVisible,
+  navItemTarget,
   ProtectedNavItem,
 } from "@/components/layout/protected-nav-item";
 import { FOCUS_RING_SHELL } from "@/components/ui/focus";
@@ -196,7 +197,12 @@ export function AppNav({
           tenantKind,
         ),
       )
-      .map((item) => withChapterWords(item, vocabulary));
+      // A row over several views opens the first the viewer can (Resources
+      // opens Backwork in a chapter with only Backwork on).
+      .map((item) => ({
+        ...withChapterWords(item, vocabulary),
+        href: navItemTarget(item, permissions, isModuleEnabled),
+      }));
     if (visibleItems.length === 0) return null;
 
     return (

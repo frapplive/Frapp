@@ -20,6 +20,7 @@ function setup(
         created_at: '2026-11-19T00:00:00Z',
       },
     ]),
+    listFor: jest.fn().mockResolvedValue([]),
     mark: jest.fn().mockResolvedValue(undefined),
     unmark: jest.fn().mockResolvedValue(undefined),
   };

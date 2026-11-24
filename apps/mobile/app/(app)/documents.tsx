@@ -340,7 +340,7 @@ export default function DocumentsScreen() {
   );
 
   const foldersQuery = useDocumentFolders();
-  const documentsQuery = useDocuments();
+  const documentsQuery = useDocuments({ minutes: true });
   const openDocument = useDocumentDownloadUrl();
   const deleteDocument = useDeleteDocument();
   const refresh = useRefetchAll([foldersQuery, documentsQuery, starsQuery]);
@@ -834,6 +834,23 @@ export default function DocumentsScreen() {
       // a folder chip, widening to every folder (the search and filters
       // stay); otherwise clearing them, as web's Clear filters does.
       // Uploading lives on the screen's + (writing.md § Chapter Documents).
+      // The Minutes filter alone, where the Minutes screen and a minutes
+      // page's back land (#5949): a chapter with none filed has nothing
+      // filtered out, so say what goes here. Minutes start from the + menu
+      // or the event, as before.
+      if (
+        kind === "minutes" &&
+        !folder &&
+        !deferredSearch &&
+        uploader === null &&
+        !dateActive &&
+        !markFilter.pinned &&
+        !markFilter.starred
+      ) {
+        return (
+          <InlineNote>No minutes yet. Posted minutes are filed here.</InlineNote>
+        );
+      }
       if (filtering) {
         const what = deferredSearch ? `“${deferredSearch}”` : "these filters";
         return folder ? (
