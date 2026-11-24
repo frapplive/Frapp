@@ -438,12 +438,16 @@ A shipped card then shows a sensible state, and its Extend button can't change a
 
 ### Name lookup
 
+**Built in #5973:** the lookup's 409 and web's picker ([`rush.md` § Voting and Bids](rush.md#voting-and-bids)). The unique index changes to unlinked candidates only with the slice that adds `pnm_id`, since until then every candidate is unlinked and the rule is already the one below.
+
 Today `GET /v1/rush/candidates?name=` and `/rush vote|bid <name>` rely on names being unique in a chapter (`rush_candidates_chapter_name_key`, and `findByNameKey`'s single-row read). Form submissions can bring in two different "Jake Smith"s, so:
 
 - **The unique name rule applies only among unlinked candidates.** A manual add still gets today's 409 when an unlinked candidate already has the name.
 - **When a name matches several candidates,** the lookup returns 409, "Several prospects match", with their ids. The slash command then shows a picker. It never returns a 500 or picks one silently.
 
 ### Dashboard
+
+**Built in #5973:** the counts by stage, open, mine, needs follow-up, follow-ups due, bids out, and the gated ratings and votes ([`rush.md` § Funnel](rush.md#funnel)). The rest joins with the slices that record it.
 
 The funnel that [`rush.md` § Funnel](rush.md#funnel) describes but was never built. It shows:
 - counts by stage, in the chapter's order;
@@ -457,6 +461,8 @@ The funnel that [`rush.md` § Funnel](rush.md#funnel) describes but was never bu
 All of it needs `rush:view`, except vote counts and rating averages, which need `rush:view_results`.
 
 ### Where the chapter's settings live
+
+**Built in #5973:** the recruitment contacts Group, the card channel and the new-member role ([`rush.md` § Settings](rush.md#settings)). The interest form's own settings come with that slice.
 
 Every chapter-side setting in this design goes on the **Recruitment module page** in Chapter settings, the one-page-per-module layout from #4073 (switch, rules that save, who can). Nothing here adds a second recruitment settings screen. The page holds:
 

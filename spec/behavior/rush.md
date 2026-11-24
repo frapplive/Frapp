@@ -16,6 +16,7 @@ A larger upgrade (a pipeline, interest forms, eligibility and a council master l
 ## Voting and Bids
 
 - Members vote on a candidate via `/<vocab> vote <candidate>` and extend a bid via `/<vocab> bid <candidate>`, where each takes a candidate's id or name, or with the candidate card's Vote and Extend bid.
+- **A name that matches several prospects** is never picked silently: the lookup (`GET /v1/rush/candidates?name=`) answers 409 `rush.several_match` with each match's id, name, stage and the day it was added, and web's slash command asks which one before it runs (#5973, [`ifc-recruitment.md` § Name lookup](ifc-recruitment.md#name-lookup)). Today names are still unique in a chapter, so this waits for candidates linked to PNMs.
 - Vote and bid actor identity comes from the authenticated session (`viewer.id`), never a client-supplied id — see the actor-identity rule in [`chat/integrations.md`](chat/integrations.md#slash-command-dispatch).
 - Ballots store `voter_id` so a member can vote once. The card and GET projection publish `vote_count` and `viewer_has_voted` only — voter names are never listed. `vote_count` is left out for a viewer without `rush:view_results` ([§ Permissions](#permissions)). No setting changes that: the seed's `wf_rush_anon_vote` is read by nothing and no longer shown in Chapter settings ([#3439](https://github.com/pdcarlson/Frapp/issues/3439), [#4073](https://github.com/pdcarlson/Frapp/issues/4073)). Vote is one-click, not a toggle.
 
@@ -32,7 +33,7 @@ Recruitment has its own permissions (#4070, 2026-11-10). Every REST route needs 
 | `rush:view_results` | See how many votes a prospect has and their average rating | No route: without it, `vote_count` is left out of every prospect read and of the vote and bid responses, and the card shows no count ([#4084](https://github.com/pdcarlson/Frapp/issues/4084)); the pipeline leaves out `vote_count`, `rating_average` and `rating_count` the same way |
 | `rush:notes` | Write notes on a prospect and tag them | `POST /v1/rush/candidates/:id/notes`, editing and deleting their own (`PATCH`/`DELETE …/notes/:noteId`), `PUT /v1/rush/candidates/:id/tags` |
 | `rush:read_notes` | Read notes on prospects ([§ Notes](#notes)) | `GET /v1/rush/candidates/:id/notes` |
-| `rush:manage` | Edit the chapter's stages, tags and stale days, assign any prospect's owner, and delete anyone's note | `PUT /v1/rush/stages`, `POST`/`PATCH`/`DELETE /v1/rush/tags`, `PUT /v1/rush/settings`, `PUT …/owner` for anyone, `DELETE …/notes/:noteId` for a note that isn't theirs. Deleting prospects and exporting the list are not built yet ([`ifc-recruitment.md`](ifc-recruitment.md), #5833) |
+| `rush:manage` | Edit the chapter's stages, tags and settings ([§ Settings](#settings)), assign any prospect's owner, and delete anyone's note | `PUT /v1/rush/stages`, `POST`/`PATCH`/`DELETE /v1/rush/tags`, `PUT /v1/rush/settings`, `PUT …/owner` for anyone, `DELETE …/notes/:noteId` for a note that isn't theirs. Deleting prospects and exporting the list are not built yet ([`ifc-recruitment.md`](ifc-recruitment.md), #5833) |
 
 **Default: today's behaviour** (Paul, 2026-11-10, [#4068](https://github.com/pdcarlson/Frapp/issues/4068) decision 12). Before these keys, any member with `members:view` could look up, add, vote and record a bid. So the seeded Member role holds every key but `rush:manage` (and `rush:read_notes`, which came later, [§ Notes](#notes)) (`RUSH_MEMBER_PERMISSIONS` in `@repo/validation`), and migration `20261111010000_rush_permissions_backfill.sql` gave the same six to every existing role and custom role that held `members:view` in a chapter with the module on. A chapter tightens it by taking a key off a role. `rush:manage` is held only through `*`.
 
@@ -111,4 +112,22 @@ Built in #5934 (slice 2 of #5833). The reasoning and the recruitment week they'r
 
 ## Funnel
 
-- The optional dashboard renders a candidate **funnel by stage**. It isn't built yet (slice 3 of #5833). Its columns come from the chapter's stages ([§ Stages](#stages)), not a hardcoded stage array, so a chapter's customized stages drive them with no code change.
+Built in #5973 (slice 3 of #5833) as the page's **Summary**, on web beside Board and List and on the phone beside List. Screens: [`spec/ui/web-dashboard/README.md` § Recruitment](../ui/web-dashboard/README.md#recruitment) and [`spec/ui/mobile/screens.md` § Recruitment](../ui/mobile/screens.md#recruitment).
+
+- **It counts the board's own cards.** It is worked out from the same pipeline read the board draws (`rushDashboard` in `@repo/hooks`), so no number can disagree with the board, and it counts the whole pipeline whatever a view or search narrows.
+- **The numbers:** open prospects (everyone not in a Closed stage); the viewer's own open prospects, for a role that can own them (`rush:add`); how many need a follow-up ([§ Contacts, owner and follow-ups](#contacts-owner-and-follow-ups)); follow-ups due today or earlier, whoever they are for; and bids out.
+- **By stage:** a count per board column, in the chapter's order, Closed folded as the board folds it. Its rows come from the chapter's stages ([§ Stages](#stages)), not a hardcoded stage array, so a chapter's customized stages drive them with no code change.
+- **Results**, only with `rush:view_results`: the five open prospects with the highest average rating and the five with the most votes. A reader without it gets neither, because the pipeline read leaves the counts out for them ([§ Permissions](#permissions)).
+- **Still to come** with the slices that record them: bids by state (accepted, declined, expired), eligibility counts, sources and the next council date ([`ifc-recruitment.md` § Dashboard](ifc-recruitment.md#dashboard)).
+
+## Settings
+
+The Recruitment module page in Chapter settings holds the stages and tags ([§ Stages](#stages), [§ Tags](#tags)), the stale days ([§ Contacts, owner and follow-ups](#contacts-owner-and-follow-ups)), the notes opt-in ([§ Notes](#notes)), and, since #5973:
+
+- **The new member role:** the role an accepted prospect's invite carries ([`ifc-recruitment.md` § Bids](ifc-recruitment.md#bids)). It defaults to the first role in the tier named New members, by the roles' order there, not the chapter's default invite role, which in some chapters is a full member's. When that tier holds no role or has been renamed away, the page asks for a pick. A role that holds everything (`*`) can't be picked. Deleting the picked role puts the default back.
+- **The recruitment contacts Group:** told about each interest-form submission along with the holders of `rush:manage`. A Group holds no permissions, so the page names any member of it who lacks `rush:view`; they are skipped. None is picked until an officer picks one.
+- **The card channel:** where an interest-form submission's candidate card goes; none posts no card. A channel is taken only when everyone who can read it holds `rush:view`, because the card names the prospect to the whole channel; the save is refused otherwise, naming how many can't. The interest-form slice checks again at every post.
+
+The contacts Group and the card channel are read by the interest-form slice ([`ifc-recruitment.md` § What a submission does](ifc-recruitment.md#what-a-submission-does)); until it lands they are saved and shown, and nothing else reads them.
+
+Reading these needs `rush:view` (`GET /v1/rush/settings`); changing them needs `rush:manage` (`PUT /v1/rush/settings`, which writes only the fields it is sent).
