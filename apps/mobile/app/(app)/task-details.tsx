@@ -24,7 +24,12 @@ import {
   useTasks,
   useViewerUserId,
 } from "@repo/hooks";
-import { can, TASK_AUDIENCE_COPY, TASK_FOLLOWER_COPY } from "@repo/validation";
+import {
+  can,
+  FRAPP_LINK_COPY,
+  TASK_AUDIENCE_COPY,
+  TASK_FOLLOWER_COPY,
+} from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_TASKS } from "@/components/back-row";
@@ -52,6 +57,7 @@ import {
   TaskBarPill,
 } from "@/components/tasks/task-action-bar";
 import { WhoHasIt } from "@/components/tasks/who-has-it";
+import { AddPeopleSheet } from "@/components/tasks/add-people-sheet";
 import { GroupProgress } from "@/components/tasks/group-progress";
 import { OpenTaskScreen } from "@/components/tasks/open-task-screen";
 import {
@@ -104,6 +110,8 @@ import {
   RELEASED_PARAM,
 } from "@/lib/tasks/open-tasks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { FrappLinksEditor } from "@/components/frapp-links";
+import { ListPanel } from "@/components/list-section";
 
 /** A following tier, role or group since deleted, as a fact's value. */
 const FOLLOWER_DELETED =
@@ -180,6 +188,13 @@ const FOLLOWER_DELETED =
  * brought back, then `POST /v1/tasks/:id/group/remove`. A row's long-press
  * Remove people (#5492) pushes this screen with `select=1`, and it opens in
  * select mode.
+ *
+ * ## Add people
+ *
+ * The plus beside Who has it (#5905) opens the Who picker for people only,
+ * with everyone who has a copy ticked and fixed; Add gives each one picked a
+ * To do copy, `POST /v1/tasks/:id/group/add`, and Who has it says how many.
+ * It sits on the list, not the bar, which already holds its three rounds.
  */
 export default function TaskDetailsRoute() {
   // `posting=<id>`: a task up for grabs (#5570), which is a posting and not
@@ -329,6 +344,20 @@ function TaskScreen({
   const [peopleNote, setPeopleNote] = useState<string | null>(null);
   const removal = removalAllowed(picked, copies);
   const removeFromGroup = useRemoveFromTaskGroup();
+  // Add people (#5905): the plus on Who has it mounts the picker, which
+  // opens itself, and it unmounts once closed; the plus waits while an add
+  // is out.
+  const [addingPeople, setAddingPeople] = useState(false);
+  const [addPending, setAddPending] = useState(false);
+  const holders = useMemo(
+    () => copies.flatMap((copy) => (copy.assigneeId ? [copy.assigneeId] : [])),
+    [copies],
+  );
+  const showAdded = (line: string) => {
+    setAddPending(false);
+    setPeopleNote(line);
+    AccessibilityInfo.announceForAccessibility(line);
+  };
 
   // Back where the member came from (the board, the Calendar), or to the
   // board on a cold link with nothing under this screen.
@@ -772,6 +801,23 @@ function TaskScreen({
 
         {row.meetingId ? <TaskMinutesFact meetingId={row.meetingId} /> : null}
 
+        {/* Attached (`spec/behavior/frapp-links.md`): web's task panel row.
+            An officer attaches and removes in place, as with the steps. */}
+        {edit.attachments.length > 0 || controls.edit ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel} accessibilityRole="header">
+              {FRAPP_LINK_COPY.field.toUpperCase()}
+            </Text>
+            <ListPanel>
+              <FrappLinksEditor
+                links={edit.attachments}
+                canEdit={controls.edit}
+                onChange={edit.changeAttachments}
+              />
+            </ListPanel>
+          </View>
+        ) : null}
+
         {row.subtasks.length > 0 || (controls.edit && !row.pointsAwarded) ? (
           <SubtaskChecklist
             taskId={row.id}
@@ -796,6 +842,15 @@ function TaskScreen({
             note={
               selecting && removal.everyone ? REMOVE_EVERYONE_NOTE : peopleNote
             }
+            onAdd={
+              controls.removePeople
+                ? () => {
+                    setPeopleNote(null);
+                    setAddingPeople(true);
+                  }
+                : undefined
+            }
+            addDisabled={addPending || addingPeople}
           />
         ) : null}
 
@@ -920,6 +975,16 @@ function TaskScreen({
           onUndo={() => void toggles.takeBack(toggles.undo!.id)}
           // Over the bar, as over a create button: the two sit at one height.
           aboveCreate
+        />
+      ) : null}
+
+      {addingPeople && showPeople && controls.removePeople ? (
+        <AddPeopleSheet
+          taskId={row.id}
+          holders={holders}
+          onSending={() => setAddPending(true)}
+          onResult={showAdded}
+          onClose={() => setAddingPeople(false)}
         />
       ) : null}
 

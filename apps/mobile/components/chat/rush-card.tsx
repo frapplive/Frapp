@@ -14,7 +14,7 @@ import {
   useVoteRushCandidate,
 } from "@repo/hooks";
 import { memberViewVocabulary, vocab } from "@repo/org-archetypes";
-import { can, isModuleEnabled } from "@repo/validation";
+import { isModuleEnabled } from "@repo/validation";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
 import { StatusChip } from "@/components/status-chip";
 import { useFrappTheme } from "@/lib/theme";
@@ -45,9 +45,10 @@ import { useCardWrite } from "./use-card-write";
  * and which controls to offer are `canReadCardRushCandidate`,
  * `rushCardBadgeLabel`, `rushCardTally` and `rushCardControls` in
  * `@repo/hooks`, the copy both cards apply. In short: nothing live until the
- * candidate is read (the snapshot has no votes and no bid), every member may
- * vote and extend a bid (the routes have no permission of their own beyond
- * `members:view`), and no control while Recruitment is off. The eyebrow is the
+ * candidate is read (the snapshot has no votes and no bid), Vote and Extend
+ * bid only for a role holding `rush:vote` / `rush:bid`, the count only for
+ * one holding `rush:view_results` (#4084), and no control while Recruitment
+ * is off. The eyebrow is the
  * chapter's own word for recruitment (`vocab`), "Rush" or "Intake" or
  * "Recruitment", as web's is.
  *
@@ -68,12 +69,7 @@ export function RushCard({
   // nothing" from "not read yet", and the read rule treats those apart.
   const permissions = useMyPermissions().data?.permissions;
   const liveQuery = useRushCandidate(
-    canReadCardRushCandidate({
-      canViewMembers: can("members:view", permissions),
-      permissionsKnown: Array.isArray(permissions),
-    })
-      ? payload.candidate_id
-      : undefined,
+    canReadCardRushCandidate(permissions) ? payload.candidate_id : undefined,
   );
   const live = readLiveRushCandidate(liveQuery.data);
 
@@ -84,7 +80,7 @@ export function RushCard({
   const recruitmentOff =
     chapterQuery.data !== undefined &&
     !isModuleEnabled(chapterQuery.data?.enabled_modules, "rush");
-  const controls = rushCardControls({ live, recruitmentOff });
+  const controls = rushCardControls({ live, recruitmentOff, permissions });
 
   const vote = useVoteRushCandidate();
   const bid = useBidRushCandidate();

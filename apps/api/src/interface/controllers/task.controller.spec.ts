@@ -464,6 +464,42 @@ describe('TaskController', () => {
     });
   });
 
+  describe('addToGroup (#5905)', () => {
+    it('passes the members and the officer to the service and returns the group', async () => {
+      const result = {
+        added: ['user-5'],
+        group: {
+          id: 'group-1',
+          audience: 'people' as const,
+          total: 5,
+          done: 0,
+          confirmed: 0,
+        },
+      };
+      taskService.addToGroup = jest.fn().mockResolvedValue(result);
+
+      await expect(
+        controller.addToGroup('chapter-1', 'admin-1', 't', {
+          assignee_ids: ['user-5'],
+        }),
+      ).resolves.toEqual(result);
+      expect(taskService.addToGroup).toHaveBeenCalledWith(
+        't',
+        'chapter-1',
+        'admin-1',
+        ['user-5'],
+      );
+    });
+
+    it('needs tasks:manage, so a member who is not an officer gets a 403', () => {
+      const required = Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        TaskController.prototype.addToGroup,
+      ) as string[];
+      expect(required).toEqual([SystemPermissions.TASKS_MANAGE]);
+    });
+  });
+
   describe('removeFromGroup (#5492)', () => {
     it('passes the members to the service and returns the group', async () => {
       const result = {

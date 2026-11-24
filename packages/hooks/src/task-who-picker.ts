@@ -331,6 +331,20 @@ export function tickedIds(
   return targetMemberIds(who.target, directory);
 }
 
+/**
+ * Who Add people would give a copy to (#5905): everyone ticked, minus
+ * those who already have one. Web's panel and the phone's sheet both send
+ * this, and their Add button counts it, so a pick who got a copy meanwhile
+ * neither counts nor goes.
+ */
+export function peopleToAdd(
+  who: TaskWho | null,
+  directory: WhoDirectory,
+  holders: ReadonlySet<string>,
+): string[] {
+  return tickedIds(who, directory).filter((userId) => !holders.has(userId));
+}
+
 /** How many people a value reaches. */
 export function whoCount(who: TaskWho | null, directory: WhoDirectory): number {
   return tickedIds(who, directory).length;

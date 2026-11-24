@@ -47,11 +47,11 @@ describe("parseExternalUrl", () => {
 });
 
 describe("the preload", () => {
-  it("sends each method on the channel the main process listens on for it", () => {
+  it("calls each method on the channel the main process listens on for it", () => {
     // The sandboxed preload can't import `IPC`, so it spells the names out.
     const preload = readFileSync(join(__dirname, "../preload/index.ts"), "utf8");
     for (const method of Object.keys(IPC) as (keyof typeof IPC)[]) {
-      const sent = new RegExp(`^\\s*${method}: \\([^)]*\\) => ipcRenderer\\.send\\("([^"]+)"`, "m").exec(preload);
+      const sent = new RegExp(`^\\s*${method}: \\([^)]*\\) => ipcRenderer\\.(?:send|invoke)\\("([^"]+)"`, "m").exec(preload);
       expect(sent?.[1], method).toBe(IPC[method]);
     }
   });

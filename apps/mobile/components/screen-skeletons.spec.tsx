@@ -493,6 +493,7 @@ describe("Placeholder rows sit on their real row's frame", () => {
           meetingId: null,
           followedBy: null,
           followedByName: null,
+          attachments: [],
           group: null,
           openTaskId: null,
           series: null,

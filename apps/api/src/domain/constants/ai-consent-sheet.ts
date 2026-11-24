@@ -1,19 +1,19 @@
 import type { AiFeatureFamily } from '../adapters/ai-call-context';
 
 /**
- * What a member's Frapp AI answer is given against (`spec/behavior/ai.md` §
+ * What a member's Frapp Intelligence answer is given against (`spec/behavior/ai.md` §
  * Consent, gate 2; ADR-28 decision 5).
  *
- * Since #4790 (Paul, 2026-11-13) the member answers on Meet Frapp AI, one
- * onboarding screen that names the companies Frapp AI works with in one line
+ * Since #4790 (Paul, 2026-11-13) the member answers on Meet Frapp Intelligence, one
+ * onboarding screen that names the companies Frapp Intelligence works with in one line
  * and links the privacy policy, which carries the detail. `providers` is what
  * the screen names; `data` lists the kinds of data that are sent, which the
- * privacy policy's "Frapp AI" section names (`apps/landing/app/privacy/
+ * privacy policy's "Frapp Intelligence" section names (`apps/landing/app/privacy/
  * page.tsx`) and store builds from before #4790 still draw on the old sheet.
  * **Adding a provider or a kind of data is a new version**: bump `version`,
  * and every member is asked again, because a Yes counts only for the version
  * it was given on (`user_ai_consents.sheet_version`). Change the privacy
- * policy's Frapp AI section in the same PR. `ai-consent-sheet.spec.ts` fails
+ * policy's Frapp Intelligence section in the same PR. `ai-consent-sheet.spec.ts` fails
  * when the providers or the kinds change without a bump, and when the model
  * catalog uses a provider this list does not name.
  *
@@ -63,7 +63,7 @@ export const AI_CONSENT_SHEET = {
     {
       key: 'chapter_records',
       // Events and tasks named 2026-11-16 (#4787): Ask's `events` and
-      // `my_tasks` tools send them, and the privacy policy's Frapp AI section
+      // `my_tasks` tools send them, and the privacy policy's Frapp Intelligence section
       // already named both. The key is unchanged.
       // `ask-consent-coverage.spec.ts` maps every Ask tool to a row.
       label: 'Chapter documents, announcements, events and tasks',

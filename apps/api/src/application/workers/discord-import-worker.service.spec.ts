@@ -1616,6 +1616,23 @@ describe('DiscordImportWorkerService — importing', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
+    it('keeps an expired handshake a day, so a late callback still reads its return (#5414)', async () => {
+      const { worker, connectionRepo } = await buildWorker(
+        repoRef,
+        makeStorage(null),
+      );
+      const before = Date.now();
+      await worker.handleOAuthStateSweep();
+      const cutoff = (
+        connectionRepo.deleteExpiredStates.mock.calls.at(-1) as unknown as [
+          Date,
+        ]
+      )[0];
+      expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(
+        24 * 60 * 60_000 - 1_000,
+      );
+    });
+
     it('reports a failed OAuth state reap as a warning', async () => {
       const { worker, connectionRepo } = await buildWorker(
         repoRef,

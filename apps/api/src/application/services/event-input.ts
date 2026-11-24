@@ -3,11 +3,7 @@ import { Event } from '#domain/entities/event.entity';
 import type { GeofenceCoordinate } from '#domain/entities/study.entity';
 import {
   agendaProblem,
-  EVENT_ATTACHMENTS_MAX,
   normalizeAgendaText,
-  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
-  attachmentLinkOpens,
-  normalizeAttachmentUrl,
   readAgendaTabledFrom,
   attendanceTierIdOf,
   eventOthersInvited,
@@ -15,8 +11,8 @@ import {
   type EventAgendaItem,
   type EventAttendancePicks,
   type EventAgendaTabledFrom,
-  type EventAttachment,
 } from '@repo/validation';
+import type { FrappLinkInput } from './frapp-link/frapp-link-input';
 
 export interface CreateEventInput {
   chapter_id: string;
@@ -37,6 +33,13 @@ export interface CreateEventInput {
   agenda?: EventAgendaItem[];
   /** This meeting's attachments, whole (#4934); omitted leaves it. */
   attachments?: EventAttachmentInput[];
+  /**
+   * Whether `attachments` was sent by a build that knows every Frapp link
+   * kind. Phone builds from before Frapp links don't send it and drop the
+   * kinds they can't read, so for them the stored minutes, event and message
+   * links are kept (`spec/behavior/frapp-links.md`). Never stored.
+   */
+  attachments_all_kinds?: boolean;
   check_in_zone?: GeofenceCoordinate[] | null;
   check_in_zone_name?: string | null;
   check_in_opens_minutes?: number;
@@ -100,6 +103,13 @@ export interface UpdateEventInput {
   agenda?: EventAgendaItem[];
   /** This meeting's attachments, whole (#4934); omitted leaves it. */
   attachments?: EventAttachmentInput[];
+  /**
+   * Whether `attachments` was sent by a build that knows every Frapp link
+   * kind. Phone builds from before Frapp links don't send it and drop the
+   * kinds they can't read, so for them the stored minutes, event and message
+   * links are kept (`spec/behavior/frapp-links.md`). Never stored.
+   */
+  attachments_all_kinds?: boolean;
   check_in_zone?: GeofenceCoordinate[] | null;
   check_in_zone_name?: string | null;
   check_in_opens_minutes?: number;
@@ -115,7 +125,7 @@ export interface UpdateEventInput {
  */
 export type SeriesUpdateInput = Omit<
   UpdateEventInput,
-  'agenda' | 'attachments'
+  'agenda' | 'attachments' | 'attachments_all_kinds'
 >;
 
 type AttendanceLists = Pick<
@@ -267,17 +277,10 @@ export function attendanceUpdate(
 export type EventMutationScope = 'instance' | 'series';
 
 /**
- * An attachment as a request sends it (#4934): one flat shape, whose `kind`
- * says which of `url` and `document_id` it carries. `normalizeAttachments`
- * turns it into the stored `EventAttachment`.
+ * An attachment as a request sends it (#4934): a Frapp link's flat shape
+ * (`FrappLinkInput`), normalized by `normalizeFrappLinks(…, 'event')`.
  */
-export interface EventAttachmentInput {
-  id: string;
-  kind: EventAttachment['kind'];
-  url?: string;
-  document_id?: string;
-  title: string;
-}
+export type EventAttachmentInput = FrappLinkInput;
 
 /**
  * Normalize an inbound check-in zone to what the column stores.
@@ -342,64 +345,9 @@ export function keepAgendaTabledFrom(
   });
 }
 
-/**
- * Attachments as the column stores them (#4934): a link's URL normalized
- * (http or https only), every title trimmed and non-empty, and only the
- * fields its `kind` carries. A link must also name a public site a phone can
- * open (`attachmentLinkOpens`, #5883), except one whose address the meeting
- * already held (`stored`): the list is sent whole, so a link saved before
- * the rule must not block every later save. Whether a document is the
- * chapter's is the caller's check (`EventService`), since it needs a read.
- */
-export function normalizeAttachments(
-  items: readonly EventAttachmentInput[] | undefined,
-  stored: readonly EventAttachment[] = [],
-): EventAttachment[] | undefined {
-  if (items === undefined) return undefined;
-  if (items.length > EVENT_ATTACHMENTS_MAX) {
-    throw new BadRequestException(
-      `An event holds at most ${EVENT_ATTACHMENTS_MAX} attachments.`,
-    );
-  }
-  const heldLinks = new Set(
-    stored.flatMap((a) => (a.kind === 'link' ? [a.url] : [])),
-  );
-  const cleaned = items.map((item): EventAttachment => {
-    const title = item.title.replace(/\s+/g, ' ').trim();
-    if (!title) {
-      throw new BadRequestException('Every attachment needs a title.');
-    }
-    if (item.kind === 'link') {
-      const url = normalizeAttachmentUrl(item.url ?? '');
-      if (!url) {
-        throw new BadRequestException(
-          'A link attachment needs a web address starting with http:// or https://.',
-        );
-      }
-      if (!attachmentLinkOpens(url) && !heldLinks.has(url)) {
-        throw new BadRequestException(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE);
-      }
-      return { id: item.id, kind: 'link', url, title };
-    }
-    if (!item.document_id) {
-      throw new BadRequestException(
-        'A document attachment needs the document it points at.',
-      );
-    }
-    return {
-      id: item.id,
-      kind: 'document',
-      document_id: item.document_id,
-      title,
-    };
-  });
-  assertUniqueIds(cleaned, 'attachments');
-  return cleaned;
-}
-
 function assertUniqueIds(
   items: readonly { id: string }[],
-  field: 'agenda' | 'attachments',
+  field: 'agenda',
 ): void {
   const seen = new Set<string>();
   for (const { id } of items) {

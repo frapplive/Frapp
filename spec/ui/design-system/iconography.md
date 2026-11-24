@@ -242,6 +242,7 @@ then, and the Member rows took the chapter accent before that.
 |---|---|---|
 | Study hours | `study`, `graduation-cap` | `StudyGlyph` |
 | Service hours | `service`, `hand-heart` | `ServiceGlyph` |
+| Recruitment (#5924) | `RecruitmentGlyph` (`components/more/more-glyphs.tsx`), the chat card's funnel; no nav set key yet | `RushGlyph` |
 | Dues | `billing`, `credit-card` | `BillingGlyph` |
 | Documents | `documents`, `file-text` | `DocumentsGlyph` |
 | Directory | `directory`, `users-three` | `DirectoryGlyph` |
@@ -345,6 +346,7 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Points | `PointsGlyph` | `points`, `trophy` |
 | Study hours | `StudyGlyph` | `study`, `graduation-cap` |
 | Service hours | `ServiceGlyph` | `service`, `hand-heart` |
+| Recruitment (#5924) | `RushGlyph` from `components/chat/chat-glyphs.tsx`, the chat card's stroke funnel, borrowed until `@repo/theme`'s nav set has a two-tone one | — |
 | Polls (no nav row since #3871; kept for the chat composer's + menu, #3865) | `PollsGlyph` | `polls`, `chart-bar` |
 | Meetings (minutes) | `MeetingsGlyph` | `meetings`, `notebook` |
 | Documents | `DocumentsGlyph` | `documents`, `file-text` |
@@ -459,7 +461,7 @@ and [`apps/web/components/points/points-glyphs.tsx`](../../../apps/web/component
 both re-exporting the shell's silhouettes rather than redrawing them. Rendered at 20px in card titles,
 16px in table cells, and 14–16px as a badge companion (§2). Never before the title of a dialog, panel
 or sheet as decoration that repeats the button just pressed ([`components.md`](components.md#chrome-weight)
-§ Chrome weight and § Surface size, 2026-11-05). A mark that names the surface is not that: the mark on s17's "Ask Frapp" (components.md §11; the ✦ until #4702, the crest since) stays. (The onboarding slideshow's per-slide glyphs were the other example until the spotlight tour replaced it, #5080.)
+§ Chrome weight and § Surface size, 2026-11-05). A mark that names the surface is not that: the mark on s17's "Frapp Intelligence" (components.md §11; the ✦ until #4702, the crest since) stays. (The onboarding slideshow's per-slide glyphs were the other example until the spotlight tour replaced it, #5080.)
 Inside a `Button` they render at 16 whatever the call site asks for, because
 `buttonVariants` pins `[&_svg]:size-4` — which is also what keeps the required
 375px floor gate unaffected by a glyph swap.

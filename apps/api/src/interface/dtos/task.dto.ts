@@ -14,11 +14,13 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CHANNEL_ACCESS_ENTRY_PATTERN,
+  FRAPP_LINKS_MAX,
   MAX_REPEAT_RULE_LENGTH,
   POINTS_ADJUSTMENT_MAX,
   TASK_COMPLETION_NOTE_MAX,
@@ -34,6 +36,7 @@ import {
   TASK_TITLE_MAX_LENGTH,
   type TaskAudience,
   type TaskGroupAudience,
+  type FrappLink,
   type TaskProofKind,
 } from '@repo/validation';
 import {
@@ -68,6 +71,10 @@ import {
   LIST_QUERY_LIMIT_MIN,
 } from '#domain/constants/list-query-limits';
 import type { AssertNever } from './drift-guard';
+import { FrappLinkDto } from './frapp-link.dto';
+
+/** `attachments` on task writes (`spec/behavior/frapp-links.md`). */
+const TASK_ATTACHMENTS_DESCRIPTION = `What is attached, in order: at most ${FRAPP_LINKS_MAX} Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and \`[]\` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored.`;
 
 /** `followed_by` on task writes and reads (#5473). */
 const TASK_FOLLOWED_BY_DESCRIPTION =
@@ -198,6 +205,18 @@ export class CreateTaskDto {
   @IsString()
   @Matches(CHANNEL_ACCESS_ENTRY_PATTERN, { message: TASK_FOLLOWED_BY_MESSAGE })
   followed_by?: string;
+
+  @ApiPropertyOptional({
+    type: () => [FrappLinkDto],
+    maxItems: FRAPP_LINKS_MAX,
+    description: TASK_ATTACHMENTS_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => FrappLinkDto)
+  attachments?: FrappLinkDto[];
 
   @ApiPropertyOptional({
     type: String,
@@ -481,6 +500,13 @@ export class CreateTaskResponseDto implements Task {
   })
   followed_by: string | null;
 
+  @ApiProperty({
+    type: () => [FrappLinkDto],
+    description:
+      'What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open.',
+  })
+  attachments: FrappLink[];
+
   @ApiProperty({ format: 'date-time' })
   created_at: string;
 
@@ -675,6 +701,18 @@ export class UpdateTaskDto {
   followed_by?: string | null;
 
   @ApiPropertyOptional({
+    type: () => [FrappLinkDto],
+    maxItems: FRAPP_LINKS_MAX,
+    description: `${TASK_ATTACHMENTS_DESCRIPTION} With \`scope: group\` every copy not yet confirmed takes it; with \`scope: series\` the next copies are made with it.`,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(FRAPP_LINKS_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => FrappLinkDto)
+  attachments?: FrappLinkDto[];
+
+  @ApiPropertyOptional({
     enum: TASK_EDIT_SCOPES,
     description:
       'On a copy of a repeating task (#5119): `instance` (default) edits this task only; `series` ("All upcoming tasks") edits what the next copies are made from and the series’ open copy, while it is still to come and not marked done. Done and overdue copies never change, and a copy keeps its day: a `due_date` other than its own is a 400 (move one copy with `instance`). On a copy of a group task (#4295 step 3): `group` ("Everyone’s copy") makes the edit to every copy not yet confirmed; `assignee_id` and `reference_photo_paths` change one copy only, so they are a 400 with it.',
@@ -726,6 +764,42 @@ export class RemoveFromTaskGroupResponseDto {
     description: 'The members whose copy was deleted.',
   })
   removed: string[];
+
+  @ApiProperty({ type: () => TaskGroupSummaryDto })
+  group: TaskGroupSummaryDto;
+}
+
+/**
+ * The most members one `POST /v1/tasks/:id/group/add` adds (#5905): the
+ * bound on picking people for a new task.
+ */
+export const TASK_GROUP_ADD_MAX = TASK_PEOPLE_MAX;
+
+/** `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupDto {
+  @ApiProperty({
+    description: `The members who get a copy, 1 to ${TASK_GROUP_ADD_MAX}, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped.`,
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: TASK_GROUP_ADD_MAX,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TASK_GROUP_ADD_MAX)
+  @IsUUID('all', { each: true })
+  assignee_ids: string[];
+}
+
+/** The group after `POST /v1/tasks/:id/group/add` (#5905). */
+export class AddToTaskGroupResponseDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The members who got a copy; anyone who already had one is left out.',
+  })
+  added: string[];
 
   @ApiProperty({ type: () => TaskGroupSummaryDto })
   group: TaskGroupSummaryDto;

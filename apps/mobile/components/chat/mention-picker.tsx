@@ -201,7 +201,7 @@ export function MentionPicker({
           ]}
         >
           {/* The crest in the chapter's colour on the chapter's tint, as
-                  the Ask Frapp bar draws its arrow (`ask-bar.tsx`), so the
+                  the Frapp Intelligence bar draws its arrow (`ask-bar.tsx`), so the
                   first row reads as Frapp at a glance (#5476). */}
           <View
             style={[styles.mentionAvatar, { backgroundColor: tint(accent) }]}

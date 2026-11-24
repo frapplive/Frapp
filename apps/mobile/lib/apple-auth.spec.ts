@@ -130,4 +130,56 @@ describe("native Apple auth", () => {
     ).resolves.toBe("completed");
     expect(signInWithIdToken).toHaveBeenCalled();
   });
+
+  it("falls back to the browser when the Apple provider is not set up for this build", async () => {
+    vi.spyOn(Platform, "OS", "get").mockReturnValue("ios");
+    setAppleAuthLoaderForTests(() => ({
+      isAvailableAsync: async () => true,
+      signInAsync: async () => ({
+        identityToken: "jwt-token",
+        email: null,
+        fullName: null,
+      }),
+      AppleAuthenticationScope: { FULL_NAME: "FULL_NAME", EMAIL: "EMAIL" },
+    }));
+    const refusal = {
+      message: "Unacceptable audience in id_token: [live.frapp.mobile.staging]",
+    };
+    const signInWithIdToken = vi.fn(async () => ({ error: refusal }));
+    const onProviderRejected = vi.fn();
+
+    await expect(
+      signInWithNativeApple(
+        { auth: { signInWithIdToken } } as never,
+        onProviderRejected,
+      ),
+    ).resolves.toBe("unavailable");
+    expect(onProviderRejected).toHaveBeenCalledWith(refusal);
+  });
+
+  it("rethrows any other Supabase refusal", async () => {
+    vi.spyOn(Platform, "OS", "get").mockReturnValue("ios");
+    setAppleAuthLoaderForTests(() => ({
+      isAvailableAsync: async () => true,
+      signInAsync: async () => ({
+        identityToken: "jwt-token",
+        email: null,
+        fullName: null,
+      }),
+      AppleAuthenticationScope: { FULL_NAME: "FULL_NAME", EMAIL: "EMAIL" },
+    }));
+    // A nonce refusal is a bug in the app's own nonce pairing, not setup.
+    const refusal = { message: "Nonces mismatch" };
+    const onProviderRejected = vi.fn();
+
+    await expect(
+      signInWithNativeApple(
+        {
+          auth: { signInWithIdToken: vi.fn(async () => ({ error: refusal })) },
+        } as never,
+        onProviderRejected,
+      ),
+    ).rejects.toBe(refusal);
+    expect(onProviderRejected).not.toHaveBeenCalled();
+  });
 });

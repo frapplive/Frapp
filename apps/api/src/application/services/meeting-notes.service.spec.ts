@@ -390,7 +390,7 @@ describe('MeetingNotesService', () => {
       expect(sourceUserIds).toEqual([AUTHOR, OFFICER, PLEDGE_ED]);
     });
 
-    it('leaves out notes whose writer hasn’t turned Frapp AI on, or can no longer take notes', async () => {
+    it('leaves out notes whose writer hasn’t turned Frapp Intelligence on, or can no longer take notes', async () => {
       const people = {
         ...PEOPLE,
         [OFFICER]: { ...PEOPLE[OFFICER], consented: false },

@@ -138,7 +138,7 @@ describe("canChangeMessagePin", () => {
   });
 });
 
-describe("an Ask Frapp answer posted to the channel (#4713)", () => {
+describe("a Frapp Intelligence answer posted to the channel (#4713)", () => {
   const SYSTEM = "00000000-0000-0000-0000-000000000000";
   const posted = (askedBy: unknown) => ({
     sender_id: SYSTEM,

@@ -16,6 +16,7 @@ import {
   notificationConversation,
   notificationEntryCount,
   notificationWhen,
+  unreadNonChatNotificationCount,
   type NotificationFilter,
 } from "@repo/hooks/notification-rows";
 import { isRecord, records, str } from "./narrow";
@@ -175,20 +176,12 @@ export function selectReadNonChatIds(data: unknown): Set<string> {
 }
 
 /**
- * Count of unread rows whose target is **not** chat.
- *
- * The API's chat push worker writes a `notifications` row
- * (`target.screen: "chat"`) for every chat push it sends (DMs, group DMs,
- * announcements, mentions, and any channel at level `all`), on top of the
- * read-receipt count `useChannelUnreadCounts` already returns for that same
- * channel — see `chat-push-worker.service.ts`'s `buildPayload`. Summing
- * `selectUnreadIds`'s total with the channel-unread total would therefore
- * double-count exactly those messages. The app-icon badge (`use-badge-sync.ts`) needs this
- * exclusion; "Mark all read" does not — it must still clear chat-sourced rows
- * — so this is a separate selector rather than a change to `selectUnreadIds`.
+ * Count of unread rows whose target is **not** chat, for the app-icon badge
+ * (`use-badge-sync.ts`) and the header's bell. The rule, and why chat rows
+ * are left out, is `unreadNonChatNotificationCount`, shared with the desktop
+ * app's icon. "Mark all read" must still clear chat-sourced rows, so this is
+ * a separate selector rather than a change to `selectUnreadIds`.
  */
 export function selectUnreadNonChatCount(data: unknown): number {
-  return records(data).filter(
-    (row) => str(row, "read_at") === null && targetScreen(row.data) !== "chat",
-  ).length;
+  return unreadNonChatNotificationCount(data);
 }

@@ -74,6 +74,7 @@ import {
 import { ChapterService } from './chapter.service';
 import { ActivationService } from './activation.service';
 import { LegalAcceptanceService } from './legal-acceptance.service';
+import { SchoolService } from './school.service';
 import {
   CHAT_CHANNEL_REPOSITORY,
   CHAT_MESSAGE_REPOSITORY,
@@ -115,8 +116,10 @@ describe('ChapterOnboardingService', () => {
   let requestInsert: jest.Mock;
   let fieldsUpsert: jest.Mock;
   let findStartedAtByUserSince: jest.Mock;
+  let proposeLinkFromDirectory: jest.Mock;
 
   beforeEach(async () => {
+    proposeLinkFromDirectory = jest.fn().mockResolvedValue('school-rpi');
     findStartedAtByUserSince = jest.fn().mockResolvedValue([]);
     chapterService = { create: jest.fn().mockResolvedValue(makeChapter()) };
     mockActivation = { record: jest.fn().mockResolvedValue(true) };
@@ -155,6 +158,7 @@ describe('ChapterOnboardingService', () => {
           provide: CHAPTER_REPOSITORY,
           useValue: { findStartedAtByUserSince },
         },
+        { provide: SchoolService, useValue: { proposeLinkFromDirectory } },
       ],
     }).compile();
 
@@ -573,6 +577,42 @@ describe('ChapterOnboardingService', () => {
       expect(welcomeContent()).toBe(
         'Welcome to the Tau Nu chapter of FIJI. Invite your chapter to get the conversation started.',
       );
+    });
+  });
+
+  describe("the chapter's school (#5929)", () => {
+    it("proposes the matched directory row's school, as the founder", async () => {
+      await service.onboard('user-1', directoryDto);
+
+      expect(proposeLinkFromDirectory).toHaveBeenCalledWith(
+        'ch-1',
+        directoryDto.directory_id,
+        'user-1',
+      );
+    });
+
+    it('proposes nothing for a manual entry, which has no directory row', async () => {
+      await service.onboard('user-1', {
+        name: 'Made Up Chapter Name',
+        university: 'Nowhere State',
+        accept_terms_privacy: true,
+      });
+
+      expect(proposeLinkFromDirectory).not.toHaveBeenCalled();
+    });
+
+    it('still onboards, and reports it, when proposing the link fails', async () => {
+      const warned = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => undefined);
+      proposeLinkFromDirectory.mockRejectedValueOnce(
+        new SupabaseQueryError({ message: 'boom' }),
+      );
+
+      await expect(
+        service.onboard('user-1', directoryDto),
+      ).resolves.toMatchObject({ id: 'ch-1' });
+      expect(warned).toHaveBeenCalled();
     });
   });
 

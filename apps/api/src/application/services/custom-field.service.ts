@@ -15,7 +15,13 @@ import {
   CustomFieldKeyConflictError,
   type ICustomFieldRepository,
 } from '#domain/repositories/custom-field.repository.interface';
-import type { CreateCustomField, UpdateCustomField } from '@repo/validation';
+import {
+  checkCustomFieldValue,
+  PROFILE_OWNED_CUSTOM_FIELD_KEYS,
+  type CreateCustomField,
+  type UpdateCustomField,
+} from '@repo/validation';
+import { normalizePhone } from '@repo/formatting';
 import {
   ChapterAuditLogService,
   type AuditDiff,
@@ -47,6 +53,33 @@ export type UpdateCustomFieldInput = UpdateCustomField;
  * entity.
  */
 const AUDIT_TARGET_TYPE = 'chapter_custom_field';
+
+/**
+ * One of the chapter's fields as its own member sees it on their profile
+ * (#581): the definition they need to draw the right control, and their value.
+ * Carries every tier, `exec` and `president` included, because a member always
+ * reads and writes their own values; who *else* sees each one is the
+ * `visibility` the form shows beside it.
+ */
+export type OwnCustomField = {
+  field_id: string;
+  key: string;
+  label: string;
+  type: ChapterCustomField['type'];
+  visibility: CustomFieldVisibility;
+  required: boolean;
+  /** A `select` field's choices; null for every other type. */
+  choices: string[] | null;
+  /** A `text` field's own length cap, when it sets one. */
+  max_length: number | null;
+  value: string | null;
+};
+
+/** One value a member sends for one of their fields; null or "" clears it. */
+export type OwnCustomFieldValueInput = {
+  field_id: string;
+  value: string | null;
+};
 
 /**
  * CRUD over `chapter_custom_fields`, scoped to the active chapter (Settings →
@@ -142,11 +175,150 @@ export class CustomFieldService {
     return this.fields.findValuesByFieldIds(fieldIds);
   }
 
+  /**
+   * Every field the chapter keeps on a member, with that member's own value
+   * (#581), for the member themselves to read and edit. Leaves out the seeded
+   * fields the profile already owns (`PROFILE_OWNED_CUSTOM_FIELD_KEYS`).
+   *
+   * Callers pass the caller's own membership id only: this reads every tier,
+   * so it is never a path to another member's values.
+   */
+  async findOwnFields(
+    chapterId: string,
+    memberId: string,
+  ): Promise<OwnCustomField[]> {
+    const defs = await this.ownEditableFields(chapterId);
+    if (defs.length === 0) return [];
+    const values = await this.fields.findValuesForMember(
+      memberId,
+      defs.map((def) => def.id),
+    );
+    const valueByFieldId = new Map(
+      values.map((row) => [row.field_id, row.value]),
+    );
+    return defs.map((def) => toOwnField(def, valueByFieldId.get(def.id)));
+  }
+
+  /**
+   * Set or clear the caller's own values (#581). Each value is checked against
+   * its field's type and `required` (`checkCustomFieldValue`, the rule both
+   * forms check too); one refused value refuses the whole save, so a save
+   * never lands half-done. A required field can't be cleared once it has a
+   * value, and clearing one that has none is a no-op.
+   *
+   * Own values only, by construction: `memberId` is the caller's membership
+   * from `ChapterGuard`, never a request parameter. Every write is one
+   * upsert, a cleared field stored as null, so a save lands whole or not at
+   * all. Logged as `member_custom_fields_updated` naming the fields that
+   * changed and never their values, since the chapter's Logs are read by
+   * officers a sensitive field's tier may exclude.
+   */
+  async updateOwnValues(
+    chapterId: string,
+    memberId: string,
+    actorUserId: string,
+    entries: OwnCustomFieldValueInput[],
+  ): Promise<OwnCustomField[]> {
+    const defs = await this.ownEditableFields(chapterId);
+    const defById = new Map(defs.map((def) => [def.id, def]));
+
+    const seen = new Set<string>();
+    const pairs: { def: ChapterCustomField; value: string | null }[] = [];
+    for (const entry of entries) {
+      if (seen.has(entry.field_id)) {
+        throw new BadRequestException('Each field may appear once per save');
+      }
+      seen.add(entry.field_id);
+      const def = defById.get(entry.field_id);
+      if (!def) {
+        throw new BadRequestException(
+          "That field isn't one of your chapter's profile fields",
+        );
+      }
+      pairs.push({ def, value: entry.value });
+    }
+
+    // Every field's stored value, read once: it decides whether a required
+    // field may stay empty, and the answer is built from it after the write.
+    const stored = defs.length
+      ? await this.fields.findValuesForMember(
+          memberId,
+          defs.map((def) => def.id),
+        )
+      : [];
+    const valueByFieldId = new Map(
+      stored.map((row) => [row.field_id, row.value]),
+    );
+    const storedBefore = new Map(valueByFieldId);
+
+    const rows: {
+      chapter_id: string;
+      member_id: string;
+      field_id: string;
+      value: string | null;
+    }[] = [];
+    for (const { def, value } of pairs) {
+      const before = valueByFieldId.get(def.id) ?? null;
+      const blank = (value ?? '').trim() === '';
+      if (blank && def.required && before === null) continue;
+      const checked = checkCustomFieldValue(def, value);
+      if (!checked.ok) throw new BadRequestException(checked.message);
+      // Stored E.164 when it is a whole number, as the profile's own Phone
+      // is (#5798), so every screen formats it alike. A cleared field is
+      // stored as null in the same write, so a save is one statement.
+      const next =
+        checked.value !== null && def.type === 'phone'
+          ? normalizePhone(checked.value)
+          : checked.value;
+      if (next === before) continue;
+      rows.push({
+        chapter_id: chapterId,
+        member_id: memberId,
+        field_id: def.id,
+        value: next,
+      });
+    }
+
+    if (rows.length > 0) {
+      await this.fields.upsertValues(rows);
+      for (const row of rows) valueByFieldId.set(row.field_id, row.value);
+      // Which fields changed, never their values: a sensitive field's value
+      // must not reach the officers who read Logs when its tier excludes
+      // them. Each key is a changed field, `{ set }` before and after.
+      const diff: AuditDiff = {};
+      for (const row of rows) {
+        const def = defById.get(row.field_id);
+        if (!def) continue;
+        diff[def.key] = {
+          from: { set: (storedBefore.get(row.field_id) ?? null) !== null },
+          to: { set: row.value !== null },
+        };
+      }
+      await this.auditLog.record({
+        chapterId,
+        actorUserId,
+        action: 'member_custom_fields_updated',
+        targetType: 'member',
+        targetId: memberId,
+        diff,
+      });
+    }
+    return defs.map((def) => toOwnField(def, valueByFieldId.get(def.id)));
+  }
+
   async create(
     chapterId: string,
     actorUserId: string,
     dto: CreateCustomFieldInput,
   ): Promise<ChapterCustomField> {
+    // Major and Graduation year are the profile's own fields (#581): a field
+    // keyed for them would be one no member is ever asked for.
+    if (PROFILE_OWNED_CUSTOM_FIELD_KEYS.includes(dto.key)) {
+      throw new BadRequestException(
+        'Major and graduation year are already on every profile. Name this field something else.',
+      );
+    }
+
     // Defense-in-depth: a select field is meaningless without choices (the
     // shared zod schema enforces the same on the client/contract boundary).
     if (dto.type === 'select' && !(dto.options?.choices?.length ?? 0)) {
@@ -284,6 +456,16 @@ export class CustomFieldService {
     return max === null ? 0 : max + 1;
   }
 
+  /** The chapter's fields a member fills in themselves, in display order. */
+  private async ownEditableFields(
+    chapterId: string,
+  ): Promise<ChapterCustomField[]> {
+    const defs = await this.fields.findByChapter(chapterId);
+    return defs.filter(
+      (def) => !PROFILE_OWNED_CUSTOM_FIELD_KEYS.includes(def.key),
+    );
+  }
+
   private async findOne(
     id: string,
     chapterId: string,
@@ -292,4 +474,21 @@ export class CustomFieldService {
     if (!field) throw new NotFoundException('Custom field not found');
     return field;
   }
+}
+
+function toOwnField(
+  def: ChapterCustomField,
+  value: string | null | undefined,
+): OwnCustomField {
+  return {
+    field_id: def.id,
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    visibility: def.visibility,
+    required: def.required,
+    choices: def.type === 'select' ? (def.options?.choices ?? []) : null,
+    max_length: def.type === 'text' ? (def.options?.max_length ?? null) : null,
+    value: value ?? null,
+  };
 }

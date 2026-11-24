@@ -404,6 +404,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
       p_first_due_at: input.first_due_at,
       p_latest_due_at: input.latest_due_at,
       p_next_due_date: input.next_due_date,
+      p_attachments: input.attachments,
     });
     if (error) throw new SupabaseQueryError(error);
     const [task] = data ?? [];
@@ -429,6 +430,7 @@ export class SupabaseTaskRepository implements ITaskRepository {
       p_proof_kind: input.proof_kind,
       p_subtask_titles: input.subtask_titles,
       p_followed_by: input.followed_by ?? null,
+      p_attachments: input.attachments,
     });
     if (error) throw new SupabaseQueryError(error);
     const copies = data ?? [];
@@ -461,6 +463,22 @@ export class SupabaseTaskRepository implements ITaskRepository {
     }
     const byId = new Map((linked ?? []).map((task) => [task.id, task]));
     return copies.map((copy) => byId.get(copy.id) ?? copy);
+  }
+
+  async addGroupCopies(
+    chapterId: string,
+    groupId: string,
+    templateId: string,
+    assigneeIds: string[],
+  ): Promise<Task[]> {
+    const { data, error } = await this.supabase.rpc('add_task_group_copies', {
+      p_chapter_id: chapterId,
+      p_group_id: groupId,
+      p_template_id: templateId,
+      p_assignee_ids: assigneeIds,
+    });
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
   }
 
   async findGroups(chapterId: string, ids: string[]): Promise<TaskGroup[]> {

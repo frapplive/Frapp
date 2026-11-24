@@ -1,17 +1,12 @@
-import {
-  normalizeProofLink,
-  proofLinkDomain,
-  proofLinkOpens,
-  TASK_PROOF_LINK_MAX,
-} from "./task-proof";
+import type { FrappLink } from "./frapp-link";
 
 /**
  * An event's agenda and attachments (#4934, `spec/behavior/events.md`
  * § Agenda and attachments). Both belong to one meeting, never to a series,
  * and are written whole by whoever can edit the event. The API's DTOs and
- * `normalizeAgenda` / `normalizeAttachments` enforce every limit here; the
+ * `normalizeAgenda` / `normalizeFrappLinks` enforce every limit here; the
  * `events` table checks only that each column is a list within its count
- * (`EVENT_AGENDA_MAX`, `EVENT_ATTACHMENTS_MAX`), so a writer that skips the
+ * (`EVENT_AGENDA_MAX`, `FRAPP_LINKS_MAX`), so a writer that skips the
  * API gets no length check. The forms read them so a member never types past
  * one.
  */
@@ -20,10 +15,6 @@ import {
 export const EVENT_AGENDA_MAX = 30;
 /** One agenda item: a short line, not a paragraph. */
 export const EVENT_AGENDA_ITEM_MAX = 200;
-/** Attachments on one meeting (the table's check holds the same number). */
-export const EVENT_ATTACHMENTS_MAX = 10;
-/** An attachment's title, as a member reads it in the list. */
-export const EVENT_ATTACHMENT_TITLE_MAX = 120;
 
 /**
  * Where an agenda item tabled at an earlier meeting came from (#5534): the
@@ -51,57 +42,11 @@ export interface EventAgendaItem {
   tabled_from?: EventAgendaTabledFrom | null;
 }
 
-/** A titled web link. */
-export interface EventLinkAttachment {
-  id: string;
-  kind: "link";
-  url: string;
-  title: string;
-}
-
 /**
- * One of the chapter's Chapter Files documents. `title` is the document's
- * name when it was attached; opening it reads the document itself
- * (`GET /v1/documents/:id`), so a file deleted since says so then.
+ * One of a meeting's attachments: a Frapp link (`frapp-link.ts`), the one
+ * object tasks share. At most `FRAPP_LINKS_MAX`; read with `readFrappLinks`.
  */
-export interface EventDocumentAttachment {
-  id: string;
-  kind: "document";
-  document_id: string;
-  title: string;
-}
-
-export type EventAttachment = EventLinkAttachment | EventDocumentAttachment;
-
-export const EVENT_ATTACHMENT_KINDS = ["link", "document"] as const;
-
-/**
- * A link attachment's URL as Frapp keeps it: trimmed, http or https only,
- * or `null` when it isn't one: `normalizeProofLink`. It is the read's rule
- * too, which keeps a `javascript:` or `data:` address from ever being drawn.
- * A newly attached link must also pass {@link attachmentLinkOpens} (#5883).
- */
-export function normalizeAttachmentUrl(value: string): string | null {
-  return normalizeProofLink(value);
-}
-
-/**
- * Whether a link attachment names a public site a member's phone can open:
- * a task proof link's `proofLinkOpens` (#5882, #5883). `https://test`,
- * `localhost`, an IP address or a `.local` name is refused on save; one
- * stored before the rule is kept and drawn as text, not a link that opens
- * "server can't be found".
- */
-export function attachmentLinkOpens(url: string): boolean {
-  return proofLinkOpens(url);
-}
-
-/**
- * Why a link that is a web address is still refused (#5883): the API's
- * message and both forms' words for a link failing `attachmentLinkOpens`.
- */
-export const ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE =
-  "That address won't open on members' phones. Use a public web link, like https://docs.google.com/…";
+export type EventAttachment = FrappLink;
 
 /** An agenda item's text as stored: trimmed, inner whitespace collapsed. */
 export function normalizeAgendaText(value: string): string {
@@ -193,39 +138,6 @@ export function readAgendaTabledFrom(
     start_time: value.start_time,
     times: value.times,
   };
-}
-
-/** An event read's attachments, read as defensively as its agenda. */
-export function readEventAttachments(value: unknown): EventAttachment[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry): EventAttachment[] => {
-    if (
-      !isRecord(entry) ||
-      typeof entry.id !== "string" ||
-      typeof entry.title !== "string"
-    ) {
-      return [];
-    }
-    if (entry.kind === "link" && typeof entry.url === "string") {
-      // Re-checked here, not only on save: a row written some other way must
-      // never put a `javascript:` or `data:` address under a tap.
-      const url = normalizeAttachmentUrl(entry.url);
-      return url
-        ? [{ id: entry.id, kind: "link", url, title: entry.title }]
-        : [];
-    }
-    if (entry.kind === "document" && typeof entry.document_id === "string") {
-      return [
-        {
-          id: entry.id,
-          kind: "document",
-          document_id: entry.document_id,
-          title: entry.title,
-        },
-      ];
-    }
-    return [];
-  });
 }
 
 /** The agenda with one item checked or unchecked. */
@@ -322,36 +234,4 @@ export function agendaWithPending(
   const text = normalizeAgendaText(pending);
   if (!text || agendaProblem([...agenda, { text }])) return [...agenda];
   return [...agenda, { id: newId(), text, done: false }];
-}
-
-/**
- * An attachment's title as the API takes it: whitespace collapsed and cut to
- * `EVENT_ATTACHMENT_TITLE_MAX`. A Chapter Files name can run to 255
- * characters, so a document's title is cut as well as a link's.
- */
-export function attachmentTitle(title: string): string {
-  return title.replace(/\s+/g, " ").trim().slice(0, EVENT_ATTACHMENT_TITLE_MAX);
-}
-
-/**
- * A link attachment's title when its adder left it empty: the link's domain
- * ("docs.google.com"), the way a pasted link reads in chat.
- */
-export function attachmentLinkTitle(title: string, url: string): string {
-  return attachmentTitle(title) || attachmentTitle(proofLinkDomain(url));
-}
-
-/**
- * Why a pasted link can't be attached, or `null` when it can: the form's
- * words for `normalizeAttachmentUrl`'s refusals and `attachmentLinkOpens`'s.
- */
-export function attachmentLinkProblem(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "Paste a web address.";
-  if (trimmed.length > TASK_PROOF_LINK_MAX) {
-    return `That link is too long to attach (over ${TASK_PROOF_LINK_MAX} characters).`;
-  }
-  const url = normalizeAttachmentUrl(trimmed);
-  if (!url) return "Paste a web address starting with http:// or https://.";
-  return attachmentLinkOpens(url) ? null : ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE;
 }

@@ -554,7 +554,7 @@ describe("MinutesPage", () => {
     expect(mine.textContent).toContain("Yours");
     // The reader's own come first, alone, until they ask for all of them.
     expect(screen.queryByText("Send the shirt form")).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "All 2" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All 2" }));
     const theirs = screen.getByText("Send the shirt form").parentElement!;
     expect(theirs.textContent).not.toContain("Yours");
     expect(screen.getByText("Nobody named yet")).toBeTruthy();
@@ -1460,7 +1460,7 @@ describe("MinutesPage", () => {
       mocks.requestDraft.mockResolvedValue({ ...NO_DRAFT, status: "drafting" });
       render(<MinutesPage id="m-1" />);
       expect(
-        screen.getByText(/Turn on Frapp AI to draft from your notes/),
+        screen.getByText(/Turn on Frapp Intelligence to draft from your notes/),
       ).toBeTruthy();
       fireEvent.change(screen.getByRole("textbox", { name: "Your notes" }), {
         target: { value: "notes" },

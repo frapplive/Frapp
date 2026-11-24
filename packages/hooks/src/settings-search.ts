@@ -209,7 +209,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["crest", "image", "picture", "icon", "emblem", "chapter mark"],
     requires: CONFIG,
-    web: { page: "org", anchor: "settings-chapter-mark" },
+    web: {
+      page: "org",
+      anchor: "settings-chapter-mark",
+      params: { page: "mark" },
+    },
   },
   {
     id: "short-name",
@@ -218,7 +222,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["nickname", "abbreviation", "chapter mark"],
     requires: CONFIG,
-    web: { page: "org", anchor: "chapter-short-name" },
+    web: {
+      page: "org",
+      anchor: "chapter-short-name",
+      params: { page: "mark" },
+    },
   },
   {
     id: "accent",
@@ -227,7 +235,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["color", "colour", "theme", "brand", "branding", "tint"],
     requires: CONFIG,
-    web: { page: "org", anchor: "settings-accent" },
+    web: { page: "org", anchor: "settings-accent", params: { page: "accent" } },
     phone: { screen: "/chapter-settings", anchor: "accent" },
   },
   {
@@ -248,7 +256,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["letters", "symbols"],
     requires: CONFIG,
-    web: { page: "org", anchor: "greek-letters" },
+    web: { page: "org", anchor: "greek-letters", params: { page: "identity" } },
   },
   {
     id: "designation",
@@ -257,7 +265,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["chapter letters", "which chapter"],
     requires: CONFIG,
-    web: { page: "org", anchor: "designation" },
+    web: { page: "org", anchor: "designation", params: { page: "identity" } },
   },
   {
     id: "school-short",
@@ -266,7 +274,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["school abbreviation", "university short name"],
     requires: CONFIG,
-    web: { page: "org", anchor: "school-short" },
+    web: { page: "org", anchor: "school-short", params: { page: "identity" } },
   },
   {
     id: "founded-year",
@@ -275,7 +283,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["founding", "founded", "established", "charter", "since"],
     requires: CONFIG,
-    web: { page: "org", anchor: "founded-year" },
+    web: { page: "org", anchor: "founded-year", params: { page: "identity" } },
   },
   {
     id: "organization-type",
@@ -294,7 +302,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "multicultural",
     ],
     requires: CONFIG,
-    web: { page: "org", anchor: "settings-archetype" },
+    web: {
+      page: "org",
+      anchor: "settings-archetype",
+      params: { page: "type" },
+    },
   },
   {
     id: "vocabulary",
@@ -303,7 +315,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["words", "terms", "terminology", "naming", "language"],
     requires: CONFIG,
-    web: { page: "org", anchor: "settings-vocabulary" },
+    web: {
+      page: "org",
+      anchor: "settings-vocabulary",
+      params: { page: "vocabulary" },
+    },
   },
   {
     id: "vocab-recruitment",
@@ -312,7 +328,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["rush", "intake", "vocabulary"],
     requires: CONFIG,
-    web: { page: "org", anchor: "vocab-recruitment" },
+    web: {
+      page: "org",
+      anchor: "vocab-recruitment",
+      params: { page: "vocabulary" },
+    },
   },
   {
     id: "vocab-pledge",
@@ -328,7 +348,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "vocabulary",
     ],
     requires: CONFIG,
-    web: { page: "org", anchor: "vocab-pledge" },
+    web: {
+      page: "org",
+      anchor: "vocab-pledge",
+      params: { page: "vocabulary" },
+    },
   },
   {
     id: "vocab-class",
@@ -337,7 +361,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["pledge class", "line", "class", "cohort", "vocabulary"],
     requires: CONFIG,
-    web: { page: "org", anchor: "vocab-class" },
+    web: { page: "org", anchor: "vocab-class", params: { page: "vocabulary" } },
   },
   {
     id: "vocab-order",
@@ -353,7 +377,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "vocabulary",
     ],
     requires: CONFIG,
-    web: { page: "org", anchor: "vocab-order" },
+    web: { page: "org", anchor: "vocab-order", params: { page: "vocabulary" } },
   },
   {
     id: "vocab-tier",
@@ -362,7 +386,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chapter",
     keywords: ["tier", "rank", "officer level", "vocabulary"],
     requires: CONFIG,
-    web: { page: "org", anchor: "vocab-tier" },
+    web: { page: "org", anchor: "vocab-tier", params: { page: "vocabulary" } },
   },
   {
     id: "birthday-posts",
@@ -439,6 +463,8 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: [
       "ai",
       "ask frapp",
+      "frapp intelligence",
+      "questions and requests",
       "assistant",
       "meeting notes",
       "transcription",
@@ -858,7 +884,7 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
   },
   {
     id: "frapp-ai",
-    label: "Frapp AI",
+    label: "Frapp Intelligence",
     area: "personal",
     section: "AI",
     keywords: ["ai", "ask frapp", "assistant", "consent"],

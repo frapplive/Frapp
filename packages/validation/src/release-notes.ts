@@ -120,6 +120,33 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-24",
+    title: "New in this update",
+    changes: [
+      "After you join a chapter, a new About you step asks for your phone, major, graduation year and birthday when any are missing, and you can skip it.",
+      "Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.",
+      "Officers can attach files, minutes, events, chat messages and web links to a task or an event, each shows by its current name, and anything you can't open says so instead of showing its name.",
+      "An officer can now give the president, or anyone ranked above them, roles ranked below their own and take those away, and set their pledge class and order number.",
+      "The assistant is now called Frapp Intelligence, on the web and on your phone.",
+      "Officers no longer see Send back on a task they completed themselves, and Mark not done takes it back instead.",
+      "Recruitment cards now offer Vote and Extend bid only to roles your chapter lets do them, and show a candidate's vote count only to roles allowed to see results.",
+      "Officers can now add more people to a task they already sent to a group, and each new person gets their own copy.",
+      "Your phone now gets chat notifications when Frapp is open in a browser tab you aren't looking at.",
+      "Add your T-shirt size, allergies, an emergency contact and your chapter's other details under More details on your profile, and see who can read each one.",
+      "Recruitment has its own page, with your prospects on a board or in a list, stages your chapter can rename and reorder, tags, star ratings and notes only the chapter sees.",
+      "Mine and All above a meeting's action items are now plain words instead of a boxed switch, and the small pickers inside forms, like Repeat and Proof, are a quiet gray instead of your chapter's color.",
+      "After you join a chapter, you can add your school and verify your school email with a code, or skip it for now.",
+    ],
+    web: [
+      "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
+    ],
+    phone: [
+      "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
+      "Notifications shows All and Unread as plain words beside the title instead of a bar across the top of the list.",
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "New in this update",
     changes: [
@@ -130,9 +157,11 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Who's coming on an event can now be set for a whole tier, such as Cabinet, and roles added to that tier later are included.",
       "An officer can now give or take away roles ranked below them on a fellow officer of the same tier, such as making a fellow cabinet member a committee chair, without the president.",
       "A task's proof link has to be a full web address now, and an older one that goes nowhere shows as text instead of opening a \"server can't be found\" page.",
+      "An officer can now set the pledge class and order number of a fellow officer of the same tier, and fix their name and graduation year, without the president.",
     ],
     web: [
       "Ask Frapp opens as its own page with chat beside it, so answers have room and the rest of the app stays usable while you ask.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
     ],
   },
   {

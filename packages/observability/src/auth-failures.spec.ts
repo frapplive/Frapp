@@ -227,6 +227,68 @@ describe("buildAuthFailureReport", () => {
   });
 });
 
+describe("native sign-in failures", () => {
+  it("keeps a native SDK's code, and groups by provider", () => {
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "apple",
+      error: Object.assign(new Error("The authorization attempt failed for an unknown reason"), {
+        code: "ERR_REQUEST_UNKNOWN",
+      }),
+    });
+    expect(r!.tags.auth_provider).toBe("apple");
+    expect(r!.tags.auth_native_code).toBe("ERR_REQUEST_UNKNOWN");
+    expect(r!.tags.auth_error_code).toBeUndefined();
+    expect(r!.tags.auth_failure_kind).toBe("unknown");
+    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown", "apple"]);
+  });
+
+  it("keeps Google's numeric status code from the wrapper's cause, as the app reports it", () => {
+    // `signInWithNativeGoogle` rethrows a MemberFacingError with the SDK's error as `cause`.
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "google",
+      error: Object.assign(new Error("We couldn't finish signing you in."), {
+        cause: Object.assign(new Error("NETWORK_ERROR"), { code: 7 }),
+      }),
+    });
+    expect(r!.tags.auth_native_code).toBe("7");
+    expect(r!.fingerprint).toEqual(["signed-out-auth", "oauth_start", "unknown", "google"]);
+  });
+
+  it("counts a stale OAuth return as an expected refusal (FRAPP-WEB-K)", () => {
+    const r = buildAuthFailureReport({
+      flow: "auth_callback",
+      screen: "/auth/callback",
+      code: "bad_oauth_state",
+    });
+    expect(r!.level).toBe("info");
+    expect(r!.tags.auth_expected).toBe("true");
+  });
+
+  it("reports a native token the provider refused under the caller's code, at error", () => {
+    const r = buildAuthFailureReport({
+      flow: "oauth_start",
+      screen: "/sign-in",
+      provider: "apple",
+      code: "native_token_refused",
+      error: authApiError("", 400, "Unacceptable audience in id_token: [live.frapp.mobile.staging]"),
+    });
+    expect(r!.level).toBe("error");
+    expect(r!.tags.auth_error_code).toBe("native_token_refused");
+    expect(r!.error.message).not.toContain("live.frapp");
+  });
+
+  it("never takes a six-digit email code or a sentence for a native code", () => {
+    for (const code of ["482913", "Unacceptable audience", "err_lower"]) {
+      const r = buildAuthFailureReport({ flow: "oauth_start", screen: "/sign-in", error: { code } });
+      expect(r!.tags.auth_native_code, code).toBeUndefined();
+    }
+  });
+});
+
 describe("what a report never carries", () => {
   const EMAIL = "member@school.edu";
   const PASSWORD = "hunter2-correct-horse";

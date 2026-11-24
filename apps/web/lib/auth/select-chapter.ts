@@ -15,8 +15,9 @@ import { useChapterStore } from "@/lib/stores/chapter-store";
  *    it into issued tokens as the authoritative `active_chapter_id` claim.
  * 2. Refresh the Supabase session. The claim is baked in at issuance, so
  *    without this the *previous* chapter stays authoritative for up to
- *    `jwt_expiry` (3600s) and `ChapterGuard` rejects the mismatched
- *    `x-chapter-id` header with `chapter.context.mismatch`.
+ *    `jwt_expiry` (3600s) for any request without the header. (Until ADR-27,
+ *    #5918, `ChapterGuard` also rejected a mismatched `x-chapter-id` header
+ *    with `chapter.context.mismatch`; it now serves the header's chapter.)
  * 3. Update the local store, which drives the `x-chapter-id` fallback header
  *    and every React Query cache key.
  *
@@ -49,9 +50,10 @@ export function useSelectChapter() {
         //
         // The local store is deliberately left untouched on failure. Writing it
         // here would point `x-chapter-id` at a chapter the un-refreshed token
-        // still disagrees with, and ChapterGuard rejects that disagreement with
-        // chapter.context.mismatch on *every* subsequent request — a far worse
-        // outcome than no selection. The next token issuance re-resolves it
+        // still disagrees with. Until ADR-27 (#5918) ChapterGuard rejected that
+        // disagreement with chapter.context.mismatch on every request; it now
+        // serves the header's chapter, but the store and the claim would still
+        // name different chapters until step 2 makes the URL the source. The next token issuance re-resolves it
         // (single-chapter users auto-resolve server-side).
         return false;
       }

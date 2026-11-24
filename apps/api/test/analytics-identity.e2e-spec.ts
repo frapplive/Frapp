@@ -160,16 +160,32 @@ describe('Analytics identity (e2e)', () => {
     expect(response.body.chapter_group_id).toBeNull();
   });
 
-  it('prefers the JWT active_chapter_id claim over the header', async () => {
-    authGuard.jwtChapterId = CHAPTER_A;
+  // ADR-27 cross-tenant test 8 (#5918): header A with claim B returns A's
+  // group, so each tab's analytics is its own tenant's. It lives here rather
+  // than in `cross-tenant-isolation.e2e-spec.ts` because this file sets the
+  // salt the digest needs.
+  it('prefers the x-chapter-id header over the JWT claim (ADR-27)', async () => {
+    authGuard.jwtChapterId = CHAPTER_B;
     const response = await request(app.getHttpServer())
       .get('/v1/analytics/identity')
       .set('authorization', 'Bearer token')
-      .set('x-chapter-id', CHAPTER_B)
+      .set('x-chapter-id', CHAPTER_A)
       .expect(200);
 
     expect(response.body.chapter_group_id).toBe(
       hashChapterIdForAnalytics(SALT, CHAPTER_A),
+    );
+  });
+
+  it('falls back to the JWT claim when no header is sent', async () => {
+    authGuard.jwtChapterId = CHAPTER_B;
+    const response = await request(app.getHttpServer())
+      .get('/v1/analytics/identity')
+      .set('authorization', 'Bearer token')
+      .expect(200);
+
+    expect(response.body.chapter_group_id).toBe(
+      hashChapterIdForAnalytics(SALT, CHAPTER_B),
     );
   });
 });

@@ -54,14 +54,16 @@ const ACTION_PHRASES: Readonly<Record<string, string>> = {
   member_profile_corrected: "edited a member's profile",
   // A member renaming themselves (#5801).
   member_renamed: "changed their name",
+  // A member setting their own More details (#581): which fields, never values.
+  member_custom_fields_updated: "updated their profile details",
   presidency_transferred: "handed over the presidency",
   presidency_claimed: "claimed the presidency",
   president_orphaned: "left the chapter without a president",
   ai_settings_updated: "changed the AI settings",
   chapter_goals_updated: "changed the chapter's goals",
   ai_diagnostics_started:
-    "turned on saving Ask Frapp answers for the Frapp team",
-  ai_diagnostics_stopped: "turned off saving Ask Frapp answers",
+    "turned on saving Frapp Intelligence answers for the Frapp team",
+  ai_diagnostics_stopped: "turned off saving Frapp Intelligence answers",
 };
 
 /** `accent_color` → `accent color`: a key as words, never as a key. */
@@ -110,6 +112,7 @@ export const CHAPTER_LOG_KINDS = [
       "member_removed",
       "member_profile_corrected",
       "member_renamed",
+      "member_custom_fields_updated",
       "presidency_transferred",
       "presidency_claimed",
       "president_orphaned",

@@ -1,6 +1,6 @@
 # The owner's UI rulebook
 
-Every UI ruling Paul has given, from 2026-11-04 to 2026-11-20, as rules you follow without being told
+Every UI ruling Paul has given, from 2026-11-04 to 2026-11-24, as rules you follow without being told
 again. He has said most of these more than once, and the reason this file exists is his message of
 2026-11-19: "I'M SO SO TIRED OF TELLING YOU THE SAME STUFF EVERY FUCKING TIME AND ITERATING ON EVERY
 FUCKING UI CHANGE … it's like a never ending loop of fix one problem and find 4 more that you fix to a
@@ -55,7 +55,8 @@ These cause most of the iterations, so they come first.
 9. **Show it.** A visual change gets a before/after page of the real screens (`SKILL.md` § Proposing a
    UI change). A changed documented pattern updates its spec in the same PR. (11-05)
 10. **Don't re-propose what Paul already rejected:** the gray surface ladder (11-11), removing pages
-    beside chat (11-12), overlay side cards (11-19), message previews on chat home's channel rows (11-07).
+    beside chat (11-12), overlay side cards (11-19), message previews on chat home's channel rows (11-07),
+    a switcher over a list or a boxed switch for a page's views (11-24, § 2).
 
 ## 2. Page layout
 
@@ -72,6 +73,18 @@ These cause most of the iterations, so they come first.
   button, so nothing waits under the header until a filter is on; a create row appears only after New
   is pressed. Tasks is the first (#5578; Shawn: "it should default to my tasks, not all tasks").
   (11-19, P8.1)
+- **No switcher over a list, and no boxed switch for a page's views.** "I want to never see one of these
+  switcher things for channel and messages like this ever again … too intrusive, draw attention", on a
+  draft that put a Channels / Messages switch above the channel list. Nothing sits over a list to change
+  what it lists: a different list is a different row or page (Messages has its own row). Where one page
+  has two or three views (Mine / Everyone's, Documents / Backwork) they are plain words beside the title,
+  the current one in the foreground colour and weight and the others muted, with no box, fill or accent,
+  and a member with one view sees none. The component is `ViewLabels`, inside `PageViews` on a web page
+  header and as `ScreenShell`'s `views` on a phone screen
+  ([`components.md` § View labels](../../../spec/ui/design-system/components.md#view-labels-change-a-pages-or-a-lists-view));
+  the sweep of the switches already on screen is #5947. **lint** rejects the segmented control in a page
+  or screen header; one drawn over a list in the body is the same defect, caught in review.
+  (11-24, #5943)
 - **One create button, one look, everywhere.** Every "New …" action is the same shared component with
   the same icon, style and wording pattern ("New event", "New minutes", "New task"), on web and phone.
   A filled pill on one page and an outlined button on the next is a defect. On web it is
@@ -276,7 +289,9 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
 
 - **Picking a value:** web `Select` (or `SearchablePicker` for a long list), phone `OptionSheet`. The
   field shows its current value; search appears past 8 options; no Save or Cancel. `SegmentedChoice` /
-  `Segmented` only for 2 to 4 short choices that stay visible; swatches only for a look (accent,
+  `Segmented` only for 2 to 4 short choices that stay visible inside a form, never to change a page's
+  view (§ 2, 11-24), and neutral since 11-24: the held answer is a raised card step, never the accent;
+  swatches only for a look (accent,
   background, density). Never a hand-drawn radio list, and never filter chips used as a form picker.
 - **lint** (partly) **Acting on a thing:** one action menu. Web: `RowMenu` (right-click plus the row's ⋯) and
   `ActionMenuButton` (a header's ⋯), the same entries. Phone: the glass menu, `useItemMenu` for a row's
@@ -303,7 +318,9 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   has it). Sort is a row in the menu. Phone: the search field, one Filters chip, and a sheet with the
   same rows in the same order ending in "Show 23 members"; the shared phone sheet doesn't exist yet and
   is built from the Directory's in the filters PR (#5739). A list that splits into two or three named sets people switch between all day (Actives /
-  Alumni, All / Unread) is a segmented view switch, not a filter.
+  Alumni, All / Unread) is a view, not a filter, and its views are the plain labels beside the title
+  (§ 2), `ViewLabels` on both apps. *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
+  longer a way to change views.*
 - **Creating and editing:** a borderless title plus property rows (§ 2), on the record itself when
   editing, saved per row. **Phone commit is the floating glass action bar** from task approval
   (`TaskActionBar`; Paul, 11-20: "i like the one for the task approval a lot and how it has options

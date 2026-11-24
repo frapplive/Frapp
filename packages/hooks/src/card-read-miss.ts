@@ -1,6 +1,11 @@
 import { codeOf, statusOf } from "@repo/api-sdk";
 
-/** `ChapterGuard`'s 403 when the `x-chapter-id` header and the token's claim disagree. */
+/**
+ * A 403 for a request whose chapter disagrees with the session's. `ChapterGuard`
+ * threw it for a header that disagreed with the token's claim until ADR-27
+ * (#5918) made the header authoritative; the chapter-config routes still throw
+ * it for a URL chapter id that disagrees with the request's.
+ */
 const CHAPTER_CONTEXT_MISMATCH = "chapter.context.mismatch";
 
 /**
@@ -13,8 +18,8 @@ const CHAPTER_CONTEXT_MISMATCH = "chapter.context.mismatch";
  * reported. `useRushCandidate` and `useServiceEntry` read through it.
  *
  * The one 403 that is not an answer is `chapter.context.mismatch`: the
- * request's chapter and the session token's disagree, which clears once the
- * token catches up with a chapter switch. It throws, and keeps the query's
+ * request's chapter and the session's disagree, which clears once the client
+ * catches up with a chapter switch. It throws, and keeps the query's
  * retry and its error line.
  */
 export function isCardReadMiss(error: unknown): boolean {

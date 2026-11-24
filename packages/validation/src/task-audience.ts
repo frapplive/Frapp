@@ -129,6 +129,22 @@ export const TASK_AUDIENCE_COPY = {
    */
   groupLine: (who: string | null, done: number, total: number) =>
     [who, `${done} of ${total} done`].filter(Boolean).join(" · "),
+  /**
+   * Add people to a group task after it's made (#5905): the control, the
+   * picker's note on someone who already has a copy, its button, and what
+   * is said once it lands. Web's panel and the phone's task screen share
+   * them.
+   */
+  addPeople: "Add people",
+  alreadyHasIt: "has it",
+  addButton: (count: number) => (count === 0 ? "Add" : `Add ${count}`),
+  addedLine: (count: number) =>
+    count === 0
+      ? "They already had this task."
+      : count === 1
+        ? "Added 1 person to this task."
+        : `Added ${count} people to this task.`,
+  addFailed: "Couldn't add them. Try again.",
   /** Why a group task can't repeat or carry photos yet. */
   noRepeat: "A task for everyone can't repeat yet.",
   noPhotos: "A task for everyone can't carry photos yet.",

@@ -117,7 +117,7 @@ const PRIVATE_TLDS = new Set([
 /**
  * A proof link as Frapp keeps it: trimmed, http or https only, or `null`
  * when it isn't one. Never fetched; shown as its domain. A new proof link
- * or agenda link attachment must also pass `proofLinkOpens`.
+ * or Frapp web link (`frappWebLinkOpens`) must also pass `proofLinkOpens`.
  */
 export function normalizeProofLink(value: string): string | null {
   const trimmed = value.trim();
@@ -160,7 +160,7 @@ export function proofLinkOpens(link: string): boolean {
 
 /**
  * What a stored link that fails `proofLinkOpens` says beside its address,
- * on a task's proof chip and an event's attachment row (#5882, #5883).
+ * on a task's proof chip and a Frapp web link's row (#5882, #5883).
  */
 export const LINK_NOT_WORKING_CAPTION = "not a working link";
 

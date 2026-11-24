@@ -1,6 +1,8 @@
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
+import type { VocabConfig } from "@repo/org-archetypes";
 import {
   DASHBOARD_NAV_ITEMS,
+  navItemLabel,
   type NavItem,
 } from "@/components/layout/nav-config";
 
@@ -42,7 +44,7 @@ export type PageTitle = {
 /**
  * Routes that are not nav rows. Profile and the personal Settings page hang
  * off the account menu; Chapter settings opens from the chapter menu atop the
- * nav, under the words that menu item uses; Ask Frapp from the Ask bar.
+ * nav, under the words that menu item uses; Frapp Intelligence from the Ask bar.
  */
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/profile": "Profile",
@@ -50,7 +52,7 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
   "/settings": "Chapter settings",
   "/whats-new": "What's new",
   // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
-  [ASK_ROUTE]: "Ask Frapp",
+  [ASK_ROUTE]: "Frapp Intelligence",
 };
 
 /**
@@ -77,10 +79,13 @@ function matchesRoute(pathname: string, href: string): boolean {
  * @param isNavItemVisible whether the nav shows a row to this viewer
  *   (`isNavItemVisible` in `protected-nav-item.tsx`, bound to their
  *   permissions and modules). Omitted, every parent shows.
+ * @param vocabulary the chapter's words, for a row named by them
+ *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
+  vocabulary?: VocabConfig,
 ): PageTitle | null {
   if (!pathname) return null;
 
@@ -99,11 +104,14 @@ export function resolvePageTitle(
     return isNavItemVisible(navItem)
       ? {
           title: subPage[1],
-          parent: { label: navItem.label, href: navItem.href },
+          parent: {
+            label: navItemLabel(navItem, vocabulary),
+            href: navItem.href,
+          },
         }
       : { title: subPage[1] };
   }
-  if (navItem) return { title: navItem.label };
+  if (navItem) return { title: navItemLabel(navItem, vocabulary) };
 
   const offNav = Object.entries(OFF_NAV_TITLES).find(([href]) =>
     matchesRoute(pathname, href),

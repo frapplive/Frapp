@@ -89,7 +89,7 @@ vi.mock("@/lib/ai/availability", () => ({
 vi.mock("@/components/quick-actions/quick-actions-panel", () => ({
   QuickActionsPanel: "QuickActionsPanel",
 }));
-// So has the Ask Frapp bar (`ask/ask-bar.spec.tsx`).
+// So has the Frapp Intelligence bar (`ask/ask-bar.spec.tsx`).
 vi.mock("@/components/ask/ask-bar", () => ({ AskBar: "AskBar" }));
 
 import { AccessibilityInfo, BackHandler } from "react-native";
@@ -451,10 +451,10 @@ describe("the +", () => {
 });
 
 /**
- * Ask Frapp's front door (#4702, Paul 2026-11-13): "in a bar above the normal
+ * Frapp Intelligence's front door (#4702, Paul 2026-11-13): "in a bar above the normal
  * liquid glass bottom, not only when you open the plus menu".
  */
-describe("the Ask Frapp bar", () => {
+describe("the Frapp Intelligence bar", () => {
   const askBar = (root: Node) =>
     root.findAll((node) => (node.type as unknown) === "AskBar")[0];
   /** The wrapper the tab bar places it with. */
@@ -554,7 +554,7 @@ describe("a confirmation", () => {
     return flat(node!.props.style).bottom as number;
   };
 
-  it("sits above the Ask Frapp bar for a member who has one, never over it", () => {
+  it("sits above the Frapp Intelligence bar for a member who has one, never over it", () => {
     quick.notice = "Assigned to Sam Rivera.";
     const without = noticeBottom(render().root);
     quick.hasAsk = true;
@@ -579,7 +579,7 @@ describe("a confirmation", () => {
 
 /**
  * The fold (#4904, Paul's direction A, 2026-11-17): reading down a tab
- * screen folds the tabs to the current one and brings the Ask Frapp bar down
+ * screen folds the tabs to the current one and brings the Frapp Intelligence bar down
  * into the row between it and the +, which never moves.
  */
 describe("the fold", () => {

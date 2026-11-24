@@ -8,6 +8,7 @@ import { TaskAudienceService } from '../../application/services/task-audience.se
 import { OPEN_TASK_REPOSITORY } from '#domain/repositories/open-task.repository.interface';
 import { SupabaseOpenTaskRepository } from '../../infrastructure/supabase/repositories/supabase-open-task.repository';
 import { ChapterModule } from '../chapter/chapter.module';
+import { FrappLinkCheckModule } from '../frapp-link/frapp-link-check.module';
 import { SupabaseTaskRepository } from '../../infrastructure/supabase/repositories/supabase-task.repository';
 import { TASK_REPOSITORY } from '#domain/repositories/task.repository.interface';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
@@ -30,6 +31,8 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
     ChatModule,
     AuthModule,
     ChapterModule,
+    // A task's attachments must be the chapter's own records.
+    FrappLinkCheckModule,
   ],
   controllers: [TaskController, OpenTaskController],
   providers: [

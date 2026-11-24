@@ -465,6 +465,8 @@ class ChatRealtimeManager {
    * owes the inbox no rejoin (#4961); any later change does.
    */
   private viewerBound = false;
+  /** The page is hidden: see `setViewerAway`. */
+  private viewerAway = false;
   private inboxBackoffStep = 0;
   private inboxRetryTimer: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -1381,8 +1383,32 @@ class ChatRealtimeManager {
    * harmless (worst case is one extra push), so it is not awaited.
    */
   private trackViewer(channel: RealtimeChannel): void {
+    if (this.viewerAway) return;
     const viewerId = this.ctx?.viewerId ?? null;
     if (viewerId) void channel.track({ userId: viewerId, ts: Date.now() });
+  }
+
+  /**
+   * Whether the viewer can see the app. A channel stays subscribed while its
+   * page is hidden (a background tab, the desktop app closed to its tray), so
+   * its messages still arrive, but nobody is reading them: left in presence,
+   * the viewer would have every push for that channel held back, on every
+   * device, for as long as the page stayed hidden (#4842). Away takes them
+   * out of each joined channel's presence; back puts them in again. A channel
+   * that joins while away tracks nobody until then.
+   */
+  setViewerAway(away: boolean): void {
+    if (this.viewerAway === away) return;
+    this.viewerAway = away;
+    for (const state of this.channels.values()) {
+      if (state.status !== "live" || !state.channel) continue;
+      if (away) {
+        // Fire-and-forget, as `track` is: the worst case is one push held.
+        void Promise.resolve(state.channel.untrack()).catch(() => {});
+      } else {
+        this.trackViewer(state.channel);
+      }
+    }
   }
 
   private reopenChannel(state: PerChannelState): void {

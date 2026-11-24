@@ -11,10 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as WebBrowser from "expo-web-browser";
 import { signetDarkTokens } from "@repo/theme/signet";
-import {
-  AGENDA_CHECK_OFF_LOCKED_COPY,
-  ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE,
-} from "@repo/validation";
+import { AGENDA_CHECK_OFF_LOCKED_COPY } from "@repo/validation";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
 import { NewEventSheet } from "@/components/events/new-event-sheet";
@@ -132,8 +129,19 @@ const invitees = vi.hoisted(() => ({
   ] as { user_id: string; display_name: string; avatar_url: null }[] | null,
 }));
 
+const frappLinkNames = vi.hoisted(() => ({
+  value: new Map<string, unknown>(),
+  candidateCalls: [] as unknown[][],
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Frapp links: names read live, and what the attach picker offers.
+  useFrappLinks: () => ({ resolved: frappLinkNames.value, isLoading: false }),
+  useFrappLinkCandidates: (...args: unknown[]) => {
+    frappLinkNames.candidateCalls.push(args);
+    return { candidates: [], isLoading: false };
+  },
   useRoleTiers: () => ({ data: [], isSuccess: true }),
   useActiveChapterId: () => chapterId,
   // Who's coming (Paul 2026-11-22): the invite list, read from the chapter's
@@ -1190,6 +1198,23 @@ describe("Event details excuses (#3735)", () => {
 });
 
 describe("Event details agenda and attachments (#4934)", () => {
+  beforeEach(() => {
+    // The document reads by its live name, as the resolve answers it.
+    frappLinkNames.value = new Map([
+      [
+        "document:doc-1",
+        {
+          key: "document:doc-1",
+          state: "ok",
+          title: "Bylaws",
+          date: null,
+          author: null,
+        },
+      ],
+    ]);
+    frappLinkNames.candidateCalls = [];
+  });
+
   afterEach(() => {
     act(() => {
       for (const tree of mounted.splice(0)) tree.unmount();
@@ -1249,7 +1274,8 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(text).toContain("Bylaws");
     expect(text).toContain("Chapter Files");
     // No editor controls for a member.
-    expect(text).not.toContain("Add a link");
+    expect(text).not.toMatch(/\bAttach\b/);
+    expect(labelled(tree, 'Remove "Budget"')).toHaveLength(0);
     expect(labelled(tree, "Add an agenda item")).toHaveLength(0);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
     // A checked-off item says so to a screen reader.
@@ -1411,7 +1437,7 @@ describe("Event details agenda and attachments (#4934)", () => {
       WITH_LISTS.agenda[0],
       { id: "a2", text: "Formal date", done: true },
     ]);
-    expect(screenText(tree)).toContain("Attach from Chapter Files");
+    expect(screenText(tree)).toMatch(/\bAttach\b/);
   });
 
   it("adds an item from the field under the list", () => {
@@ -1466,34 +1492,21 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(labelled(tree, 'Remove "Budget"').length).toBeGreaterThan(0);
   });
 
-  it("refuses a link no phone can open, saying why (#5883)", () => {
-    permissions = ["members:view", "events:update"];
-    const tree = render();
-    const pressable = (label: string) =>
-      tree.root.find(
-        (node) =>
-          typeof node.type !== "string" &&
-          node.props.label === label &&
-          typeof node.props.onPress === "function",
-      );
-    act(() => pressable("Add a link").props.onPress());
-    const field = tree.root.find(
-      (node) =>
-        node.props.accessibilityLabel === "Link" &&
-        typeof node.props.onChangeText === "function",
-    );
-    act(() => field.props.onChangeText("http://localhost:3000"));
-    act(() => pressable("Add link").props.onPress());
-    expect(screenText(tree)).toContain(ATTACHMENT_LINK_NOT_PUBLIC_MESSAGE);
-    expect(listsChange).not.toHaveBeenCalled();
-  });
-
-  it("offers no Chapter Files picker while that module is off", () => {
+  it("offers no Chapter Files files in the picker while that module is off", () => {
     permissions = ["members:view", "events:update"];
     enabledModules = { documents: false };
-    const text = screenText(render());
-    expect(text).toContain("Add a link");
-    expect(text).not.toContain("Attach from Chapter Files");
+    const tree = render();
+    let attach = tree.root.find(
+      (node) =>
+        typeof node.type === "string" && node.props.children === "Attach",
+    );
+    while (typeof attach.props.onPress !== "function" && attach.parent) {
+      attach = attach.parent;
+    }
+    act(() => attach.props.onPress());
+    expect(frappLinkNames.candidateCalls.at(-1)?.[1]).toMatchObject({
+      documents: false,
+    });
   });
 
   it("offers no controls while writes are blocked, and still reads the lists", () => {
@@ -1502,7 +1515,7 @@ describe("Event details agenda and attachments (#4934)", () => {
     writeBlockedReason = "You're offline.";
     const tree = render();
     expect(screenText(tree)).toContain("Formal date");
-    expect(screenText(tree)).not.toContain("Add a link");
+    expect(screenText(tree)).not.toMatch(/\bAttach\b/);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
   });
 
@@ -1514,7 +1527,7 @@ describe("Event details agenda and attachments (#4934)", () => {
     eventDataKept = true;
     const tree = render();
     expect(screenText(tree)).toContain("Formal date");
-    expect(screenText(tree)).not.toContain("Add a link");
+    expect(screenText(tree)).not.toMatch(/\bAttach\b/);
     expect(labelled(tree, `Remove "Formal date"`)).toHaveLength(0);
     eventError = null;
     eventDataKept = false;
@@ -1642,13 +1655,12 @@ describe("Event details agenda and attachments (#4934)", () => {
     expect(text).not.toContain(AGENDA_CHECK_OFF_LOCKED_COPY);
   });
 
-  it("offers no Chapter Files picker until the chapter says the module is on, and calls the notes Notes meanwhile", () => {
+  it("offers Attach while the chapter can't say whether Chapter Files is on, and calls the notes Notes meanwhile", () => {
     permissions = ["members:view", "events:update"];
     event = WITH_LISTS;
     enabledModules = null;
     const text = screenText(render());
-    expect(text).toContain("Add a link");
-    expect(text).not.toContain("Attach from Chapter Files");
+    expect(text).toMatch(/\bAttach\b/);
     expect(text).toContain("NOTES");
     expect(text).not.toContain("MEETING MINUTES");
   });
@@ -1671,7 +1683,7 @@ describe("Event details agenda and attachments (#4934)", () => {
     );
   });
 
-  it("draws a stored link no phone can open as text that doesn't open (#5883)", async () => {
+  it("draws a stored link no phone can open as text that never opens (#5883)", () => {
     event = {
       ...EVENT,
       attachments: [
@@ -1679,16 +1691,12 @@ describe("Event details agenda and attachments (#4934)", () => {
       ],
     };
     const tree = render();
-    const row = attachmentRow(
-      tree,
-      "Old notes, not a working web address: https://test",
+    const row = attachmentRow(tree, "Old notes,");
+    expect(row.props.accessibilityLabel).toBe(
+      "Old notes, test · not a working link",
     );
-    expect(row.props.disabled).toBe(true);
     expect(row.props.accessibilityRole).toBe("text");
-    // The caption is its own Text, so a long address can't cut it off.
-    expect(screenText(tree)).toMatch(/https:\/\/test\s*· not a working link/);
-    await act(async () => row.props.onPress());
-    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
+    expect(row.props.disabled).toBe(true);
   });
 
   it("says when a link won't open", async () => {

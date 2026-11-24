@@ -98,7 +98,7 @@ export class ActivityNudgeItemDto {
     type: String,
     nullable: true,
     description:
-      'One sentence Frapp AI wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written.',
+      'One sentence Frapp Intelligence wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written.',
   })
   line: string | null;
 

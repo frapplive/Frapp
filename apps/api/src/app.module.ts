@@ -22,6 +22,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { InviteModule } from './modules/invite/invite.module';
 import { EventModule } from './modules/event/event.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
+import { FrappLinkModule } from './modules/frapp-link/frapp-link.module';
 import { MeetingDraftModule } from './modules/meeting/meeting-draft.module';
 import { MeetingRecordingModule } from './modules/meeting/meeting-recording.module';
 import { MeetingMinutesRequestModule } from './modules/meeting/meeting-minutes-request.module';
@@ -33,8 +34,10 @@ import { BillingModule } from './modules/billing/billing.module';
 import { FinancialInvoiceModule } from './modules/financial-invoice/financial-invoice.module';
 import { BackworkModule } from './modules/backwork/backwork.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { SchoolModule } from './modules/school/school.module';
 import { ServiceEntryModule } from './modules/service-entry/service-entry.module';
 import { TaskModule } from './modules/task/task.module';
+import { TenantModule } from './modules/tenant/tenant.module';
 import { AiSuggestionModule } from './modules/ai-suggestion/ai-suggestion.module';
 import { PledgeClassModule } from './modules/pledge-class/pledge-class.module';
 import { ChapterGroupModule } from './modules/chapter-group/chapter-group.module';
@@ -116,8 +119,10 @@ import { validateEnv } from './config/env.validation';
     FinancialInvoiceModule,
     BackworkModule,
     ChatModule,
+    SchoolModule,
     ServiceEntryModule,
     TaskModule,
+    TenantModule,
     AiSuggestionModule,
     PledgeClassModule,
     ChapterGroupModule,
@@ -125,6 +130,8 @@ import { validateEnv } from './config/env.validation';
     NotificationModule,
     StudyModule,
     ChapterDocumentModule,
+    // Names the records tasks' and events' attachments point at.
+    FrappLinkModule,
     PollModule,
     PredictionModule,
     SemesterRolloverModule,

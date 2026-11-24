@@ -48,6 +48,8 @@ import {
   CreateTaskResponseDto,
   CreateTaskSubtaskDto,
   DeleteTaskQueryDto,
+  AddToTaskGroupDto,
+  AddToTaskGroupResponseDto,
   RemoveFromTaskGroupDto,
   RemoveFromTaskGroupResponseDto,
   TaskGroupSummaryDto,
@@ -243,6 +245,7 @@ export class TaskController {
       // neither yet) makes the very task the form would (#4313).
       audience_tier_id: dto.audience_tier_id,
       followed_by: dto.followed_by,
+      attachments: dto.attachments,
       created_by: createdBy,
       due_date: dto.due_date,
       due_at: dto.due_at ?? null,
@@ -453,6 +456,23 @@ export class TaskController {
   ) {
     await this.taskService.deleteSubtask(id, subtaskId, chapterId);
     return { success: true };
+  }
+
+  @Post(':id/group/add')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.TASKS_MANAGE)
+  @ApiOperation({
+    summary:
+      'Add members to a group task: each gets a To do copy of it (#5905)',
+  })
+  @ApiOkResponse({ type: AddToTaskGroupResponseDto })
+  async addToGroup(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddToTaskGroupDto,
+  ): Promise<AddToTaskGroupResponseDto> {
+    return this.taskService.addToGroup(id, chapterId, userId, dto.assignee_ids);
   }
 
   @Post(':id/group/remove')

@@ -46,7 +46,7 @@ export function FloatingCreateButton({ label, hint, onPress }: CreateAction) {
   const feedback = usePressFeedback({ onCard: true });
   const styles = createStyles(tokens);
 
-  // Above the floating bar where there is one (and the Ask Frapp bar over
+  // Above the floating bar where there is one (and the Frapp Intelligence bar over
   // it, for a member who has Ask), else clear of the inset.
   const askLift = useAskBarLift();
   const offset = tabBar

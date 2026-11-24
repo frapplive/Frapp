@@ -26,16 +26,12 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
-import { codeOf, randomClientId, statusOf } from "@repo/api-sdk";
+import { codeOf, randomClientId } from "@repo/api-sdk";
 import {
-  selectDownloadUrl,
   useAgendaSuggestionActions,
   useAgendaSuggestions,
   useCurrentChapter,
-  useDocumentDownloadUrl,
-  useDocuments,
   useEventListsEditor,
   type EventLists,
 } from "@repo/hooks";
@@ -46,20 +42,10 @@ import {
   agendaFromMinutesLabel,
   agendaTabledFromLabel,
   agendaProblem,
-  attachmentLinkOpens,
-  attachmentLinkProblem,
-  attachmentLinkTitle,
-  attachmentTitle,
-  LINK_NOT_WORKING_CAPTION,
-  LINK_NOT_WORKING_LABEL,
   EVENT_AGENDA_ITEM_MAX,
   EVENT_AGENDA_MAX,
-  EVENT_ATTACHMENT_TITLE_MAX,
-  EVENT_ATTACHMENTS_MAX,
   isModuleEnabled,
   normalizeAgendaText,
-  normalizeAttachmentUrl,
-  proofLinkDomain,
   reorderEventEntry,
   toggleAgendaItem,
   type AgendaSuggestion,
@@ -74,11 +60,10 @@ import {
   CheckGlyph,
   CloseGlyph,
   DragHandleGlyph,
-  LinkGlyph,
   PlusGlyph,
 } from "@/components/control-glyphs";
 import { TextAction } from "@/components/events/event-excuses";
-import { DocumentsGlyph } from "@/components/more/more-glyphs";
+import { FrappLinksEditor } from "@/components/frapp-links";
 import { sheetFieldStyles } from "@/components/sheet-scaffold";
 import { eyebrowStyle } from "@/components/eyebrow";
 import { useChapterBranding } from "@/lib/chapter-branding";
@@ -863,54 +848,11 @@ function AgendaSuggestions({
 }
 
 /**
- * Open an attachment in the in-app browser: a link as it is, a Chapter Files
- * document to read through its inline signed link, as Documents opens one. A
- * file deleted since it was attached says so rather than failing generically.
- * One browser at a time for both: iOS refuses a second over the first.
+ * The event's attachments: the shared Frapp link list
+ * (`spec/behavior/frapp-links.md`), the same rows and picker as a task's
+ * Attached row. A document keeps its name, as every event entry carries a
+ * title for builds from before Frapp links.
  */
-function useOpenAttachment() {
-  const signedLinks = useDocumentDownloadUrl();
-  const [openingId, setOpeningId] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const presenting = useRef(false);
-  async function openLink(url: string) {
-    if (presenting.current) return;
-    setProblem(null);
-    presenting.current = true;
-    try {
-      await WebBrowser.openBrowserAsync(url);
-    } catch {
-      setProblem("Couldn't open that link. Try again in a moment.");
-    } finally {
-      presenting.current = false;
-    }
-  }
-  async function openDocument(documentId: string) {
-    if (presenting.current || openingId) return;
-    setProblem(null);
-    setOpeningId(documentId);
-    try {
-      const url = selectDownloadUrl(await signedLinks.mutateAsync(documentId));
-      if (!url) throw new Error("No link to the file came back.");
-      presenting.current = true;
-      try {
-        await WebBrowser.openBrowserAsync(url);
-      } finally {
-        presenting.current = false;
-      }
-    } catch (error) {
-      setProblem(
-        statusOf(error) === 404
-          ? "That file is gone from Chapter Files. Someone removed it after it was attached."
-          : "Couldn't open that file. Try again in a moment.",
-      );
-    } finally {
-      setOpeningId(null);
-    }
-  }
-  return { openLink, openDocument, openingId, problem };
-}
-
 function EventAttachmentsSection({
   attachments,
   canEdit,
@@ -923,355 +865,19 @@ function EventAttachmentsSection({
   onChange: (update: (current: EventAttachment[]) => EventAttachment[]) => void;
 }) {
   const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
-  const styles = createStyles(tokens, accent);
-  const { openLink, openDocument, openingId, problem } = useOpenAttachment();
-  const [adding, setAdding] = useState<"link" | "document" | null>(null);
+  const styles = createStyles(tokens);
   if (attachments.length === 0 && !canEdit) return null;
-
-  const muted = tokens.color.text.mutedForeground;
-  const full = attachments.length >= EVENT_ATTACHMENTS_MAX;
-  const attachedDocuments = new Set(
-    attachments.flatMap((a) => (a.kind === "document" ? [a.document_id] : [])),
-  );
-  const add = (attachment: EventAttachment) => {
-    onChange((current) =>
-      current.length >= EVENT_ATTACHMENTS_MAX
-        ? current
-        : [...current, attachment],
-    );
-    setAdding(null);
-  };
-
   return (
     <View style={styles.section} accessibilityLabel="Attachments">
       <Text style={styles.sectionLabel}>ATTACHMENTS</Text>
       <ListPanel>
-        {attachments.map((attachment) => {
-          const isLink = attachment.kind === "link";
-          // A link saved before #5883's rule is kept, and drawn as text with
-          // its address so it never opens "server can't be found".
-          const dead = isLink && !attachmentLinkOpens(attachment.url);
-          // Only a chapter read that answered "off" disables a document; one
-          // that can't say yet lets the server answer.
-          const disabled =
-            dead || (!isLink && (documentsOn === false || !!openingId));
-          const source = dead
-            ? attachment.url
-            : isLink
-              ? proofLinkDomain(attachment.url)
-              : documentsOn === false
-                ? "Chapter Files is off"
-                : "Chapter Files";
-          return (
-            <View key={attachment.id} style={styles.line}>
-              <Pressable
-                accessibilityRole={dead ? "text" : isLink ? "link" : "button"}
-                accessibilityLabel={
-                  dead
-                    ? `${attachment.title}, ${LINK_NOT_WORKING_LABEL}: ${attachment.url}`
-                    : `${attachment.title}, ${source}`
-                }
-                accessibilityState={{ disabled }}
-                disabled={disabled}
-                onPress={() =>
-                  dead
-                    ? undefined
-                    : attachment.kind === "link"
-                      ? void openLink(attachment.url)
-                      : void openDocument(attachment.document_id)
-                }
-                style={({ pressed }) => [
-                  styles.row,
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                {!isLink && openingId === attachment.document_id ? (
-                  <ActivityIndicator size="small" color={muted} />
-                ) : isLink ? (
-                  <LinkGlyph color={muted} />
-                ) : (
-                  <DocumentsGlyph color={muted} size={20} />
-                )}
-                <Text
-                  style={[styles.text, dead ? styles.textQuiet : null]}
-                  numberOfLines={1}
-                >
-                  {attachment.title}
-                </Text>
-                <Text style={styles.caption} numberOfLines={1}>
-                  {source}
-                </Text>
-                {dead ? (
-                  // Its own Text, so a long address never cuts it off.
-                  <Text style={styles.captionFixed}>
-                    · {LINK_NOT_WORKING_CAPTION}
-                  </Text>
-                ) : null}
-              </Pressable>
-              {canEdit ? (
-                <View style={styles.controls}>
-                  <IconButton
-                    label={`Remove "${attachment.title}"`}
-                    onPress={() =>
-                      onChange((current) =>
-                        current.filter((entry) => entry.id !== attachment.id),
-                      )
-                    }
-                  >
-                    <CloseGlyph color={muted} />
-                  </IconButton>
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
-        {problem ? <Text style={styles.error}>{problem}</Text> : null}
-        {canEdit && full ? (
-          <Text style={styles.caption}>
-            An event holds {EVENT_ATTACHMENTS_MAX} attachments.
-          </Text>
-        ) : null}
-        {canEdit && !full && adding === "link" ? (
-          <AddLinkForm
-            onCancel={() => setAdding(null)}
-            onAdd={(url, title) =>
-              add({ id: randomClientId(), kind: "link", url, title })
-            }
-          />
-        ) : null}
-        {canEdit && !full && adding === "document" ? (
-          <PickDocument
-            attached={attachedDocuments}
-            onCancel={() => setAdding(null)}
-            onPick={(documentId, title) =>
-              add({
-                id: randomClientId(),
-                kind: "document",
-                document_id: documentId,
-                title: attachmentTitle(title),
-              })
-            }
-          />
-        ) : null}
-        {canEdit && !full && adding === null ? (
-          <View style={styles.actions}>
-            <TextAction
-              label="Add a link"
-              color={accent}
-              onPress={() => setAdding("link")}
-            />
-            {documentsOn === true ? (
-              <TextAction
-                label="Attach from Chapter Files"
-                color={accent}
-                onPress={() => setAdding("document")}
-              />
-            ) : null}
-          </View>
-        ) : null}
+        <FrappLinksEditor
+          links={attachments}
+          canEdit={canEdit}
+          documentsOn={documentsOn}
+          onChange={onChange}
+        />
       </ListPanel>
-    </View>
-  );
-}
-
-function AddLinkForm({
-  onAdd,
-  onCancel,
-}: {
-  onAdd: (url: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
-  const styles = createStyles(tokens, accent);
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const [focused, setFocused] = useState<"url" | "title" | null>(null);
-  // Low on the page, under the agenda: the form keeps above the keyboard.
-  const { hold, ...keep } = useKeepAboveKeyboard();
-
-  function submit() {
-    const refused = attachmentLinkProblem(url);
-    const normalized = normalizeAttachmentUrl(url);
-    if (refused || !normalized) {
-      setProblem(refused ?? "Paste a web address.");
-      return;
-    }
-    onAdd(normalized, attachmentLinkTitle(title, normalized));
-  }
-
-  return (
-    <View ref={hold} onLayout={keep.onLayout} style={styles.form}>
-      <View style={[styles.ring, focused === "url" ? styles.ringActive : null]}>
-        <TextInput
-          value={url}
-          onChangeText={(text) => {
-            setUrl(text);
-            setProblem(null);
-            keep.onType();
-          }}
-          onFocus={() => {
-            setFocused("url");
-            keep.onFocus();
-          }}
-          onBlur={() => {
-            setFocused(null);
-            keep.onBlur();
-          }}
-          placeholder="https://"
-          placeholderTextColor={tokens.color.text.muted}
-          accessibilityLabel="Link"
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus
-          returnKeyType="next"
-          style={[
-            styles.field,
-            focused === "url" ? styles.fieldFocused : null,
-            problem ? styles.fieldError : null,
-          ]}
-        />
-      </View>
-      <View
-        style={[styles.ring, focused === "title" ? styles.ringActive : null]}
-      >
-        <TextInput
-          value={title}
-          onChangeText={(text) => {
-            setTitle(text);
-            keep.onType();
-          }}
-          onFocus={() => {
-            setFocused("title");
-            keep.onFocus();
-          }}
-          onBlur={() => {
-            setFocused(null);
-            keep.onBlur();
-          }}
-          placeholder="Title (optional)"
-          placeholderTextColor={tokens.color.text.muted}
-          accessibilityLabel="Title"
-          maxLength={EVENT_ATTACHMENT_TITLE_MAX}
-          returnKeyType="done"
-          onSubmitEditing={submit}
-          style={[
-            styles.field,
-            focused === "title" ? styles.fieldFocused : null,
-          ]}
-        />
-      </View>
-      {problem ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {problem}
-        </Text>
-      ) : null}
-      <View style={styles.actions}>
-        <TextAction
-          label="Add link"
-          color={accent}
-          disabled={!url.trim()}
-          onPress={submit}
-        />
-        <TextAction label="Cancel" onPress={onCancel} />
-      </View>
-    </View>
-  );
-}
-
-function PickDocument({
-  attached,
-  onPick,
-  onCancel,
-}: {
-  attached: ReadonlySet<string>;
-  onPick: (documentId: string, title: string) => void;
-  onCancel: () => void;
-}) {
-  const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
-  const styles = createStyles(tokens, accent);
-  const [search, setSearch] = useState("");
-  const [focused, setFocused] = useState(false);
-  // The search field and the first matches keep above the keyboard.
-  const { hold, ...keep } = useKeepAboveKeyboard();
-  const documents = useDocuments();
-  const muted = tokens.color.text.mutedForeground;
-  const matches = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return (documents.data ?? [])
-      .filter((doc) => !attached.has(doc.id))
-      .filter((doc) => !needle || doc.title.toLowerCase().includes(needle))
-      .slice(0, 8);
-  }, [documents.data, search, attached]);
-
-  return (
-    <View ref={hold} onLayout={keep.onLayout} style={styles.form}>
-      <View style={[styles.ring, focused ? styles.ringActive : null]}>
-        <TextInput
-          value={search}
-          onChangeText={(text) => {
-            setSearch(text);
-            keep.onType();
-          }}
-          onFocus={() => {
-            setFocused(true);
-            keep.onFocus();
-          }}
-          onBlur={() => {
-            setFocused(false);
-            keep.onBlur();
-          }}
-          placeholder="Find a file in Chapter Files"
-          placeholderTextColor={tokens.color.text.muted}
-          accessibilityLabel="Find a file in Chapter Files"
-          autoFocus
-          returnKeyType="search"
-          style={[styles.field, focused ? styles.fieldFocused : null]}
-        />
-      </View>
-      {documents.isPending ? (
-        <Text style={styles.caption}>Loading files…</Text>
-      ) : documents.isError ? (
-        <Text style={styles.caption}>
-          Couldn&apos;t load Chapter Files. Try again in a moment.
-        </Text>
-      ) : matches.length === 0 ? (
-        <Text style={styles.caption}>
-          {search.trim()
-            ? "No file matches that."
-            : "Chapter Files has nothing to attach yet. Upload it there first."}
-        </Text>
-      ) : (
-        matches.map((doc) => (
-          <Pressable
-            key={doc.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Attach ${doc.title}`}
-            onPress={() => onPick(doc.id, doc.title)}
-            style={({ pressed }) => [
-              styles.row,
-              pressed ? styles.pressed : null,
-            ]}
-          >
-            <DocumentsGlyph color={muted} size={20} />
-            <Text style={styles.text} numberOfLines={1}>
-              {doc.title}
-            </Text>
-            {doc.folder ? (
-              <Text style={styles.caption} numberOfLines={1}>
-                {doc.folder}
-              </Text>
-            ) : null}
-          </Pressable>
-        ))
-      )}
-      <View style={styles.actions}>
-        <TextAction label="Cancel" onPress={onCancel} />
-      </View>
     </View>
   );
 }
@@ -1380,15 +986,8 @@ function createStyles(tokens: SignetTokens, accent?: string) {
       color: tokens.color.text.mutedForeground,
       textDecorationLine: "line-through",
     },
-    textQuiet: {
-      color: tokens.color.text.mutedForeground,
-    },
     caption: {
       flexShrink: 1,
-      ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
-    },
-    captionFixed: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.mutedForeground,
     },
