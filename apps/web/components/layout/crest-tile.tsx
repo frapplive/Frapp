@@ -34,7 +34,8 @@ import { cn } from "@/lib/utils";
  * crest even when its stored switch was never turned off, as for a chapter
  * created before the profile knew to. The match reads the organization's name
  * inside the chapter's ("Phi Gamma Delta Tau Nu"). One function for every crest
- * web draws (the sidebar's head, the chapter picker), so they never disagree.
+ * web draws (the sidebar's head, the chapter picker, a council's home), so they
+ * never disagree.
  */
 export function chapterMarkFor(chapter: {
   name: string;
@@ -52,9 +53,10 @@ export function chapterMarkFor(chapter: {
 }
 
 /**
- * Two sizes: `nav` is the 28px tile in the sidebar's head, `card` the 56px
- * one on the invite card (#5625). The same mark, fallback and step-down at
- * both.
+ * Three sizes: `nav` is the 28px tile in the sidebar's head, `card` the
+ * 56px one on the invite card (#5625), `home` the 112px one a council's home
+ * centres (`council-home.tsx`; the chapter's home view drew it until #5946).
+ * The same mark, fallback and step-down at each.
  */
 const SIZES = {
   nav: {
@@ -67,6 +69,11 @@ const SIZES = {
     box: "h-14 w-14 rounded-[16px]",
     text: "text-sm tracking-[0.06em]",
     longText: "text-caption tracking-normal",
+  },
+  home: {
+    box: "h-28 w-28 rounded-[28px]",
+    text: "text-3xl tracking-[0.06em]",
+    longText: "text-xl tracking-normal",
   },
 } as const;
 
