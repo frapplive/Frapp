@@ -148,16 +148,27 @@ export interface ProfileStats {
  * `data` through a failed background refetch, and a number drawn above
  * "couldn't load" contradicts itself.
  */
-export function useMyProfileStats(): ProfileStats {
+export function useMyProfileStats(
+  /**
+   * Which numbers the screen draws. One it leaves out (its module is off)
+   * sends no read: the route is module-guarded and would answer 403, which
+   * would read as a failure nobody can retry.
+   */
+  wanted: { points?: boolean; service?: boolean } = {},
+): ProfileStats {
+  const wantPoints = wanted.points ?? true;
+  const wantService = wanted.service ?? true;
   const chapterId = useActiveChapterId();
   const viewerUserId = useViewerUserId();
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
   const permissionsKnown = Array.isArray(permissions);
   const canView = permissionsKnown && can("members:view", permissions);
-  const pointsQuery = useMyPoints(undefined, undefined, { enabled: canView });
+  const pointsQuery = useMyPoints(undefined, undefined, {
+    enabled: canView && wantPoints,
+  });
   const serviceQuery = useServiceEntries(viewerUserId ?? undefined, undefined, {
-    enabled: canView && !!viewerUserId,
+    enabled: canView && wantService && !!viewerUserId,
   });
   const minutes = sumApprovedServiceMinutes(serviceQuery.data);
   return {

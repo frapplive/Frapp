@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
-  profileStatsErrorNote,
+  useActiveChapterId,
   useChapterMajors,
   useCurrentUser,
   useMemberByUserId,
   useMemberDisplayNames,
-  useMyProfileStats,
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
@@ -29,6 +29,12 @@ import {
   USER_COMPANY_MAX_LENGTH,
 } from "@repo/validation";
 import { StandingCards } from "@/components/activity/standing-cards";
+import { StandingPanels } from "@/components/standing/standing-panels";
+import { StandingStats } from "@/components/standing/standing-stats";
+import {
+  STANDING_PARAM,
+  standingDoorFrom,
+} from "@/components/standing/standing-doors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,9 +75,10 @@ type CurrentUser = {
 
 /**
  * `/profile`: who you are in the directory. Name, photo, phone, major, year,
- * bio and the after-graduation fields, with your points, service hours,
- * pledge class and order number read-only above the form (#4137), and nothing
- * else: quiet hours, chapter alerts,
+ * bio and the after-graduation fields, with your standing above the form:
+ * your points, service hours and study hours, each opening its own panel in
+ * place (`components/standing/`, #5950), then your pledge class and order
+ * number, read-only (#4137). Nothing else: quiet hours, chapter alerts,
  * chat density, blocked members, Discord history and the account controls
  * moved to the personal Settings page (`/preferences`,
  * `components/personal-settings/`, #3856).
@@ -86,13 +93,12 @@ export function ProfilePanel() {
   const updateUser = useUpdateUser();
   // Whether the chapter locks the member's own name (#5801).
   const nameLocked = isDisplayNameLocked(userQuery.data);
-  // Points and approved service hours, read and summed as the phone's Profile
-  // does them (`@repo/hooks` `profile-stats.ts`, #4137).
-  const stats = useMyProfileStats();
-  const statsNote = profileStatsErrorNote(
-    stats.pointsFailed,
-    stats.serviceFailed,
-  );
+  // Standing is the chapter's: with no active chapter there is none to read.
+  const hasChapter = !!useActiveChapterId();
+  // `/profile?open=points` (or `service`, `study`) opens that number's panel
+  // in place of the page; the figures and gauges below link to it.
+  const router = useRouter();
+  const openDoor = standingDoorFrom(useSearchParams().get(STANDING_PARAM));
   // Your pledge class and order number live on your membership, not on
   // `/v1/users/me`, behind the Directory's gate (`members:view`); a viewer
   // without it reads neither and sees no rows, as on the phone (#3939).
@@ -326,63 +332,28 @@ export function ProfilePanel() {
         </header>
 
         {/*
-          Your points and approved service hours, the numbers the phone's
-          Profile shows (#4137). A stat on the page surface, the label over
-          the number with no frame, as the Points page draws "My balance":
-          the phone's two cards are its grouped-list grammar, not web's.
-          s15's third card, attendance, is built on neither app: no member
-          can read an attendance rate (`profile-stats.ts`).
+          Your numbers, each a door to what is behind it (#5950): Points,
+          Service hours and Study hours were sidebar pages until then.
         */}
-        <section aria-label="Your numbers" className="space-y-2">
-          {stats.visible ? (
-            <>
-              <dl className="flex gap-10">
-                <div className="space-y-0.5">
-                  <dt className="text-caption text-muted-foreground">Points</dt>
-                  <dd className="text-headline font-bold tabular-nums text-foreground">
-                    {stats.points === null
-                      ? "—"
-                      : stats.points.toLocaleString()}
-                  </dd>
-                </div>
-                <div className="space-y-0.5">
-                  <dt className="text-caption text-muted-foreground">
-                    Service hours
-                  </dt>
-                  <dd className="text-headline font-bold tabular-nums text-foreground">
-                    {stats.serviceHours ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-              {!stats.hasChapter ? (
-                <p className="text-caption text-muted-foreground">
-                  Choose a chapter to see your points.
-                </p>
-              ) : statsNote ? (
-                <p className="text-caption text-muted-foreground">
-                  {statsNote}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-          {/*
-            Your class and number, read-only as on the phone: they are an
-            officer's to set, from your Directory profile or Settings. Each
-            shows only when set, so a chapter that keeps neither sees nothing.
-          */}
-          <MemberPledgeClassSection
-            open
-            memberId={membership?.id ?? null}
-            displayName={displayName}
-            pledgeClassId={membership?.pledge_class_id ?? null}
-            orderNumber={
-              typeof membership?.order_number === "number"
-                ? membership.order_number
-                : null
-            }
-            canEdit={false}
-          />
-        </section>
+        <StandingStats />
+
+        {/*
+          Your class and number, read-only as on the phone: they are an
+          officer's to set, from your Directory profile or Settings. Each
+          shows only when set, so a chapter that keeps neither sees nothing.
+        */}
+        <MemberPledgeClassSection
+          open
+          memberId={membership?.id ?? null}
+          displayName={displayName}
+          pledgeClassId={membership?.pledge_class_id ?? null}
+          orderNumber={
+            typeof membership?.order_number === "number"
+              ? membership.order_number
+              : null
+          }
+          canEdit={false}
+        />
 
         {/*
           Last week and This semester, beside your numbers (#5779): how you
@@ -390,7 +361,7 @@ export function ProfilePanel() {
           hours are this semester's, beside a goal; the figures above are all
           time, so both stay.
         */}
-        {stats.hasChapter ? <StandingCards /> : null}
+        {hasChapter ? <StandingCards /> : null}
 
         {/* Non-chapter business roles you pick yourself (#4958). */}
         {canViewMembers ? <PickRolesSection /> : null}
@@ -527,6 +498,10 @@ export function ProfilePanel() {
           </form>
         </ProfileSection>
       </div>
+      <StandingPanels
+        open={openDoor}
+        onClose={() => router.replace("/profile", { scroll: false })}
+      />
     </div>
   );
 }
