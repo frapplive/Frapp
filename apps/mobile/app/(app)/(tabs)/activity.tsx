@@ -69,7 +69,12 @@ import {
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { messageReminderPresetTime } from "@repo/hooks/use-message-reminders";
-import { can, isModuleEnabled, SECTION_NAMES } from "@repo/validation";
+import {
+  MEETING_LIST_COPY,
+  can,
+  isModuleEnabled,
+  SECTION_NAMES,
+} from "@repo/validation";
 import {
   ActivityFaces,
   ActivityListRow,
@@ -77,6 +82,12 @@ import {
   ActivityRowSkeleton,
 } from "@/components/activity/activity-row";
 import { useActivityRowMenu } from "@/components/activity/activity-row-menu";
+import {
+  ActivityMinutesContext,
+  useActivityMinutesActions,
+  type ActivityMinutesNotice,
+} from "@/components/activity/activity-minutes";
+import { NoteTakerSheet } from "@/components/minutes/note-taker-sheet";
 import type { ItemMenuHandle } from "@/components/item-actions-menu";
 import {
   ActivityRowItem,
@@ -373,7 +384,24 @@ export default function ActivityScreen() {
     reread();
     void recheckNudge();
   }, [reread, recheckNudge]);
-  const rowMenu = useActivityRowMenu({ onWrote: afterMenuWrite });
+  // To do's minutes rows (#5949): Write minutes, and No minutes in a Write
+  // minutes row's long press.
+  const minutesActions = useActivityMinutesActions(reread);
+  const rowMenu = useActivityRowMenu({
+    onWrote: afterMenuWrite,
+    extraActions: minutesActions.menuActions,
+  });
+  // Notes on another officer's minutes open in their sheet, as the event's
+  // Take notes row opens them: mounted on the first, then presented.
+  const notesSheet = useRef<BottomSheetModal>(null);
+  const [notesFor, setNotesFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (notesFor !== null) notesSheet.current?.present();
+  }, [notesFor]);
+  const openNotes = (meetingId: string) => {
+    if (meetingId === notesFor) notesSheet.current?.present();
+    else setNotesFor(meetingId);
+  };
   // Dots (#4405): opening a row from here is what reads it; scrolling past
   // doesn't, and neither does acting on the item elsewhere in Frapp.
   const { markRead } = useActivityUnread(activity.data);
@@ -391,6 +419,26 @@ export default function ActivityScreen() {
         recheckOnReturn.current = true;
       }
       router.push({ pathname: "/task-details", params: { id: taskId } });
+      return;
+    }
+    // Minutes (#5949) open where the Minutes list opened them: a meeting to
+    // write minutes for its event, a draft the minutes, notes their sheet.
+    if (row.kind === "minutes-to-write") {
+      router.push({
+        pathname: "/event-details",
+        params: { id: row.meeting.event_id },
+      });
+      return;
+    }
+    if (row.kind === "minutes-draft") {
+      router.push({
+        pathname: "/minutes-details",
+        params: { id: row.draft.meeting_id },
+      });
+      return;
+    }
+    if (row.kind === "minutes-notes") {
+      openNotes(row.notes.meeting_id);
       return;
     }
     // A sign-up or form (#3926) is answered on its card: the row goes to
@@ -626,6 +674,7 @@ export default function ActivityScreen() {
           onShowAll={() => setPicked("all")}
           rowActions={rowActions}
           onOpen={open}
+          notice={minutesActions.notice}
         />
       ),
       running:
@@ -670,50 +719,58 @@ export default function ActivityScreen() {
 
   return (
     <ActivityFaces.Provider value={faceFor}>
-      <ActivityRowMenuContext.Provider value={rowMenu.menuFor}>
-        <ScreenShell
-          title={SECTION_NAMES.activity}
-          refresh={refresh}
-          headerAction={
-            ring || board ? (
-              <View style={styles.headerActions}>
-                {ring}
-                {board}
-              </View>
-            ) : undefined
-          }
-        >
-          {renderBody()}
-          <ActivitySheet
-            row={sheetRow}
-            viewerId={viewerId}
-            rowActionState={sheetRow ? rowActionStateOf(sheetRow.key) : "idle"}
-            onActed={reread}
-            onClosed={() => {
-              const closedKey = openedKey;
-              setOpenedKey(null);
-              if (rereadOnClose()) reread();
-              // The member may have just done what the card asked: ask again
-              // only when the sheet was the card's own item, since every
-              // other sheet leaves the card as it was.
-              if (nudgeShowsRow(nudge, closedKey)) void nudgeActions.recheck();
-            }}
-            reminderActions={reminderActions}
-          />
-          {askDraft !== null ? (
-            <AskSheet
-              key={askDraft}
-              ref={askRef}
-              initialDraft={askDraft}
-              onClosed={() => setAskDraft(null)}
+      <ActivityMinutesContext.Provider value={minutesActions}>
+        <ActivityRowMenuContext.Provider value={rowMenu.menuFor}>
+          <ScreenShell
+            title={SECTION_NAMES.activity}
+            refresh={refresh}
+            headerAction={
+              ring || board ? (
+                <View style={styles.headerActions}>
+                  {ring}
+                  {board}
+                </View>
+              ) : undefined
+            }
+          >
+            {renderBody()}
+            <ActivitySheet
+              row={sheetRow}
+              viewerId={viewerId}
+              rowActionState={
+                sheetRow ? rowActionStateOf(sheetRow.key) : "idle"
+              }
+              onActed={reread}
+              onClosed={() => {
+                const closedKey = openedKey;
+                setOpenedKey(null);
+                if (rereadOnClose()) reread();
+                // The member may have just done what the card asked: ask again
+                // only when the sheet was the card's own item, since every
+                // other sheet leaves the card as it was.
+                if (nudgeShowsRow(nudge, closedKey))
+                  void nudgeActions.recheck();
+              }}
+              reminderActions={reminderActions}
             />
-          ) : null}
-          {rowMenu.host}
-        </ScreenShell>
-        {/* Outside the scroll, as the board's: a Mark done's from a row's
+            {askDraft !== null ? (
+              <AskSheet
+                key={askDraft}
+                ref={askRef}
+                initialDraft={askDraft}
+                onClosed={() => setAskDraft(null)}
+              />
+            ) : null}
+            {notesFor !== null ? (
+              <NoteTakerSheet ref={notesSheet} meetingId={notesFor} />
+            ) : null}
+            {rowMenu.host}
+          </ScreenShell>
+          {/* Outside the scroll, as the board's: a Mark done's from a row's
             menu. */}
-        {rowMenu.undoBar}
-      </ActivityRowMenuContext.Provider>
+          {rowMenu.undoBar}
+        </ActivityRowMenuContext.Provider>
+      </ActivityMinutesContext.Provider>
     </ActivityFaces.Provider>
   );
 }
@@ -804,6 +861,7 @@ function ToDoSection({
   onShowAll,
   rowActions,
   onOpen,
+  notice = null,
 }: {
   days: ActivityAgendaDay[];
   unavailable: ActivityGroup["unavailable"];
@@ -812,6 +870,11 @@ function ToDoSection({
   /** Check in on an open event's row (#4427); `null` while refused. */
   rowActions: ActivityRowActions | null;
   onOpen: (row: ActivityRow) => void;
+  /**
+   * What a minutes row's write has to say (#5949): marked No minutes, with
+   * Undo, or why minutes didn't start. Shown a few seconds.
+   */
+  notice?: ActivityMinutesNotice | null;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -831,6 +894,17 @@ function ToDoSection({
         // "nothing to do" must not be a failed read.
         <InlineNote tone="warning">
           {`${activityCouldNotLoad(unavailable)} Pull down to try again.`}
+        </InlineNote>
+      ) : null}
+      {notice ? (
+        <InlineNote
+          action={
+            notice.undo
+              ? { label: MEETING_LIST_COPY.undo, onPress: notice.undo }
+              : undefined
+          }
+        >
+          {notice.text}
         </InlineNote>
       ) : null}
       {count === 0 && filter === "all" && unavailable.length === 0 ? (

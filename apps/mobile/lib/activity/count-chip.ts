@@ -9,6 +9,8 @@ const COUNTED_SECTIONS: ReadonlySet<Activity["unavailable"][number]> = new Set([
   "coming_up",
   // Due reminders count too (#4957).
   "reminders",
+  // And the minutes waiting on the member (#5949).
+  "minutes",
 ]);
 
 /**
