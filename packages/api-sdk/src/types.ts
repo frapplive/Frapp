@@ -11203,14 +11203,32 @@ export interface components {
             /** @description One to 25 uploads to file, each as the single confirm route takes it */
             documents: components["schemas"]["ConfirmDocumentUploadDto"][];
         };
+        DocumentMinutesDto: {
+            meeting_id: string;
+            /** @description The meeting's name as the minutes hold it */
+            event_name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @enum {string} */
+            meeting_type: "chapter" | "exec" | "committee" | "other";
+            other_label: string | null;
+            decision_count: number;
+            action_item_count: number;
+            /** @description Whether a recording's transcript is kept with the minutes */
+            recorded: boolean;
+            /** @description The TL;DR's first line */
+            gist: string | null;
+        };
         ChapterDocumentDto: {
             id: string;
             chapter_id: string;
             title: string;
             description: string | null;
             folder: string | null;
-            storage_path: string;
-            uploaded_by: string;
+            /** @description The stored file's path. Null only on a row that files a meeting's minutes (`meeting_id`), which the list returns only when asked with `minutes=true`. */
+            storage_path: string | null;
+            /** @description Who uploaded the file. Null only on a row that files a meeting's minutes. */
+            uploaded_by: string | null;
             created_at: string;
             content_type: string | null;
             byte_size: number | null;
@@ -11238,6 +11256,10 @@ export interface components {
             drive_synced_at: string | null;
             /** @description Who can see it (#3642): null for the same as its folder, else its own list, which narrows the folder's */
             who_can_see: string[] | null;
+            /** @description Set on the row that files a meeting's posted minutes (#5949): the minutes' id, which the row opens instead of a file. Seen only by members who may read those minutes. */
+            meeting_id: string | null;
+            /** @description On the list and a single read: what a minutes row shows of its minutes. Null on a file. */
+            minutes?: components["schemas"]["DocumentMinutesDto"] | null;
         };
         DocumentConfirmResultDto: {
             /** @description The storage path this result is for */
@@ -11292,6 +11314,8 @@ export interface components {
             who_can_see: string[] | null;
             /** @description The Google Drive folder it mirrors, or null (#5220). Its name follows Drive, so it is renamed and deleted there, not here. */
             drive_folder_id: string | null;
+            /** @description Set on a folder the minutes flow files into (#5949): `root` for the chapter's Minutes folder, or a repeating meeting's series for that series' folder. */
+            minutes_series_key: string | null;
         };
         DocumentAccessOptionsDto: {
             options: components["schemas"]["ChannelAccessOptionDto"][];
@@ -23860,6 +23884,8 @@ export interface operations {
                 folder?: string;
                 /** @description Case-insensitive substring match on the document title */
                 search?: string;
+                /** @description Send `true` to also get the rows that file meetings' posted minutes (#5949): rows with `meeting_id` set and no file, which open the minutes. Left out unless asked for, so a client from before them never gets a row with no file. */
+                minutes?: "true";
             };
             header?: never;
             path?: never;

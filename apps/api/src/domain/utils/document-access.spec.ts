@@ -63,26 +63,60 @@ describe('document-access (#3642 piece 1)', () => {
     });
 
     it('follows its folder while its own list is null', () => {
-      expect(canSeeDocument(file('Exec', null), lists, viewer([]), NO_READABLE_MINUTES)).toBe(false);
       expect(
-        canSeeDocument(file('Exec', null), lists, viewer(['tier:exec']), NO_READABLE_MINUTES),
+        canSeeDocument(
+          file('Exec', null),
+          lists,
+          viewer([]),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(false);
+      expect(
+        canSeeDocument(
+          file('Exec', null),
+          lists,
+          viewer(['tier:exec']),
+          NO_READABLE_MINUTES,
+        ),
       ).toBe(true);
     });
 
     it('narrows its folder with its own list: a member passes both', () => {
       const budget = file('Exec', ['role:treasurer']);
-      expect(canSeeDocument(budget, lists, viewer(['tier:exec']), NO_READABLE_MINUTES)).toBe(false);
-      expect(canSeeDocument(budget, lists, viewer(['role:treasurer']), NO_READABLE_MINUTES)).toBe(
-        false,
-      );
       expect(
-        canSeeDocument(budget, lists, viewer(['tier:exec', 'role:treasurer']), NO_READABLE_MINUTES),
+        canSeeDocument(
+          budget,
+          lists,
+          viewer(['tier:exec']),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(false);
+      expect(
+        canSeeDocument(
+          budget,
+          lists,
+          viewer(['role:treasurer']),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(false);
+      expect(
+        canSeeDocument(
+          budget,
+          lists,
+          viewer(['tier:exec', 'role:treasurer']),
+          NO_READABLE_MINUTES,
+        ),
       ).toBe(true);
     });
 
     it('lets the uploader see their file whatever the lists say', () => {
       expect(
-        canSeeDocument(file('Exec', ['role:x'], 'u-1'), lists, viewer([]), NO_READABLE_MINUTES),
+        canSeeDocument(
+          file('Exec', ['role:x'], 'u-1'),
+          lists,
+          viewer([]),
+          NO_READABLE_MINUTES,
+        ),
       ).toBe(true);
     });
 
@@ -154,17 +188,22 @@ describe('document-access (#3642 piece 1)', () => {
         expect(canSeeDocument(minutes(null), lists, viewer([]), invited)).toBe(
           true,
         );
-        expect(canSeeDocument(minutes('Open'), lists, viewer([]), invited)).toBe(
-          true,
-        );
+        expect(
+          canSeeDocument(minutes('Open'), lists, viewer([]), invited),
+        ).toBe(true);
       });
 
-      it("is never open to more people than its folder or its own list", () => {
-        expect(canSeeDocument(minutes('Exec'), lists, viewer([]), invited)).toBe(
-          false,
-        );
+      it('is never open to more people than its folder or its own list', () => {
         expect(
-          canSeeDocument(minutes('Exec'), lists, viewer(['tier:exec']), invited),
+          canSeeDocument(minutes('Exec'), lists, viewer([]), invited),
+        ).toBe(false);
+        expect(
+          canSeeDocument(
+            minutes('Exec'),
+            lists,
+            viewer(['tier:exec']),
+            invited,
+          ),
         ).toBe(true);
         expect(
           canSeeDocument(minutes(null, ['role:x']), lists, viewer([]), invited),
@@ -184,11 +223,30 @@ describe('document-access (#3642 piece 1)', () => {
     });
 
     it('reads a top-level file, or one under a name no folder claims, by its own list alone', () => {
-      expect(canSeeDocument(file(null, null), lists, viewer([]), NO_READABLE_MINUTES)).toBe(true);
-      expect(canSeeDocument(file('Gone', null), lists, viewer([]), NO_READABLE_MINUTES)).toBe(true);
-      expect(canSeeDocument(file(null, ['role:x']), lists, viewer([]), NO_READABLE_MINUTES)).toBe(
-        false,
-      );
+      expect(
+        canSeeDocument(
+          file(null, null),
+          lists,
+          viewer([]),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(true);
+      expect(
+        canSeeDocument(
+          file('Gone', null),
+          lists,
+          viewer([]),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(true);
+      expect(
+        canSeeDocument(
+          file(null, ['role:x']),
+          lists,
+          viewer([]),
+          NO_READABLE_MINUTES,
+        ),
+      ).toBe(false);
     });
   });
 

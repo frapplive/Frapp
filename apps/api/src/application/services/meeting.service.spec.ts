@@ -954,9 +954,9 @@ describe('MeetingService', () => {
           },
         }),
       );
-      const facts = (await service.readablePosted(CHAPTER, JAKE, ['mtg-1'])).get(
-        'mtg-1',
-      );
+      const facts = (
+        await service.readablePosted(CHAPTER, JAKE, ['mtg-1'])
+      ).get('mtg-1');
       expect(facts).toEqual({
         meeting_id: 'mtg-1',
         event_name: rows.get('mtg-1')?.event_name,
