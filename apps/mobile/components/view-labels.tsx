@@ -109,8 +109,12 @@ function createStyles(tokens: SignetTokens) {
   const { body, label } = tokens.typography.role;
   const { regular, semibold } = tokens.typography.weight;
   return StyleSheet.create({
+    // Never shrinks, so beside a title the title gives way first; where the
+    // row has its parent's width (a card, a sheet) a long set wraps onto a
+    // second line rather than running off the screen.
     row: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "center",
       flexShrink: 0,
     },

@@ -86,7 +86,7 @@ export function useSidebarPreferences(): SidebarPreferences {
             },
             // `data.sort` is ignored: channels are always in the chapter's
             // order (Paul, 2026-11-24, #5947). The API keeps the field for
-            // shipped phone builds until #NEW_ISSUE retires it.
+            // shipped phone builds until #5981 retires it.
           }
         : NO_PREFERENCES,
     [data],

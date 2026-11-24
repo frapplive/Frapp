@@ -42,7 +42,7 @@ import { shareCsv } from "@/lib/chat/share-csv";
 import { IconButton } from "@/components/icon-button";
 import { CloseGlyph, ShareGlyph } from "@/components/control-glyphs";
 import { SheetPrimaryButton } from "@/components/sheet-scaffold";
-import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { meterStyles } from "@/components/meter";
 import {
   SkeletonBlock,
@@ -149,7 +149,8 @@ export function FormResponsesPage({
           </Text>
           {data ? (
             <>
-              <Segmented<ResponsesTab>
+              <ViewLabels<ResponsesTab>
+                flush
                 options={TABS}
                 value={tab}
                 onChange={setTab}

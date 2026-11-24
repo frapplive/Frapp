@@ -282,22 +282,6 @@ export default function ChatHomeScreen() {
     useSetSidebarSectionCollapsed(sidebarWriteOptions);
   const { mutate: setSidebarFilter } = useSetSidebarFilter(sidebarWriteOptions);
   const notificationPrefsQuery = useChannelNotificationPreferences();
-  // The Recent sort (#2877) reads each channel's latest message time, the
-  // read the Messages screen orders by. Only while the member sorts by it.
-  const recentSort = preferences.sort === "recent";
-  const latestQuery = useChannelLatestMessages({ enabled: recentSort });
-  // Unknown until the read answers, and kept through a failed refetch, as
-  // TanStack keeps `data`: the shared arrangement holds the chapter's order
-  // until then rather than sorting on nothing.
-  const latestAtByChannelId = useMemo(
-    () =>
-      recentSort && latestQuery.data
-        ? new Map(
-            latestQuery.data.map((row) => [row.channel_id, row.created_at]),
-          )
-        : undefined,
-    [recentSort, latestQuery.data],
-  );
 
   // A row's long-press menu (owner, 2026-11-06): web's right-click actions in
   // our own glass menu. Which rows show is `channelRowActions`, scoped to the
@@ -515,8 +499,6 @@ export default function ChatHomeScreen() {
       filters: unread.provisional
         ? { ...preferences.filters, unreadOnly: false }
         : preferences.filters,
-      sort: preferences.sort,
-      latestAtByChannelId,
       activeChannelId: null,
       titleOf,
       unreadByChannelId: arrangementUnread,
@@ -530,7 +512,6 @@ export default function ChatHomeScreen() {
     arrangementUnread,
     mutedChannelIds,
     titleOf,
-    latestAtByChannelId,
   ]);
   const filtersOn =
     preferences.filters.unreadOnly || preferences.filters.hideMuted;
@@ -863,7 +844,6 @@ export default function ChatHomeScreen() {
             menu={filterMenu}
             unreadOnly={preferences.filters.unreadOnly}
             hideMuted={preferences.filters.hideMuted}
-            sort={preferences.sort}
             onChange={setSidebarFilter}
           />
         ),

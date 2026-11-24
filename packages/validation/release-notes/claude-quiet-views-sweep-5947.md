@@ -1,0 +1,1 @@
+Channels always appear in your chapter's order, so the channel list's filter menu no longer offers Recent or A to Z, and the views on Tasks, form responses, chat reports, the GIF picker and Catch me up are plain words instead of a boxed switch.

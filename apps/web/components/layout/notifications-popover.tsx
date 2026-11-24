@@ -55,7 +55,7 @@ import { AnnouncementGlyph } from "@/components/chat/chat-glyphs";
 import { MENTION_CHIP } from "@/components/chat/chip";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { UnreadDot } from "@/components/shared/unread-dot";
 import { FOCUS_RING } from "@/components/ui/focus";
 import {
@@ -372,20 +372,24 @@ export function NotificationsPopover({
         className="flex max-h-[min(560px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-16px))] flex-col p-0"
       >
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border pl-4 pr-2">
-          <h2 id={titleId} className="mr-auto text-sm font-semibold">
+          <h2 id={titleId} className="text-sm font-semibold">
             Notifications
           </h2>
-          <SegmentedChoice
+          {/* All and Unread as plain words beside the title, after a
+              hairline, as a page header draws its views (#5947). */}
+          <span aria-hidden="true" className="h-4 w-px bg-border" />
+          <ViewLabels
             label="Show"
-            dense
             options={FILTER_OPTIONS}
             value={filter}
             onChange={setFilter}
+            className="-ml-1"
           />
           {unreadCount > 0 ? (
             <Button
               variant="link"
               size="sm"
+              className="ml-auto"
               disabled={markManyRead.isPending || markRead.isPending}
               onClick={markAllRead}
             >
