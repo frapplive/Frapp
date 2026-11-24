@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import {
-  Alert,
   type GestureResponderEvent,
   Linking,
   StyleSheet,
@@ -15,7 +14,6 @@ import {
   linkedStatusLabel,
   loadSignInMethods,
   signInMethodsQueryKey,
-  useDiscordAuthorLink,
   type LinkedAppState,
   type LinkedAppTone,
   type SignInMethodKey,
@@ -29,11 +27,12 @@ import {
   GOOGLE_CALENDAR_WEB,
   useGoogleCalendarConnection,
 } from "@/lib/events/google-calendar-connect";
+import { useDiscordLinkConnection } from "@/lib/settings/discord-link-connect";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useFrappTheme } from "@/lib/theme";
 
-/** Settings' own address: Google's sign-in comes back here. */
-const GOOGLE_RETURN_PATH = "preferences";
+/** Settings' own address: Google's and Discord's sign-ins come back here. */
+const SETTINGS_RETURN_PATH = "preferences";
 /** Discord's blurple: a trademark color, never a theme token. */
 const DISCORD_BLURPLE = "#5865F2";
 const MARK_SIZE = 18;
@@ -49,18 +48,24 @@ const MARK_SIZE = 18;
  *   Settings, and the row turns green.
  * - Calendar apps: the Subscribe sheet the Calendar opens, for Apple
  *   Calendar and the rest, so Settings is a second way to it.
- * - Discord: linking happens on the web (Discord's sign-in returns to the web
- *   app), so the phone shows the state and says where.
+ * - Discord (#5414): a tap links, through Discord's sign-in in the system
+ *   auth sheet, which comes back to Settings and the row turns green; once
+ *   linked, a tap offers Unlink, confirmed.
  * - Sign in: email and password, Google, Apple, as the account has them.
  */
 export function LinkedAppsSection() {
   const { tokens } = useFrappTheme();
   const google = useGoogleCalendarConnection({
-    returnPath: GOOGLE_RETURN_PATH,
+    returnPath: SETTINGS_RETURN_PATH,
   });
   const googleState = googleCalendarLinkedState(google.status.data);
-  const discord = useDiscordAuthorLink();
-  const discordState = discordLinkedState(discord.data);
+  const discord = useDiscordLinkConnection({
+    returnPath: SETTINGS_RETURN_PATH,
+  });
+  // "Linking…" while the token is spent, as web's row says.
+  const discordState = discord.linking
+    ? { tone: "off" as const, detail: "Linking…" }
+    : discordLinkedState(discord.link.data);
   const signIn = useQuery({
     queryKey: signInMethodsQueryKey,
     queryFn: async () => {
@@ -172,14 +177,17 @@ export function LinkedAppsSection() {
             description={discordState.detail}
             trailing={<LinkedStatusMark tone={discordState.tone} />}
             accessibilityValue={linkedStatusLabel(discordState.tone)}
+            accessibilityHint={
+              discordState.tone === "connected"
+                ? "Unlinks your Discord account."
+                : "Links the Discord account you used in your chapter's server, so your imported messages show under your name."
+            }
+            busy={discord.busy}
             action
             onPress={() =>
-              Alert.alert(
-                "Discord",
-                discordState.tone === "connected"
-                  ? `Your imported Discord messages show under your name. Unlink from Settings, Linked apps on the web.`
-                  : "Link the Discord account you used in your chapter's server from Settings, Linked apps on the web. Your imported messages then show under your name.",
-              )
+              void (discordState.tone === "connected"
+                ? discord.confirmUnlink()
+                : discord.connect())
             }
           />
         ) : null}
@@ -211,7 +219,7 @@ export function LinkedAppsSection() {
         ref={calendarSheetRef}
         open={calendarSheetOpen}
         onDismiss={() => setCalendarSheetOpen(false)}
-        googleReturnPath={GOOGLE_RETURN_PATH}
+        googleReturnPath={SETTINGS_RETURN_PATH}
       />
     </>
   );

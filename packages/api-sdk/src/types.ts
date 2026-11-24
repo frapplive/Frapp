@@ -5977,7 +5977,7 @@ export interface paths {
         put?: never;
         /**
          * Start linking your Discord account
-         * @description Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the browser to their Settings page with a one-time token that `POST /v1/discord/author-link/confirm` spends.
+         * @description Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the member to Settings with a one-time token that `POST /v1/discord/author-link/confirm` spends: the web page by default, or with `client: mobile` the phone app at `return_url`, which must be the app’s own Settings address.
          */
         post: operations["DiscordAuthorLinkController_begin_v1"];
         delete?: never;
@@ -12492,6 +12492,18 @@ export interface components {
             discord_username: string | null;
             linked_at: string | null;
         };
+        BeginDiscordAuthorLinkDto: {
+            /**
+             * @description Where Discord sends the member back: the web Settings → Linked apps (the default), or the phone app at `return_url`.
+             * @enum {string}
+             */
+            client?: "web" | "mobile";
+            /**
+             * @description For `mobile`: the app’s Settings address, `frapp://preferences` (outside production, the staging app’s `frapp-staging://preferences` too). Any other address is refused, Expo Go’s included.
+             * @example frapp://preferences
+             */
+            return_url?: string;
+        };
         BeginDiscordAuthorLinkResponseDto: {
             /** @description Send the member here. Asks Discord for the `identify` scope only, with a single-use state bound to this member and chapter. */
             authorize_url: string;
@@ -12499,7 +12511,7 @@ export interface components {
             expires_at: string;
         };
         ConfirmDiscordAuthorLinkDto: {
-            /** @description The one-time token the OAuth callback put on the redirect to the Settings page. It links the Discord account only for the member who started the handshake, in the chapter it was started in. */
+            /** @description The one-time token the OAuth callback put on the redirect to Settings (the web page, or the phone app). It links the Discord account only for the member who started the handshake, in the chapter it was started in. */
             handshake: string;
         };
         ConfirmDiscordAuthorLinkResponseDto: {
@@ -26825,7 +26837,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BeginDiscordAuthorLinkDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {

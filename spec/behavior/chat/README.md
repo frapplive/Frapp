@@ -2467,6 +2467,15 @@ A member fixes that by **linking the Discord account they used**, and from then 
   So the callback binds nothing.
   It parks the Discord account on the single-use handshake and returns the browser to that section with a one-time token, and `POST /v1/discord/author-link/confirm` links only for the member who started the handshake, in the chapter it was started in.
   It shares the bot connect flow's state table and its one registered callback URL (`/v1/discord/connect/callback`), tagged with a purpose so neither flow can spend the other's handshake.
+- **The phone links from Settings → Linked apps too** (#5414, 2026-11-24).
+  A tap on the unlinked Discord row opens the same sign-in in the system auth sheet, as Google Calendar's row does, and the handshake returns to the phone's Settings with the same token, which the phone confirms from its own session; a linked row's tap offers Unlink, confirmed first.
+  The phone names its own Settings address (`client: mobile`, `return_url`, on `POST /v1/discord/author-link/start`).
+  The server takes it only as the Settings screen in the app's own `frapp://` scheme (outside production also the staging app's `frapp-staging://`), checked when the handshake is minted and again on the redirect (`isAppReturnUrl` in `apps/api/src/domain/utils/app-return-url.ts`, shared with Google Calendar's return), and never follows any other address the request names.
+  Never Expo Go, even on a local network: a member can send their authorize link to someone else to approve, and on a shared network the starter's own Expo Go server would catch the token.
+  An expired handshake's row is kept a day past its expiry, so a late callback still returns to the phone with `expired` rather than to a web page.
+  **Known gap, pending Paul:** `frapp://` is a custom scheme that another app on the phone can also claim.
+  A caught token is useless to anyone but the member who started the handshake, but not to that member: one who sends their authorize link to somebody else and has an app on that person's phone catch the return could link that person's Discord account to themselves.
+  The web flow has no such gap, because its token only reaches the approving person's own browser; a verified https return (an App Link / Universal Link) closes it on the phone too ([#5941](https://github.com/frapplive/Frapp/issues/5941)).
 - **A link is per chapter, and one account is one member.**
   Linking in one chapter attaches only that chapter's imported messages and is invisible to every other chapter; a member of two chapters links in each.
   Within a chapter, a Discord account links to one member (another member claiming it gets 409) and a member links one account (linking a different one replaces the first).
