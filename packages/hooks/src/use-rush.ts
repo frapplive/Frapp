@@ -5,12 +5,9 @@ import type { components } from "@repo/api-sdk";
 import { isCardReadMiss } from "./card-read-miss";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { rushPipelineKeys } from "./use-rush-pipeline";
+import { rushKeys } from "./rush-keys";
 
-export const rushKeys = {
-  all: ["rush"] as const,
-  detail: (chapterId: string | null, id: string) =>
-    ["rush", chapterId, "detail", id] as const,
-};
+export { rushKeys };
 
 /** A candidate as the rush routes return it. Voter names are never on it. */
 export type RushCandidateView = components["schemas"]["RushCandidateViewDto"];

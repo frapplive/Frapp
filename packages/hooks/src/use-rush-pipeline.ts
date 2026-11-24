@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
-import { rushKeys } from "./use-rush";
+import { rushKeys } from "./rush-keys";
 
 /**
  * The recruitment pipeline's reads and writes (#5924), for web's Rush page,
