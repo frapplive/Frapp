@@ -9,7 +9,8 @@
  * re-reads once a minute (how a thread read on another device clears here),
  * right after a thread is read in this app (`use-message-thread.ts`
  * invalidates `memberThreadKeys.all`), on the phone's pull to refresh, and
- * when web's popover opens (it calls `refetch`; its observer stays mounted).
+ * whenever web's list of them opens (the popover, or the channel menu's
+ * Threads view in a narrow header: the list calls `refetch` on mount).
  */
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";

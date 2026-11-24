@@ -718,6 +718,9 @@ vi.mock("@repo/hooks", async () => ({
   // The Forward dialog (#4907) mounts only once a row asks for it.
   useForwardMessage: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // Threads under their channel in the rail (#5300): none listed here.
+  // The narrow header's Threads row counts with the real rule.
+  unreadThreadCount: (threads: Array<{ unread_count: number }>) =>
+    threads.filter((t) => t.unread_count > 0).length,
   useMemberThreads: () => ({
     data: sidebarState.memberThreads,
     dataUpdatedAt: Date.now(),
@@ -1503,8 +1506,16 @@ vi.mock("./composer", () => ({
 // they exercise the *shell's* jump wiring rather than a panel's own behaviour
 // or Radix's popover mechanics — each panel's rendering is owned by its own
 // spec, and the menu's view switching by `channel-menu.spec.tsx`.
+// The channel header measures itself (`useIsNarrow`); jsdom can't, so a test
+// sets the answer. `null` is the unmeasured header, drawn wide.
+const headerNarrow = vi.hoisted(() => ({ current: null as boolean | null }));
+vi.mock("@/lib/use-is-narrow", () => ({
+  useIsNarrow: () => [() => undefined, headerNarrow.current],
+}));
+
 vi.mock("./channel-menu", () => ({
   ChannelMenu: ({
+    threads,
     messages,
     hiddenPins,
     onJumpToSearchHit,
@@ -1517,6 +1528,7 @@ vi.mock("./channel-menu", () => ({
     searchMembers,
     notificationFromChapterLevel,
   }: {
+    threads?: { unread: number };
     notificationFromChapterLevel?: boolean;
     displayLock?: { saving: boolean; onChange: (locked: boolean) => void };
     searchChannels: Array<{ id: string; label: string }>;
@@ -1533,6 +1545,9 @@ vi.mock("./channel-menu", () => ({
     hideConversation?: { name: string; onHide: () => void };
   }) => (
     <div>
+      {threads ? (
+        <span data-testid="menu-threads">{threads.unread}</span>
+      ) : null}
       <span data-testid="menu-from-chapter-level">
         {String(Boolean(notificationFromChapterLevel))}
       </span>
@@ -7392,6 +7407,28 @@ describe("ChatShell's two lists (#3774)", () => {
 });
 
 describe("ChatShell All threads (#4960)", () => {
+  afterEach(() => {
+    headerNarrow.current = null;
+  });
+
+  // Paul, 2026-11-24: in a narrow header the name read "A..." beside four
+  // buttons, so Threads moves into the channel menu with its unread count.
+  it("moves Threads into the channel menu while the header is narrow", async () => {
+    headerNarrow.current = true;
+    render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("composer");
+    expect(screen.queryByTestId("all-threads-random")).toBeNull();
+    expect(screen.getByTestId("menu-threads")).toHaveTextContent("0");
+  });
+
+  it("keeps the header's own Threads button while there is room", async () => {
+    headerNarrow.current = false;
+    render(<ChatShell initialChannelId="chan-general" />);
+    await screen.findByTestId("composer");
+    expect(screen.getByTestId("all-threads-random")).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-threads")).toBeNull();
+  });
+
   it("switches to the thread's channel and opens the thread there", async () => {
     render(<ChatShell initialChannelId="chan-general" />);
     await screen.findByTestId("composer");

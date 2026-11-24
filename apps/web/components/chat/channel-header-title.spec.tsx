@@ -80,4 +80,24 @@ describe("ChannelHeaderTitle", () => {
       }
     },
   );
+
+  // A narrow header read "A... • Notification channel used for..." while both
+  // shrank alike (Paul, 2026-11-24). jsdom has no layout, so the guard is the
+  // description box: it takes only what the name leaves (`basis-0`), and the
+  // dot rides inside it so the two go together.
+  it("gives the name the room and the description only what is left", () => {
+    render(
+      <ChannelHeaderTitle
+        channel={{ name: "announcements", type: "PRIVATE" }}
+        name="Announcements Bro"
+        description="Notification channel used for every announcement"
+      />,
+    );
+    const description = screen
+      .getByText("Notification channel used for every announcement")
+      .closest("p")!;
+    expect(description).toHaveClass("basis-0", "flex-1", "min-w-0");
+    expect(description).toHaveTextContent("•");
+    expect(screen.getByRole("heading", { level: 2 })).not.toHaveClass("flex-1");
+  });
 });
