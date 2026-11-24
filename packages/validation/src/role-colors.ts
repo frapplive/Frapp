@@ -1,7 +1,10 @@
 import {
   AA_NORMAL,
+  hexToHsv,
   hexToOklch,
+  type Hsv,
   meetsContrast,
+  normalizeHex,
   oklchToHex,
   parseHex,
   type Rgb,
@@ -13,12 +16,14 @@ import {
   type TierPositions,
 } from "./role-rank";
 /**
- * The quick-pick colors a chapter role or group can wear (#3485), beside any
- * custom hue {@link roleColorForHue} makes (#5784).
+ * The ten colors a chapter role or group could wear first (#3485), and the
+ * only ones builds before #5784 paint. The picker shows them inside its
+ * larger grid ({@link ROLE_COLOR_SWATCH_COLUMNS}, #5966), beside
+ * any custom color {@link pickRoleColor} makes readable.
  *
  * A role's color paints text: a chat author's name, and the dot on a role
  * chip. Text on Frapp's charcoal surfaces has to stay readable, so roles pick
- * from this list instead of a free hex picker. Every swatch clears WCAG AA for
+ * from this list or from a custom color lifted until it reads. Every swatch clears WCAG AA for
  * normal text (4.5:1) on every resting surface a name sits on (lowest is
  * Violet at 5.13:1 on `--popover`). On a hovered row's `--card-hover`, Rose
  * and Violet rest at 4.49:1 and 4.42:1 since the 2026-11-12 surface ladder
@@ -134,11 +139,6 @@ export type ReservedRoleHue = (typeof ROLE_COLOR_RESERVED_BANDS)[number]["key"];
 /** Below this OKLCH chroma a color is too grey to read as red or gold. */
 export const ROLE_COLOR_RESERVED_CHROMA = 0.06;
 
-/** The chroma a custom hue is painted at: the palette's own, about 0.13–0.15. */
-export const ROLE_COLOR_CUSTOM_CHROMA = 0.14;
-
-/** The lightness a custom hue starts from before it is lifted to read. */
-const CUSTOM_START_LIGHTNESS = 0.7;
 /** How far one lift raises OKLCH lightness while adjusting a color. */
 const LIGHTNESS_STEP = 0.005;
 /** How far past a band's edge a nudged hue lands, so hex rounding can't drift it back in. */
@@ -245,7 +245,7 @@ export function roleColorOrNull(value: unknown): string | null {
 
 /**
  * The nearest paintable color to `hex` (#5784), the step behind
- * {@link roleColorForHue}, which is how the picker reaches it.
+ * {@link pickRoleColor}, which is how the picker reaches it.
  *
  * The color keeps its hue and chroma, its hue moves just past the nearer edge of a reserved band
  * it sits in (`nudged` names that band, for the picker's one line of why), and
@@ -274,41 +274,226 @@ export function adjustRoleColor(
 }
 
 /**
- * The color a hue picker paints for `hue` (0–360, OKLCH degrees): that hue at
- * the palette's chroma, lifted until it reads, moved out of a reserved band
- * when it sits in one. Every result passes {@link isPaintableRoleColor}.
+ * The picker's swatch grid (#5966): ten columns by hue, each light, middle
+ * and bright, the way Discord's role colors and Linear's and Notion's label
+ * colors lay out a curated set. The ten {@link ROLE_COLOR_PALETTE} colors
+ * are in it as listed (eight in the middle row, Slate and Sand in the
+ * neutral column), so every role stored with one stays selected; the others
+ * were made with {@link adjustRoleColor} from
+ * that hue at a softer and a stronger chroma, so each one reads at AA on
+ * every surface and sits outside red and gold (`role-colors.spec.ts` checks
+ * all thirty). Builds before #5784 paint only the ten.
  */
-export function roleColorForHue(hue: number): {
-  hex: string;
-  nudged: ReservedRoleHue | null;
-} {
-  // Nudged here, on the exact hue, rather than left to the adjustment: a hue
-  // on a band's edge can round across it once it is a hex, and the picker's
-  // line of why should follow where the slider sits.
-  const { hue: allowed, band } = nudgeHue(hue);
-  const { hex } = adjustRoleColor(
-    oklchToHex({
-      l: CUSTOM_START_LIGHTNESS,
-      c: ROLE_COLOR_CUSTOM_CHROMA,
-      h: allowed,
-    }),
-  )!;
-  return { hex, nudged: band };
+export const ROLE_COLOR_SWATCH_COLUMNS = [
+  {
+    key: "rose",
+    swatches: [
+      { label: "Light rose", hex: "#F9BECF" },
+      { label: "Rose", hex: "#F47FA4" },
+      { label: "Bright rose", hex: "#F96B9F" },
+    ],
+  },
+  {
+    key: "orange",
+    swatches: [
+      { label: "Peach", hex: "#F6C6A6" },
+      { label: "Orange", hex: "#F2994A" },
+      { label: "Bright orange", hex: "#F27E00" },
+    ],
+  },
+  {
+    key: "lime",
+    swatches: [
+      { label: "Light lime", hex: "#CCD8A4" },
+      { label: "Lime", hex: "#C5E06A" },
+      { label: "Bright lime", hex: "#A8D832" },
+    ],
+  },
+  {
+    key: "green",
+    swatches: [
+      { label: "Light green", hex: "#B3DEB8" },
+      { label: "Green", hex: "#6FD08C" },
+      { label: "Bright green", hex: "#1DC066" },
+    ],
+  },
+  {
+    key: "teal",
+    swatches: [
+      { label: "Light teal", hex: "#9CE1D7" },
+      { label: "Teal", hex: "#3DD6C4" },
+      { label: "Deep teal", hex: "#00BBA9" },
+    ],
+  },
+  {
+    key: "sky",
+    swatches: [
+      { label: "Light sky", hex: "#9DDCF1" },
+      { label: "Sky", hex: "#5CC8F0" },
+      { label: "Bright sky", hex: "#00B2E0" },
+    ],
+  },
+  {
+    key: "blue",
+    swatches: [
+      { label: "Light blue", hex: "#B3D4FF" },
+      { label: "Periwinkle", hex: "#8FA8FF" },
+      { label: "Bright blue", hex: "#53A0FF" },
+    ],
+  },
+  {
+    key: "violet",
+    swatches: [
+      { label: "Lavender", hex: "#D4C9FB" },
+      { label: "Violet", hex: "#B392F0" },
+      { label: "Bright violet", hex: "#A986FF" },
+    ],
+  },
+  {
+    key: "magenta",
+    swatches: [
+      { label: "Light orchid", hex: "#E9C2EB" },
+      { label: "Orchid", hex: "#DB93DE" },
+      { label: "Magenta", hex: "#DD73E4" },
+    ],
+  },
+  {
+    key: "neutral",
+    swatches: [
+      { label: "Silver", hex: "#D2D8DF" },
+      { label: "Slate", hex: "#A9B4C2" },
+      { label: "Sand", hex: "#D9B99B" },
+    ],
+  },
+] as const;
+
+export type RoleColorGridSwatch =
+  (typeof ROLE_COLOR_SWATCH_COLUMNS)[number]["swatches"][number];
+
+/** The grid's thirty swatches, column by column. */
+export const ROLE_COLOR_SWATCHES: readonly RoleColorGridSwatch[] =
+  ROLE_COLOR_SWATCH_COLUMNS.flatMap(
+    (column): readonly RoleColorGridSwatch[] => column.swatches,
+  );
+
+const SWATCH_LABEL_BY_UPPER_HEX = new Map<string, string>(
+  ROLE_COLOR_SWATCHES.map((swatch) => [swatch.hex.toUpperCase(), swatch.label]),
+);
+
+/** Whether a color is one of the grid's swatches (any letter case). */
+export function isRoleColorSwatch(value: string): boolean {
+  return SWATCH_LABEL_BY_UPPER_HEX.has(value.trim().toUpperCase());
 }
 
 /**
- * The OKLCH hue of a color, for placing a picker's slider on a stored custom
- * color; `null` for a non-color or a grey with no meaningful hue.
+ * What a color is called on screen and to a screen reader: "No color", a
+ * swatch's name, or "Custom color" for anything else the API stores.
  */
-export function roleColorHue(hex: string): number | null {
-  const oklch = hexToOklch(hex);
-  if (!oklch || oklch.c < ROLE_COLOR_RESERVED_CHROMA) return null;
-  return oklch.h;
+export function roleColorLabel(value: string | null): string {
+  if (value === null) return "No color";
+  return (
+    SWATCH_LABEL_BY_UPPER_HEX.get(value.trim().toUpperCase()) ?? "Custom color"
+  );
 }
 
-/** Whether a paintable value is one of the ten quick picks rather than a custom hue. */
-export function isPaletteRoleColor(value: string): value is RoleColorHex {
-  return BY_UPPER_HEX.has(value.trim().toUpperCase());
+/**
+ * A typed hex as `#RRGGBB`, or `null` when it isn't one. Forgiving the way
+ * Figma's and Discord's hex fields are: the `#` is optional, a short `#RGB`
+ * expands, and spaces and letter case don't matter.
+ */
+export function parseRoleColorInput(text: string): string | null {
+  const trimmed = text.trim().replace(/^#?/, "#");
+  return normalizeHex(trimmed) || null;
+}
+
+/** A custom pick, as the picker saves it. */
+export interface RoleColorPick {
+  /** The paintable `#RRGGBB` the role saves. */
+  hex: string;
+  /** The reserved band the hue was moved out of, if it sat in one. */
+  nudged: ReservedRoleHue | null;
+  /** Whether the color was made lighter so names read on Frapp's surfaces. */
+  lightened: boolean;
+}
+
+/**
+ * The color a custom pick saves (#5966): the picked color itself when it
+ * already reads at AA on every surface and isn't red or gold, otherwise the
+ * nearest one that does ({@link adjustRoleColor}), with what changed, so the
+ * picker can say so in one line ({@link roleColorPickNote}) rather than
+ * refuse it. `null` only for a non-color.
+ */
+export function pickRoleColor(input: string): RoleColorPick | null {
+  const hex = parseRoleColorInput(input);
+  if (!hex) return null;
+  const paintable = roleColorOrNull(hex);
+  if (paintable) return { hex: paintable, nudged: null, lightened: false };
+  const adjusted = adjustRoleColor(hex)!;
+  return {
+    hex: adjusted.hex,
+    nudged: adjusted.nudged,
+    lightened: adjusted.nudged === null,
+  };
+}
+
+/** The one line a picker shows when it changed a custom pick, or `null`. */
+export function roleColorPickNote(pick: RoleColorPick | null): string | null {
+  if (!pick) return null;
+  if (pick.nudged) {
+    return `${reservedRoleHueReason(pick.nudged)} This is the nearest color you can use.`;
+  }
+  return pick.lightened ? "Made lighter so names stay readable." : null;
+}
+
+/**
+ * The words the color picker says, the same on web and the phone (#5966).
+ */
+export const ROLE_COLOR_PICKER_COPY = {
+  none: "No color",
+  custom: "Custom color",
+  inChapter: "In your chapter",
+  hex: "Hex",
+  hexInvalid: "Enter a hex color, like #4A90E2.",
+  square: "Saturation and brightness",
+  hue: "Hue",
+  preview: "Preview",
+} as const;
+
+/** Where the custom square and hue bar start when there's no color to start from. */
+const CUSTOM_START: Hsv = { h: 210, s: 0.6, v: 0.95 };
+
+/**
+ * Where the custom square's thumb and the hue bar start for a color: on the
+ * color itself, so opening Custom on a role shows its own color, or on a
+ * readable sky blue when it has none.
+ */
+export function roleColorPickerStart(value: string | null): Hsv {
+  return (value && hexToHsv(value)) || CUSTOM_START;
+}
+
+/** How many of the chapter's own colors the picker offers. */
+export const CHAPTER_ROLE_COLORS_SHOWN = 10;
+
+/**
+ * The custom colors a chapter already uses on its roles and groups (#5966),
+ * most used first: what the picker offers as "In your chapter", so a second
+ * committee can match the first without retyping its hex. Grid swatches and
+ * colors that may not paint are left out, and so is nothing at all.
+ */
+export function chapterRoleColors(
+  colors: readonly (string | null | undefined)[],
+): string[] {
+  const counts = new Map<string, number>();
+  for (const color of colors) {
+    const hex = roleColorOrNull(color);
+    if (!hex || isRoleColorSwatch(hex)) continue;
+    counts.set(hex, (counts.get(hex) ?? 0) + 1);
+  }
+  // A stable sort keeps first-seen order among equal counts.
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, CHAPTER_ROLE_COLORS_SHOWN)
+    .map(([hex]) => hex);
 }
 
 /** The fields {@link topRoleColor} reads from a role row. */

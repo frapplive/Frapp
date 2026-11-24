@@ -1,8 +1,9 @@
-import { mixHex } from "@repo/color";
+import { hsvToHex, mixHex } from "@repo/color";
 import {
   ROLE_COLOR_PALETTE,
   ROLE_COLOR_SURFACES,
-  roleColorForHue,
+  ROLE_COLOR_SWATCHES,
+  pickRoleColor,
 } from "@repo/validation";
 import { describe, expect, it } from "vitest";
 
@@ -82,8 +83,22 @@ describe("custom role colors", () => {
   });
 
   it("read at AA on every surface, at rest and lifted on a hovered row", () => {
-    for (let hue = 0; hue < 360; hue += 3) {
-      const { hex } = roleColorForHue(hue);
+    // Every grid swatch, and custom picks across the square and hue bar.
+    const picks = ROLE_COLOR_SWATCHES.map((swatch) => [
+      swatch.label,
+      swatch.hex,
+    ]);
+    for (let h = 0; h < 360; h += 6) {
+      for (const [s, v] of [
+        [1, 1],
+        [0.5, 0.5],
+        [1, 0.2],
+      ]) {
+        const picked = hsvToHex({ h, s: s!, v: v! });
+        picks.push([picked, pickRoleColor(picked)!.hex]);
+      }
+    }
+    for (const [hue, hex] of picks as [string, string][]) {
       for (const [name, surface] of Object.entries(RESTING_SURFACES)) {
         expect(
           ratio(hex, surface),

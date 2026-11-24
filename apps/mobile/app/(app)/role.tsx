@@ -20,6 +20,7 @@ import {
   groupPermissionsByModule,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
+  roleColorOrNull,
   SELF_ASSIGNABLE_TIERED_CODE,
   selfAssignableRefusal,
   type SelfAssignableRefusal,
@@ -41,6 +42,10 @@ import {
   OverrideSheet,
   type OverrideTarget,
 } from "@/components/roles/override-sheet";
+import {
+  RoleColorRow,
+  useOptimisticColor,
+} from "@/components/roles/role-color-row";
 import { Toggle } from "@/components/toggle";
 import { describeError } from "@/lib/roles/save-error";
 import {
@@ -72,7 +77,10 @@ type Failure = { permission: string; message: string } | null;
  *   page has. It saves at once, like every switch on this screen, and is
  *   disabled with the rule's words on a role that can't be marked.
  *
- * Name, color, @mention and moving a role between tiers stay on web with
+ * - **Color** (#5966): the same picker as web's role page, saved on each
+ *   pick (`components/roles/role-color-row.tsx`).
+ *
+ * Name, @mention and moving a role between tiers stay on web with
  * the rest of a role's setup; giving a member a role is the Directory's
  * member profile, as it has been (#3676).
  */
@@ -175,6 +183,11 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           value={count === null ? "—" : String(count)}
           variant="detail"
         />
+        <RoleColor
+          role={role}
+          editable={canManage && reachesRole(reach, role, tiers)}
+          rolesUpdatedAt={data.rolesQuery.dataUpdatedAt}
+        />
       </ListSection>
 
       {role.system_key ? null : (
@@ -220,6 +233,53 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
  * switch says why and only turns off. A marked role that became unsafe some
  * other way can still be unmarked.
  */
+/**
+ * The role's color (#5966, #5791), set here as on web's role page with the
+ * same picker; it saves on each pick, like every switch on this screen.
+ * Read-only for an officer who can't edit this role.
+ */
+function RoleColor({
+  role,
+  editable,
+  rolesUpdatedAt,
+}: {
+  role: TieredRole;
+  editable: boolean;
+  rolesUpdatedAt: number;
+}) {
+  const updateRole = useUpdateRole();
+  const color = useOptimisticColor(roleColorOrNull(role.color), rolesUpdatedAt);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  async function save(next: string | null) {
+    color.start(next);
+    setFailure(null);
+    try {
+      await updateRole.mutateAsync({ id: role.id, body: { color: next } });
+      color.saved();
+    } catch (error) {
+      color.failed();
+      setFailure(
+        describeError(
+          role.name,
+          error,
+          "The color was not changed. Try again in a moment.",
+        ),
+      );
+    }
+  }
+
+  return (
+    <RoleColorRow
+      value={color.value}
+      name={role.name}
+      onChange={(next) => void save(next)}
+      disabled={!editable}
+      failure={failure}
+    />
+  );
+}
+
 function PickableSwitch({
   role,
   lockedReason,
