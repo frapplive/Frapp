@@ -22,7 +22,7 @@ describe("badgeDotPng", () => {
     expect(png.toString("ascii", 37, 41)).toBe("IDAT");
     const rows = inflateSync(png.subarray(41, 41 + idatLength));
     const pixel = (x: number, y: number) => [...rows.subarray(y * 129 + 1 + x * 4, y * 129 + 5 + x * 4)];
-    expect(pixel(16, 16)).toEqual([0xed, 0x42, 0x45, 255]);
+    expect(pixel(16, 16)).toEqual([0xe5, 0x48, 0x4d, 255]);
     expect(pixel(0, 0)[3]).toBe(0);
     expect(pixel(31, 31)[3]).toBe(0);
     expect(png.toString("ascii", png.length - 8, png.length - 4)).toBe("IEND");

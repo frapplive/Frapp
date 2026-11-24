@@ -64,8 +64,10 @@ has no web manifest and no service worker.
    This is how Discord and Slack behave. Whether an open desktop app holds back the phone push
    under ADR-04's presence rules is decided and recorded with that step ([#4842](https://github.com/pdcarlson/Frapp/issues/4842)).
    *Decided 2026-11-24 ([#4842](https://github.com/pdcarlson/Frapp/issues/4842)):* it holds one
-   back exactly as an open browser tab does. A member is present in a channel only while the
-   window is showing it, so an app hidden in the tray never silences the phone. The notification
+   back exactly as an open browser tab does. A member is present in a channel only while a
+   visible page is showing it: a hidden page leaves the channel's presence (a change to every
+   browser tab too, recorded on [ADR-10](adr-10.md)), so an app hidden in the tray never
+   silences the phone. The notification
    is raised from the member's own notification rows, which is what carries their settings and
    mutes ([`notifications.md` § The desktop app](../../behavior/notifications.md#the-desktop-app)).
 7. **Signed builds only.** macOS with an Apple Developer ID certificate and notarization (the

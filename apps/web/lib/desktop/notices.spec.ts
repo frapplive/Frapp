@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type NoticeRow, planDesktopNotices, unreadNonChatCount } from "./notices";
+import { type NoticeRow, newestRowTime, planDesktopNotices } from "./notices";
 
 const SINCE = Date.parse("2026-11-24T10:00:00Z");
-const base = { announced: new Set<string>(), since: SINCE, viewingChannelId: null };
+const base = { announced: new Set<string>(), since: SINCE };
 
 function row(id: string, over: Partial<NoticeRow> = {}): NoticeRow {
   return {
@@ -19,7 +19,14 @@ function row(id: string, over: Partial<NoticeRow> = {}): NoticeRow {
 describe("planDesktopNotices", () => {
   it("raises a new unread row with its title and words", () => {
     expect(planDesktopNotices([row("n-1")], base)).toEqual([
-      { id: "n-1", tag: "chat:c-1", title: "Ryan in #general", body: "are we still on for tonight?" },
+      {
+        id: "n-1",
+        unreadIds: ["n-1"],
+        tag: "chat:c-1",
+        title: "Ryan in #general",
+        body: "are we still on for tonight?",
+        silent: false,
+      },
     ]);
   });
 
@@ -30,16 +37,20 @@ describe("planDesktopNotices", () => {
     expect(planDesktopNotices([row("n-1", { created_at: "not a date" })], base)).toEqual([]);
   });
 
-  it("stays quiet for a row sent during quiet hours or Do Not Disturb", () => {
-    const quiet = row("n-1", { data: { target: { screen: "events" }, priority: "SILENT" } });
-    expect(planDesktopNotices([quiet], base)).toEqual([]);
+  it("stays quiet for a row quiet hours or Do Not Disturb lowered, and only those", () => {
+    const quieted = row("n-1", {
+      data: { target: { screen: "events" }, priority: "SILENT", quieted: true },
+    });
+    expect(planDesktopNotices([quieted], base)).toEqual([]);
     const urgent = row("n-2", { data: { target: { screen: "chat", channelId: "c-1" }, priority: "URGENT" } });
     expect(planDesktopNotices([urgent], base)).toHaveLength(1);
   });
 
-  it("stays quiet for the channel on screen, and only that one", () => {
-    const rows = [row("n-1"), row("n-2", { data: { target: { screen: "chat", channelId: "c-2" } } })];
-    expect(planDesktopNotices(rows, { ...base, viewingChannelId: "c-1" }).map((n) => n.id)).toEqual(["n-2"]);
+  it("shows a row its sender marked low priority, without a sound", () => {
+    // "New event created" goes out SILENT to everyone: a phone shows it and
+    // makes no sound, and so does this.
+    const low = row("n-1", { data: { target: { screen: "events" }, priority: "SILENT" } });
+    expect(planDesktopNotices([low], base)).toEqual([expect.objectContaining({ id: "n-1", silent: true })]);
   });
 
   it("keeps one notification per conversation, the newest", () => {
@@ -50,6 +61,17 @@ describe("planDesktopNotices", () => {
     expect(planDesktopNotices(rows, base)).toEqual([
       expect.objectContaining({ id: "n-2", tag: "chat:c-1", body: "second" }),
     ]);
+  });
+
+  it("stands for every unread row of the conversation, so a click reads them all (#3948)", () => {
+    const rows = [
+      row("n-1", { created_at: "2026-11-24T09:00:00Z" }),
+      row("n-2", { created_at: "2026-11-24T09:30:00Z", read_at: "2026-11-24T09:31:00Z" }),
+      row("n-3", { created_at: "2026-11-24T10:06:00Z" }),
+      row("n-4", { data: { target: { screen: "chat", channelId: "c-2" } } }),
+    ];
+    const notices = planDesktopNotices(rows, { ...base, announced: new Set(["n-1", "n-2"]) });
+    expect(notices.find((n) => n.id === "n-3")?.unreadIds).toEqual(["n-1", "n-3"]);
   });
 
   it("gives a row outside chat its own notification", () => {
@@ -72,15 +94,18 @@ describe("planDesktopNotices", () => {
   });
 });
 
-describe("unreadNonChatCount", () => {
-  it("counts unread rows that aren't about a chat message", () => {
+describe("newestRowTime", () => {
+  it("is the newest row's own time, from the server's clock", () => {
     expect(
-      unreadNonChatCount([
-        row("a"),
-        row("b", { data: { target: { screen: "events" } } }),
-        row("c", { data: { target: { screen: "tasks" } }, read_at: "2026-11-24T10:06:00Z" }),
-        row("d", { data: null }),
+      newestRowTime([
+        row("a", { created_at: "2026-11-24T09:00:00Z" }),
+        row("b", { created_at: "2026-11-24T10:05:00Z" }),
+        row("c", { created_at: "not a date" }),
       ]),
-    ).toBe(2);
+    ).toBe(Date.parse("2026-11-24T10:05:00Z"));
+  });
+
+  it("is 0 for an empty list, so everything after it is news", () => {
+    expect(newestRowTime([])).toBe(0);
   });
 });

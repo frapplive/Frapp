@@ -659,7 +659,11 @@ describe('NotificationService', () => {
       // The row says so too, for a client that raises its own banner (#4842).
       expect(mockNotificationRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { target: { screen: 'events' }, priority: 'SILENT' },
+          data: {
+            target: { screen: 'events' },
+            priority: 'SILENT',
+            quieted: true,
+          },
         }),
       );
 
@@ -1109,6 +1113,8 @@ describe('NotificationService', () => {
           user_id: 'u-1',
           title: 'for u-1',
           body: 'zone America/Chicago',
+          // Its sender's own SILENT, not the member's quiet hours (#4842).
+          data: { priority: 'SILENT' },
         }),
         expect.objectContaining({
           user_id: 'u-2',
@@ -1310,7 +1316,9 @@ describe('NotificationService', () => {
 
       expectSilentPush();
       expect(mockNotificationRepo.createMany).toHaveBeenCalledWith([
-        expect.objectContaining({ data: { priority: 'SILENT' } }),
+        expect.objectContaining({
+          data: { priority: 'SILENT', quieted: true },
+        }),
       ]);
 
       jest.useRealTimers();

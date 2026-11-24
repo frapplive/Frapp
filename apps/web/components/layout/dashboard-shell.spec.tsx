@@ -102,9 +102,9 @@ vi.mock("@/components/chat/chat-page", () => ({
   ),
 }));
 
-// Desktop-only, with its own spec; here it would only add reads of its own.
-vi.mock("@/components/layout/use-desktop-runtime", () => ({
-  useDesktopRuntime: () => {},
+// Desktop-only, with its own spec; here only that the shell mounts it.
+vi.mock("@/components/layout/desktop-runtime", () => ({
+  DesktopRuntime: () => <span data-testid="desktop-runtime" />,
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => {
@@ -317,6 +317,15 @@ describe("DashboardShell", () => {
       device.phone = null;
       window.localStorage.removeItem("frapp.web.get-the-app-dismissed");
     }
+  });
+
+  it("mounts the desktop app's runtime, which decides for itself where it runs (#4842)", () => {
+    render(
+      <DashboardShell>
+        <p>route content</p>
+      </DashboardShell>,
+    );
+    expect(screen.getByTestId("desktop-runtime")).toBeInTheDocument();
   });
 
   it("renders the route inside a main landmark", () => {

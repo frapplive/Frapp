@@ -26,7 +26,12 @@ vi.mock("@/lib/realtime/supabase-realtime", () => ({
   getRealtimeClient: () => ({}),
 }));
 vi.mock("@repo/chat-core/realtime-manager", () => ({
-  chatRealtime: { configure: vi.fn(), destroy: vi.fn(), resume: vi.fn() },
+  chatRealtime: {
+    configure: vi.fn(),
+    destroy: vi.fn(),
+    resume: vi.fn(),
+    setViewerAway: vi.fn(),
+  },
   createBackfillFetcher: vi.fn((client: unknown) => ({ readsWith: client })),
 }));
 
@@ -112,13 +117,18 @@ describe("useChatRealtimeBinding", () => {
       liveViewerId.current = "user-live";
       const { unmount } = renderHook(() => useChatRealtimeBinding());
 
+      expect(chatRealtime.setViewerAway).toHaveBeenLastCalledWith(false);
+
       visibility = "hidden";
       document.dispatchEvent(new Event("visibilitychange"));
       expect(chatRealtime.resume).not.toHaveBeenCalled();
+      // Hidden, the member isn't reading the open channel (#4842).
+      expect(chatRealtime.setViewerAway).toHaveBeenLastCalledWith(true);
 
       visibility = "visible";
       document.dispatchEvent(new Event("visibilitychange"));
       expect(chatRealtime.resume).toHaveBeenCalledTimes(1);
+      expect(chatRealtime.setViewerAway).toHaveBeenLastCalledWith(false);
 
       unmount();
       document.dispatchEvent(new Event("visibilitychange"));

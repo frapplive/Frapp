@@ -260,11 +260,20 @@ function inAppRow(
     user_id: userId,
     title: payload.title,
     body: payload.body,
-    // The priority the push went out at, quiet hours and Do Not Disturb
-    // applied (`SILENT`). A client that raises its own banner from the row,
-    // as the desktop app does (#4842), reads it here, so the quiet rules stay
-    // in this service.
-    data: { ...(payload.data ?? {}), priority: effectivePriority },
+    // The priority the push went out at, and `quieted` when quiet hours or
+    // Do Not Disturb are what made it `SILENT` rather than its sender. A
+    // client that raises its own banner from the row, as the desktop app
+    // does (#4842), reads both here, so the quiet rules stay in this service:
+    // it holds back a quieted row and shows a sender's `SILENT` one without
+    // a sound, as a phone does.
+    data: {
+      ...(payload.data ?? {}),
+      priority: effectivePriority,
+      ...(effectivePriority === 'SILENT' &&
+      (payload.priority ?? 'NORMAL') !== 'SILENT'
+        ? { quieted: true }
+        : {}),
+    },
     ...(payload.chatMessageId
       ? { chat_message_id: payload.chatMessageId }
       : {}),

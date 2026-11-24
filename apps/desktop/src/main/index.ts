@@ -138,6 +138,11 @@ function createWindow(options: { hidden?: boolean } = {}): BrowserWindow {
   win.on("session-end", () => {
     quitting = true;
   });
+  // Windows drops a taskbar overlay set while the window had no taskbar
+  // button (hidden in the tray), so the dot is put back each time it shows.
+  win.on("show", () => {
+    if (win === mainWindow) setUnreadBadge(unreadBadge);
+  });
   win.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();

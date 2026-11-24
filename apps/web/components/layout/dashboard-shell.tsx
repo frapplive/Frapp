@@ -67,7 +67,7 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
-import { useDesktopRuntime } from "@/components/layout/use-desktop-runtime";
+import { DesktopRuntime } from "@/components/layout/desktop-runtime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -172,9 +172,6 @@ export function DashboardShell({
   const askBar = useAskEntry() !== null && !isAskRoute(pathname);
   const searchParams = useSearchParams();
   const router = useRouter();
-  // Inside the desktop app only: the icon's unread count and system
-  // notifications (#4842).
-  useDesktopRuntime();
   // Chapter accent, shell-wide: maps the persisted engine roles onto the
   // semantic tokens signet.css defines. Mounted here (not in ChatProvider) so
   // the nav's active-item tint does not depend on which route is open.
@@ -521,6 +518,8 @@ export function DashboardShell({
       <WelcomeGate />
       {/* What's new, by itself once after an update (#3943). */}
       <WhatsNewHost />
+      {/* Inside the desktop app only: the icon's count and system notifications (#4842). */}
+      <DesktopRuntime />
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*

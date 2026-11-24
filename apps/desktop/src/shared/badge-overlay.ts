@@ -12,8 +12,8 @@ import { crc32, deflateSync } from "node:zlib";
 
 /** Windows scales the overlay to 16px; 32 keeps it sharp at 200%. */
 const SIZE = 32;
-/** The mention red of the app's own unread counts (`--destructive`, dark). */
-const DOT = { r: 0xed, g: 0x42, b: 0x45 };
+/** The red of the app's own unread counts: `--mention` in `packages/theme/src/signet.css`. */
+const DOT = { r: 0xe5, g: 0x48, b: 0x4d };
 
 /** What the overlay says to a screen reader, or `null` when there is no dot. */
 export function badgeDescription(count: number): string | null {
