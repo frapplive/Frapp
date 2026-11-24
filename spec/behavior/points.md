@@ -81,6 +81,10 @@ When a user checks into an event:
   **Equal totals share a rank** (1, 1, 3), in the Directory's standings and on
   the mobile task board's points line alike, so a roster tied at 0 is everyone
   at `#1` (2026-11-06).
+  *Changed in #5950 by pdcarlson, 2026-11-24:* in the Directory's standings a
+  member with nothing in the period (a total of 0 or less) gets no place: their
+  row lists after the ranked ones, unnumbered, and a member's own points show
+  no "#24 of 24" either. A place tied for last says nothing a member can act on.
 - The sum happens **in Postgres** (`get_points_leaderboard`), not in the API
   process. Rows come back by total descending, **ties broken by `user_id`** — so
   two members on the same total hold the same relative order on every request,
@@ -108,7 +112,7 @@ Which sorts each app offers and how a row draws are [`members.md` § Directory](
 - **A standing counts over a period**, picked beside the sort: This semester (the default), This month or All time, and for points each archived semester after them.
   The service board takes a date range and has no archive, so it offers the three live periods only; its This semester starts the day after the latest archive ends, as the Activity standing's does ([`activity.md` § Standing](activity.md#standing)).
 - **Each row leads with the member's place** and ends with their total for the period ("45 points", "2.5 hours").
-  Places are ranked as above: equal totals share a place, and a search or filter never renumbers them.
+  Places are ranked as above: equal totals share a place, and a search or filter never renumbers them. A member with nothing in the period (0 or less) has no place; their row comes after the ranked ones, unnumbered, its total muted.
 - **A standing that can't be read ranks nobody.** Its rows are replaced by an error with Try again; ranking the chapter at 0 would be a wrong answer, not a missing one.
 - **A module that is off offers no standing** and its board is never read.
 

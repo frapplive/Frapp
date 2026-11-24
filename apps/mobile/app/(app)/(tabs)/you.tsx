@@ -143,9 +143,8 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * ## Rows nobody has set up
  *
- * Study hours with no active study zone leaves the list for everyone, since
- * zones are made in the web app and the screen could only say so. Documents
- * with nothing in it leaves it for a viewer who can't upload; an officer who
+ * Documents with nothing in it leaves the list for a viewer who can't
+ * upload; an officer who
  * can keeps the row, because the upload is on that screen
  * (`useHiddenUnsetFeatures` in `@repo/hooks`; `spec/product/modules.md`
  * § Not-set-up features). Nothing hides until the viewer's permissions, the
@@ -154,13 +153,9 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * ## Trailing statuses
  *
- * Canvas draws "4.0 / 6.0" on Study: the week's real total over the member's
- * weekly study goal, which officers set in Chapter settings (#1062,
- * `useMyGoals`). With no goal the row shows the total with no denominator
- * (see `components/study/week-summary.tsx`), and nothing at zero (#5281). Neither Study nor Dues renders a
- * placeholder while its query is in flight: a row that says "0.0 hrs" for a
- * beat at a member who studied all week is worse than one that says nothing
- * yet.
+ * Dues draws its next due date; it renders no placeholder while its query is
+ * in flight. Study and service hours have no rows here since #5950: their
+ * numbers are the This semester gauges, which open their screens.
  */
 export default function YouScreen() {
   const router = useRouter();
