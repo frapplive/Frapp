@@ -34,7 +34,7 @@ A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id
 
 - **A group task** (`tasks.md` § Tasks for everyone): every copy holds the same list. A group edit (`scope: "group"`) changes it on every copy, checked once.
 - **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields, checked once and written to the open copy as checked.
-- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261123183858_task_attachments`), as `events.attachments` is.
+- **The database** keeps `tasks.attachments` and `task_series.attachments` as `jsonb` lists of at most 10 (`20261124034200_task_attachments`), as `events.attachments` is.
 
 ## Where a link opens
 
