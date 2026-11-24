@@ -55,6 +55,7 @@ export * from "./chapter-groups";
 export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
+export * from "./chapter-settings-copy";
 // The audit log (#3909): what may change on a line already in it.
 export * from "./chat-audit-log";
 export * from "./chat-backgrounds";
@@ -176,7 +177,6 @@ export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
 export * from "./name-lock";
-export * from "./chapter-settings-copy";
 // The native app's identifiers, store listings and invite hand-off (#4002),
 // shared so web's invite hand-off (`AppHandoff`), the API's update-screen
 // default and the app-link files name one app. See ./native-app.
