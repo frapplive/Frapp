@@ -20,7 +20,6 @@ import {
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
-import { formatPhone, formatPhoneInput } from "@repo/formatting";
 import {
   BIRTHDAY_COPY,
   can,
@@ -55,7 +54,11 @@ import { Toggle } from "@/components/toggle";
 import { ListRow, ListSection } from "@/components/list-section";
 import {
   applyEdit,
+  BIRTHDAY_FIELD_ACCESSIBLE_LABELS,
   draftFromProfile,
+  tidiedPhone,
+  typedPhone,
+  YEAR_FIELD_WIDTH,
   hasChanges,
   profilePatch,
   rebaseEdits,
@@ -150,12 +153,6 @@ const BIRTHDAY_FIELDS: EditProfileField[] = [
 ];
 
 const copy = PROFILE_FIELD_COPY;
-
-/**
- * The graduation year's width beside Major: four digits at the body size plus
- * the field's padding, rounded up to the grid (foundations §9).
- */
-const YEAR_FIELD_WIDTH = 96;
 
 /** A typed graduation year as a number, or null while it isn't one. */
 function draftYear(typed: string): number | null {
@@ -258,10 +255,7 @@ export const EditProfileSheet = forwardRef<
     setSubmitFailed(false);
     // The phone formats as it is typed (#5798); `onChangeText` reports no
     // caret, so it is worked out from the text before.
-    const next =
-      field === "phone"
-        ? formatPhoneInput(value, undefined, shown.phone).value
-        : value;
+    const next = field === "phone" ? typedPhone(value, shown.phone) : value;
     setEdits((latest) => applyEdit(latest, original, field, next));
   };
 
@@ -451,8 +445,8 @@ export const EditProfileSheet = forwardRef<
           reveal.blur(name);
           // A 7-digit local number reads `555-0142` once the member leaves
           // the field, not half-grouped as a longer one (#5798).
-          if (name === "phone" && formatPhone(shown.phone) !== shown.phone) {
-            const tidy = formatPhone(shown.phone);
+          const tidy = name === "phone" ? tidiedPhone(shown.phone) : null;
+          if (tidy !== null) {
             setEdits((latest) => applyEdit(latest, original, "phone", tidy));
           }
         }}
@@ -588,21 +582,21 @@ export const EditProfileSheet = forwardRef<
         </View>
         <View style={styles.row} onLayout={anchor(BIRTHDAY_FIELDS, "bottom")}>
           {field("birthdayMonth", BIRTHDAY_COPY.monthLabel, {
-            accessibleLabel: "Birthday month, 1 to 12",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayMonth,
             placeholder: "MM",
             keyboardType: "number-pad",
             maxLength: 2,
             grow: true,
           })}
           {field("birthdayDay", BIRTHDAY_COPY.dayLabel, {
-            accessibleLabel: "Birthday day",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayDay,
             placeholder: "DD",
             keyboardType: "number-pad",
             maxLength: 2,
             grow: true,
           })}
           {field("birthdayYear", BIRTHDAY_COPY.yearLabel, {
-            accessibleLabel: "Birth year, optional",
+            accessibleLabel: BIRTHDAY_FIELD_ACCESSIBLE_LABELS.birthdayYear,
             placeholder: "YYYY",
             keyboardType: "number-pad",
             maxLength: 4,

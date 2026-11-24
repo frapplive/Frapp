@@ -15,6 +15,7 @@ import {
   ONBOARDING_YOU_COPY,
   initialNameField,
   isDisplayNameLocked,
+  needsAboutYou,
   typedNameMissing,
 } from "@repo/validation";
 import { AuthScreen } from "@/components/auth/auth-screen";
@@ -28,13 +29,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WelcomeAbout } from "@/components/onboarding/welcome-about";
+import type { ProfileFields } from "@/components/profile/profile-save-body";
 import { markWelcomeDue } from "@/lib/onboarding/welcome-due";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { initials } from "@/lib/utils";
 
-type Me = {
+type Me = ProfileFields & {
   id?: string;
-  display_name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
 };
@@ -53,6 +55,10 @@ type Me = {
  * message the member sends carries it. The photo is optional and saves on its
  * own, as it does on Profile.
  *
+ * Then **About you** (#5284), when phone, major, graduation year or birthday
+ * is empty (`needsAboutYou`): optional, with Skip for now
+ * (`welcome-about.tsx`). The name's button says Continue when it follows.
+ *
  * Leaving marks onboarding done (`has_completed_onboarding`), as the phone's
  * s03 does, so the Directory stops listing the member as pending. The phone
  * then skips s03 for them, and its chat home asks about notifications once
@@ -70,6 +76,7 @@ export function WelcomeYou() {
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [step, setStep] = useState<"you" | "about">("you");
 
   if (!me) {
     if (isOffline && userQuery.isPending) {
@@ -112,7 +119,16 @@ export function WelcomeYou() {
     ? storedName
     : (nameDraft ?? initialNameField(me.display_name, me.email ?? null));
 
-  // Validated on Go to chat, not per keystroke. A name that didn't change
+  // Decided from the profile as loaded; once on About you it stays there.
+  const askAbout = needsAboutYou({
+    phone: me.phone,
+    major: me.major,
+    graduationYear: me.graduation_year,
+    birthdayMonth: me.birthday_month,
+    birthdayDay: me.birthday_day,
+  });
+
+  // Validated on Continue or Go to chat, not per keystroke. A name that didn't change
   // isn't sent again; one that did is saved first, so a failure keeps the
   // member here with the reason rather than losing the name.
   async function leave(event: React.FormEvent<HTMLFormElement>) {
@@ -133,6 +149,16 @@ export function WelcomeYou() {
         return;
       }
     }
+    if (askAbout) {
+      setLeaving(false);
+      setStep("about");
+      return;
+    }
+    await finish();
+  }
+
+  async function finish() {
+    setLeaving(true);
     try {
       await updateOnboarding.mutateAsync({ has_completed_onboarding: true });
     } catch {
@@ -142,6 +168,12 @@ export function WelcomeYou() {
     if (me?.id && chapterId) markWelcomeDue(me.id, chapterId);
     // Stays busy: the page is on its way to chat.
     router.replace("/chat");
+  }
+
+  if (step === "about") {
+    return (
+      <WelcomeAbout saved={me} leaving={leaving} onDone={() => void finish()} />
+    );
   }
 
   return (
@@ -220,7 +252,9 @@ export function WelcomeYou() {
           {leaving ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : null}
-          {ONBOARDING_YOU_COPY.goToChat}
+          {askAbout
+            ? ONBOARDING_YOU_COPY.continue
+            : ONBOARDING_YOU_COPY.goToChat}
         </Button>
       </form>
     </AuthScreen>

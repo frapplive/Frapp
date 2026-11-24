@@ -16,7 +16,7 @@ import { FRAPP_AI_COPY, joinNames, type FrappAiPoint } from "@repo/validation";
 import { ChatGlyph, TasksGlyph } from "@/components/tab-glyphs";
 import { Frame, paint } from "@/components/glyph-recipe";
 import { OnboardingPrimaryButton } from "@/components/onboarding/onboarding-primary-button";
-import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
+import { OnboardingQuietButton } from "@/components/onboarding/onboarding-quiet-button";
 import {
   SHEET_STACK_BEHAVIOR,
   SheetBackToClose,
@@ -122,8 +122,6 @@ export function MeetFrappAiActions({
   onContinue: () => void;
   onNotNow: () => void;
 }) {
-  const { tokens } = useFrappTheme();
-  const styles = createStyles(tokens);
   return (
     <>
       <OnboardingPrimaryButton
@@ -132,15 +130,11 @@ export function MeetFrappAiActions({
         disabled={busy || disabled}
         busy={busy}
       />
-      <OnboardingPressable
-        accessibilityRole="button"
+      <OnboardingQuietButton
+        label={FRAPP_AI_COPY.notNow}
         onPress={onNotNow}
         disabled={busy || disabled}
-        quiet
-        style={styles.quietButton}
-      >
-        <Text style={styles.quietButtonText}>{FRAPP_AI_COPY.notNow}</Text>
-      </OnboardingPressable>
+      />
     </>
   );
 }
@@ -418,18 +412,6 @@ function createStyles(tokens: SignetTokens) {
     error: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.semantic.destructiveText,
-    },
-    quietButton: {
-      alignSelf: "center",
-      minHeight: tokens.touch.minimum,
-      paddingHorizontal: tokens.spacing.lg,
-      justifyContent: "center",
-      marginTop: tokens.spacing.xs,
-    },
-    quietButtonText: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.text.mutedForeground,
-      textDecorationLine: "underline",
     },
     sheetBody: {
       paddingHorizontal: tokens.spacing.lg,
