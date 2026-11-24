@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { emptyCache, mergeServerRow } from "@repo/chat-core/cache";
+import { emptyCache, mergeServerRow } from "./cache";
 import {
   chatMessagesKey,
   type ChannelCache,
   type RawChatMessage,
-} from "@repo/chat-core/types";
+} from "./types";
 import { refreshTimelinesForDiscordAuthor } from "./discord-author-reads";
 
 /*

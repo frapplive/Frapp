@@ -19828,9 +19828,19 @@
     },
     "/v1/discord/author-link/start": {
       "post": {
-        "description": "Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the browser to their Settings page with a one-time token that `POST /v1/discord/author-link/confirm` spends.",
+        "description": "Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the member to Settings with a one-time token that `POST /v1/discord/author-link/confirm` spends: the web page by default, or with `client: mobile` the phone app at `return_url`, which must be the app’s own Settings address.",
         "operationId": "DiscordAuthorLinkController_begin_v1",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeginDiscordAuthorLinkDto"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "",
@@ -38479,6 +38489,24 @@
           "linked_at"
         ]
       },
+      "BeginDiscordAuthorLinkDto": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "type": "string",
+            "enum": [
+              "web",
+              "mobile"
+            ],
+            "description": "Where Discord sends the member back: the web Settings → Linked apps (the default), or the phone app at `return_url`."
+          },
+          "return_url": {
+            "type": "string",
+            "description": "For `mobile`: the app’s Settings address, in its own `frapp://` scheme. Any other address is refused.",
+            "example": "frapp://preferences"
+          }
+        }
+      },
       "BeginDiscordAuthorLinkResponseDto": {
         "type": "object",
         "properties": {
@@ -38501,7 +38529,7 @@
         "properties": {
           "handshake": {
             "type": "string",
-            "description": "The one-time token the OAuth callback put on the redirect to the Settings page. It links the Discord account only for the member who started the handshake, in the chapter it was started in."
+            "description": "The one-time token the OAuth callback put on the redirect to Settings (the web page, or the phone app). It links the Discord account only for the member who started the handshake, in the chapter it was started in."
           }
         },
         "required": [

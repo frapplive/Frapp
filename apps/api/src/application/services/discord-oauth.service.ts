@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { isProductionSupabaseUrl } from '@repo/validation';
 import { logSafe } from '../../infrastructure/observability/log-safe';
 import {
   DISCORD_BOT_GATEWAY,
@@ -22,6 +23,7 @@ import {
   type IDiscordConnectionRepository,
 } from '#domain/repositories/discord-connection.repository.interface';
 import type { DiscordOAuthState } from '#domain/entities/discord-connection.entity';
+import { isAppReturnUrl, withQueryParams } from '#domain/utils/app-return-url';
 import { toReportableError } from '../../infrastructure/observability/reportable-error';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportSwallowed } from '../../infrastructure/observability/report-swallowed';
@@ -88,6 +90,15 @@ export const DEFAULT_RETURN_PATH = '/discord-import';
  * move is spent where it lands.
  */
 export const AUTHOR_LINK_RETURN_PATH = '/preferences?section=apps';
+
+/**
+ * The phone screens a member's link handshake may return to (#5414): Settings,
+ * where Linked apps' Discord row starts it. The phone names its own address
+ * (`frapp://preferences`, or Expo Go's in development), because only the app
+ * knows it; the server accepts it only as one of these screens in one of the
+ * app's schemes (`isAppReturnUrl`), never an address the request makes up.
+ */
+export const AUTHOR_LINK_APP_ROUTES = ['preferences'] as const;
 
 /**
  * How long the browser has to activate what the callback parked.
@@ -200,6 +211,8 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DiscordOAuthService.name);
   private readonly apiUrl: string | null;
   private readonly appUrl: string | null;
+  /** Whether the staging app and Expo Go may receive a link handshake's return. */
+  private readonly allowDevApps: boolean;
   private applicationCheckResult: {
     check: DiscordApplicationCheck;
     at: number;
@@ -219,6 +232,8 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
     const rawApiUrl = config.get<string>('API_URL');
     this.apiUrl = apiBaseUrl(rawApiUrl);
     this.appUrl = normaliseOrigin(config.get<string>('APP_URL'));
+    const supabaseUrl = config.get<string>('SUPABASE_URL');
+    this.allowDevApps = !(supabaseUrl && isProductionSupabaseUrl(supabaseUrl));
     if (this.apiUrl !== null && this.apiUrl !== normaliseOrigin(rawApiUrl)) {
       // Harmless now, and said once per boot so the drift stays visible: the
       // documented value is the bare origin (ENV_REFERENCE.md), and a stray
@@ -491,11 +506,25 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
    * and only the link confirm can spend it. The authorize URL asks for
    * `identify` alone. The chapter and the member come from the authenticated,
    * chapter-scoped request that calls this, never from the browser later.
+   *
+   * `appReturnUrl` is the phone's Settings address (#5414); without it the
+   * handshake returns to the web's Settings → Linked apps. It is checked here,
+   * at write time, for the same reason `safeReturnPath` is: the callback has
+   * no session, so whatever is stored is where the confirm token goes. The
+   * token is still only half of a link: another app that claimed the scheme
+   * and caught it could spend it only from the session of the member who
+   * started the handshake, in this chapter (`DiscordAuthorLinkService.confirm`).
    */
   async beginAuthorLink(
     chapterId: string,
     userId: string,
+    appReturnUrl: string | null = null,
   ): Promise<{ authorize_url: string; expires_at: string }> {
+    if (appReturnUrl !== null && !this.isAuthorLinkAppReturn(appReturnUrl)) {
+      throw new BadRequestException(
+        'return_url must be the app’s own Settings address.',
+      );
+    }
     try {
       await this.assertAvailable({ fresh: true });
     } catch (error) {
@@ -515,7 +544,7 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
       chapter_id: chapterId,
       purpose: 'author_link',
       created_by: userId,
-      return_path: AUTHOR_LINK_RETURN_PATH,
+      return_path: appReturnUrl ?? AUTHOR_LINK_RETURN_PATH,
       expires_at: expiresAt.toISOString(),
     });
 
@@ -985,6 +1014,13 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
    * whether or not a row answers, and the path is one this server stored,
    * sanitised again by `buildReturnUrl`.
    */
+  private isAuthorLinkAppReturn(url: string): boolean {
+    return isAppReturnUrl(url, {
+      allowDevApps: this.allowDevApps,
+      routes: AUTHOR_LINK_APP_ROUTES,
+    });
+  }
+
   private storedReturnPath(stateId: string): Promise<string | null> {
     return this.connectionRepo.findStateReturnPath(stateId).catch(() => null);
   }
@@ -995,13 +1031,21 @@ export class DiscordOAuthService implements OnApplicationBootstrap {
    * `returnPath` was sanitised at write time (`safeReturnPath`), and it is
    * resolved against the CONFIGURED app origin rather than anything on the
    * request — so even a stored value that somehow got past validation cannot
-   * send the browser off-origin.
+   * send the browser off-origin. The one exception is a phone's Settings
+   * address on a member's link handshake (#5414), checked again here against
+   * the same closed list it was stored under.
    */
   private buildReturnUrl(
     returnPath: string | null,
     code: DiscordConnectCode,
     confirmToken?: string,
   ): string {
+    if (returnPath !== null && this.isAuthorLinkAppReturn(returnPath)) {
+      return withQueryParams(returnPath, {
+        discord: code,
+        ...(confirmToken ? { handshake: confirmToken } : {}),
+      });
+    }
     const origin = this.appUrl ?? 'http://localhost';
     const url = new URL(safeReturnPath(returnPath), origin);
     url.searchParams.set('discord', code);

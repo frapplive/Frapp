@@ -18,6 +18,7 @@ import {
 } from '../decorators/current-user.decorator';
 import { SystemPermissions } from '#domain/constants/permissions';
 import {
+  BeginDiscordAuthorLinkDto,
   BeginDiscordAuthorLinkResponseDto,
   ConfirmDiscordAuthorLinkDto,
   ConfirmDiscordAuthorLinkResponseDto,
@@ -70,14 +71,19 @@ export class DiscordAuthorLinkController {
   @ApiOperation({
     summary: 'Start linking your Discord account',
     description:
-      'Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the browser to their Settings page with a one-time token that `POST /v1/discord/author-link/confirm` spends.',
+      'Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the member to Settings with a one-time token that `POST /v1/discord/author-link/confirm` spends: the web page by default, or with `client: mobile` the phone app at `return_url`, which must be the app’s own Settings address.',
   })
   @ApiCreatedResponse({ type: BeginDiscordAuthorLinkResponseDto })
   begin(
     @CurrentChapterId() chapterId: string,
     @CurrentUser() user: { id: string },
+    @Body() dto: BeginDiscordAuthorLinkDto = {},
   ) {
-    return this.linkService.begin(chapterId, user.id);
+    return this.linkService.begin(
+      chapterId,
+      user.id,
+      dto.client === 'mobile' ? (dto.return_url ?? '') : null,
+    );
   }
 
   @Post('author-link/confirm')

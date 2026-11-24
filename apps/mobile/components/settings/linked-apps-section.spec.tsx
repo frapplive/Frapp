@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
   authSession: vi.fn(),
   disconnect: vi.fn(),
   discord: undefined as Record<string, unknown> | undefined,
+  discordBegin: vi.fn(),
+  discordConfirm: vi.fn(),
+  discordUnlink: vi.fn(),
   sheetReturnPaths: [] as (string | undefined)[],
 }));
 
@@ -37,6 +40,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isPending: false,
   }),
   useDiscordAuthorLink: () => ({ data: state.discord }),
+  useBeginDiscordAuthorLink: () => ({
+    mutateAsync: state.discordBegin,
+    isPending: false,
+  }),
+  useConfirmDiscordAuthorLink: () => ({
+    mutateAsync: state.discordConfirm,
+    isPending: false,
+  }),
+  useUnlinkDiscordAuthor: () => ({
+    mutateAsync: state.discordUnlink,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/components/events/calendar-subscribe-sheet", () => ({
@@ -117,8 +132,16 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     state.authSession.mockResolvedValue({ type: "cancel" });
     state.disconnect.mockReset();
     state.discord = { available: true, linked: false };
+    state.discordBegin.mockReset();
+    state.discordBegin.mockResolvedValue({
+      authorize_url: "https://discord.com/oauth2/authorize?x",
+      expires_at: "2026-11-24T12:15:00Z",
+    });
+    state.discordConfirm.mockReset();
+    state.discordUnlink.mockReset();
     state.sheetReturnPaths = [];
     vi.spyOn(Alert, "alert").mockImplementation(() => {});
+    vi.mocked(Alert.alert).mockClear();
   });
 
   it("connects Google from Settings and has the sign-in come back to Settings", async () => {
@@ -177,5 +200,99 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     expect(row(tree, "Apple").props.accessibilityValue).toBe("Connected");
     expect(row(tree, "Google").props.accessibilityValue).toBe("Not connected");
     expect(row(tree, "Email").props.accessibilityValue).toBe("Not connected");
+  });
+
+  it("links Discord in the auth sheet and has it come back to Settings (#5414)", async () => {
+    state.authSession.mockResolvedValue({
+      type: "success",
+      url: "frapp://preferences?discord=pending&handshake=11111111-1111-4111-8111-111111111111",
+    });
+    state.discordConfirm.mockResolvedValue({
+      available: true,
+      linked: true,
+      discord_user_id: "1100000000000000001",
+      discord_username: "jkslayer",
+      linked_at: "2026-11-24T12:00:00Z",
+      messages_linked: 3,
+    });
+    const tree = await render();
+    expect(row(tree, "Discord").props.accessibilityValue).toBe("Not connected");
+    await act(async () => {
+      row(tree, "Discord").props.onPress();
+    });
+
+    expect(state.discordBegin).toHaveBeenCalledWith({
+      client: "mobile",
+      returnUrl: "frapp://preferences",
+    });
+    expect(state.authSession).toHaveBeenCalledWith(
+      "https://discord.com/oauth2/authorize?x",
+      "frapp://preferences",
+    );
+    expect(state.discordConfirm).toHaveBeenCalledWith({
+      handshake: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Discord linked",
+      "Discord account linked. 3 imported messages now show as yours.",
+    );
+  });
+
+  it("says nothing when the member cancels on Discord, and says an expired link", async () => {
+    state.authSession.mockResolvedValueOnce({
+      type: "success",
+      url: "frapp://preferences?discord=declined",
+    });
+    const tree = await render();
+    await act(async () => {
+      row(tree, "Discord").props.onPress();
+    });
+    expect(state.discordConfirm).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
+
+    state.authSession.mockResolvedValueOnce({
+      type: "success",
+      url: "frapp://preferences?discord=expired",
+    });
+    await act(async () => {
+      row(tree, "Discord").props.onPress();
+    });
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Discord wasn't linked",
+      "That Discord link expired. Link your account again.",
+    );
+  });
+
+  it("offers Unlink on a linked row, confirmed before anything changes", async () => {
+    state.discord = {
+      available: true,
+      linked: true,
+      discord_user_id: "1100000000000000001",
+      discord_username: "jkslayer",
+    };
+    state.discordUnlink.mockResolvedValue({
+      unlinked: true,
+      messages_restored: 1,
+    });
+    const tree = await render();
+    expect(row(tree, "Discord").props.accessibilityValue).toBe("Connected");
+    expect(row(tree, "Discord").props.description).toBe("jkslayer");
+
+    await act(async () => {
+      row(tree, "Discord").props.onPress();
+    });
+    expect(state.discordBegin).not.toHaveBeenCalled();
+    const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
+    expect(title).toBe("Unlink Discord?");
+    expect(state.discordUnlink).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttons!.find((button) => button.text === "Unlink")!.onPress!();
+    });
+    expect(state.discordUnlink).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      "Discord unlinked",
+      "Discord account unlinked. 1 imported message shows under the Discord name again.",
+    );
   });
 });
