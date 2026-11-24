@@ -37,10 +37,13 @@ import {
   formNotRespondedLabel,
   formQuestionAnsweredLine,
   formResponsesCountLine,
+  FORM_RESPONSES_VIEWS,
+  FORM_RESPONSES_VIEWS_LABEL,
   formResponsesExportRows,
   formResponsesKey,
   summarizeFormResponses,
   type FormResponses,
+  type FormResponsesView,
   type MemberLabel,
 } from "@repo/chat-core/form-responses";
 import type { FormPayload } from "@repo/chat-core/forms";
@@ -237,13 +240,6 @@ function ResponsesBody({
   );
 }
 
-type ResponsesView = "summary" | "individual";
-
-const RESPONSE_VIEWS = [
-  { value: "summary", label: "Summary" },
-  { value: "individual", label: "Individual" },
-] as const satisfies readonly { value: ResponsesView; label: string }[];
-
 function ResponsesTabs({
   payload,
   data,
@@ -258,15 +254,15 @@ function ResponsesTabs({
     [payload, data.responses],
   );
   const total = data.responses.length;
-  const [view, setView] = useState<ResponsesView>("summary");
+  const [view, setView] = useState<FormResponsesView>("summary");
   return (
     <>
       {/* The two views as plain words (`ViewLabels`, #5947), as the phone
           draws them. */}
       <ViewLabels
         flush
-        label="Show responses as"
-        options={RESPONSE_VIEWS}
+        label={FORM_RESPONSES_VIEWS_LABEL}
+        options={FORM_RESPONSES_VIEWS}
         value={view}
         onChange={setView}
       />

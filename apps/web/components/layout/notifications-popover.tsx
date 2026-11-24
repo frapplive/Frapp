@@ -378,12 +378,14 @@ export function NotificationsPopover({
         // up to 560px or the room under the bar, then the list scrolls.
         className="flex max-h-[min(560px,var(--radix-popover-content-available-height))] w-[min(400px,calc(100vw-16px))] flex-col p-0"
       >
-        <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border pl-4 pr-2">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
           <h2 id={titleId} className="text-sm font-semibold">
             Notifications
           </h2>
           {/* All and Unread as plain words beside the title, after a
-              hairline, as a page header draws its views (#5947). */}
+              hairline, as a page header draws its views (#5947). The row
+              packs from the start, so they stay beside the title whether or
+              not Mark all read is there to take the end. */}
           <span aria-hidden="true" className="h-4 w-px bg-border" />
           <ViewLabels
             label="Show"

@@ -381,11 +381,11 @@ export interface ChannelListProps {
   kind?: "channels" | "direct";
   /**
    * Each conversation's or channel's latest message time
-   * (`GET /v1/channels/latest`). Direct messages always sort by it, newest
-   * first, as the phone's Messages screen does; the channels rail sorts by it
-   * only when the member picked Recent (#2877). Absent until that read
-   * answers, when the list keeps its other order rather than reordering under
-   * the pointer twice.
+   * (`GET /v1/channels/latest`). Direct messages sort by it, newest first, as
+   * the phone's Messages screen does; channels never do, because they are
+   * always in the chapter's order (#5947). Absent until that read answers,
+   * when the list keeps its other order rather than reordering under the
+   * pointer twice.
    */
   latestAt?: ReadonlyMap<string, string>;
   /**

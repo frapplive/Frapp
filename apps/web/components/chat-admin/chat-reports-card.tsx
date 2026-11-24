@@ -346,11 +346,14 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
       {/*
           The statuses as plain words (`ViewLabels`, #5947). Four of them
           can run past a 375px page, so they scroll in their own box rather
-          than pushing the page (the `test:floor` rule).
+          than pushing the page (the `test:floor` rule). A scroll box clips
+          whatever leaves its padding box, so the box reaches 3px past the
+          labels on every side for the focus ring, and 7px further left so
+          the first word still lines up with the heading (what `flush` does
+          outside a scroll box).
         */}
-      <div className="overflow-x-auto">
+      <div className="-my-[3px] -ml-[10px] -mr-[3px] overflow-x-auto p-[3px]">
         <ViewLabels
-          flush
           label="Report status"
           options={CHAT_REPORT_TABS.map((tab) => ({
             value: tab.status,

@@ -3466,9 +3466,8 @@ export function ChatShell({
               sidebar={sidebarControls}
               // The chapter's order is for channels: a DM is never placed in
               // it, and the empty categories an officer drags onto would sit
-              // in a list of conversations (#3774). Under Recent or A–Z the
-              // list keeps categories draggable and turns off channel-row
-              // drag itself (#2877).
+              // in a list of conversations (#3774). Channels are always in
+              // that order (#5947), so their rows always drag.
               reorder={directView ? undefined : railReorder}
               onCreateChannel={
                 canManageChannel && !directView

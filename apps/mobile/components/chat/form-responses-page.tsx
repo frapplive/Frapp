@@ -19,10 +19,13 @@ import {
   formNotRespondedLabel,
   formQuestionAnsweredLine,
   formResponsesCountLine,
+  FORM_RESPONSES_VIEWS,
+  FORM_RESPONSES_VIEWS_LABEL,
   formResponsesExportRows,
   formResponsesKey,
   summarizeFormResponses,
   type FormResponses,
+  type FormResponsesView,
   type MemberLabel,
 } from "@repo/chat-core/form-responses";
 import {
@@ -70,13 +73,6 @@ import {
  * the answers are read fresh on every open (no `staleTime`): they keep
  * arriving and nothing pushes them.
  */
-type ResponsesTab = "summary" | "individual";
-
-const TABS = [
-  { value: "summary", label: "Summary" },
-  { value: "individual", label: "Individual" },
-] as const;
-
 export function FormResponsesPage({
   messageId,
   payload,
@@ -102,7 +98,7 @@ export function FormResponsesPage({
   const data = query.data;
   const count = data?.responses.length ?? 0;
   const labelOf: MemberLabel = (id) => actorLabel(id, nameFor) ?? "A member";
-  const [tab, setTab] = useState<ResponsesTab>("summary");
+  const [tab, setTab] = useState<FormResponsesView>("summary");
   const [exporting, setExporting] = useState(false);
 
   const heading = useRef<View>(null);
@@ -149,12 +145,12 @@ export function FormResponsesPage({
           </Text>
           {data ? (
             <>
-              <ViewLabels<ResponsesTab>
+              <ViewLabels<FormResponsesView>
                 flush
-                options={TABS}
+                options={FORM_RESPONSES_VIEWS}
                 value={tab}
                 onChange={setTab}
-                accessibilityLabel="Show responses as"
+                accessibilityLabel={FORM_RESPONSES_VIEWS_LABEL}
               />
               {count === 0 ? (
                 <Text style={styles.notice}>No one has answered yet.</Text>

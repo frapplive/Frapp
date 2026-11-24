@@ -187,6 +187,27 @@ describe("useCatchUp", () => {
     }
   });
 
+  it("moves between ranges with the arrow keys without asking, and asks on Enter", async () => {
+    await openPanel();
+    expect(state.run).toHaveBeenCalledTimes(1);
+    const unread = screen.getByRole("tab", {
+      name: CHAT_CATCH_UP_COPY.ranges.unread,
+    });
+    unread.focus();
+    // Each range costs a summary, so arrowing past one must not start it
+    // (the ARIA tabs pattern's manual activation).
+    await userEvent.keyboard("{ArrowRight}");
+    const next = screen.getByRole("tab", {
+      name: CHAT_CATCH_UP_COPY.ranges.day,
+    });
+    expect(next).toHaveFocus();
+    expect(state.run).toHaveBeenCalledTimes(1);
+    expect(unread).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Enter}");
+    expect(state.run).toHaveBeenCalledTimes(2);
+    expect(next).toHaveAttribute("aria-selected", "true");
+  });
+
   it("asks for a thread by its first message, with no range to pick", async () => {
     await openPanel({
       scope: {
@@ -196,7 +217,7 @@ describe("useCatchUp", () => {
       },
     });
     expect(state.run).toHaveBeenCalledWith(CHANNEL, { thread_root_id: "root-1" });
-    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
     expect(
       screen.getByRole("heading", { name: CHAT_CATCH_UP_COPY.thread_title }),
     ).toBeInTheDocument();
