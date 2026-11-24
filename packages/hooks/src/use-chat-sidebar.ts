@@ -8,12 +8,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type { components } from "@repo/api-sdk";
-import {
-  DEFAULT_SIDEBAR_SORT,
-  isSidebarSort,
-  type SidebarSectionKey,
-  type SidebarSort,
-} from "@repo/validation";
+import type { SidebarSectionKey } from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { createChapterQueryKeys } from "./chapter-query-keys";
 import type { SidebarFilters } from "./channel-sidebar";
@@ -62,14 +57,12 @@ export interface SidebarPreferences {
   pinnedIds: ReadonlySet<string>;
   collapsed: ReadonlySet<string>;
   filters: SidebarFilters;
-  sort: SidebarSort;
 }
 
 const NO_PREFERENCES: SidebarPreferences = {
   pinnedIds: new Set(),
   collapsed: new Set(),
   filters: { unreadOnly: false, hideMuted: false },
-  sort: DEFAULT_SIDEBAR_SORT,
 };
 
 /**
@@ -91,8 +84,9 @@ export function useSidebarPreferences(): SidebarPreferences {
               unreadOnly: data.unread_only,
               hideMuted: data.hide_muted,
             },
-            // A cached answer from an API older than the sort has none.
-            sort: isSidebarSort(data.sort) ? data.sort : DEFAULT_SIDEBAR_SORT,
+            // `data.sort` is ignored: channels are always in the chapter's
+            // order (Paul, 2026-11-24, #5947). The API keeps the field for
+            // shipped phone builds until #NEW_ISSUE retires it.
           }
         : NO_PREFERENCES,
     [data],
@@ -219,13 +213,12 @@ function useSidebarWrite<TVars>(
   });
 }
 
-/** What a filter write sends: a filter, the sort, or several at once. */
+/** What a filter write sends: one filter, or both. */
 export type SidebarFilterChange =
-  | { unread_only: boolean; hide_muted?: boolean; sort?: SidebarSort }
-  | { unread_only?: boolean; hide_muted: boolean; sort?: SidebarSort }
-  | { unread_only?: boolean; hide_muted?: boolean; sort: SidebarSort };
+  | { unread_only: boolean; hide_muted?: boolean }
+  | { unread_only?: boolean; hide_muted: boolean };
 
-/** Change a filter or the sort. A setting left out keeps its stored value. */
+/** Change a filter. A setting left out keeps its stored value. */
 export function useSetSidebarFilter(options?: SidebarWriteOptions) {
   const client = useFrappClient();
   return useSidebarWrite(

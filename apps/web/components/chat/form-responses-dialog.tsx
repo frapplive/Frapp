@@ -16,7 +16,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { ExportMenu } from "@/components/shared/export-menu";
 import { NestedError } from "@/components/shared/nested-states";
 import { Skeleton } from "@/components/shared/async-states";
@@ -237,6 +237,13 @@ function ResponsesBody({
   );
 }
 
+type ResponsesView = "summary" | "individual";
+
+const RESPONSE_VIEWS = [
+  { value: "summary", label: "Summary" },
+  { value: "individual", label: "Individual" },
+] as const satisfies readonly { value: ResponsesView; label: string }[];
+
 function ResponsesTabs({
   payload,
   data,
@@ -251,14 +258,20 @@ function ResponsesTabs({
     [payload, data.responses],
   );
   const total = data.responses.length;
+  const [view, setView] = useState<ResponsesView>("summary");
   return (
     <>
-      <Tabs defaultValue="summary">
-        <TabsList>
-          <TabsTrigger value="summary">Summary</TabsTrigger>
-          <TabsTrigger value="individual">Individual</TabsTrigger>
-        </TabsList>
-        <TabsContent value="summary">
+      {/* The two views as plain words (`ViewLabels`, #5947), as the phone
+          draws them. */}
+      <ViewLabels
+        flush
+        label="Show responses as"
+        options={RESPONSE_VIEWS}
+        value={view}
+        onChange={setView}
+      />
+      {view === "summary" ? (
+        <div>
           {total === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">
               No one has answered yet.
@@ -317,8 +330,9 @@ function ResponsesTabs({
               ))}
             </ol>
           )}
-        </TabsContent>
-        <TabsContent value="individual">
+        </div>
+      ) : (
+        <div>
           {total === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">
               No one has answered yet.
@@ -360,8 +374,8 @@ function ResponsesTabs({
               ))}
             </ul>
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
       {data.not_responded.length > 0 ? (
         <section className="mt-8">
           <h3 className="text-base font-bold">

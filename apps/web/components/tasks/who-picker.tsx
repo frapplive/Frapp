@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { propertyChipClass } from "./property-chip";
@@ -671,13 +672,12 @@ export function WhoPickerBody({
       </div>
       {allow === "any" && !searching ? (
         <div className="px-3 pt-3">
-          <SegmentedChoice
+          <ViewLabels
+            flush
             label="Show"
             options={TAB_OPTIONS}
             value={tab}
             onChange={setTab}
-            fill
-            dense
           />
         </div>
       ) : null}

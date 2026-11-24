@@ -172,14 +172,11 @@ test("web: a page's views are never a boxed switch in its header", async () => {
   ]) {
     assert.deepEqual(await uiHits("web", WEB_FILE, code), [], code);
   }
-  // Tasks is held by another open PR, so its header waits for the sweep and
-  // is excused from this rule alone.
-  const tasks = "components/tasks/tasks-board.tsx";
-  assert.deepEqual(await uiHits("web", tasks, cases[0]), []);
+  // No file is excused: Tasks moved to the labels in #5947's sweep.
   assert.ok(
     has(
-      await uiHits("web", tasks, "export const A = () => <select />;"),
-      "native <select>",
+      await uiHits("web", "components/tasks/tasks-board.tsx", cases[0]),
+      "No boxed switch",
     ),
   );
 });
