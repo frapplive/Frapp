@@ -142,15 +142,19 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Channels always appear in your chapter's order now, so the channel filter no longer offers Recent or A to Z, and the views in form responses, the GIF picker, Catch me up and the picker for who gets a task are plain words instead of a boxed switch.",
       "Recruitment now tracks bids: extend one, record an acceptance or a decline, and see a recorded acceptance wait until the prospect confirms it from an email or an officer does. A new Summary view beside the list shows the whole pipeline at a glance.",
       "Role and group colors have a much bigger picker: thirty readable colors, the colors your chapter already uses, and any custom color by hex, now on your phone too.",
+      "A council can invite its school's chapters and answer their requests to join, and sees its member chapters in its own Chapters list.",
     ],
     web: [
       "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
       "Tasks, the notifications list, the service leaderboard, event attendance and chat reports show their views as plain words beside the title instead of a switch or tabs.",
+      "Your channels now stay in the sidebar on every page, with New, Search, Activity, Messages, Calendar, Resources and Directory above them, and your own menu at the bottom.",
+      "A chapter's officers can confirm their school and ask to join its council, or answer the council's invitation, from School and council in the chapter menu.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
       "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
       "Notifications shows All and Unread as plain words beside the title instead of a bar across the top of the list.",
+      "Continue with Google now opens Google's own sign-in sheet instead of a web page.",
     ],
   },
   {
