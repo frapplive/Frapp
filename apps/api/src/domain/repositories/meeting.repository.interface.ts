@@ -32,6 +32,24 @@ export interface IMeetingRepository {
   /** The chapter's minutes, newest meeting first, at most `limit`. */
   findByChapter(chapterId: string, limit: number): Promise<Meeting[]>;
   /**
+   * Of `eventIds`, the events that have minutes of any status, whoever's:
+   * a narrow read that asks only whether minutes exist (#5949, Activity's
+   * Write minutes rows), never what they say.
+   */
+  findEventIdsWithMinutes(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<Set<string>>;
+  /**
+   * The unposted minutes `userId` started, newest meeting first, at most
+   * `limit` (#5949, Activity's own drafts).
+   */
+  findDraftsBy(
+    chapterId: string,
+    userId: string,
+    limit: number,
+  ): Promise<Meeting[]>;
+  /**
    * Posted minutes for meetings held at or after `since`, newest meeting
    * first, at most `limit`: a narrow read for a caller that wants only the
    * latest few.

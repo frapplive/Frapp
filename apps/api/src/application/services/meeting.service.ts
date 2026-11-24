@@ -385,6 +385,54 @@ export class MeetingService {
     return this.readableRows(chapterId, viewerId, rows);
   }
 
+  /**
+   * Of `eventIds`, the events that already have minutes, posted or a draft,
+   * whoever started them (#5949): Activity's Write minutes rows leave those
+   * out, so an officer is never asked to write minutes another officer's
+   * unreadable draft already holds. It says only that minutes exist, which
+   * New minutes already says ("Has minutes"), never what they hold.
+   */
+  async eventIdsWithMinutes(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (const chunk of chunkIds([...new Set(eventIds)])) {
+      for (const id of await this.meetingRepo.findEventIdsWithMinutes(
+        chapterId,
+        chunk,
+      )) {
+        found.add(id);
+      }
+    }
+    return found;
+  }
+
+  /**
+   * The viewer's own unposted minutes they may still read, newest meeting
+   * first, with each one's list facts (#5949, Activity's To do): a draft
+   * whose event no longer shows itself to its author is left out, as
+   * `readable` leaves it out of the Minutes list.
+   */
+  async ownDrafts(
+    chapterId: string,
+    viewerId: string,
+    limit: number,
+  ): Promise<{ rows: Meeting[]; facts: Map<string, MeetingListFacts> }> {
+    const drafts = await this.meetingRepo.findDraftsBy(
+      chapterId,
+      viewerId,
+      limit,
+    );
+    const { rows, events } = await this.readableWithEvents(
+      chapterId,
+      viewerId,
+      drafts,
+    );
+    const facts = await this.listFacts(chapterId, viewerId, rows, events);
+    return { rows, facts };
+  }
+
   /** The rows of `rows` the viewer may read (`readable`), in their order. */
   private async readableRows(
     chapterId: string,

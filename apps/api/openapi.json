@@ -37171,6 +37171,155 @@
           "due"
         ]
       },
+      "ActivityMinutesToWriteDto": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The meeting’s event: `POST /v1/meetings` with it starts the minutes, and `PUT /v1/events/{id}/no-minutes` marks it as having none."
+          },
+          "name": {
+            "type": "string",
+            "description": "The event’s name."
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "event_id",
+          "name",
+          "start_time",
+          "end_time"
+        ]
+      },
+      "ActivityMinutesDraftDto": {
+        "type": "object",
+        "properties": {
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null for minutes started with no meeting, until one is linked."
+          },
+          "name": {
+            "type": "string",
+            "description": "The meeting’s name, as the minutes hold it."
+          },
+          "event_start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started": {
+            "type": "boolean",
+            "description": "Whether anything is in them yet: a written section, someone’s notes, or a recording. Without, they read \"Not started\"."
+          },
+          "recording_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who is recording them on their phone right now, else null."
+          },
+          "recording_by_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The name of whoever is recording, when it isn’t the caller; else null."
+          }
+        },
+        "required": [
+          "meeting_id",
+          "event_id",
+          "name",
+          "event_start_time",
+          "started",
+          "recording_by",
+          "recording_by_name"
+        ]
+      },
+      "ActivityNoteTakingDto": {
+        "type": "object",
+        "properties": {
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Their notes are `GET /v1/meetings/{id}/notes`."
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "The meeting’s name, as the minutes hold it."
+          },
+          "event_start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "Who is writing the minutes."
+          },
+          "joined": {
+            "type": "boolean",
+            "description": "The caller has notes on it already."
+          },
+          "added": {
+            "type": "boolean",
+            "description": "The author or an editor added the caller."
+          }
+        },
+        "required": [
+          "meeting_id",
+          "event_id",
+          "name",
+          "event_start_time",
+          "author_name",
+          "joined",
+          "added"
+        ]
+      },
+      "ActivityMinutesDto": {
+        "type": "object",
+        "properties": {
+          "to_write": {
+            "description": "For a holder of `meetings:record`: events the caller can see that ended in the last 30 days, whose name reads as a meeting, with no minutes by anyone (a draft the caller can’t read included) and not marked \"No minutes\". Newest first, at most 25. Counted in `needs_you_count`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityMinutesToWriteDto"
+            }
+          },
+          "drafts": {
+            "description": "The caller’s own unposted minutes they may still read, newest meeting first, at most 25. Counted in `needs_you_count`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityMinutesDraftDto"
+            }
+          },
+          "taking_notes": {
+            "description": "Other officers’ unposted minutes the caller takes notes on, added or joined, newest meeting first, at most 25. Empty on a server with AI off. Those with `joined` false are counted in `needs_you_count`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityNoteTakingDto"
+            }
+          }
+        },
+        "required": [
+          "to_write",
+          "drafts",
+          "taking_notes"
+        ]
+      },
       "ActivityFileDto": {
         "type": "object",
         "properties": {
@@ -37383,12 +37532,20 @@
               "$ref": "#/components/schemas/ActivityReminderDto"
             }
           },
+          "minutes": {
+            "description": "Minutes waiting on the caller (#5949): meetings to write minutes for, their own drafts, and drafts they take notes on. Empty lists while the chapter has Meetings off. No `unread` or `snoozed_until`: these rows have neither.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActivityMinutesDto"
+              }
+            ]
+          },
           "made_by_you": {
             "$ref": "#/components/schemas/ActivityMadeByYouDto"
           },
           "needs_you_count": {
             "type": "number",
-            "description": "How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, less what the caller snoozed (`snoozed_until`)."
+            "description": "How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, plus every `minutes.to_write` and `minutes.drafts` row and each `minutes.taking_notes` row not yet `joined`, less what the caller snoozed (`snoozed_until`)."
           },
           "unavailable": {
             "type": "array",
@@ -37403,7 +37560,8 @@
                 "coming_up",
                 "made_events",
                 "links",
-                "reminders"
+                "reminders",
+                "minutes"
               ]
             }
           },
@@ -37427,6 +37585,7 @@
           "coming_up",
           "links",
           "reminders",
+          "minutes",
           "made_by_you",
           "needs_you_count",
           "unavailable",

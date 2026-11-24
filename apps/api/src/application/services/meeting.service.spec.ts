@@ -171,6 +171,22 @@ describe('MeetingService', () => {
       findByChapter: jest.fn(async (_chapterId: string, _limit: number) => [
         ...rows.values(),
       ]),
+      findEventIdsWithMinutes: jest.fn(
+        async (_chapterId: string, eventIds: readonly string[]) =>
+          new Set(
+            [...rows.values()].flatMap((row) =>
+              row.event_id && eventIds.includes(row.event_id)
+                ? [row.event_id]
+                : [],
+            ),
+          ),
+      ),
+      findDraftsBy: jest.fn(
+        async (_chapterId: string, userId: string, _limit: number) =>
+          [...rows.values()].filter(
+            (row) => row.status === 'draft' && row.created_by === userId,
+          ),
+      ),
       findPostedSince: jest.fn(
         async (_chapterId: string, _since: string, _limit: number) =>
           [...rows.values()].filter((row) => row.status === 'posted'),
@@ -462,6 +478,57 @@ describe('MeetingService', () => {
         recorded: false,
       });
       expect(repo.findRecordedIds).toHaveBeenCalledWith(CHAPTER, []);
+    });
+  });
+
+  describe("Activity's minutes reads (#5949)", () => {
+    it('eventIdsWithMinutes names an event with any minutes, a draft the caller cannot read included', async () => {
+      // The VP's draft on the chapter meeting: the secretary can't read it.
+      rows.set(
+        'mtg-vp',
+        meeting({ id: 'mtg-vp', created_by: VP, status: 'draft' }),
+      );
+      const ids = await service.eventIdsWithMinutes(CHAPTER, [
+        CHAPTER_EVENT.id,
+        EXEC_EVENT.id,
+      ]);
+      expect([...ids]).toEqual([CHAPTER_EVENT.id]);
+    });
+
+    it('ownDrafts lists only the caller’s drafts they may still read, with their state', async () => {
+      rows.set('mtg-mine', meeting({ id: 'mtg-mine' }));
+      // The secretary's own, on an event that no longer invites them.
+      events.set(
+        'evt-hidden',
+        event({
+          id: 'evt-hidden',
+          others_invited: false,
+          required_role_ids: ['role-other'],
+        }),
+      );
+      rows.set(
+        'mtg-hidden',
+        meeting({ id: 'mtg-hidden', event_id: 'evt-hidden' }),
+      );
+      // Posted, so no longer a draft; and someone else's draft.
+      rows.set('mtg-posted', meeting({ id: 'mtg-posted', status: 'posted' }));
+      rows.set('mtg-vp', meeting({ id: 'mtg-vp', created_by: VP }));
+      liveRecorders.set('mtg-mine', {
+        userId: VP,
+        seenAt: new Date().toISOString(),
+      });
+
+      const { rows: drafts, facts } = await service.ownDrafts(
+        CHAPTER,
+        SECRETARY,
+        10,
+      );
+
+      expect(drafts.map((row) => row.id)).toEqual(['mtg-mine']);
+      expect(facts.get('mtg-mine')).toMatchObject({
+        started: false,
+        recording_by: VP,
+      });
     });
   });
 

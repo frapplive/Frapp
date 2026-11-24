@@ -12050,6 +12050,68 @@ export interface components {
             /** @description Whether `remind_at` has passed. A due reminder waits on the caller and is counted in `needs_you_count` until they clear it. */
             due: boolean;
         };
+        ActivityMinutesToWriteDto: {
+            /**
+             * Format: uuid
+             * @description The meeting’s event: `POST /v1/meetings` with it starts the minutes, and `PUT /v1/events/{id}/no-minutes` marks it as having none.
+             */
+            event_id: string;
+            /** @description The event’s name. */
+            name: string;
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+        };
+        ActivityMinutesDraftDto: {
+            /** Format: uuid */
+            meeting_id: string;
+            /**
+             * Format: uuid
+             * @description Null for minutes started with no meeting, until one is linked.
+             */
+            event_id: string | null;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Whether anything is in them yet: a written section, someone’s notes, or a recording. Without, they read "Not started". */
+            started: boolean;
+            /**
+             * Format: uuid
+             * @description Who is recording them on their phone right now, else null.
+             */
+            recording_by: string | null;
+            /** @description The name of whoever is recording, when it isn’t the caller; else null. */
+            recording_by_name: string | null;
+        };
+        ActivityNoteTakingDto: {
+            /**
+             * Format: uuid
+             * @description Their notes are `GET /v1/meetings/{id}/notes`.
+             */
+            meeting_id: string;
+            /** Format: uuid */
+            event_id: string;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Who is writing the minutes. */
+            author_name: string;
+            /** @description The caller has notes on it already. */
+            joined: boolean;
+            /** @description The author or an editor added the caller. */
+            added: boolean;
+        };
+        ActivityMinutesDto: {
+            /** @description For a holder of `meetings:record`: events the caller can see that ended in the last 30 days, whose name reads as a meeting, with no minutes by anyone (a draft the caller can’t read included) and not marked "No minutes". Newest first, at most 25. Counted in `needs_you_count`. */
+            to_write: components["schemas"]["ActivityMinutesToWriteDto"][];
+            /** @description The caller’s own unposted minutes they may still read, newest meeting first, at most 25. Counted in `needs_you_count`. */
+            drafts: components["schemas"]["ActivityMinutesDraftDto"][];
+            /** @description Other officers’ unposted minutes the caller takes notes on, added or joined, newest meeting first, at most 25. Empty on a server with AI off. Those with `joined` false are counted in `needs_you_count`. */
+            taking_notes: components["schemas"]["ActivityNoteTakingDto"][];
+        };
         ActivityFileDto: {
             /** Format: uuid */
             id: string;
@@ -12110,11 +12172,13 @@ export interface components {
             links: components["schemas"]["ActivityLinkDto"][];
             /** @description Reminders the caller set on chat messages (#4957): those due that they haven’t cleared, newest first, then those still waiting, soonest first; at most 50 of each. Private to the caller. Due ones are counted in `needs_you_count` (so at most 50). */
             reminders: components["schemas"]["ActivityReminderDto"][];
+            /** @description Minutes waiting on the caller (#5949): meetings to write minutes for, their own drafts, and drafts they take notes on. Empty lists while the chapter has Meetings off. No `unread` or `snoozed_until`: these rows have neither. */
+            minutes: components["schemas"]["ActivityMinutesDto"];
             made_by_you: components["schemas"]["ActivityMadeByYouDto"];
-            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, less what the caller snoozed (`snoozed_until`). */
+            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, plus every `minutes.to_write` and `minutes.drafts` row and each `minutes.taking_notes` row not yet `joined`, less what the caller snoozed (`snoozed_until`). */
             needs_you_count: number;
             /** @description Sections that could not be read this time. Each is served empty; the others are unaffected. */
-            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders")[];
+            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders" | "minutes")[];
             /** @description How the caller’s week is going, for the ring at the top of the page (`spec/behavior/activity.md` § Week): what they finished since the week began and what is still theirs to do in it, by kind. Their own things only; what waits on their review is not counted. */
             week: components["schemas"]["ActivityWeekDto"];
             /**

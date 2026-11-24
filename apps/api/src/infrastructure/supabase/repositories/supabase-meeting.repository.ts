@@ -77,6 +77,40 @@ export class SupabaseMeetingRepository implements IMeetingRepository {
     return data ?? [];
   }
 
+  async findEventIdsWithMinutes(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<Set<string>> {
+    if (eventIds.length === 0) return new Set();
+    const { data, error } = await this.supabase
+      .from('meetings')
+      .select('event_id')
+      .eq('chapter_id', chapterId)
+      .in('event_id', [...eventIds]);
+    if (error) throw new SupabaseQueryError(error);
+    return new Set(
+      (data ?? []).flatMap((row) => (row.event_id ? [row.event_id] : [])),
+    );
+  }
+
+  async findDraftsBy(
+    chapterId: string,
+    userId: string,
+    limit: number,
+  ): Promise<Meeting[]> {
+    const { data, error } = await this.supabase
+      .from('meetings')
+      .select('*')
+      .eq('chapter_id', chapterId)
+      .eq('created_by', userId)
+      .eq('status', 'draft')
+      .order('event_start_time', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new SupabaseQueryError(error);
+    return data ?? [];
+  }
+
   async findRecordedIds(
     chapterId: string,
     meetingIds: readonly string[],
