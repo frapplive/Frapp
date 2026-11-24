@@ -5,9 +5,9 @@ import { OnboardingPressable } from "./onboarding-pressable";
 
 /**
  * The quiet answer under an onboarding step's gold button: Not now on the
- * notifications and Meet Frapp AI steps, Skip for now on s03's About you
+ * notifications and Meet Frapp Intelligence steps, Skip for now on s03's About you
  * (#5284). Muted and underlined, as web's `QUIET_LINK`, at the 44pt touch
- * floor. One component for every onboarding quiet answer (s03, Meet Frapp AI,
+ * floor. One component for every onboarding quiet answer (s03, Meet Frapp Intelligence,
  * chapter setup's invite step), since the copies it replaced had drifted (one
  * underlined, two not).
  *
