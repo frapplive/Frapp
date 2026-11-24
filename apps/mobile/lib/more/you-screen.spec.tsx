@@ -472,7 +472,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       "Study hours",
       "Service hours",
       "Dues",
-      "Documents",
+      "Resources",
       "Directory",
       "Settings",
     ]) {
@@ -495,29 +495,50 @@ describe("You tab anatomy (#1048, #3839)", () => {
       );
     expect(sections).toEqual([
       ["Status"],
-      [
-        "Study hours",
-        "Service hours",
-        "Dues",
-        "Documents",
-        "Minutes",
-        "Directory",
-      ],
+      ["Study hours", "Service hours", "Dues", "Resources", "Directory"],
       ["Settings"],
       ["Host check-in"],
     ]);
   });
 
-  it("drops the Minutes row while meetings is beta-off, and for a chapter with it off", () => {
-    betaOff.keys = ["meetings"];
+  // One row for Documents and the minutes filed in it (#5949): shown on
+  // either of the two rows' conditions it replaced, and opening Documents.
+  it("draws one Resources row while Documents is shown or the chapter keeps minutes", () => {
     const labels = () =>
       render()
         .root.findAllByType(ListRow)
         .map((row) => row.props.label);
-    expect(labels()).not.toContain("Minutes");
-    betaOff.keys = [];
-    chapterModules = { meetings: false };
-    expect(labels()).not.toContain("Minutes");
+    try {
+      expect(labels()).not.toContain("Documents");
+      expect(labels()).not.toContain("Minutes");
+      expect(labels().filter((label) => label === "Resources")).toHaveLength(1);
+      // Documents unset for this member, but the chapter keeps minutes.
+      hiddenFeatures = new Set(["documents"]);
+      expect(labels()).toContain("Resources");
+      // Neither: Documents unset and meetings beta-off, or off for the chapter.
+      betaOff.keys = ["meetings"];
+      expect(labels()).not.toContain("Resources");
+      betaOff.keys = [];
+      chapterModules = { meetings: false };
+      expect(labels()).not.toContain("Resources");
+      // Documents shown with meetings off.
+      hiddenFeatures = new Set();
+      expect(labels()).toContain("Resources");
+    } finally {
+      hiddenFeatures = new Set();
+      chapterModules = {};
+      betaOff.keys = [];
+    }
+  });
+
+  it("opens Documents from the Resources row", () => {
+    const push = vi.mocked(useRouter().push);
+    push.mockClear();
+    const row = render()
+      .root.findAllByType(ListRow)
+      .find((candidate) => candidate.props.label === "Resources")!;
+    act(() => row.props.onPress());
+    expect(push).toHaveBeenCalledWith("/documents");
   });
 
   it("drops the Dues row while dues is beta-off", () => {
@@ -526,7 +547,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       .root.findAllByType(ListRow)
       .map((row) => row.props.label);
     expect(labels).not.toContain("Dues");
-    expect(labels).toContain("Documents");
+    expect(labels).toContain("Resources");
   });
 
   // A member must still be able to pay an invoice the chapter already sent.
@@ -548,18 +569,21 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(invoiceReadOptions.at(-1)).toEqual({ enabled: false });
   });
 
-  it("drops Study hours and Documents while nobody has set them up for this member", () => {
+  it("drops Study hours and Resources while nobody has set them up for this member", () => {
     hiddenFeatures = new Set(["study", "documents"]);
+    // Resources stays while the chapter keeps minutes, which nobody sets up.
+    chapterModules = { meetings: false };
     try {
       const labels = render()
         .root.findAllByType(ListRow)
         .map((row) => row.props.label);
       expect(labels).not.toContain("Study hours");
-      expect(labels).not.toContain("Documents");
+      expect(labels).not.toContain("Resources");
       expect(labels).toContain("Service hours");
       expect(labels).toContain("Directory");
     } finally {
       hiddenFeatures = new Set();
+      chapterModules = {};
     }
   });
 
@@ -651,8 +675,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       "Study hours",
       "Service hours",
       "Dues",
-      "Documents",
-      "Minutes",
+      "Resources",
       "Directory",
       "Settings",
     ]);
