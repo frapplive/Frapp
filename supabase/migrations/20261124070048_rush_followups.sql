@@ -2,7 +2,7 @@
 -- logged contacts, a prospect's owner, follow-ups and the stale alert.
 -- Behavior: spec/behavior/rush.md § Pipeline (Contacts, owner and follow-ups).
 --
--- Like slice 1's tables (20261123215153_rush_pipeline.sql), everything here
+-- Like slice 1's tables (20261124065057_rush_pipeline.sql), everything here
 -- is chapter-private: RLS on with no policies, reached only through the API's
 -- service-role client, which scopes every read to the caller's chapter and
 -- checks the `rush:*` keys.
@@ -97,7 +97,7 @@ alter table scheduled_notification_dispatches
 -- Account deletion -------------------------------------------------------------
 
 -- `anonymize_user` is redefined in full from
--- `20261123215153_rush_pipeline.sql`; the only change is clearing the
+-- `20261124065057_rush_pipeline.sql`; the only change is clearing the
 -- member's recruitment ownership and follow-ups. Same signature, so its
 -- grants are kept.
 create or replace function anonymize_user(
