@@ -79,8 +79,12 @@ These cause most of the iterations, so they come first.
   what it lists: a different list is a different row or page (Messages has its own row). Where one page
   has two or three views (Mine / Everyone's, Documents / Backwork) they are plain words beside the title,
   the current one in the foreground colour and weight and the others muted, with no box, fill or accent,
-  and a member with one view sees none. The shared component and the sweep of the existing switches are
-  #5947; until it merges, don't add a new segmented view switch. (11-24, #5943)
+  and a member with one view sees none. The component is `ViewLabels`, inside `PageViews` on a web page
+  header and as `ScreenShell`'s `views` on a phone screen
+  ([`components.md` § View labels](../../../spec/ui/design-system/components.md#view-labels-change-a-pages-or-a-lists-view));
+  the sweep of the switches already on screen is #5947. **lint** rejects the segmented control in a page
+  or screen header; one drawn over a list in the body is the same defect, caught in review.
+  (11-24, #5943)
 - **One create button, one look, everywhere.** Every "New …" action is the same shared component with
   the same icon, style and wording pattern ("New event", "New minutes", "New task"), on web and phone.
   A filled pill on one page and an outlined button on the next is a defect. On web it is
@@ -286,7 +290,8 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
 - **Picking a value:** web `Select` (or `SearchablePicker` for a long list), phone `OptionSheet`. The
   field shows its current value; search appears past 8 options; no Save or Cancel. `SegmentedChoice` /
   `Segmented` only for 2 to 4 short choices that stay visible inside a form, never to change a page's
-  view (§ 2, 11-24); swatches only for a look (accent,
+  view (§ 2, 11-24), and neutral since 11-24: the held answer is a raised card step, never the accent;
+  swatches only for a look (accent,
   background, density). Never a hand-drawn radio list, and never filter chips used as a form picker.
 - **lint** (partly) **Acting on a thing:** one action menu. Web: `RowMenu` (right-click plus the row's ⋯) and
   `ActionMenuButton` (a header's ⋯), the same entries. Phone: the glass menu, `useItemMenu` for a row's
@@ -314,7 +319,7 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   same rows in the same order ending in "Show 23 members"; the shared phone sheet doesn't exist yet and
   is built from the Directory's in the filters PR (#5739). A list that splits into two or three named sets people switch between all day (Actives /
   Alumni, All / Unread) is a view, not a filter, and its views are the plain labels beside the title
-  (§ 2). *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
+  (§ 2), `ViewLabels` on both apps. *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
   longer a way to change views.*
 - **Creating and editing:** a borderless title plus property rows (§ 2), on the record itself when
   editing, saved per row. **Phone commit is the floating glass action bar** from task approval

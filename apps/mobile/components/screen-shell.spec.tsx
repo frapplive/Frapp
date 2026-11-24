@@ -17,6 +17,7 @@ vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => ({ accent: "#CB9FFF" }),
 }));
 import { ScreenShell, StickyHeader } from "./screen-shell";
+import { ViewLabels } from "./view-labels";
 
 /**
  * #2485 — the tab layout draws no navigator header, so the shell is the whole
@@ -105,6 +106,69 @@ describe("ScreenShell (#2485)", () => {
  * The board draws one only on s07, so Event details is the caller that does:
  * its subtitle is the event's time.
  */
+describe("ScreenShell views (#5947)", () => {
+  const VIEWS = [
+    { value: "all", label: "All" },
+    { value: "unread", label: "Unread" },
+  ] as const;
+
+  it("seats the views on the title's line, after the title and a hairline", () => {
+    const onChange = vi.fn();
+    const tree = render(
+      <ScreenShell
+        title="Notifications"
+        views={{
+          accessibilityLabel: "Show",
+          options: VIEWS,
+          value: "all",
+          onChange,
+        }}
+      >
+        <View />
+      </ScreenShell>,
+    );
+    const labels = tree.root.findByType(ViewLabels);
+    const line = labels.parent!;
+    // One row on the title's baseline: title, rule, views.
+    expect(line.props.style).toMatchObject({
+      flexDirection: "row",
+      alignItems: "baseline",
+    });
+    const title = line.findByProps({ accessibilityRole: "header" });
+    expect(title.props.children).toBe("Notifications");
+    // The title gives way, so the views never wrap.
+    expect(title.props.numberOfLines).toBe(1);
+
+    const unread = tree.root.find(
+      (node) =>
+        node.props.accessibilityRole === "tab" &&
+        node.props.accessibilityLabel === "Unread" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => unread.props.onPress());
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("unread");
+  });
+
+  it("draws the title as it always has for a member with one view", () => {
+    const tree = render(
+      <ScreenShell
+        title="Activity"
+        views={{
+          accessibilityLabel: "Whose",
+          options: [{ value: "mine", label: "Mine" }],
+          value: "mine",
+          onChange: () => {},
+        }}
+      >
+        <View />
+      </ScreenShell>,
+    );
+    expect(tree.root.findAllByType(ViewLabels)).toHaveLength(0);
+    const title = tree.root.findByProps({ accessibilityRole: "header" });
+    expect(title.props.numberOfLines).toBeUndefined();
+  });
+});
+
 describe("ScreenShell subtitle (#3023)", () => {
   it("draws nothing under the title when no subtitle is passed", () => {
     const tree = render(

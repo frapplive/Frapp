@@ -80,17 +80,20 @@ describe("AttendanceEditor", () => {
     expect(
       screen.getByText("Officers required, everyone else optional"),
     ).toBeTruthy();
-    // Lit (accent) when set apart, neutral while it follows everyone else.
-    expect(
-      within(group("Attendance for Officers")).getByRole("radio", {
-        name: "Required",
-      }).className,
-    ).toContain("bg-accent-subtle");
-    expect(
-      within(group("Attendance for Alumni")).getByRole("radio", {
-        name: "Optional",
-      }).className,
-    ).toContain("bg-card");
+    // Raised (the card fill) when set apart; the edge alone while it follows
+    // everyone else. Never the accent (Paul, 2026-11-24).
+    const setApart = within(group("Attendance for Officers")).getByRole(
+      "radio",
+      { name: "Required" },
+    ).className;
+    expect(setApart).toContain("bg-card");
+    expect(setApart).not.toContain("accent-subtle");
+    const following = within(group("Attendance for Alumni")).getByRole(
+      "radio",
+      { name: "Optional" },
+    ).className;
+    expect(following).toContain("border-input");
+    expect(following).not.toContain("bg-card");
   });
 
   it("flows with the panel: a few rows, then Show all, and search past eight", () => {

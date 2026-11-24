@@ -281,6 +281,8 @@ Eight files are **frozen** now that the nav restructure has landed:
 
 The point is contention: these files are the ones every parallel slice would otherwise edit at once, and a rename or a prop added in two branches at the same time is a merge conflict in the one place that breaks the whole app.
 
+**`components/screen-shell.tsx` gained the `views` prop on 2026-11-24 (#5947),** through the integrator carve-out above: a small standalone PR that added the shared view labels and nothing screen-specific. A screen passes its views; it does not edit the shell.
+
 **Three of the seven were touched by C7/C8 (#998), recorded rather than glossed:**
 `package.json` gained `expo-notifications`, `app.json` gained its config plugin, and
 `app/_layout.tsx` swapped `<NetworkBanner isOnline… isInternetReachable… />` for a

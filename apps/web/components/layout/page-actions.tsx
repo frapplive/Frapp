@@ -56,18 +56,50 @@ const PageHeaderSlotContext = React.createContext<
   HTMLElement | null | undefined
 >(undefined);
 
+/**
+ * The header's view slot, beside the title (`PageViews`). `undefined` outside
+ * the shell; `null` inside it until the slot has mounted.
+ */
+const PageViewSlotContext = React.createContext<
+  HTMLElement | null | undefined
+>(undefined);
+
 export function PageHeaderSlotProvider({
   slot,
+  viewSlot,
   children,
 }: {
   slot: HTMLElement | null;
+  viewSlot?: HTMLElement | null;
   children: React.ReactNode;
 }) {
   return (
     <PageHeaderSlotContext.Provider value={slot}>
-      {children}
+      <PageViewSlotContext.Provider value={viewSlot}>
+        {children}
+      </PageViewSlotContext.Provider>
     </PageHeaderSlotContext.Provider>
   );
+}
+
+/**
+ * A page's views (`shared/view-labels.tsx` `ViewLabels`: My tasks and
+ * Everyone's, Documents and Backwork), seated beside the page's title after a
+ * hairline, where Paul picked them on 2026-11-24 in place of the boxed switch
+ * among the actions. The page writes them once, inline, beside the state they
+ * set, as it writes `PageActions`; this portals them into the header's view
+ * slot (`tool-page-header.tsx`), which draws the hairline and hides while it
+ * is empty, so a member with one view (`ViewLabels` draws nothing) gets no
+ * stray rule.
+ *
+ * On the server, and for the one commit before the slot mounts, it renders
+ * nothing, as `PageActions` does. Outside the shell it renders inline.
+ */
+export function PageViews({ children }: { children: React.ReactNode }) {
+  const slot = React.useContext(PageViewSlotContext);
+  if (slot === null) return null;
+  if (slot) return createPortal(children, slot);
+  return <>{children}</>;
 }
 
 export function PageActions({ children, className }: PageActionsProps) {

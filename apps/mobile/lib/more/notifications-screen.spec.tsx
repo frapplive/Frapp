@@ -17,6 +17,7 @@ vi.mock("@/lib/chapter-branding", async () => {
 import { useRouter } from "expo-router";
 import { FrappThemeProvider } from "@/lib/theme";
 import { HeaderButton } from "@/components/header-button";
+import { ScreenShell } from "@/components/screen-shell";
 import { expectBackRow } from "@/test/back-row";
 import { drawnText, screenText } from "@/test/screen-text";
 
@@ -715,16 +716,16 @@ describe("Notifications: Unread / All (#3948)", () => {
 
     const unread = tree.root.find(
       (node) =>
-        node.props.accessibilityRole === "radio" &&
+        node.props.accessibilityRole === "tab" &&
         node.props.accessibilityLabel === "Unread" &&
         typeof node.props.onPress === "function",
     );
     act(() => unread.props.onPress());
     expect(screenText(tree)).not.toContain("Dues reminder");
     expect(screenText(tree)).toContain("You're all caught up.");
-    // The switch stays, so the way back to All is still there.
+    // The views stay, so the way back to All is still there.
     expect(
-      tree.root.findAll((node) => node.props.accessibilityRole === "radiogroup")
+      tree.root.findAll((node) => node.props.accessibilityRole === "tablist")
         .length,
     ).toBeGreaterThan(0);
   });
@@ -757,9 +758,34 @@ describe("Notifications: Unread / All (#3948)", () => {
     expect(markRead.mutate).not.toHaveBeenCalled();
   });
 
-  it("draws no switch on an empty inbox", () => {
+  it("draws no views on an empty inbox", () => {
     inbox.data = [];
     const tree = render();
+    expect(
+      tree.root.findAll((node) => node.props.accessibilityRole === "tablist"),
+    ).toHaveLength(0);
+  });
+
+  it("draws All and Unread as plain words on the title's line, never a boxed switch (Paul, 2026-11-24)", () => {
+    inbox.data = [
+      {
+        id: "read-1",
+        title: "Dues reminder",
+        body: null,
+        created_at: CREATED_AT.toISOString(),
+        read_at: CREATED_AT.toISOString(),
+        data: null,
+      },
+    ];
+    const tree = render();
+    expect(tree.root.findByType(ScreenShell).props.views).toMatchObject({
+      accessibilityLabel: "Show",
+      value: "all",
+      options: [
+        { value: "all", label: "All" },
+        { value: "unread", label: "Unread" },
+      ],
+    });
     expect(
       tree.root.findAll(
         (node) => node.props.accessibilityRole === "radiogroup",

@@ -1,19 +1,24 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SignetTokens } from "@repo/theme/signet";
-import { useChapterBranding } from "@/lib/chapter-branding";
-import { tint, typeRole, useFrappTheme } from "@/lib/theme";
+import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * A small segmented control: two to four choices, one held, every choice in
- * view (`spec/ui/design-system/components.md` § Segmented control). For a
- * choice with a handful of answers that a form row sets in one tap, where a
- * menu would hide the current answer behind a press.
+ * A small segmented control: two to four short answers inside a form, one
+ * held, every choice in view (`spec/ui/design-system/components.md` §
+ * Segmented control). For a choice a form row sets in one tap, where a menu
+ * would hide the current answer behind a press.
  *
- * The held segment carries the chapter accent as a tint, so its state reads at
- * a glance and the control never changes size between states (P4). `quiet`
- * holds it in neutral ink instead, for a row whose answer only follows a
- * default set elsewhere (Who's coming's roles that follow "Everyone else"),
- * so the rows that were set apart are the ones lit.
+ * **Neutral since 2026-11-24.** The held segment is the card step with a quiet
+ * edge and foreground text, and the control never changes size between states
+ * (P4). It was the chapter accent as a tint until Paul's ruling on the control
+ * ("too intrusive, draw attention"): the accent stays on what commits.
+ *
+ * **Only for a short pick inside a form.** It never changes a screen's or a
+ * list's view: that is `ViewLabels` (`components/view-labels.tsx`).
+ *
+ * `quiet` holds the answer with the edge alone, no fill, for a row whose
+ * answer only follows a default set elsewhere (Who's coming's roles that
+ * follow "Everyone else"), so the rows that were set apart are the ones raised.
  */
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -39,7 +44,6 @@ export function Segmented<T extends string>({
   dense?: boolean;
 }) {
   const { tokens } = useFrappTheme();
-  const { accent } = useChapterBranding();
   const styles = createStyles(tokens);
   return (
     <View
@@ -63,23 +67,12 @@ export function Segmented<T extends string>({
             style={[
               styles.segment,
               dense ? styles.dense : null,
-              held
-                ? quiet
-                  ? styles.quietHeld
-                  : { backgroundColor: tint(accent, 0.18), borderColor: accent }
-                : null,
+              held ? (quiet ? styles.quietHeld : styles.held) : null,
             ]}
           >
             <Text
               numberOfLines={1}
-              style={[
-                styles.label,
-                held
-                  ? quiet
-                    ? styles.quietHeldLabel
-                    : { color: accent }
-                  : null,
-              ]}
+              style={[styles.label, held ? styles.heldLabel : null]}
             >
               {option.label}
             </Text>
@@ -113,7 +106,7 @@ function createStyles(tokens: SignetTokens) {
     },
     label: {
       ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.mutedForeground,
+      color: tokens.color.text.muted,
     },
     // Each segment takes its label's width plus an equal share of the rest,
     // so the longest answer ("Not invited") is never cut short.
@@ -121,11 +114,14 @@ function createStyles(tokens: SignetTokens) {
       flexBasis: "auto",
       paddingHorizontal: tokens.spacing.xs,
     },
-    quietHeld: {
+    held: {
       backgroundColor: tokens.color.surface.card,
       borderColor: tokens.color.border.input,
     },
-    quietHeldLabel: {
+    quietHeld: {
+      borderColor: tokens.color.border.input,
+    },
+    heldLabel: {
       color: tokens.color.text.foreground,
     },
   });
