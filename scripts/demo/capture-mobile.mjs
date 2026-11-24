@@ -38,7 +38,7 @@
  * the default stack, where AI is off. Until 2026-11-12 the entry was a header
  * pill behind a build flag, `EXPO_PUBLIC_ASK_ENABLED`, and this stop saw it on
  * every tab. For a day the entry was a bar inside the + panel, which no shot
- * opens; since #4702 it is the Ask Frapp bar above the tab bar, on every tab
+ * opens; since #4702 it is the Frapp Intelligence bar above the tab bar, on every tab
  * again for a member with Ask, so the stop sees it there too.
  * The presets and the checks each file must pass live in
  * `store-screenshots.mjs`; any failed check deletes the folders, like the Ask
@@ -390,23 +390,23 @@ const STORE_SCREENS = [
 
 /**
  * Whether an AI surface is in the shot. Since #4702 Ask's entry is the bar
- * above the tab bar, a button named "Ask Frapp", on every tab for a member
+ * above the tab bar, a button named "Frapp Intelligence", on every tab for a member
  * with Ask. Also matched: a row that only exists with AI on (the Tasks tab's
- * "N suggested tasks"), the words "Ask Frapp" (the sheet's title, should a
+ * "N suggested tasks"), the words "Frapp Intelligence" (the sheet's title, should a
  * shot ever open one), and the ✦ glyph and bare "Ask" the entry used before,
  * so an old bundle is still refused. Runs in the page.
  */
 const ASK_ON_SCREEN = () =>
   document.body.innerText.includes("✦") ||
   Boolean(
-    document.querySelector('[aria-label="Ask"], [aria-label="Ask Frapp"]'),
+    document.querySelector('[aria-label="Ask"], [aria-label="Frapp Intelligence"]'),
   ) ||
   [...document.querySelectorAll("body *")].some((el) => {
     if (el.childElementCount !== 0) return false;
     const text = el.textContent.trim();
     return (
       text === "Ask" ||
-      text === "Ask Frapp" ||
+      text === "Frapp Intelligence" ||
       /^\d+ suggested tasks?$/.test(text)
     );
   });

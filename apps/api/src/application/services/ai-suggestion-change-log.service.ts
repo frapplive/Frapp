@@ -68,14 +68,14 @@ export interface AiSuggestionDecided {
 
 /**
  * The change log of AI suggestions (`ai_suggestion_changes`, Paul,
- * 2026-11-22: "we defo need to log what humans change when Frapp AI makes
+ * 2026-11-22: "we defo need to log what humans change when Frapp Intelligence makes
  * suggestions"; `spec/behavior/ai.md` § Stored AI text).
  *
  * - **Changes always**: field by field whether what was saved kept, changed,
  *   added or removed what was proposed, as codes, ids and numbers.
  * - **Words only sealed**: the question, the proposed text and the saved
  *   text, sealed with `AI_STORED_TEXT_KEY`, and only when the decider has
- *   said yes to Frapp AI. With no key, none are kept.
+ *   said yes to Frapp Intelligence. With no key, none are kept.
  * - **Never in the way**: a row that can't be written is reported and the
  *   decision stands.
  */
@@ -260,7 +260,7 @@ export class AiSuggestionChangeLogService {
 
   /**
    * The words sealed, or null: no key, the card drew on chat, the decider
-   * hasn't said yes to Frapp AI, there are none, or sealing failed (the row
+   * hasn't said yes to Frapp Intelligence, there are none, or sealing failed (the row
    * is still kept, with the changes alone). Never throws.
    */
   private async sealWords(

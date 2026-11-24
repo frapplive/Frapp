@@ -171,7 +171,7 @@ beforeEach(() => {
 });
 
 describe("asking from a channel", () => {
-  it("gives a member without Ask nothing: no way to ask, no turns, no Meet Frapp AI", async () => {
+  it("gives a member without Ask nothing: no way to ask, no turns, no Meet Frapp Intelligence", async () => {
     state.exchanges = [DONE];
     mount(false);
     expect(screen.getByTestId("ask")).toHaveTextContent("none");

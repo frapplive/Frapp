@@ -1473,7 +1473,7 @@ describe('MeetingDraftService', () => {
       expect(notes.others).toHaveLength(1);
     });
 
-    it('leaves out a note-taker who said No to Frapp AI after the draft was asked for', async () => {
+    it('leaves out a note-taker who said No to Frapp Intelligence after the draft was asked for', async () => {
       const { ask, work, seen, notes } = withSam();
       await ask();
       notes.droppedOut.add(SAM);

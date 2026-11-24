@@ -5,6 +5,9 @@ import {
   canAll,
   EVENT_CREATE_PERMISSIONS,
   isModuleEnabled,
+  NEW_ACTION_LABELS,
+  NEW_ACTION_ORDER,
+  type NewActionKey,
 } from "@repo/validation";
 
 /**
@@ -14,18 +17,12 @@ import {
  * press-and-hold mode makes, and where the member's own arrangement is kept.
  * The panel is `components/quick-actions/quick-actions-panel.tsx`; what each
  * action opens is `components/quick-actions/quick-actions-host.tsx`.
+ *
+ * The actions, their order and their words are the app's New list
+ * (`@repo/validation` `sections.ts`, #5943), so web's New page (#5946) reads
+ * the same ones.
  */
-export type QuickActionKey =
-  | "newMinutes"
-  | "search"
-  | "newEvent"
-  | "newTask"
-  | "invite"
-  | "message"
-  | "hostCheckIn"
-  | "logHours"
-  | "study"
-  | "upload";
+export type QuickActionKey = NewActionKey;
 
 /**
  * The panel holds at most nine, three rows of three (Paul, 2026-11-13: "cap it
@@ -65,31 +62,10 @@ export const QUICK_ACTION_COLUMNS = 3;
  * couldn't find a way to invite new members"); Host check-in, Log hours,
  * Study and Upload wait in the Add row for that officer.
  */
-const QUICK_ACTION_ORDER: readonly QuickActionKey[] = [
-  "newMinutes",
-  "search",
-  "newEvent",
-  "newTask",
-  "invite",
-  "message",
-  "hostCheckIn",
-  "logHours",
-  "study",
-  "upload",
-];
+const QUICK_ACTION_ORDER: readonly QuickActionKey[] = NEW_ACTION_ORDER;
 
-export const QUICK_ACTION_LABELS: Record<QuickActionKey, string> = {
-  newMinutes: "New minutes",
-  search: "Search",
-  newEvent: "New event",
-  newTask: "New task",
-  invite: "Invite",
-  message: "Message",
-  hostCheckIn: "Host check-in",
-  logHours: "Log hours",
-  study: "Study",
-  upload: "Upload",
-};
+export const QUICK_ACTION_LABELS: Record<QuickActionKey, string> =
+  NEW_ACTION_LABELS;
 
 /** What a screen reader says the action does, beyond its label. */
 export const QUICK_ACTION_HINTS: Record<QuickActionKey, string> = {

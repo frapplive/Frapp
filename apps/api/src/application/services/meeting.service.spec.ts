@@ -755,7 +755,7 @@ describe('MeetingService', () => {
     });
 
     it('answers for a whole audience by the same rule as each member alone', async () => {
-      // What posting an Ask Frapp answer to a channel asks (#4713): could
+      // What posting a Frapp Intelligence answer to a channel asks (#4713): could
       // everyone who reads the channel open these minutes.
       const posted = {
         status: 'posted' as const,

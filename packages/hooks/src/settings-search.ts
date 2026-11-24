@@ -439,6 +439,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: [
       "ai",
       "ask frapp",
+      "frapp intelligence",
       "assistant",
       "meeting notes",
       "transcription",
@@ -858,7 +859,7 @@ const PERSONAL_ENTRIES: readonly SettingEntry[] = [
   },
   {
     id: "frapp-ai",
-    label: "Frapp AI",
+    label: "Frapp Intelligence",
     area: "personal",
     section: "AI",
     keywords: ["ai", "ask frapp", "assistant", "consent"],

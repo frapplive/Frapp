@@ -12,7 +12,7 @@ interface AskAnswerCardProps {
 }
 
 /**
- * An Ask Frapp answer its asker posted to the channel (`kind: 'ask_answer'`,
+ * A Frapp Intelligence answer its asker posted to the channel (`kind: 'ask_answer'`,
  * #4713, `spec/behavior/ai.md` § Posting an answer to the channel). Mobile's twin is
  * `apps/mobile/components/chat/ask-answer-card.tsx`.
  *

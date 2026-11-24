@@ -1,12 +1,12 @@
 import { AI_MINIMUM_AGE } from "./legal";
 /**
- * The words around Frapp AI, shared by web and mobile so the two never say
+ * The words around Frapp Intelligence, shared by web and mobile so the two never say
  * different things about it (`spec/behavior/ai.md` § Consent).
  *
- * The member meets Frapp AI on one screen, "Meet Frapp AI" (#4790, Paul
+ * The member meets Frapp Intelligence on one screen, "Meet Frapp Intelligence" (#4790, Paul
  * 2026-11-13): during onboarding, once on next open for an account that
  * never answered, and at an AI entry point for a member who chose Not now.
- * It says what Frapp AI does in three lines, names the companies it works
+ * It says what Frapp Intelligence does in three lines, names the companies it works
  * with in one, and links the privacy policy, which carries the detail.
  * Continue is the member's Yes; Not now is a No they can change in
  * Settings. Paul's rule for the wording: say no more about the process than
@@ -53,7 +53,7 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
   },
   {
     key: "ask",
-    label: "Ask Frapp",
+    label: "Questions and requests",
     description:
       // Announcements are chat (#4915): they reach Ask only with "Include
       // channel messages" on, so this switch doesn't name them.
@@ -65,9 +65,9 @@ export const AI_SWITCHES: readonly AiSwitchCopy[] = [
     key: "chat_source",
     label: "Include channel messages",
     description:
-      "Ask Frapp also reads messages in chapter channels, and members can ask for a summary of a channel's new messages or of a thread. Only messages from members who have Frapp AI on. Never direct messages.",
+      "Frapp Intelligence also reads messages in chapter channels, and members can ask for a summary of a channel's new messages or of a thread. Only messages from members who have Frapp Intelligence on. Never direct messages.",
     short:
-      "Ask and channel summaries read chapter channels. Only members with Frapp AI on, never DMs.",
+      "Answers and channel summaries read chapter channels. Only members with Frapp Intelligence on, never DMs.",
     dependsOn: "ask",
   },
   {
@@ -122,19 +122,19 @@ export const AI_SETTINGS_COPY = {
   /**
    * No company names (Paul, 2026-11-17: "we don't need to say it works with
    * Anthropic, Google, and AssemblyAI ... that lives in the privacy policy").
-   * They stay on Meet Frapp AI, where the member's yes is given.
+   * They stay on Meet Frapp Intelligence, where the member's yes is given.
    */
   description:
-    "Each is on unless the president turns it off, and each member chooses for themselves whether Frapp AI is on.",
+    "Each is on unless the president turns it off, and each member chooses for themselves whether Frapp Intelligence is on.",
   /** The phone's footnote under the switches in Chapter settings. */
   phoneFootnote:
-    "Each member also chooses for themselves whether Frapp AI is on.",
+    "Each member also chooses for themselves whether Frapp Intelligence is on.",
   /** The phone's row in a member's own Settings that opens these switches. */
   chapterRow: "Chapter AI",
   /** That row's value: how many of the chapter's switches are on. */
   chapterRowValue: (on: number) => `${on} on`,
   presidentOnly: "Only the chapter president can turn these on or off.",
-  dependsOnAsk: "Turn on Ask Frapp first.",
+  dependsOnAsk: "Turn on Questions and requests first.",
   lastChanged: (date: string) => `Last changed ${date}.`,
   turnedOn: (label: string) => `${label} turned on`,
   turnedOff: (label: string) => `${label} turned off`,
@@ -145,14 +145,14 @@ export const AI_SETTINGS_COPY = {
   retryLater: "Retry in a moment.",
 } as const;
 
-/** One line of what Frapp AI does, on the Meet Frapp AI screen. */
+/** One line of what Frapp Intelligence does, on the Meet Frapp Intelligence screen. */
 export interface FrappAiPoint {
   key: "ask" | "catch_up" | "nudge";
   text: string;
 }
 
 export const FRAPP_AI_COPY = {
-  title: "Meet Frapp AI",
+  title: "Meet Frapp Intelligence",
   points: [
     {
       key: "ask",
@@ -173,31 +173,31 @@ export const FRAPP_AI_COPY = {
    * your chapter" form.
    */
   disclosure: (providers: string) =>
-    `Frapp AI works with ${providers}. Continuing confirms you're ${AI_MINIMUM_AGE} or older and turns it on for your account.`,
+    `Frapp Intelligence works with ${providers}. Continuing confirms you're ${AI_MINIMUM_AGE} or older and turns it on for your account.`,
   privacyLink: "Privacy policy",
   continue: "Continue",
   notNow: "Not now",
-  saveFailed: "Couldn't turn on Frapp AI. Try again.",
-  loadFailed: "Couldn't load your Frapp AI setting",
-  offlineTitle: "Frapp AI setting unavailable offline",
-  offlineDescription: "Reconnect to see whether Frapp AI is on.",
+  saveFailed: "Couldn't turn on Frapp Intelligence. Try again.",
+  loadFailed: "Couldn't load your Frapp Intelligence setting",
+  offlineTitle: "Frapp Intelligence setting unavailable offline",
+  offlineDescription: "Reconnect to see whether Frapp Intelligence is on.",
   /** Settings: the member's own switch. */
-  settingsTitle: "Frapp AI",
-  settingsSwitch: "Frapp AI",
+  settingsTitle: "Frapp Intelligence",
+  settingsSwitch: "Frapp Intelligence",
   /**
    * What it does, not who it works with: the companies are named on Meet
-   * Frapp AI, which turning the switch on opens, and in the privacy policy
+   * Frapp Intelligence, which turning the switch on opens, and in the privacy policy
    * (Paul, 2026-11-17).
    */
   settingsCaption:
     "Ask questions, catch up on channels, draft minutes and get nudges.",
-  /** The phone's Settings section that holds Frapp AI and nudges. */
+  /** The phone's Settings section that holds Frapp Intelligence and nudges. */
   settingsSection: "AI",
   /** The line under that section; `privacyLink` is the linked words. */
-  settingsFootnote: "What Frapp AI reads and who it works with is in the",
-  turnOffFailed: "Couldn't turn off Frapp AI",
-  turnedOn: "Frapp AI is on",
-  turnedOff: "Frapp AI is off",
+  settingsFootnote: "What Frapp Intelligence reads and who it works with is in the",
+  turnOffFailed: "Couldn't turn off Frapp Intelligence",
+  turnedOn: "Frapp Intelligence is on",
+  turnedOff: "Frapp Intelligence is off",
 } as const;
 
 /** `["Anthropic", "Google"]` → `"Anthropic and Google"`. */

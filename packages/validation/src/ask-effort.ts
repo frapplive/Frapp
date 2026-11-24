@@ -1,8 +1,8 @@
 import type { AskEffort } from "./ask";
 
 /**
- * "Think harder" under an Ask answer (#4904, `spec/behavior/ai.md` § Ask
- * Frapp): the same question asked again in the answer's place with more
+ * "Think harder" under an Ask answer (#4904, `spec/behavior/ai.md` § Frapp
+ * Intelligence): the same question asked again in the answer's place with more
  * effort (`effort: "more"`, {@link AskEffort}). The words both clients show.
  */
 export const ASK_EFFORT_COPY = {

@@ -419,7 +419,7 @@ describe('the acting agent, against a model that misbehaves', () => {
       expect.objectContaining({
         chapterId: HOME,
         requestedFor: OFFICER,
-        source: { type: 'request', id: OFFICER, title: 'Ask Frapp' },
+        source: { type: 'request', id: OFFICER, title: 'Frapp Intelligence' },
         notify: [],
       }),
     );

@@ -72,6 +72,13 @@
 //   words for Ask Frapp and chapter channels, never direct messages
 //   (2026-11-21, #5772), moved only the Privacy pin on the #5276 precedent,
 //   pending the owner's material-or-not ruling in its PR.
+//   The rename of Ask Frapp and Frapp AI to Frapp Intelligence (2026-11-24,
+//   #5945, Paul's decision), with the name defined once in each page ("Frapp
+//   Intelligence, Frapp's AI features" in the Terms; "Frapp Intelligence is
+//   the name for Frapp's AI features" in Privacy section 4) and the chapter's
+//   Ask switch named "questions and requests", moved only the Terms and
+//   Privacy pins on the ADR-25 rename precedent (#2580), pending the owner's
+//   material-or-not ruling in its PR.
 //
 // SCOPE. Reads source files, never the module, so the API specs' mocks of
 // `#domain/constants/legal` (`'test-version'`, `'current-version'`) can't
@@ -110,12 +117,12 @@ export const PINNED_PAGES = {
   terms: {
     path: "apps/landing/app/terms/page.tsx",
     lastUpdated: "September 2026",
-    fingerprint: "3d5e3fc5be3e148b",
+    fingerprint: "daf894109c4ef6a6",
   },
   privacy: {
     path: "apps/landing/app/privacy/page.tsx",
     lastUpdated: "November 2026",
-    fingerprint: "66dd5dcfff41e586",
+    fingerprint: "23c053737ed803bc",
   },
   ferpa: {
     path: "apps/landing/app/ferpa/page.tsx",

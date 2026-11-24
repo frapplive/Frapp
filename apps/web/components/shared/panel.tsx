@@ -440,7 +440,7 @@ function DockedPanel({
     };
     for (const child of covered) cover(child);
     // A child that joins the column while the panel is up is covered too:
-    // Ask Frapp's floating bar mounts once Ask access resolves, which can be
+    // Frapp Intelligence's floating bar mounts once Ask access resolves, which can be
     // after a deep link opened the panel (#5476). It is released with the
     // rest when the panel closes.
     const joined = new MutationObserver((records) => {

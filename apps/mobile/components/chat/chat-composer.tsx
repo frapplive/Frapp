@@ -117,7 +117,7 @@ import {
  * "Only you see the answer". A message that names `@Frapp` is a question for Frapp
  * and is never posted (`components/ask/ask-in-channel.tsx`); the screen
  * decides that on Send, and while the draft names it the send button is
- * called "Ask Frapp" and the screen says above the composer that only the
+ * called "Frapp Intelligence" and the screen says above the composer that only the
  * member will see it.
  *
  * **A long press on Send schedules the message** (`onSchedule`, #4956), as
@@ -228,14 +228,14 @@ export interface ChatComposerProps {
    */
   dictationTarget?: string | null;
   /**
-   * Whether dictated words go to Frapp AI to be tidied. False lands them as
-   * the phone heard them: in a DM or group DM, which Frapp AI never reads
-   * (privacy policy, Frapp AI), and until the channel is known.
+   * Whether dictated words go to Frapp Intelligence to be tidied. False lands them as
+   * the phone heard them: in a DM or group DM, which Frapp Intelligence never reads
+   * (privacy policy, Frapp Intelligence), and until the channel is known.
    */
   tidyDictation?: boolean;
 }
 
-/** Dictation's cleanup where nothing may reach Frapp AI: the words as heard. */
+/** Dictation's cleanup where nothing may reach Frapp Intelligence: the words as heard. */
 const KEEP_AS_HEARD = async (): Promise<string | null> => null;
 
 export function ChatComposer({
@@ -290,7 +290,7 @@ export function ChatComposer({
 
   // Dictation (#5772, Ask's own from #5276): talk, tap Done, and the words
   // land in the box to read and send. Tidied only where the composer says so:
-  // never in a DM or group DM, whose words Frapp AI never receives.
+  // never in a DM or group DM, whose words Frapp Intelligence never receives.
   const cleanDictation = useCleanDictation();
   const field = useFieldDictation({
     value,

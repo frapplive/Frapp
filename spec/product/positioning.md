@@ -4,6 +4,28 @@ The chat-first product (see [`spec/README.md`](../README.md#active-work)) invert
 
 The paid tier gates the ops integrations (events with check-in, dues invoicing, points ledger, reports) and the AI features (meeting transcription/summary, Q&A over chapter content). The free tier — unlimited chat, unlimited members, unlimited chapters — is the wedge. Delivery sequencing lives in **GitHub Issues**, not a chunk roadmap; [`spec/README.md`](../README.md#active-work) is the index. This spec captures positioning, not ship state.
 
+## Three questions
+
+_Added 2026-11-24 (Paul, [#5943](https://github.com/pdcarlson/Frapp/issues/5943)): "The one thing I think Frapp lacks is a clear framework for what makes us unique and what we want to provide value through."_
+
+A member opens Frapp with one of three questions, and the product has exactly one place that answers each. This is the test a screen, a nav row or a new feature is held to.
+
+| | The question | Its one home |
+| --- | --- | --- |
+| **Talk** | What is being said? | The chapter's channels, always in view, and Messages |
+| **Do** | What is on me, and what is happening? | Activity (the member's own) and Calendar (the chapter's) |
+| **Keep** | Where is it, and who is it? | Resources (documents, minutes, backwork) and Directory |
+
+Three rules follow from it.
+
+- **Frapp Intelligence works across all three, and is what New opens.** A sentence becomes an event, posted minutes become suggested tasks, and a question is answered from the chapter's records. That connection is what a group chat, a calendar and a shared drive kept side by side cannot do, and it is why the three live in one app. Scope and non-goals: [`spec/behavior/ai.md`](../behavior/ai.md).
+- **Standing is never a destination.** Points, hours and attendance are facts about a person. They are shown on the person (their profile, the directory) and on the event or task that earned them, and officers manage them in Chapter settings. They are not pages a member visits.
+- **A feature that answers none of the three for a member in an ordinary week is officer setup or dead weight.** Setup lives in Chapter settings; dead weight is deleted, not kept in case.
+
+Each question has one home, so two screens never list the same thing for the same person: a task is on the member's Activity, an event is on the Calendar, a file is in Resources. Where the apps still disagree with this (the Tasks, Points, Service hours, Study hours and Meetings pages; the web shell's separate nav and channel columns) the difference is tracked work under #5943, not a second design.
+
+Chat is still the spine: the channels are the one thing on screen at all times, and events, tasks and polls still arrive in conversation as cards. What changed on 2026-11-24 is the claim in the first paragraph that every other capability is surfaced only in conversation and never behind a place of its own. Activity, Calendar, Resources and Directory are places, one per question.
+
 **AI features are anchored on authoritative content first.** Meeting minutes, uploaded documents and structured chapter data are the chapter's records. Chat in chapter channels is also read, announcements included, for members who agreed to it, and always cited as chat; the model is told what each source is (an officer's announcement, a reply, a posted record) and weighs it. Direct messages never are. _(Changed 2026-11-16, #4915: this sentence called announcements official sources that outrank everything else.)_ See [`spec/behavior/ai.md`](../behavior/ai.md) for scope and non-goals.
 
 > **Changed 2026-11-11 (Paul, [ADR-28](../architecture/adr/adr-28.md) decision 5).** This paragraph used to say the corpus was "not the general channels", as "an intentional product call: smaller AI that's reliably right, instead of bigger AI that's frequently embarrassing". Paul reversed it because chat carries much of a chapter's context. Product, landing and store copy must no longer promise that channel messages are never read by AI.

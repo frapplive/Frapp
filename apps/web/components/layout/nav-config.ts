@@ -14,6 +14,7 @@ import {
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
+import { SECTION_NAMES } from "@repo/validation";
 
 /**
  * Permission-aware dashboard navigation.
@@ -152,7 +153,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         // its read leaves out any that are off. No permission either: the
         // read needs `members:view`, which every member role holds.
         id: "activity",
-        label: "Activity",
+        label: SECTION_NAMES.activity,
         icon: ActivityGlyph,
         href: "/activity",
         description: "Your week, what is left to do, and what you made.",
@@ -263,7 +264,7 @@ export const DASHBOARD_NAV: NavSection[] = [
     items: [
       {
         id: "members",
-        label: "Directory",
+        label: SECTION_NAMES.directory,
         icon: DirectoryGlyph,
         href: "/members",
         description:

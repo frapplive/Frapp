@@ -63,8 +63,8 @@ import { fontFamilyFor, tint, typeRole, useFrappTheme } from "@/lib/theme";
  * words as a recent search.
  *
  * **Every member has it.** Until #5139 the only search on the phone was the
- * list inside the Ask Frapp field (#4904), so a member without Ask had none.
- * For a member who has Ask, the list ends in one "Ask Frapp about …" row,
+ * list inside the Frapp Intelligence field (#4904), so a member without Ask had none.
+ * For a member who has Ask, the list ends in one "Frapp Intelligence: …" row,
  * which opens the Ask sheet with the words in its field to send or change:
  * search may hand a question to Ask, but Ask no longer searches.
  *
@@ -89,7 +89,7 @@ export const SEARCH_COPY = {
   partial: (groups: readonly string[]) =>
     `Stopped looking in ${groups.join(", ")}. Results may be incomplete.`,
   partialUnnamed: "Some sources timed out. Results may be incomplete.",
-  askAbout: (query: string) => `${ASK_COPY.name} about “${query}”`,
+  askAbout: (query: string) => `${ASK_COPY.name}: “${query}”`,
 } as const;
 
 const DEBOUNCE_MS = 200;
@@ -402,7 +402,7 @@ export function SearchScreen() {
               testID="search-ask"
               accessibilityRole="button"
               accessibilityLabel={SEARCH_COPY.askAbout(typed)}
-              accessibilityHint="Opens Ask Frapp with these words."
+              accessibilityHint="Opens Frapp Intelligence with these words."
               onPress={() => {
                 selectionHaptic();
                 remember(typed);

@@ -308,11 +308,11 @@ describe("editing in place", () => {
 });
 
 /**
- * Ask Frapp left the panel for a bar above the tab bar (#4702, Paul
+ * Frapp Intelligence left the panel for a bar above the tab bar (#4702, Paul
  * 2026-11-13: "not only when you open the plus menu"), so the panel is the
  * actions and nothing else.
  */
-describe("Ask Frapp", () => {
+describe("Frapp Intelligence", () => {
   it("has no row in the panel", () => {
     let tree!: ReactTestRenderer;
     act(() => {

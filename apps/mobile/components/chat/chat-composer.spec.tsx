@@ -709,7 +709,7 @@ describe("ChatComposer @-mention picker", () => {
   });
 
   describe("Frapp's own row (#4713)", () => {
-    const FRAPP = "Ask Frapp. Only you see the answer";
+    const FRAPP = "Frapp Intelligence. Only you see the answer";
     const ask = { naming: false };
 
     it("is not offered to a member without Ask", () => {
@@ -756,7 +756,7 @@ describe("ChatComposer @-mention picker", () => {
         value: "@Frapp when is formal?",
         ask: { naming: true },
       }).tree;
-      const send = byLabel(naming, "Ask Frapp")!;
+      const send = byLabel(naming, "Frapp Intelligence")!;
       expect(send.props.accessibilityHint).toBe(
         "Only you will see this question and Frapp's answer.",
       );
@@ -764,7 +764,7 @@ describe("ChatComposer @-mention picker", () => {
 
       const plain = renderComposer({ value: "when is formal?", ask }).tree;
       expect(byLabel(plain, "Send message")).toBeDefined();
-      expect(byLabel(plain, "Ask Frapp")).toBeUndefined();
+      expect(byLabel(plain, "Frapp Intelligence")).toBeUndefined();
     });
   });
 });

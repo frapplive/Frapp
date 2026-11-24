@@ -13364,7 +13364,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get what Meet Frapp AI shows and the caller’s answer",
+        "summary": "Get what Meet Frapp Intelligence shows and the caller’s answer",
         "tags": [
           "AI"
         ]
@@ -13416,7 +13416,7 @@
             "bearer": []
           }
         ],
-        "summary": "Answer Meet Frapp AI (turn Frapp AI on or off)",
+        "summary": "Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)",
         "tags": [
           "AI"
         ]
@@ -20146,7 +20146,7 @@
     },
     "/v1/ai/ask/dictation": {
       "post": {
-        "description": "The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Ask Frapp, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp AI’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.",
+        "description": "The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Frapp Intelligence, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp Intelligence’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.",
         "operationId": "AskController_cleanDictation_v1",
         "parameters": [],
         "requestBody": {
@@ -20681,7 +20681,7 @@
             "description": "The receipt was not issued to the caller for an answer (`ai.ask.post.receipt_invalid`), is older than a day or from before answers could be posted (`ai.ask.post.too_old`), is not an answer (`ai.ask.post.not_an_answer`), the answer read chat messages (`ai.ask.post.read_chat`) or followed earlier questions (`ai.ask.post.follow_up`), or it is already in this channel (`ai.ask.post.already_posted`)."
           },
           "403": {
-            "description": "The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp AI on (`ai.consent.required`)."
+            "description": "The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp Intelligence on (`ai.consent.required`)."
           },
           "404": {
             "description": "AI is off on this server (`ai.not_available`), or the channel does not exist."
@@ -20702,7 +20702,7 @@
             "bearer": []
           }
         ],
-        "summary": "Post an Ask Frapp answer to a channel, or ask what posting would warn about",
+        "summary": "Post a Frapp Intelligence answer to a channel, or ask what posting would warn about",
         "tags": [
           "AI"
         ]
@@ -20734,7 +20734,7 @@
             }
           },
           "403": {
-            "description": "The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp AI turned off (`ai.chapter_off`)."
+            "description": "The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp Intelligence turned off (`ai.chapter_off`)."
           },
           "404": {
             "description": "AI is off on this server (`ai.not_available`), or the draft is not the caller's or is gone."
@@ -32616,7 +32616,7 @@
           },
           "point_reward": {
             "type": "number",
-            "description": "Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them."
+            "description": "Points on completion (2026-11-22). Only a Frapp Intelligence card proposes them, or an officer edit sets them."
           },
           "proof_kind": {
             "type": "string",
@@ -33689,7 +33689,7 @@
         "properties": {
           "ask": {
             "type": "boolean",
-            "description": "Ask Frapp is on for the chapter."
+            "description": "Frapp Intelligence is on for the chapter."
           },
           "meeting_notes": {
             "type": "boolean",
@@ -37316,7 +37316,7 @@
           "line": {
             "type": "string",
             "nullable": true,
-            "description": "One sentence Frapp AI wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written."
+            "description": "One sentence Frapp Intelligence wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written."
           },
           "start_here": {
             "type": "string",
@@ -40034,7 +40034,7 @@
               "consent_required"
             ],
             "nullable": true,
-            "description": "Why these notes would be left out of a draft now: their writer has not turned Frapp AI on."
+            "description": "Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on."
           }
         },
         "required": [
@@ -40060,7 +40060,7 @@
               "consent_required"
             ],
             "nullable": true,
-            "description": "Why these notes would be left out of a draft now: their writer has not turned Frapp AI on."
+            "description": "Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on."
           },
           "user_id": {
             "type": "string",

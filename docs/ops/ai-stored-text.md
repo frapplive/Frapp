@@ -1,10 +1,10 @@
 # Stored AI text: reports and the Ask diagnostics window
 
-Frapp keeps no prompt or answer text, with the exceptions in [`spec/behavior/ai.md` § Stored AI text](../../spec/behavior/ai.md#stored-ai-text). This page is how both work in operation (#4315, ADR-28 decision 8): [reports](#reports) a member makes with "Report this", and the 14-day beta diagnostics window on Ask Frapp. The rules are the spec's; the table shapes are the migrations' (`20261112220000_ai_reports.sql`, `20261112200000_ai_ask_diagnostics.sql`).
+Frapp keeps no prompt or answer text, with the exceptions in [`spec/behavior/ai.md` § Stored AI text](../../spec/behavior/ai.md#stored-ai-text). This page is how both work in operation (#4315, ADR-28 decision 8): [reports](#reports) a member makes with "Report this", and the 14-day beta diagnostics window on Frapp Intelligence. The rules are the spec's; the table shapes are the migrations' (`20261112220000_ai_reports.sql`, `20261112200000_ai_ask_diagnostics.sql`).
 
 What is kept about Ask that is not text, the trace of each turn and the member's thumbs on it, is kept 90 days and deleted sooner when the asker leaves the chapter, deletes their account or answers No on the AI sheet. It is on its own page: [`ask-answer-quality.md`](ask-answer-quality.md).
 
-What members change when they decide on a Frapp AI suggestion, with the words sealed by the same key, is on [`ai-suggestion-changes.md`](ai-suggestion-changes.md).
+What members change when they decide on a Frapp Intelligence suggestion, with the words sealed by the same key, is on [`ai-suggestion-changes.md`](ai-suggestion-changes.md).
 
 ## Reports
 
@@ -14,7 +14,7 @@ A row is deleted:
 
 - 30 days after the report (a sweep runs every hour, whether or not AI is still on);
 - when the reporter deletes their account;
-- when a member whose words are in it (`quoted_user_ids`) deletes their account or turns Frapp AI off;
+- when a member whose words are in it (`quoted_user_ids`) deletes their account or turns Frapp Intelligence off;
 - when the chapter is deleted.
 
 A report is not kept at all when the reporter or a member it quotes had already deleted their account when it was made (the table's insert trigger, `ai_reports_refuse_deleted_users`): an Ask answer can be reported up to 7 days after it was given, so a chat author can be gone by then. The member is still told their report was sent.
@@ -59,7 +59,7 @@ A row is deleted when:
 
 - the window reaches its end date (a sweep runs every ten minutes, whether or not AI is still on);
 - the president stops the window early, which deletes everything it kept;
-- the member who asked leaves the chapter, deletes their account, or turns Frapp AI off;
+- the member who asked leaves the chapter, deletes their account, or turns Frapp Intelligence off;
 - the chapter is deleted.
 
 ### Turning it off, and moving it to another chapter

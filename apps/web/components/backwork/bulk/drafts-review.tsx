@@ -53,8 +53,8 @@ import { CheckPagesDialog } from "./check-pages-dialog";
 
 /** Why the AI fill stopped, in words for the line above the table. */
 const AUTOFILL_STOPPED: Record<Exclude<DraftAutofillStop, "off">, string> = {
-  consent: "Turn on Frapp AI to have drafts filled in from their pages.",
-  chapter_off: "Frapp AI is off for your chapter, so drafts aren't filled in for you.",
+  consent: "Turn on Frapp Intelligence to have drafts filled in from their pages.",
+  chapter_off: "Frapp Intelligence is off for your chapter, so drafts aren't filled in for you.",
 };
 
 /** A Radix Select item can't hold "", so a cleared choice goes as this. */
