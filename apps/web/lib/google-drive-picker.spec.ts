@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { captureMessage } = vi.hoisted(() => ({ captureMessage: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureMessage }));
+
 /**
  * Google's two browser libraries, faked: the sign-in's token client and the
  * picker, so each branch of `google-drive-picker.ts` runs without Google.
@@ -25,6 +28,8 @@ let gapiLoad: (config: {
   ontimeout: () => void;
 }) => void;
 const requestAccessToken = vi.fn();
+const dispose = vi.fn();
+const setVisible = vi.fn();
 const builder = {
   addView: vi.fn(),
   setOAuthToken: vi.fn(),
@@ -51,7 +56,11 @@ function installGoogle() {
     return builder;
   });
   builder.build.mockImplementation(() => ({
-    setVisible: () => pickerReply(callback),
+    setVisible: (visible: boolean) => {
+      setVisible(visible);
+      if (visible) pickerReply(callback);
+    },
+    dispose,
   }));
   Object.assign(window, {
     google: {
@@ -114,7 +123,22 @@ describe("pickDriveFolder", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const node of document.querySelectorAll(".picker-dialog")) {
+      node.remove();
+    }
   });
+
+  /**
+   * Google's picker window: `static` is where it sits without Google's
+   * stylesheet, in the page's flow; `absolute` floats over the page.
+   */
+  function pickerWindow(position: "absolute" | "static", named = true) {
+    const node = document.createElement("div");
+    node.className = named ? "picker picker-dialog" : "picker";
+    node.style.position = position;
+    document.body.append(node);
+    return node;
+  }
 
   it("signs in for drive.file, then returns the picked folder with the token", async () => {
     const { pickDriveFolder } = await load();
@@ -173,5 +197,85 @@ describe("pickDriveFolder", () => {
     await expect(pickDriveFolder(CONFIG)).resolves.toMatchObject({
       id: "folder-9",
     });
+  });
+
+  it("closes a picker whose window sits in the page instead of over it, and says so", async () => {
+    // On staging (2026-11-24) the window sat in the page's flow: the page
+    // grew screens tall and scrolled to a blank bottom.
+    pickerReply = () => {
+      pickerWindow("static");
+    };
+    const { pickDriveFolder } = await load();
+    await expect(pickDriveFolder(CONFIG)).rejects.toThrow(
+      /didn't display properly/,
+    );
+    expect(setVisible).toHaveBeenLastCalledWith(false);
+    expect(dispose).toHaveBeenCalled();
+    expect(captureMessage).toHaveBeenCalledWith(
+      "Google Drive picker shown in the page's flow",
+      expect.objectContaining({ level: "warning" }),
+    );
+  });
+
+  it("sees a window Google names only after adding it", async () => {
+    pickerReply = () => {
+      const node = pickerWindow("static", false);
+      setTimeout(() => node.classList.add("picker-dialog"), 0);
+    };
+    const { pickDriveFolder } = await load();
+    await expect(pickDriveFolder(CONFIG)).rejects.toThrow(
+      /didn't display properly/,
+    );
+  });
+
+  it("gives a window a moment to take its place before calling it misplaced", async () => {
+    let pick: PickerCallback = () => undefined;
+    pickerReply = (callback) => {
+      pick = callback;
+      const node = pickerWindow("static");
+      setTimeout(() => (node.style.position = "absolute"), 20);
+    };
+    const { pickDriveFolder } = await load();
+    const picked = pickDriveFolder(CONFIG);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    pick({
+      action: "picked",
+      docs: [{ id: "folder-9", name: "Chapter Drive" }],
+    });
+    await expect(picked).resolves.toMatchObject({ id: "folder-9" });
+    expect(dispose).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it("leaves a picker that floats over the page open, and ignores an earlier picker's window", async () => {
+    pickerWindow("static");
+    let pick: PickerCallback = () => undefined;
+    pickerReply = (callback) => {
+      pick = callback;
+      queueMicrotask(() => pickerWindow("absolute"));
+    };
+    const { pickDriveFolder } = await load();
+    const picked = pickDriveFolder(CONFIG);
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".picker-dialog")).toHaveLength(2),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    pick({
+      action: "picked",
+      docs: [{ id: "folder-9", name: "Chapter Drive" }],
+    });
+    await expect(picked).resolves.toMatchObject({ id: "folder-9" });
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it("stops watching once the pick ends, so a later window can't close it", async () => {
+    const { pickDriveFolder } = await load();
+    await expect(pickDriveFolder(CONFIG)).resolves.toMatchObject({
+      id: "folder-9",
+    });
+    pickerWindow("static");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(dispose).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
   });
 });
