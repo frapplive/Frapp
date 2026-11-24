@@ -242,6 +242,7 @@ then, and the Member rows took the chapter accent before that.
 |---|---|---|
 | Study hours | `study`, `graduation-cap` | `StudyGlyph` |
 | Service hours | `service`, `hand-heart` | `ServiceGlyph` |
+| Recruitment (#5924) | `RecruitmentGlyph` (`components/more/more-glyphs.tsx`), the chat card's funnel; no nav set key yet | `RushGlyph` |
 | Dues | `billing`, `credit-card` | `BillingGlyph` |
 | Documents | `documents`, `file-text` | `DocumentsGlyph` |
 | Directory | `directory`, `users-three` | `DirectoryGlyph` |
@@ -345,6 +346,7 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Points | `PointsGlyph` | `points`, `trophy` |
 | Study hours | `StudyGlyph` | `study`, `graduation-cap` |
 | Service hours | `ServiceGlyph` | `service`, `hand-heart` |
+| Recruitment (#5924) | `RushGlyph` from `components/chat/chat-glyphs.tsx`, the chat card's stroke funnel, borrowed until `@repo/theme`'s nav set has a two-tone one | — |
 | Polls (no nav row since #3871; kept for the chat composer's + menu, #3865) | `PollsGlyph` | `polls`, `chart-bar` |
 | Meetings (minutes) | `MeetingsGlyph` | `meetings`, `notebook` |
 | Documents | `DocumentsGlyph` | `documents`, `file-text` |

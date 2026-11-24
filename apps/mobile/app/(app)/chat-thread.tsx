@@ -1889,7 +1889,7 @@ function ChannelThreadScreen() {
           >
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Back to ${below?.title.toLowerCase() ?? "chat"}`}
+              accessibilityLabel={`Back to ${below?.title?.toLowerCase() ?? "chat"}`}
               hitSlop={12}
               // Pops the thread, as the edge swipe does, to whatever opened
               // it (Chat home, a member's card, a notification), and to Chat

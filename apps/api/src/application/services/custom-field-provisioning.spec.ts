@@ -4,6 +4,7 @@ import {
   SEED_SORT_BASE,
 } from './custom-field-provisioning';
 import { CUSTOM_FIELDS_SEED } from '@repo/org-archetypes';
+import { PROFILE_OWNED_CUSTOM_FIELD_KEYS } from '@repo/validation';
 import type { CustomFieldEntry } from '@repo/org-archetypes';
 
 // The fixtures below exercise the mapping's branches; the `CUSTOM_FIELDS_SEED`
@@ -268,6 +269,13 @@ describe('CUSTOM_FIELDS_SEED (the real seed, as shipped)', () => {
   it('maps every entry — nothing is silently dropped', () => {
     expect(skipped).toEqual([]);
     expect(rows).toHaveLength(CUSTOM_FIELDS_SEED.length);
+  });
+
+  it('seeds no field the profile already owns, like Major or Graduation year (#581)', () => {
+    const keys = rows.map((r) => r.key);
+    for (const owned of PROFILE_OWNED_CUSTOM_FIELD_KEYS) {
+      expect(keys).not.toContain(owned);
+    }
   });
 
   it('derives a unique, contract-legal key for every entry', () => {

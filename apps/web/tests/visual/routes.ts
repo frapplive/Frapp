@@ -28,6 +28,7 @@ export const DASHBOARD_ROUTES = [
   "/activity",
   "/events",
   "/tasks",
+  "/rush",
   "/documents",
   "/backwork",
   "/chat",

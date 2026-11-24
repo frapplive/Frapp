@@ -23,7 +23,11 @@ import {
   formatBirthday,
   phoneHref,
 } from "@repo/validation";
-import { formatDay, formatPhone } from "@repo/formatting";
+import {
+  formatCustomFieldValue,
+  formatDay,
+  formatPhone,
+} from "@repo/formatting";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -83,12 +87,7 @@ type CustomFieldValue = {
 function formatCustomValue(
   field: CustomFieldValue & { value: string },
 ): string {
-  if (field.type === "boolean") {
-    return field.value === "true" ? "Yes" : "No";
-  }
-  // A chapter's own phone field reads like the member's Phone row (#5798).
-  if (field.type === "phone") return formatPhone(field.value);
-  return field.value;
+  return formatCustomFieldValue(field.type, field.value) ?? field.value;
 }
 
 /**

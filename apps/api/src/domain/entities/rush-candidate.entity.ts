@@ -1,3 +1,5 @@
+import type { RushClosedReason } from '@repo/validation';
+
 export type RushBidStatus = 'none' | 'extended';
 
 export interface RushCandidate {
@@ -7,6 +9,8 @@ export interface RushCandidate {
   name_key: string;
   user_id: string | null;
   stage: string;
+  /** Why the candidate is in a Closed stage; null in any other (#5924). */
+  closed_reason: RushClosedReason | null;
   bid_status: RushBidStatus;
   created_by: string;
   created_at: string;

@@ -6,6 +6,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RUSH_CLOSED_REASONS, type RushClosedReason } from '@repo/validation';
 import type {
   RushBidStatus,
   RushCandidate,
@@ -79,6 +80,13 @@ export class CreateRushCandidateResponseDto implements RushCandidate {
   @ApiProperty()
   stage: string;
 
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
+
   @ApiProperty({ enum: ['none', 'extended'] })
   bid_status: RushBidStatus;
 
@@ -113,6 +121,13 @@ export class RushCandidateViewDto implements RushCandidateView {
 
   @ApiProperty()
   stage: string;
+
+  @ApiProperty({
+    enum: RUSH_CLOSED_REASONS,
+    nullable: true,
+    description: 'Why the candidate is in a Closed stage; null in any other.',
+  })
+  closed_reason: RushClosedReason | null;
 
   @ApiProperty({ enum: ['none', 'extended'] })
   bid_status: RushBidStatus;

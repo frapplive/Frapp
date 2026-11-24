@@ -11,6 +11,7 @@ import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface'
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import { ChatService } from './chat.service';
+import { RushPipelineService } from './rush-pipeline.service';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 
 const sees = (id: string) => ({ id, canViewResults: Promise.resolve(true) });
@@ -24,6 +25,9 @@ describe('RushService', () => {
   let mockRushRepo: jest.Mocked<IRushCandidateRepository>;
   let mockUserRepo: jest.Mocked<Pick<IUserRepository, 'findByIds'>>;
   let mockChatService: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
+  let mockPipeline: jest.Mocked<
+    Pick<RushPipelineService, 'stageForNewCandidate'>
+  >;
 
   const baseCandidate: RushCandidate = {
     id: 'cand-1',
@@ -32,6 +36,7 @@ describe('RushService', () => {
     name_key: 'jane doe',
     user_id: null,
     stage: 'new',
+    closed_reason: null,
     bid_status: 'none',
     created_by: 'user-1',
     created_at: '2026-09-10T00:00:00.000Z',
@@ -56,12 +61,17 @@ describe('RushService', () => {
       sendMessage: jest.fn().mockResolvedValue({}),
     };
 
+    mockPipeline = {
+      stageForNewCandidate: jest.fn().mockResolvedValue('new'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RushService,
         { provide: RUSH_CANDIDATE_REPOSITORY, useValue: mockRushRepo },
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: ChatService, useValue: mockChatService },
+        { provide: RushPipelineService, useValue: mockPipeline },
       ],
     }).compile();
 
@@ -69,6 +79,22 @@ describe('RushService', () => {
   });
 
   describe('create', () => {
+    it("lands in the chapter's first visible New-category stage", async () => {
+      mockPipeline.stageForNewCandidate.mockResolvedValue('s_lead');
+      mockRushRepo.create.mockResolvedValue(baseCandidate);
+
+      await service.create({
+        chapter_id: 'ch-1',
+        display_name: 'Jane Doe',
+        created_by: 'user-1',
+      });
+
+      expect(mockPipeline.stageForNewCandidate).toHaveBeenCalledWith('ch-1');
+      expect(mockRushRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 's_lead' }),
+      );
+    });
+
     it('trims the display name and persists stage new / bid none', async () => {
       mockRushRepo.create.mockResolvedValue(baseCandidate);
 
@@ -83,6 +109,7 @@ describe('RushService', () => {
         display_name: 'Jane Doe',
         user_id: null,
         stage: 'new',
+        closed_reason: null,
         bid_status: 'none',
         created_by: 'user-1',
       });

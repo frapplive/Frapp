@@ -35,9 +35,8 @@ import {
   HostCheckInGlyph,
   InviteGlyph,
   MinutesGlyph,
-
+  RecruitmentGlyph,
   SettingsGlyph,
-
 } from "@/components/more/more-glyphs";
 import { StatusChip } from "@/components/status-chip";
 import { StatusDot } from "@/components/account/status-dot";
@@ -54,12 +53,14 @@ import {
   ProfileHead,
   ProfileSkeleton,
 } from "@/components/you/profile-sections";
+import { OwnCustomFieldsSection } from "@/components/you/own-custom-fields";
 import { useOwnStatus } from "@/lib/account/own-status";
 import {
   destinationHue,
   type YouDestination,
 } from "@/lib/more/destination-hue";
 import { selectEventRows } from "@/lib/events/select";
+import { useRushEntry } from "@/lib/rush/rush-entry";
 import { selectViewerProfile } from "@/lib/more/profile";
 import {
   dueChip,
@@ -230,6 +231,7 @@ export default function YouScreen() {
         : undefined,
     [chapter],
   );
+  const rush = useRushEntry();
   const hiddenFeatures = useHiddenUnsetFeatures(
     permissionsQuery.data?.permissions,
     moduleGate,
@@ -378,6 +380,17 @@ export default function YouScreen() {
           accessibilityHint="Opens the member directory."
           onPress={() => router.push("/directory")}
         />
+        {/* The recruitment pipeline (#5924), named with the chapter's own
+            word ("Rush", "Intake"), only with Recruitment on and for a role
+            that may open it (`useRushEntry`). A row, not a fifth tab. */}
+        {rush.show ? (
+          <ListRow
+            label={rush.term}
+            leading={tile(RecruitmentGlyph, "recruitment")}
+            accessibilityHint="Opens the chapter's prospects."
+            onPress={() => router.push("/rush")}
+          />
+        ) : null}
       </ListSection>
 
       <ListSection>
@@ -448,7 +461,11 @@ export default function YouScreen() {
       ) : null}
 
       {profileLoaded ? (
-        <ProfileDetails profile={profile} onEdit={openEditor} />
+        <>
+          <ProfileDetails profile={profile} onEdit={openEditor} />
+          {/* The chapter's own fields, every tier, with who sees each (#581). */}
+          <OwnCustomFieldsSection />
+        </>
       ) : null}
 
       {profileLoaded ? (

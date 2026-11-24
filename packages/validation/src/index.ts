@@ -76,6 +76,8 @@ export * from "./coming-up-tracking";
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// A member's own custom-field values (#581): the rule the API and both forms check.
+export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
 // (apps/web) and the import worker (apps/api). See ./discord-export for why
 // this used to be two copies of the same scanner.
@@ -258,6 +260,8 @@ export * from "./repeat-draft";
 export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).

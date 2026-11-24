@@ -9,6 +9,7 @@
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "node:path";
 import { resolveAppOrigin } from "../shared/app-url";
+import { AUTH_LINK_SCHEME, createAuthLinkGate, findAuthLink } from "../shared/auth-link";
 import { IPC, parseBadgeCount, parseExternalUrl } from "../shared/bridge";
 import { decideNavigation, isPermissionAllowed } from "../shared/navigation";
 import { offlinePageHtml, WINDOW_BACKGROUND } from "../shared/offline-page";
@@ -28,12 +29,28 @@ if (rejected) console.warn(`Ignoring app URL outside the allow-list: ${rejected}
 let mainWindow: BrowserWindow | null = null;
 /** Set when the member chose Quit, so closing the window really quits. */
 let quitting = false;
+/**
+ * Which `frapp-desktop://` sign-in link is taken: only the one answering the
+ * Google or Apple sign-in the member last started here. Any web page can open
+ * the scheme, so every other link is ignored and doesn't raise the window.
+ */
+const authLinks = createAuthLinkGate();
 
 if (!app.requestSingleInstanceLock()) {
   // A second launch (double-clicking the icon again) hands over to the first.
   app.quit();
 } else {
-  app.on("second-instance", () => showWindow());
+  app.on("second-instance", (_event, argv) => {
+    // Windows and Linux deliver a sign-in link as a second launch.
+    // An ordinary second launch (the icon again) brings the window forward.
+    const link = findAuthLink(argv);
+    if (link === null || openAuthLink(link)) showWindow();
+  });
+  // macOS delivers it here, to the running app.
+  app.on("open-url", (event, link) => {
+    event.preventDefault();
+    if (openAuthLink(link)) showWindow();
+  });
   app.on("before-quit", () => {
     quitting = true;
   });
@@ -66,6 +83,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(() => {
+    registerAuthLinkScheme();
     installPermissionHandlers();
     installBridge();
     const menus = { isPackaged: app.isPackaged, showWindow, onChange: () => rebuildMenus() };
@@ -172,7 +190,7 @@ function installPermissionHandlers(): void {
 
 /** The main-process half of `window.frappDesktop`; see `shared/bridge.ts`. */
 function installBridge(): void {
-  const fromApp = (event: Electron.IpcMainEvent): boolean =>
+  const fromApp = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean =>
     event.senderFrame?.origin === appOrigin;
 
   ipcMain.on(IPC.setBadgeCount, (event, value: unknown) => {
@@ -181,11 +199,48 @@ function installBridge(): void {
     // macOS and Linux draw this on the icon; the Windows overlay comes with #4842.
     app.setBadgeCount(count);
   });
-  ipcMain.on(IPC.openExternal, (event, value: unknown) => {
+  // Answers whether the browser was opened, so the page can say when it wasn't.
+  ipcMain.handle(IPC.openExternal, async (event, value: unknown): Promise<boolean> => {
     const url = parseExternalUrl(value);
-    if (!fromApp(event) || url === null) return;
-    void shell.openExternal(url);
+    if (!fromApp(event) || url === null) return false;
+    // The only page this opens is the start of a sign-in that returns to this
+    // app, and its link back is the one expected from now on.
+    if (!authLinks.arm(url, appOrigin)) return false;
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch {
+      return false;
+    }
   });
+}
+
+/**
+ * Claim `frapp-desktop://` for this app. A packaged app registers itself; an
+ * unpackaged `npm start` has to name its entry script, or the link would
+ * start a bare Electron.
+ */
+function registerAuthLinkScheme(): void {
+  const entry = process.argv[1];
+  if (process.defaultApp && entry) {
+    app.setAsDefaultProtocolClient(AUTH_LINK_SCHEME, process.execPath, [path.resolve(entry)]);
+  } else {
+    app.setAsDefaultProtocolClient(AUTH_LINK_SCHEME);
+  }
+}
+
+/**
+ * Finish a sign-in the member started here: load the web app's own callback
+ * route with the code the browser brought back (`shared/auth-link.ts`). A
+ * link nobody asked for, or one that isn't a sign-in, is dropped. Returns
+ * whether the link was taken.
+ */
+function openAuthLink(link: string): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const target = authLinks.accept(link, appOrigin);
+  if (target === null) return false;
+  mainWindow.loadURL(target).catch(ignoreLoadFailure);
+  return true;
 }
 
 /** The Frapp mark for the tray: bundled as an extra resource when packaged. */

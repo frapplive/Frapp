@@ -84,3 +84,4 @@ export {
   suggestTaskDue,
 } from "./due-time";
 export { formatPhone, formatPhoneInput, normalizePhone } from "./phone";
+export { formatCustomFieldValue } from "./custom-field";

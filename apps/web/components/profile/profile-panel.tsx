@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ProfileSection } from "@/components/profile/profile-section";
+import { OwnCustomFieldsSection } from "@/components/profile/own-custom-fields-section";
 import {
   profileSaveBody,
   profileSaveProblem,
@@ -497,6 +498,12 @@ export function ProfilePanel() {
             </div>
           </form>
         </ProfileSection>
+
+        {/*
+          Your chapter's own fields, every tier, with who sees each (#581).
+          Behind the Directory's gate, like your pledge class above.
+        */}
+        <OwnCustomFieldsSection enabled={canViewMembers} />
       </div>
       <StandingPanels
         open={openDoor}
