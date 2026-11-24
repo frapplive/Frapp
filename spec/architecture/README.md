@@ -64,7 +64,7 @@ Frapp/
 - **Database access:** Supabase JS client (`@supabase/supabase-js`) for Postgres queries, storage operations, and auth admin operations. No ORM; raw SQL or query builder via Supabase.
 - **Security:**
   - `SupabaseAuthGuard`: Validates JWT from Supabase Auth on every request.
-  - `ChapterGuard`: Resolves the active chapter and verifies membership. How the chapter is resolved — claim, header fallback, precedence and the mismatch response — is owned by [`../behavior/multi-tenancy.md`](../behavior/multi-tenancy.md), item 1 of its Enforcement layers list.
+  - `ChapterGuard`: Resolves the active chapter and verifies membership. How the chapter is resolved — the header, the claim default, precedence and the tenant-kind check — is owned by [`../behavior/multi-tenancy.md`](../behavior/multi-tenancy.md), item 1 of its Enforcement layers list.
   - `PermissionsGuard`: Checks `@RequirePermissions()` metadata against the user's flattened permission set.
 - **Validation:** Global `ValidationPipe` using `class-validator` and `class-transformer`.
 - **Documentation:** Swagger UI at `/docs` via `@nestjs/swagger`.

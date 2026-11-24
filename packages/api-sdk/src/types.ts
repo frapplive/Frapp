@@ -3856,6 +3856,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find one of your tenants by its URL slug
+         * @description Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.
+         */
+        get: operations["TenantController_resolve_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/suggestions": {
         parameters: {
             query?: never;
@@ -7071,6 +7091,60 @@ export interface components {
             branding?: components["schemas"]["BrandingDto"];
             /** @description The admin accepted the Terms of Service and Privacy Policy, for the chapter and for themselves. Must be true (spec/behavior/legal.md). The acceptance timestamp and policy version are recorded server-side from the session — never from this payload. */
             accept_terms_privacy: boolean;
+        };
+        ChapterMemberViewDto: {
+            id: string;
+            name: string;
+            university: string;
+            /**
+             * @description Read by the client subscription gate. Load-bearing — see `chapter-member-view.ts`.
+             * @enum {string}
+             */
+            subscription_status: "incomplete" | "active" | "past_due" | "canceled";
+            /** @description Timestamp the chapter entered `past_due`, or null. Drives the 3-day client grace window; the grace predicate fails open without it. */
+            past_due_since: string | null;
+            accent_color: string | null;
+            logo_path: string | null;
+            donation_url: string | null;
+            created_at: string;
+            updated_at: string;
+            org_archetype?: string;
+            enabled_modules?: {
+                [key: string]: boolean;
+            };
+            vocabulary?: {
+                [key: string]: unknown;
+            };
+            branding?: {
+                [key: string]: unknown;
+            };
+            theme_palette?: {
+                [key: string]: unknown;
+            };
+            /** @description Per-chapter opt-out for the pseudonymous analytics pipeline. Mobile reads it off this payload. */
+            analytics_opt_out?: boolean;
+            /** @description Set when the chapter has lost its President outside a voluntary transfer (spec/behavior/rbac.md § Presidency Transfer). Every member reads this, not just `roles:manage` holders — see `PresidencyClaimBanner`. */
+            needs_president?: boolean;
+        };
+        ChapterMembershipSummaryDto: {
+            /** Format: uuid */
+            member_id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            role_ids: string[];
+            has_completed_onboarding: boolean;
+            /** @description Module keys whose ops-setup nudge this member has dismissed in this chapter. */
+            dismissed_ops_nudges: string[];
+            chapter: components["schemas"]["ChapterMemberViewDto"];
+            /**
+             * @description The tenant's current URL slug (ADR-27), what its pages live under as `/c/<slug>/…`.
+             * @example fiji-rpi
+             */
+            slug: string | null;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /** @description The tenant's school. Always null until the school layer lands (#5835); declared now so clients are written against the final shape. */
+            school: string | null;
         };
         CurrentChapterResponseDto: {
             id: string;
@@ -10311,6 +10385,20 @@ export interface components {
              * @description Who gets it: any active member of the chapter, eligible to claim it or not.
              */
             assignee_id: string;
+        };
+        ResolvedTenantDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /**
+             * @description The tenant's current slug. Differs from the one asked for when that slug was retired, in which case the client replaces its URL with this one.
+             * @example fiji-rpi
+             */
+            slug: string;
+            /** @description True when the slug asked for is one this tenant has retired, so the URL should move to `slug`. */
+            redirected: boolean;
         };
         AiSuggestionSourceDto: {
             /** @enum {string} */
@@ -14009,7 +14097,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ChapterMembershipSummaryDto"][];
+                };
             };
             /** @description Error */
             default: {
@@ -22179,6 +22269,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TenantController_resolve_v1: {
+        parameters: {
+            query: {
+                /** @description The slug from the page's URL (`/c/<slug>/…`). Matched in lower case; anything that is not a slug the caller's own tenant holds or held answers 404. */
+                slug: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedTenantDto"];
+                };
             };
             /** @description Error */
             default: {

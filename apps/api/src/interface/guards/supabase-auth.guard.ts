@@ -344,8 +344,8 @@ export class SupabaseAuthGuard implements CanActivate {
    *
    * Failure is deliberately non-fatal: `getUser()` above has already
    * authenticated the request, so a JWKS hiccup or a token predating the hook
-   * should degrade to the `x-chapter-id` fallback that
-   * spec/behavior/multi-tenancy.md sanctions, not reject a valid caller.
+   * should leave the chapter to the `x-chapter-id` header (authoritative since
+   * ADR-27) or the sole membership, not reject a valid caller.
    */
   private async readClaims(token: string): Promise<JwtPayload | undefined> {
     try {
