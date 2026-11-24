@@ -4,6 +4,21 @@ import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
+ * How a worded header button folds to its glyph where the header is narrow
+ * (below), shared with the Filter button (`shared/filter-menu.tsx`) so the
+ * two fold at the same width and a header never shows one worded and the
+ * other bare. `HEADER_BUTTON_FOLD` squares the button; `HEADER_LABEL_FOLD`
+ * keeps its words for a screen reader only.
+ */
+export const HEADER_BUTTON_FOLD =
+  "@max-[26rem]:w-9 @max-[26rem]:px-0 @max-[26rem]:pointer-coarse:w-11 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:w-9 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:px-0 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:pointer-coarse:w-11";
+export const HEADER_LABEL_FOLD =
+  "@max-[26rem]:sr-only group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:sr-only";
+/** A count on a folded button rides its corner, as `FilterMenu`'s glyph's. */
+export const HEADER_BADGE_FOLD =
+  "@max-[26rem]:absolute @max-[26rem]:-right-1.5 @max-[26rem]:-top-1.5 @max-[26rem]:h-4 @max-[26rem]:min-w-4 @max-[26rem]:justify-center @max-[26rem]:px-1 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:absolute group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:-right-1.5 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:-top-1.5 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:h-4 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:min-w-4 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:justify-center group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:px-1";
+
+/**
  * A page's "New ..." button: a +, then "New" and the thing it makes ("New
  * event", "New minutes", "New task"). Paul, 2026-11-19: "make the new buttons
  * match across the board"; on the decision card the same day he chose the
@@ -38,17 +53,11 @@ export const NewButton = React.forwardRef<HTMLButtonElement, NewButtonProps>(
         ref={ref}
         size={size}
         variant="action"
-        className={cn(
-          "shrink-0 gap-2 @max-[26rem]:w-9 @max-[26rem]:px-0 @max-[26rem]:pointer-coarse:w-11",
-          "group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:w-9 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:px-0 group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:pointer-coarse:w-11",
-          className,
-        )}
+        className={cn("shrink-0 gap-2", HEADER_BUTTON_FOLD, className)}
         {...props}
       >
         <Plus className="h-4 w-4" aria-hidden="true" />
-        <span className="@max-[26rem]:sr-only group-has-[[data-tool-page-views]:not(:empty)]/page-header:@max-[36rem]:sr-only">
-          {newLabel(thing)}
-        </span>
+        <span className={HEADER_LABEL_FOLD}>{newLabel(thing)}</span>
       </Button>
     );
   },

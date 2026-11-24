@@ -150,8 +150,11 @@ export function TaskRow({
       <button
         type="button"
         onClick={onOpen}
+        // The title keeps at least 6rem beside chat's narrowest pane, where
+        // the facts after it otherwise took the whole row and left a row with
+        // no title (Paul, 2026-11-24); the due day truncates instead.
         className={cn(
-          "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md text-left",
+          "flex min-h-8 min-w-24 flex-1 items-center gap-2 rounded-md text-left",
           FOCUS_RING,
         )}
       >
@@ -168,11 +171,13 @@ export function TaskRow({
             {TASK_NEEDS_CHANGES_LABEL}
           </Badge>
         ) : showStatus && status === "IN_PROGRESS" ? (
-          <Badge variant="outline" className="shrink-0">
+          // On a narrow pane the circle's dot says it; the words are still
+          // read out.
+          <Badge variant="outline" className="shrink-0 @max-md:sr-only">
             {TASK_STATUS_LABELS.IN_PROGRESS}
           </Badge>
         ) : showStatus && waiting ? (
-          <Badge variant="outline" className="shrink-0">
+          <Badge variant="outline" className="shrink-0 @max-md:sr-only">
             {TASK_STATUS_LABELS.COMPLETED}
           </Badge>
         ) : status === "COMPLETED" && !taskNeedsSignOff(task) && task.points_awarded ? (
@@ -248,8 +253,11 @@ export function GroupTaskRow({
       <button
         type="button"
         onClick={onOpen}
+        // The title keeps at least 6rem beside chat's narrowest pane, where
+        // the facts after it otherwise took the whole row and left a row with
+        // no title (Paul, 2026-11-24); the due day truncates instead.
         className={cn(
-          "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md text-left",
+          "flex min-h-8 min-w-24 flex-1 items-center gap-2 rounded-md text-left",
           FOCUS_RING,
         )}
       >
@@ -420,7 +428,7 @@ function DueText({
   return (
     <span
       className={cn(
-        "shrink-0 text-caption",
+        "min-w-0 truncate text-caption",
         due.overdue ? "text-destructive-text" : "text-muted-foreground",
       )}
       title={

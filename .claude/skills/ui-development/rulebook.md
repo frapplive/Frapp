@@ -99,6 +99,12 @@ These cause most of the iterations, so they come first.
   own 48px header at `lg` (1024px) and wider, paired with chat's channel header (1056px until 11-24,
   #5946). Top-level pages show the title alone, no chapter-name prefix; only Settings pages read
   "Settings › X". (11-05, 11-11)
+- **A page beside chat works at every width chat leaves it, down to the 375px floor.** "yikes", on Rush's
+  board with chat open: four fixed columns cut the one holding prospects off mid-card, the header's views
+  ran under its count and the title vanished. The title and the views keep their room and the actions
+  fold first (glyphs, then one View menu); a board's columns share the width and empty ones fold; a table
+  drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
+  Capture every page at 576px and at 375px beside chat before the PR opens. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
   its tools inside itself, not in drawers. (11-11, 11-12)
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a

@@ -62,9 +62,16 @@ export function ToolPageHeader({
       // title is in the top bar there and there is nothing to close into.
       className="group/page-header @container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 lg:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex has-[[data-tool-page-views]:not(:empty)]:flex"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        {/* The title gives way first: it truncates, the views never wrap. */}
-        <div className="hidden min-w-0 items-center lg:flex">
+      {/*
+        The title and the views keep their room and the actions give way
+        (Paul, 2026-11-24: Rush's title vanished and its views ran under the
+        count with chat open). The title truncates only past 16rem; the views
+        never wrap or shrink, so this group never shrinks below them, and the
+        actions slot after it is what narrows (`PageActions`' pages fold
+        their own controls on the header's container width).
+      */}
+      <div className="flex min-w-0 shrink-0 items-center gap-3 @max-[26rem]:gap-2">
+        <div className="hidden min-w-0 max-w-64 items-center lg:flex">
           {pageTitle ? (
             <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
           ) : null}

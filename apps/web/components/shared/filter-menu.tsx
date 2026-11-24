@@ -10,6 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
+  HEADER_BADGE_FOLD,
+  HEADER_BUTTON_FOLD,
+  HEADER_LABEL_FOLD,
+} from "@/components/ui/new-button";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -90,16 +95,27 @@ export function FilterMenu({
             {count}
           </IconButton>
         ) : (
+          // Folds to its glyph where the header is narrow, at the same width
+          // as New beside it (`HEADER_BUTTON_FOLD`), the count riding its
+          // corner as the narrow glyph's does.
           <Button
             size="toolbar"
             variant="secondary"
-            className="shrink-0 gap-2"
+            className={cn("relative shrink-0 gap-2", HEADER_BUTTON_FOLD)}
             data-filter-menu-trigger=""
             aria-label={name}
           >
             <ListFilter className="h-4 w-4" aria-hidden="true" />
-            Filter
-            {count}
+            <span className={HEADER_LABEL_FOLD}>Filter</span>
+            {on.length > 0 ? (
+              <Badge
+                variant="default"
+                aria-hidden="true"
+                className={HEADER_BADGE_FOLD}
+              >
+                {on.length}
+              </Badge>
+            ) : null}
           </Button>
         )}
       </DropdownMenuTrigger>

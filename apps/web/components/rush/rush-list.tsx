@@ -122,9 +122,10 @@ export function RushList({
     return sort.dir === "desc" ? sorted.reverse() : sorted;
   }, [candidates, stages, sort, staleDays, today, closedKeys]);
 
-  const header = (key: SortKey, label: string) => (
+  const header = (key: SortKey, label: string, className?: string) => (
     <SortHeader
       label={label}
+      className={className}
       sort={sort.key === key ? sort.dir : null}
       onSort={() =>
         setSort((current) =>
@@ -145,11 +146,13 @@ export function RushList({
         <TableRow>
           {header("name", "Name")}
           {header("stage", "Stage")}
-          {header("owner", "Owner")}
-          {header("follow_up", "Follow-up")}
-          <TableHead>Tags</TableHead>
-          {showRating ? header("rating", "Rating") : null}
-          {header("added", "Added")}
+          {header("owner", "Owner", RUSH_LIST_FOLD.owner)}
+          {header("follow_up", "Follow-up", RUSH_LIST_FOLD.followUp)}
+          <TableHead className={RUSH_LIST_FOLD.tags}>Tags</TableHead>
+          {showRating
+            ? header("rating", "Rating", RUSH_LIST_FOLD.rating)
+            : null}
+          {header("added", "Added", RUSH_LIST_FOLD.added)}
           <TableHead className="w-10">
             <span className="sr-only">Actions</span>
           </TableHead>
@@ -204,6 +207,7 @@ export function RushList({
                   <TableCell
                     className={cn(
                       "max-w-40 truncate text-sm",
+                      RUSH_LIST_FOLD.owner,
                       candidate.owner_id
                         ? "text-foreground"
                         : "text-muted-foreground",
@@ -213,12 +217,14 @@ export function RushList({
                       ? (candidate.owner_name ?? "")
                       : "No owner"}
                   </TableCell>
-                  <TableCell className="max-w-44">
+                  <TableCell
+                    className={cn("max-w-44", RUSH_LIST_FOLD.followUp)}
+                  >
                     <span className="flex min-w-0 text-sm">
                       <RushFollowUpFact state={workOf(candidate)} />
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className={RUSH_LIST_FOLD.tags}>
                     <RushTagChips
                       tagIds={candidate.tag_ids}
                       tags={tags}
@@ -226,11 +232,21 @@ export function RushList({
                     />
                   </TableCell>
                   {showRating ? (
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "whitespace-nowrap text-sm text-muted-foreground",
+                        RUSH_LIST_FOLD.rating,
+                      )}
+                    >
                       {rushRatingSummary(candidate)}
                     </TableCell>
                   ) : null}
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap text-sm text-muted-foreground",
+                      RUSH_LIST_FOLD.added,
+                    )}
+                  >
                     {formatDay(candidate.created_at)}
                   </TableCell>
                   <TableCell className="w-10">{menuButton}</TableCell>
@@ -244,18 +260,36 @@ export function RushList({
   );
 }
 
+/**
+ * The columns a narrow page leaves out, last-read first, on the page's own
+ * width (`rush-page.tsx`'s `@container`): beside chat the list is often
+ * under 600px, and a table that scrolls sideways hides the row's ⋯ off the
+ * edge (Paul, 2026-11-24). Name, Stage and the ⋯ always show; the panel a row
+ * opens holds every fact a folded column drops.
+ */
+const RUSH_LIST_FOLD = {
+  tags: "@max-[48rem]:hidden",
+  added: "@max-[42rem]:hidden",
+  rating: "@max-[38rem]:hidden",
+  followUp: "@max-[32rem]:hidden",
+  owner: "@max-[26rem]:hidden",
+} as const;
+
 function SortHeader({
   label,
   sort,
   onSort,
+  className,
 }: {
   label: string;
   sort: "asc" | "desc" | null;
   onSort: () => void;
+  className?: string;
 }) {
   const Arrow = sort === "asc" ? ArrowUp : ArrowDown;
   return (
     <TableHead
+      className={className}
       aria-sort={
         sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none"
       }
@@ -264,7 +298,7 @@ function SortHeader({
         type="button"
         onClick={onSort}
         className={cn(
-          "inline-flex items-center gap-1 rounded-sm hover:text-foreground",
+          "inline-flex items-center gap-1 whitespace-nowrap rounded-sm hover:text-foreground",
           FOCUS_RING,
         )}
       >
