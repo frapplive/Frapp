@@ -14,6 +14,7 @@ import {
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import {
+  NO_READABLE_MINUTES,
   canSeeDocument,
   canSeeFolder,
   folderListsByName,
@@ -39,11 +40,13 @@ import {
   CHAPTER_DOCUMENT_STAR_REPOSITORY,
   type IChapterDocumentStarRepository,
 } from '#domain/repositories/chapter-document-star.repository.interface';
-import type {
-  ChapterDocument,
-  ChapterDocumentFolder,
-  ChapterDocumentStarTarget,
-  ChapterDocumentStars,
+import {
+  isDocumentFile,
+  isMinutesSeriesFolder,
+  type ChapterDocument,
+  type ChapterDocumentFolder,
+  type ChapterDocumentStarTarget,
+  type ChapterDocumentStars,
 } from '#domain/entities/chapter-document.entity';
 import {
   STORAGE_PROVIDER,
@@ -59,6 +62,7 @@ import {
   type ChannelAccessOption,
 } from './channel-access-list.service';
 import { RbacService } from './rbac.service';
+import { MeetingService, type PostedMinutesFacts } from './meeting.service';
 import {
   assertUploadRequestAllowed,
   mintChapterUpload,
@@ -113,7 +117,24 @@ export interface DocumentAccessOptions {
   always: string[] | null;
 }
 
+/**
+ * A document as the list and a single read return it: a row that files a
+ * meeting's minutes (#5949) carries what its row shows of them, a file
+ * carries `null`.
+ */
+export type ListedDocument = ChapterDocument & {
+  minutes: PostedMinutesFacts | null;
+};
+
+/** `findById`'s answer: a file's two signed links, `null` on a minutes row. */
+export type OpenedDocument = ListedDocument & {
+  downloadUrl: string | null;
+  forcedDownloadUrl: string | null;
+};
+
 const NOT_FOUND_DOCUMENT = 'Document not found';
+const MINUTES_ARE_THE_MEETINGS =
+  "These are a meeting's minutes. Open them to change or delete them.";
 const NOT_FOUND_FOLDER = 'Folder not found';
 const SYNCED_FOLDER_IS_DRIVES =
   'This folder comes from Google Drive. Rename or delete it in Drive, and Documents follows.';
@@ -133,6 +154,7 @@ export class ChapterDocumentService {
     @Inject(MEMBER_REPOSITORY) private readonly memberRepo: IMemberRepository,
     private readonly rbac: RbacService,
     private readonly accessLists: ChannelAccessListService,
+    private readonly meetings: MeetingService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -164,14 +186,41 @@ export class ChapterDocumentService {
 
   /**
    * The documents in `documents` the member sees. With no list on any
-   * folder or file in play, that's all of them, read without the viewer.
+   * folder or file in play, that's all the files, read without the viewer.
+   * A row that files a meeting's minutes (#5949) is kept only when the
+   * meeting's own rule lets the member read them, lists or no lists.
    */
   async visibleTo(
     chapterId: string,
     userId: string,
     documents: ChapterDocument[],
   ): Promise<ChapterDocument[]> {
-    if (documents.length === 0) return [];
+    return (await this.seen(chapterId, userId, documents)).documents;
+  }
+
+  /**
+   * `visibleTo`, with the minutes it read to decide: for each minutes row
+   * kept, what its row shows.
+   */
+  private async seen(
+    chapterId: string,
+    userId: string,
+    documents: ChapterDocument[],
+  ): Promise<{
+    documents: ChapterDocument[];
+    minutes: ReadonlyMap<string, PostedMinutesFacts>;
+  }> {
+    if (documents.length === 0) return { documents: [], minutes: new Map() };
+    const minutes = await this.meetings.readablePosted(
+      chapterId,
+      userId,
+      documents.flatMap((doc) => (doc.meeting_id ? [doc.meeting_id] : [])),
+    );
+    // The meeting's rule first, before any shortcut below can skip it.
+    const candidates = documents.filter(
+      (doc) => doc.meeting_id === null || minutes.has(doc.meeting_id),
+    );
+    if (candidates.length === 0) return { documents: [], minutes };
     const folders = await this.folderRepo.findByChapter(chapterId);
     const lists = folderListsByName(folders);
     const byId = new Map(folders.map((folder) => [folder.id, folder]));
@@ -180,30 +229,35 @@ export class ChapterDocumentService {
         ? byId.get(doc.drive_held_folder_id)
         : undefined;
     const inPlay = listsInPlay([
-      ...documents.map((doc) => doc.who_can_see),
-      ...documents.map((doc) =>
+      ...candidates.map((doc) => doc.who_can_see),
+      ...candidates.map((doc) =>
         doc.folder !== null ? lists.get(doc.folder) : null,
       ),
-      ...documents.map((doc) => heldIn(doc)?.who_can_see),
+      ...candidates.map((doc) => heldIn(doc)?.who_can_see),
     ]);
-    if (!inPlay.any) return documents;
+    if (!inPlay.any) return { documents: candidates, minutes };
     const viewer = await this.viewerFor(chapterId, userId, inPlay.groups);
     // A held Drive copy names the folder Drive put it in (#5220); a reader
     // who can't see that folder gets no hint it exists.
-    return documents
-      .filter((doc) => canSeeDocument(doc, lists, viewer))
-      .map((doc) => {
-        const held = heldIn(doc);
-        return held && !canSeeFolder(held, viewer)
-          ? { ...doc, drive_held_folder_id: null }
-          : doc;
-      });
+    return {
+      documents: candidates
+        .filter((doc) => canSeeDocument(doc, lists, viewer, minutes))
+        .map((doc) => {
+          const held = heldIn(doc);
+          return held && !canSeeFolder(held, viewer)
+            ? { ...doc, drive_held_folder_id: null }
+            : doc;
+        }),
+      minutes,
+    };
   }
 
   /**
    * The ids in `documentIds` that every one of `viewers` sees, for Ask's
    * check before an answer is posted to a channel (`AskPostService`): a file
-   * one reader can't open is one the post would show them.
+   * one reader can't open is one the post would show them. A minutes row is
+   * never in the answer: an answer can't draw on one as a document (minutes
+   * are their own source, checked by `MeetingService.readableByAll`).
    */
   async visibleToAll(
     chapterId: string,
@@ -224,10 +278,12 @@ export class ChapterDocumentService {
       documents
         .filter((doc) =>
           viewers.every((viewer) =>
-            canSeeDocument(doc, lists, {
-              userId: viewer.user_id,
-              holder: viewer.channel_access,
-            }),
+            canSeeDocument(
+              doc,
+              lists,
+              { userId: viewer.user_id, holder: viewer.channel_access },
+              NO_READABLE_MINUTES,
+            ),
           ),
         )
         .map((doc) => doc.id),
@@ -258,17 +314,41 @@ export class ChapterDocumentService {
   ): Promise<ChapterDocumentFolder> {
     const folder = await this.folderRepo.findById(id, chapterId);
     if (!folder) throw new NotFoundException(NOT_FOUND_FOLDER);
-    if (folder.who_can_see === null) return folder;
-    const inPlay = listsInPlay([folder.who_can_see]);
-    if (
-      !canSeeFolder(
-        folder,
-        await this.viewerFor(chapterId, userId, inPlay.groups),
-      )
-    ) {
+    if (!(await this.seesFolder(folder, chapterId, userId))) {
       throw new NotFoundException(NOT_FOUND_FOLDER);
     }
     return folder;
+  }
+
+  /**
+   * Whether the member sees `folder`: its list admits them, and, for a
+   * repeating meeting's own folder (`isMinutesSeriesFolder`, #5949), they
+   * see something in it. Without that second half a member the Exec
+   * meetings leave out would read the series' name off its folder.
+   */
+  private async seesFolder(
+    folder: ChapterDocumentFolder,
+    chapterId: string,
+    userId: string,
+  ): Promise<boolean> {
+    if (
+      folder.who_can_see !== null &&
+      !canSeeFolder(
+        folder,
+        await this.viewerFor(
+          chapterId,
+          userId,
+          listsInPlay([folder.who_can_see]).groups,
+        ),
+      )
+    ) {
+      return false;
+    }
+    if (!isMinutesSeriesFolder(folder)) return true;
+    const inside = await this.documentRepo.findInFolders(chapterId, [
+      folder.name,
+    ]);
+    return (await this.visibleTo(chapterId, userId, inside)).length > 0;
   }
 
   /** What the caller's who-can-see picker offers, and the tiers it keeps. */
@@ -320,6 +400,14 @@ export class ChapterDocumentService {
     whoCanSee: string[] | null,
   ): Promise<ChapterDocument> {
     const document = await this.visibleDocument(id, chapterId, userId);
+    // Minutes are seen by who their meeting invites, and a list here could
+    // only read as widening that. Clearing one a deleted folder left on the
+    // row is still allowed.
+    if (document.meeting_id !== null && whoCanSee !== null) {
+      throw new ConflictException(
+        "Minutes are seen by who their meeting invites. Change who's invited on the event.",
+      );
+    }
     await this.assertUploaderOrManager(
       [document],
       chapterId,
@@ -362,6 +450,11 @@ export class ChapterDocumentService {
       // space Drive had before its extension, and sending it back unchanged
       // isn't a rename.
       if (title !== document.title.trim()) {
+        if (document.meeting_id !== null) {
+          throw new ConflictException(
+            "Minutes take their meeting's name. Rename the meeting, and Documents follows.",
+          );
+        }
         if (document.drive_link_status !== null) {
           throw new ConflictException(
             'This file keeps its name from Google Drive. Rename it in Drive, and Documents follows.',
@@ -435,17 +528,7 @@ export class ChapterDocumentService {
     );
     for (const name of leaving) {
       const folder = await this.folderRepo.findByName(chapterId, name);
-      if (
-        folder?.who_can_see &&
-        !canSeeFolder(
-          folder,
-          await this.viewerFor(
-            chapterId,
-            userId,
-            listsInPlay([folder.who_can_see]).groups,
-          ),
-        )
-      ) {
+      if (folder && !(await this.seesFolder(folder, chapterId, userId))) {
         throw new ForbiddenException(
           "You can't move a file out of a folder you can't see",
         );
@@ -730,17 +813,28 @@ export class ChapterDocumentService {
     return document;
   }
 
-  /** The chapter's documents the member sees. */
+  /**
+   * The chapter's documents the member sees. Rows that file a meeting's
+   * minutes (#5949) come only when `minutes` is asked for, so a client from
+   * before they existed (a shipped phone build) never gets a row with no
+   * file. Each carries what its row shows, and reads its meeting's name as
+   * the minutes hold it now.
+   */
   async findByChapter(
     chapterId: string,
     userId: string,
-    filter?: ChapterDocumentFilter,
-  ): Promise<ChapterDocument[]> {
-    return this.visibleTo(
+    filter?: Pick<ChapterDocumentFilter, 'folder' | 'search'>,
+    options: { minutes?: boolean } = {},
+  ): Promise<ListedDocument[]> {
+    const { documents, minutes } = await this.seen(
       chapterId,
       userId,
-      await this.documentRepo.findByChapter(chapterId, filter),
+      await this.documentRepo.findByChapter(chapterId, {
+        ...filter,
+        filesOnly: !options.minutes,
+      }),
     );
+    return documents.map((doc) => listed(doc, minutes));
   }
 
   /**
@@ -764,10 +858,20 @@ export class ChapterDocumentService {
     id: string,
     chapterId: string,
     userId: string,
-  ): Promise<
-    ChapterDocument & { downloadUrl: string; forcedDownloadUrl: string }
-  > {
-    const document = await this.visibleDocument(id, chapterId, userId);
+  ): Promise<OpenedDocument> {
+    const found = await this.documentRepo.findById(id, chapterId);
+    if (!found) throw new NotFoundException(NOT_FOUND_DOCUMENT);
+    const { documents, minutes } = await this.seen(chapterId, userId, [found]);
+    const [document] = documents;
+    if (!document) throw new NotFoundException(NOT_FOUND_DOCUMENT);
+    // A meeting's minutes have no file to sign: the row opens the minutes.
+    if (!isDocumentFile(document)) {
+      return {
+        ...listed(document, minutes),
+        downloadUrl: null,
+        forcedDownloadUrl: null,
+      };
+    }
 
     const { inline: downloadUrl, attachment: forcedDownloadUrl } =
       await this.storageProvider.getSignedInlineAndAttachmentUrls(
@@ -776,7 +880,7 @@ export class ChapterDocumentService {
         storedFilename(document.storage_path),
       );
 
-    return { ...document, downloadUrl, forcedDownloadUrl };
+    return { ...document, minutes: null, downloadUrl, forcedDownloadUrl };
   }
 
   /**
@@ -800,11 +904,13 @@ export class ChapterDocumentService {
         `At most ${MAX_PREVIEW_IDS} documents per request`,
       );
     }
-    const documents = await this.visibleTo(
-      chapterId,
-      userId,
-      await this.documentRepo.findByIds(unique, chapterId),
-    );
+    const documents = (
+      await this.visibleTo(
+        chapterId,
+        userId,
+        await this.documentRepo.findByIds(unique, chapterId),
+      )
+    ).filter(isDocumentFile);
     if (documents.length === 0) return [];
     const signed = await this.storageProvider.getSignedDownloadUrls(
       DOCUMENTS_BUCKET,
@@ -828,6 +934,11 @@ export class ChapterDocumentService {
         "This file comes from the chapter's Google Drive folder. Remove it in Google Drive.",
       );
     }
+    // Minutes are deleted as minutes (`meetings:delete`), and their row goes
+    // with them; deleting the row alone would only bring it back.
+    if (!isDocumentFile(document)) {
+      throw new ConflictException(MINUTES_ARE_THE_MEETINGS);
+    }
 
     await this.storageProvider.deleteFile(
       DOCUMENTS_BUCKET,
@@ -845,11 +956,33 @@ export class ChapterDocumentService {
     chapterId: string,
     userId: string,
   ): Promise<ChapterDocumentFolder[]> {
-    const folders = await this.folderRepo.findByChapter(chapterId);
-    const inPlay = listsInPlay(folders.map((folder) => folder.who_can_see));
-    if (!inPlay.any) return folders;
-    const viewer = await this.viewerFor(chapterId, userId, inPlay.groups);
-    return folders.filter((folder) => canSeeFolder(folder, viewer));
+    const all = await this.folderRepo.findByChapter(chapterId);
+    const inPlay = listsInPlay(all.map((folder) => folder.who_can_see));
+    const viewer = inPlay.any
+      ? await this.viewerFor(chapterId, userId, inPlay.groups)
+      : null;
+    const folders = viewer
+      ? all.filter((folder) => canSeeFolder(folder, viewer))
+      : all;
+    // A repeating meeting's own folder shows only to a member who sees
+    // something in it (`seesFolder`), in one read for all of them.
+    const series = folders.filter(isMinutesSeriesFolder);
+    if (series.length === 0) return folders;
+    const shown = new Set(
+      (
+        await this.visibleTo(
+          chapterId,
+          userId,
+          await this.documentRepo.findInFolders(
+            chapterId,
+            series.map((folder) => folder.name),
+          ),
+        )
+      ).map((doc) => doc.folder),
+    );
+    return folders.filter(
+      (folder) => !isMinutesSeriesFolder(folder) || shown.has(folder.name),
+    );
   }
 
   async createFolder(
@@ -1148,17 +1281,7 @@ export class ChapterDocumentService {
   ): Promise<string[] | null> {
     if (folder !== null) {
       const existing = await this.folderRepo.findByName(chapterId, folder);
-      if (
-        existing?.who_can_see &&
-        !canSeeFolder(
-          existing,
-          await this.viewerFor(
-            chapterId,
-            userId,
-            listsInPlay([existing.who_can_see]).groups,
-          ),
-        )
-      ) {
+      if (existing && !(await this.seesFolder(existing, chapterId, userId))) {
         throw new ForbiddenException("You can't file into that folder");
       }
     }
@@ -1197,6 +1320,23 @@ export class ChapterDocumentService {
     if (folders.length === 0) return 0;
     return Math.max(...folders.map((f) => f.sort_order)) + 1;
   }
+}
+
+/**
+ * A seen row as the list returns it: a minutes row with what it shows, under
+ * its meeting's name as the minutes hold it now.
+ */
+function listed(
+  document: ChapterDocument,
+  minutes: ReadonlyMap<string, PostedMinutesFacts>,
+): ListedDocument {
+  const facts =
+    document.meeting_id !== null
+      ? (minutes.get(document.meeting_id) ?? null)
+      : null;
+  return facts
+    ? { ...document, title: facts.event_name, minutes: facts }
+    : { ...document, minutes: null };
 }
 
 /**

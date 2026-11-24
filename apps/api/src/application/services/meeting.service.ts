@@ -71,6 +71,25 @@ export interface MeetingListFacts {
 }
 
 /**
+ * What Documents shows of posted minutes on their row (#5949,
+ * `spec/behavior/chapter-docs.md` § Minutes): the meeting's name and start
+ * as the minutes hold them, and the same facts the Minutes list drew.
+ */
+export interface PostedMinutesFacts {
+  meeting_id: string;
+  event_name: string;
+  event_start_time: string;
+  meeting_type: MeetingType;
+  other_label: string | null;
+  decision_count: number;
+  action_item_count: number;
+  /** Whether a recording's transcript is kept with the minutes. */
+  recorded: boolean;
+  /** The TL;DR's first line. */
+  gist: string | null;
+}
+
+/**
  * What a feature does each time posted minutes are saved: when they are
  * posted, and on every edit after. See `MeetingService.onPostedMinutesSaved`.
  */
@@ -477,6 +496,50 @@ export class MeetingService {
           this.readable(row, userId, access, (id) => visibleEventIds.has(id)),
         )
         .map((row) => row.id),
+    );
+  }
+
+  /**
+   * Of `meetingIds`, the posted minutes `userId` may read, each with what
+   * its Documents row shows (#5949). The rule is `readable`, as every other
+   * door here, over one read of the rows and one of their events however
+   * many ids; a draft is never in the answer, its author's included, because
+   * only posted minutes are filed. A missing or other-chapter id is left out.
+   */
+  async readablePosted(
+    chapterId: string,
+    userId: string,
+    meetingIds: readonly string[],
+  ): Promise<Map<string, PostedMinutesFacts>> {
+    const ids = [...new Set(meetingIds)];
+    if (ids.length === 0) return new Map();
+    const found: Meeting[] = [];
+    for (const chunk of chunkIds(ids)) {
+      found.push(...(await this.meetingRepo.findByIds(chapterId, chunk)));
+    }
+    const { rows } = await this.readableWithEvents(
+      chapterId,
+      userId,
+      found.filter((row) => row.status === 'posted'),
+    );
+    return new Map(
+      rows.map((row) => {
+        const content = readMeetingContent(row.content);
+        return [
+          row.id,
+          {
+            meeting_id: row.id,
+            event_name: row.event_name,
+            event_start_time: row.event_start_time,
+            meeting_type: row.meeting_type,
+            other_label: row.other_label,
+            decision_count: content.decisions.length,
+            action_item_count: content.action_items.length,
+            recorded: row.transcript !== null,
+            gist: minutesGist(content.tldr),
+          },
+        ];
+      }),
     );
   }
 

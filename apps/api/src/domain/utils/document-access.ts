@@ -14,6 +14,15 @@
  * connected the folder, who mustn't see past every list through that.
  * Holding `chapter_docs:manage` passes nothing (Paul's pick 2): a chair who
  * runs the library doesn't see the exec board's files.
+ *
+ * A row that files a meeting's minutes (`meeting_id`, #5949) is seen by the
+ * meeting's own rule and nothing else opens it: the caller hands in the
+ * minutes the viewer may read (`MeetingService.readablePosted`), and a row
+ * whose meeting isn't among them is hidden whatever its lists say. It has no
+ * uploader, so nobody passes as one. Its folder's list and its own still
+ * apply on top, so it is never open to more people than its folder. The set
+ * is a required argument on purpose: a read path that forgets the meeting's
+ * rule doesn't compile.
  */
 import { channelAccessEntry } from '@repo/validation';
 import { listAdmits, type ChannelAccessHolder } from './channel-access';
@@ -89,6 +98,12 @@ export function isOwnUpload(
   return document.uploaded_by === userId && !isDriveFolderCopy(document);
 }
 
+/** The minutes a viewer may read, by meeting id (`MeetingService.readablePosted`). */
+export type ReadableMinutes = { has(meetingId: string): boolean };
+
+/** No minutes at all: for a read that may never show a minutes row. */
+export const NO_READABLE_MINUTES: ReadableMinutes = { has: () => false };
+
 /**
  * A copy from the chapter's connected Drive folder (#5157): Drive owns its
  * name, folder and existence, and whoever connected the folder is filed as
@@ -104,7 +119,8 @@ export function isDriveFolderCopy(
 /**
  * Whether the viewer sees a file: its uploader always does (a folder copy
  * has no uploader in that sense); anyone else passes its folder's list and its
- * own. A file filed under a name no folder row claims has no folder list to
+ * own. A meeting's minutes row needs the meeting among `readableMinutes`
+ * first, then the same lists. A file filed under a name no folder row claims has no folder list to
  * pass; renaming and deleting a folder move its files in one transaction so
  * that never happens to a restricted one.
  */
@@ -116,11 +132,18 @@ export function canSeeDocument(
     | 'uploaded_by'
     | 'drive_file_id'
     | 'drive_link_status'
+    | 'meeting_id'
   >,
   folderLists: ReadonlyMap<string, readonly string[] | null>,
   viewer: DocumentViewer,
+  readableMinutes: ReadableMinutes,
 ): boolean {
-  if (isOwnUpload(document, viewer.userId)) return true;
+  if (document.meeting_id !== null) {
+    // The meeting's rule first, and no uploader's pass after it.
+    if (!readableMinutes.has(document.meeting_id)) return false;
+  } else if (isOwnUpload(document, viewer.userId)) {
+    return true;
+  }
   const folderList =
     document.folder !== null
       ? (folderLists.get(document.folder) ?? null)

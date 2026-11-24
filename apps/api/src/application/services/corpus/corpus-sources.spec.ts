@@ -200,6 +200,7 @@ describe('ChapterDocumentCorpusSource', () => {
     effective_date: '2026-08-15',
     created_at: '2026-09-01T12:00:00.000Z',
     drive_file_id: null,
+    meeting_id: null as string | null,
   };
 
   function setup(row: typeof document | null = document) {
@@ -324,6 +325,28 @@ describe('ChapterDocumentCorpusSource', () => {
     ).resolves.toEqual(new Set());
   });
 
+  // #5949: a row that files a meeting's minutes is not a document source.
+  // Posted minutes are `meeting_minutes`, read under the meeting's own rule.
+  it("never reads or answers a meeting's minutes row", async () => {
+    const minutesRow = {
+      ...document,
+      storage_path: null as unknown as string,
+      meeting_id: 'mtg-exec',
+    };
+    const { source, documents, storage } = setup(minutesRow);
+    await expect(source.read(CHAPTER, 'doc-1')).resolves.toEqual({
+      status: 'gone',
+    });
+    expect(storage.downloadFile).not.toHaveBeenCalled();
+
+    documents.findByIds.mockResolvedValue([
+      { ...minutesRow, folder: null, who_can_see: null, uploaded_by: null },
+    ] as never);
+    await expect(
+      source.readableBy(CHAPTER, MEMBER, ['doc-1']),
+    ).resolves.toEqual(new Set());
+  });
+
   // #3642 piece 1: Ask quotes only the files the member sees in Documents.
   it("leaves out a file whose folder list or own list the member isn't on", async () => {
     const { source, documents, folders, getChannelAccessHolder } = setup();
@@ -337,6 +360,7 @@ describe('ChapterDocumentCorpusSource', () => {
         pinned_at: null,
         who_can_see: ['tier:exec'],
         drive_folder_id: null,
+        minutes_series_key: null,
       },
     ]);
     documents.findByIds.mockResolvedValue([

@@ -881,6 +881,96 @@ describe('MeetingService', () => {
     });
   });
 
+  // What Documents asks for a row that files a meeting's minutes (#5949):
+  // the same rule as every other door, for posted minutes only.
+  describe('readablePosted (#5949)', () => {
+    const posted = (over: Partial<Meeting> = {}) =>
+      meeting({
+        status: 'posted',
+        posted_at: '2026-11-10T03:00:00.000Z',
+        ...over,
+      });
+    const exec = () =>
+      posted({
+        id: 'mtg-exec',
+        event_id: EXEC_EVENT.id,
+        event_name: EXEC_EVENT.name,
+        meeting_type: 'exec',
+      });
+
+    it('answers a member only the posted minutes their events invite them to', async () => {
+      rows.set('mtg-1', posted());
+      rows.set('mtg-exec', exec());
+
+      const jake = await service.readablePosted(CHAPTER, JAKE, [
+        'mtg-1',
+        'mtg-exec',
+        'no-such-minutes',
+      ]);
+      expect([...jake.keys()]).toEqual(['mtg-1']);
+
+      const president = await service.readablePosted(CHAPTER, PRESIDENT, [
+        'mtg-1',
+        'mtg-exec',
+      ]);
+      expect([...president.keys()].sort()).toEqual(['mtg-1', 'mtg-exec']);
+    });
+
+    it('never answers a draft, its author included: only posted minutes are filed', async () => {
+      rows.set('mtg-1', meeting());
+      await expect(
+        service.readablePosted(CHAPTER, SECRETARY, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+      await expect(
+        service.readablePosted(CHAPTER, PRESIDENT, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+    });
+
+    it('keeps posted minutes whose event is gone to officers who can edit any minutes', async () => {
+      rows.set('mtg-1', posted({ event_id: null }));
+      await expect(
+        service.readablePosted(CHAPTER, JAKE, ['mtg-1']),
+      ).resolves.toEqual(new Map());
+      expect(
+        (await service.readablePosted(CHAPTER, PRESIDENT, ['mtg-1'])).has(
+          'mtg-1',
+        ),
+      ).toBe(true);
+    });
+
+    it('carries what the row shows: the name, the start, the counts and the gist', async () => {
+      rows.set(
+        'mtg-1',
+        posted({
+          transcript: 'Speaker 1: hello',
+          content: {
+            ...EMPTY_MEETING_CONTENT,
+            tldr: '- Dues are due Friday\n- Formal is December 4',
+            decisions: [{ text: 'Raise dues', vote: null }],
+            action_items: [
+              { text: 'Email the roster', owner_user_id: null, due_date: null },
+              { text: 'Book it', owner_user_id: null, due_date: null },
+            ],
+          },
+        }),
+      );
+      const facts = (await service.readablePosted(CHAPTER, JAKE, ['mtg-1'])).get(
+        'mtg-1',
+      );
+      expect(facts).toEqual({
+        meeting_id: 'mtg-1',
+        event_name: rows.get('mtg-1')?.event_name,
+        event_start_time: rows.get('mtg-1')?.event_start_time,
+        meeting_type: 'chapter',
+        other_label: null,
+        decision_count: 1,
+        action_item_count: 2,
+        recorded: true,
+        gist: 'Dues are due Friday',
+      });
+    });
+  });
+
   describe('update', () => {
     beforeEach(() => rows.set('mtg-1', meeting()));
 
