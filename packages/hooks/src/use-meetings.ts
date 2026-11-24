@@ -354,6 +354,10 @@ export function usePostMeeting() {
       void queryClient.invalidateQueries({
         queryKey: aiSuggestionKeys.all(chapterId),
       });
+      // And what files the minutes in Documents (#5949).
+      void queryClient.invalidateQueries({
+        queryKey: ["documents", chapterId],
+      });
       return queryClient.invalidateQueries({
         queryKey: meetingsKey(chapterId),
         predicate: (query) => query.queryKey[2] !== "one",
@@ -383,6 +387,10 @@ export function useDeleteMeeting() {
       // Its suggested tasks went with it (#4313).
       void queryClient.invalidateQueries({
         queryKey: aiSuggestionKeys.all(chapterId),
+      });
+      // And its row in Documents (#5949).
+      void queryClient.invalidateQueries({
+        queryKey: ["documents", chapterId],
       });
       return queryClient.invalidateQueries({
         queryKey: meetingsKey(chapterId),

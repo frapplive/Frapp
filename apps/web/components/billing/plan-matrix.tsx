@@ -90,7 +90,10 @@ import { ProChip } from "@/components/billing/pro-chip";
  * unlocks nothing a member can see.
  */
 const SHIPPED_PAID_KEYS = new Set<string>([
-  ...DASHBOARD_NAV_ITEMS.flatMap((item) => (item.module ? [item.module] : [])),
+  ...DASHBOARD_NAV_ITEMS.flatMap((item) => [
+    ...(item.module ? [item.module] : []),
+    ...(item.anyModule ?? []),
+  ]),
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",
   "polls",

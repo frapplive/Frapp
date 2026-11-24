@@ -125,6 +125,14 @@ export function isNavItemVisible(
   if (item.module && isModuleEnabled && !isModuleEnabled(item.module)) {
     return false;
   }
+  // A row over several modules' views shows while any one of them is on.
+  if (
+    item.anyModule &&
+    isModuleEnabled &&
+    !item.anyModule.some((key) => isModuleEnabled(key))
+  ) {
+    return false;
+  }
   if (item.hiddenUntilSetUp && hiddenFeatures?.has(item.hiddenUntilSetUp)) {
     return false;
   }

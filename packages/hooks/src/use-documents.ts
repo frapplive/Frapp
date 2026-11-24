@@ -30,7 +30,9 @@ export function useDocuments(options?: {
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/documents", {
         signal,
-        params: { query: { folder, search } },
+        // With the rows that file meetings' posted minutes (#5949): the API
+        // leaves them out unless asked, for builds from before them.
+        params: { query: { folder, search, minutes: "true" } },
       });
       if (error) throw error;
       return data;

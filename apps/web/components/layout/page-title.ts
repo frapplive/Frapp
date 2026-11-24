@@ -1,6 +1,7 @@
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import {
   DASHBOARD_NAV_ITEMS,
+  navItemHolds,
   type NavItem,
 } from "@/components/layout/nav-config";
 
@@ -69,6 +70,7 @@ const RECORD_PAGE_TITLES: Readonly<Record<string, string>> = {
   "/meetings/": "Minutes",
 };
 
+/** `matchesRoute` for an off-nav or sub-page route. */
 function matchesRoute(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -85,7 +87,7 @@ export function resolvePageTitle(
   if (!pathname) return null;
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
-    matchesRoute(pathname, item.href),
+    navItemHolds(item, pathname),
   );
   const subPage =
     Object.entries(SUB_PAGE_TITLES).find(([href]) =>

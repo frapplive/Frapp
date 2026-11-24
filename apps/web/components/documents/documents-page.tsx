@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useDeleteDocument,
   useDocumentFolders,
@@ -37,6 +37,7 @@ import {
   NO_DOCUMENT_FILTERS,
   deleteDocumentTitle,
   documentFolderHues,
+  isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
   tierRows,
@@ -44,11 +45,18 @@ import {
   type DocumentSort,
 } from "@repo/hooks/document-library";
 import { DocumentViewer } from "@/components/documents/document-viewer";
+import { DocumentsPageSkeleton } from "@/components/documents/documents-skeleton";
+import {
+  DOCUMENT_TYPE_PARAM,
+  MINUTES_TYPE_PARAM_VALUE,
+} from "@/components/documents/document-links";
+import { meetingHref } from "@/components/meetings/meeting-copy";
 import { DOCUMENT_LINK_PARAM } from "@/components/ask/ask-source-link";
-import type {
-  ChapterDocument,
-  ChapterDocumentFolder,
-  FolderRow,
+import {
+  isFileDocument,
+  type ChapterDocument,
+  type ChapterDocumentFolder,
+  type FolderRow,
 } from "@/components/documents/document-types";
 import {
   FolderDialog,
@@ -78,12 +86,25 @@ import { asArray, getErrorMessage } from "@/lib/utils";
   they were made in and must never be offered to the next one.
 */
 export function DocumentsPage() {
-  const chapterId = useChapterStore((state) => state.activeChapterId);
-  return <ChapterDocumentsPage key={chapterId ?? "none"} />;
+  return (
+    // `useSearchParams` needs a boundary; the skeleton is the page's own.
+    <Suspense fallback={<DocumentsPageSkeleton />}>
+      <DocumentsPageForLink />
+    </Suspense>
+  );
 }
 
-function ChapterDocumentsPage() {
+function DocumentsPageForLink() {
+  const chapterId = useChapterStore((state) => state.activeChapterId);
+  const type = useSearchParams()?.get(DOCUMENT_TYPE_PARAM) ?? null;
+  return (
+    <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />
+  );
+}
+
+function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
   const { toast } = useToast();
+  const router = useRouter();
   // Every write route on `ChapterDocumentController` (upload URL, confirm,
   // delete) carries no `@FreeTier`, so they are all paid-ops behind the same
   // subscription guard — one gate covers the surface (#841).
@@ -100,7 +121,14 @@ function ChapterDocumentsPage() {
     so a long library re-ranks behind the keystroke rather than ahead of it.
   */
   const deferredSearch = useDeferredValue(search.trim());
-  const [filters, setFilters] = useState<DocumentFilters>(NO_DOCUMENT_FILTERS);
+  // `/documents?type=minutes` opens on the Minutes filter: where `/meetings`
+  // lands now that minutes are filed here (#5949), and what a meeting's
+  // minutes page goes back to. Read once; the filter is the member's after.
+  const [filters, setFilters] = useState<DocumentFilters>(() =>
+    initialType === MINUTES_TYPE_PARAM_VALUE
+      ? { ...NO_DOCUMENT_FILTERS, kind: "minutes" }
+      : NO_DOCUMENT_FILTERS,
+  );
   const [sort, setSort] = useState<DocumentSort>("name");
   const documentsQuery = useDocuments();
   const foldersQuery = useDocumentFolders();
@@ -185,6 +213,11 @@ function ChapterDocumentsPage() {
   */
   const viewerOpener = useRef<HTMLElement | null>(null);
   function openDocument(doc: ChapterDocument) {
+    // A meeting's minutes have no file: the row opens the minutes (#5949).
+    if (isMinutesDocument(doc)) {
+      router.push(meetingHref(doc.meeting_id));
+      return;
+    }
     viewerOpener.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -265,8 +298,12 @@ function ChapterDocumentsPage() {
       }),
     [documents, folders, visible, starredIds],
   );
+  // The viewer steps through files only: minutes open on their own page.
   const visibleDocs = useMemo(
-    () => tieredVisible.map((row) => row.doc),
+    () =>
+      tieredVisible
+        .map((row) => row.doc)
+        .filter((doc) => !isMinutesDocument(doc)),
     [tieredVisible],
   );
 
@@ -313,8 +350,14 @@ function ChapterDocumentsPage() {
     () => folders.map((folder) => folder.name),
     [folders],
   );
+  // A folder import checks its files against the chapter's files: minutes
+  // rows have no file to be a copy of.
   const importContext = useMemo(
-    () => ({ typeOptions, folders: folderNames, documents }),
+    () => ({
+      typeOptions,
+      folders: folderNames,
+      documents: documents.filter(isFileDocument),
+    }),
     [typeOptions, folderNames, documents],
   );
   const upload = useDocumentUpload(gate, {
@@ -646,7 +689,17 @@ function OpenLinkedDocument({
   onOpen: (id: string) => void;
 }) {
   const linked = useSearchParams()?.get(DOCUMENT_LINK_PARAM) ?? null;
-  const found = linked !== null && known.some((doc) => doc.id === linked);
+  const linkedDoc =
+    linked === null ? undefined : known.find((doc) => doc.id === linked);
+  const found = linkedDoc !== undefined;
+  // A link to a meeting's minutes row (#5949) opens the minutes: the row is
+  // never in the viewer's list, so it must not wait to be shown there.
+  const minutesId =
+    linkedDoc && isMinutesDocument(linkedDoc) ? linkedDoc.meeting_id : null;
+  const router = useRouter();
+  useEffect(() => {
+    if (minutesId) router.replace(meetingHref(minutesId));
+  }, [minutesId, router]);
   const visible = found && shown.some((doc) => doc.id === linked);
   // The latest callbacks without making the effect depend on their identity.
   const callbacks = useRef({ onReveal, onOpen });
@@ -654,7 +707,7 @@ function OpenLinkedDocument({
     callbacks.current = { onReveal, onOpen };
   });
   useEffect(() => {
-    if (!linked || !found) return;
+    if (!linked || !found || minutesId) return;
     if (!visible) {
       callbacks.current.onReveal();
       return;
@@ -663,6 +716,6 @@ function OpenLinkedDocument({
     // Next keeps `useSearchParams` in step with the History API, so this
     // clears the parameter without a navigation.
     window.history.replaceState(null, "", window.location.pathname);
-  }, [linked, found, visible]);
+  }, [linked, found, visible, minutesId]);
   return null;
 }

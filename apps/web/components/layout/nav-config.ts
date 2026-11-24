@@ -1,12 +1,10 @@
 import {
   ActivityGlyph,
-  BackworkGlyph,
   ChatGlyph,
   DirectMessagesGlyph,
   DirectoryGlyph,
   DocumentsGlyph,
   EventsGlyph,
-  MeetingsGlyph,
   PointsGlyph,
   ServiceGlyph,
   StudyGlyph,
@@ -26,7 +24,7 @@ import { SECTION_NAMES } from "@repo/validation";
  * § Navigation map mirrors this file, and a change to one changes the other.
  *
  * Structure (#2946): a Chat anchor with no section header, then Chapter, then
- * Resources, then one unlabeled group holding Directory. Chat leads because chat is the product's home — `/` and
+ * the Resources row (one row since #5949), then one unlabeled group holding Directory. Chat leads because chat is the product's home — `/` and
  * `/dashboard` both redirect there. The anchor holds two rows since #3774
  * (Shawn, 2026-11-12): Chat, then Direct messages, which opens the same chat
  * panel on the member's conversations instead of the chapter's channels, the
@@ -103,6 +101,18 @@ export type NavItem = {
   /** `enabled_modules` key that gates this item; omit for always-on items. */
   module?: string;
   /**
+   * `enabled_modules` keys of which any one being on shows this item: for a
+   * row that holds several modules' views (Resources, #2956). An item sets
+   * this or `module`, never both.
+   */
+  anyModule?: readonly string[];
+  /**
+   * Other routes whose pages sit under this row, beside `href` and the pages
+   * below it: the row is lit on them and names their parent
+   * (`navItemHolds`). Resources holds `/backwork` and `/meetings`.
+   */
+  routes?: readonly string[];
+  /**
    * Hide from a member until an officer sets the feature up (see "Setup
    * gating" above). Omit for a feature that works with nothing in it.
    */
@@ -119,6 +129,22 @@ export type NavSection = {
    */
   anchor?: boolean;
 };
+
+/** Where the Resources row opens: Documents, the page's first view. */
+export const RESOURCES_HREF = "/documents";
+
+/**
+ * Whether `pathname` is the item's own page or one under it: its `href`, a
+ * page below that, or one of its `routes` and the pages below those.
+ */
+export function navItemHolds(
+  item: Pick<NavItem, "href" | "routes">,
+  pathname: string,
+): boolean {
+  return [item.href, ...(item.routes ?? [])].some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
 
 export const DASHBOARD_NAV: NavSection[] = [
   {
@@ -202,41 +228,32 @@ export const DASHBOARD_NAV: NavSection[] = [
     ],
   },
   {
+    /*
+     * One row for what the chapter keeps (#5949, step 5 of #5943; Paul,
+     * 2026-11-24: "resources could be consolidated into one tab"). It opens
+     * Documents, where a meeting's posted minutes are filed beside the
+     * chapter's files, and Backwork is the page's other view
+     * (`components/documents/resources-views.tsx`). Until then this group was
+     * three rows: Meetings, Documents and Backwork (#2956 asked to merge the
+     * last two). The row is the group, so the group has no heading.
+     */
     id: "resources",
-    label: "Resources",
+    label: SECTION_NAMES.resources,
+    anchor: true,
     items: [
       {
-        // A meeting's minutes, read by the members its event invites
-        // (`spec/behavior/meetings.md`). Every member sees the row while the
-        // module is on: the page lists only what the viewer may read.
-        id: "meetings",
-        label: "Meetings",
-        icon: MeetingsGlyph,
-        href: "/meetings",
-        description: "Minutes from chapter, exec and committee meetings.",
-        module: "meetings",
-      },
-      {
-        id: "documents",
-        label: "Documents",
+        id: "resources",
+        label: SECTION_NAMES.resources,
         icon: DocumentsGlyph,
-        href: "/documents",
-        description: "Chapter files and organizational documents.",
-        module: "documents",
-        hiddenUntilSetUp: "documents",
-      },
-      {
-        id: "backwork",
-        label: "Backwork",
-        icon: BackworkGlyph,
-        href: "/backwork",
-        description: "Academic library with rich filters.",
-        module: "backwork",
-        // The library's read is guarded on either at controller level, so a
-        // viewer with neither (Alumni, a Treasurer-only officer) would open
-        // a page that can only fail. Members hold `backwork:upload`, and an
-        // empty library is theirs to start, so it has no setup gate.
-        requireAnyOf: ["backwork:upload", "backwork:admin"],
+        href: RESOURCES_HREF,
+        description: "Documents, minutes and backwork.",
+        // Shown while any of the three is on: the page offers each view only
+        // to a member who can open it. No permission and no setup gate: every
+        // member reads Documents, and an empty one is an officer's to start.
+        anyModule: ["documents", "meetings", "backwork"],
+        // Backwork and its Bulk upload, and a meeting's minutes, are pages
+        // under this row, so it stays lit on them (rulebook § 8).
+        routes: ["/backwork", "/meetings"],
       },
     ],
   },

@@ -4,7 +4,11 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useHiddenUnsetFeatures } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { ChapterNavHeader } from "@/components/layout/chapter-nav-header";
-import { DASHBOARD_NAV, type NavItem } from "@/components/layout/nav-config";
+import {
+  DASHBOARD_NAV,
+  navItemHolds,
+  type NavItem,
+} from "@/components/layout/nav-config";
 import type { ChatView } from "@/components/layout/shell-prefs";
 import {
   isNavItemVisible,
@@ -139,16 +143,16 @@ const navIconClassName = "h-[18px] w-[18px]";
  */
 /**
  * The row's `aria-current`: "page" on its own page, "true" on a page under it
- * (a meeting's minutes under Meetings, Bulk upload under Backwork), so the
+ * (a meeting's minutes, Backwork and its Bulk upload under Resources), so the
  * sidebar always says where you are (rulebook § 8). Only "page" makes the row
  * close the page it opened; under it, the row goes back to its list.
  */
 export function currentFor(
-  item: Pick<NavItem, "href">,
+  item: Pick<NavItem, "href" | "routes">,
   pathname: string,
 ): "page" | "true" | undefined {
   if (item.href === pathname) return "page";
-  return pathname.startsWith(`${item.href}/`) ? "true" : undefined;
+  return navItemHolds(item, pathname) ? "true" : undefined;
 }
 
 export function AppNav({
