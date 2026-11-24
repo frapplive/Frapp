@@ -400,8 +400,15 @@ describe('RushPipelineService', () => {
 
     beforeEach(() => {
       pipelineRepo.listCandidates.mockResolvedValue([
-        baseCandidate,
-        { ...baseCandidate, id: 'cand-2', display_name: 'Sam Roe' },
+        { ...baseCandidate, pnm_id: null, origin: 'manual' },
+        {
+          ...baseCandidate,
+          id: 'cand-2',
+          display_name: 'Sam Roe',
+          pnm_id: 'pnm-1',
+          origin: 'pnm',
+          created_by: null,
+        },
       ]);
       pipelineRepo.listTags.mockResolvedValue([tag('t1', 'Legacy')]);
       pipelineRepo.listCandidateTags.mockResolvedValue([
@@ -451,9 +458,14 @@ describe('RushPipelineService', () => {
         viewer_rating: 4,
         viewer_has_voted: true,
       });
+      expect(first).toMatchObject({ origin: 'manual' });
+      // A candidate the PNM's interest form created names no adder (#5977).
       expect(second).toMatchObject({
         id: 'cand-2',
         tag_ids: [],
+        created_by: null,
+        created_by_name: null,
+        origin: 'pnm',
         viewer_rating: null,
         viewer_has_voted: false,
       });

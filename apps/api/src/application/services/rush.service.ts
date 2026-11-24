@@ -11,6 +11,9 @@ import type { IRushCandidateRepository } from '#domain/repositories/rush-candida
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import { isUniqueViolation } from '#domain/constants/postgres-error-codes';
+
+/** The 409 a name lookup answers when several prospects share the name. */
+export const RUSH_SEVERAL_MATCH_CODE = 'rush.candidate.several_match';
 import type {
   RushCandidate,
   RushCandidateView,
@@ -79,9 +82,19 @@ export class RushService {
     if (!nameKey) {
       throw new BadRequestException('Candidate name is required');
     }
-    const candidate = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    const matches = await this.rushRepo.findByNameKey(chapterId, nameKey);
+    const [candidate] = matches;
     if (!candidate) {
       throw new NotFoundException('Candidate not found');
+    }
+    // Two PNMs from the interest form may share a name (#5977): never pick
+    // one silently (`ifc-recruitment.md` § Name lookup).
+    if (matches.length > 1) {
+      throw new ConflictException({
+        code: RUSH_SEVERAL_MATCH_CODE,
+        message: 'Several prospects match',
+        candidate_ids: matches.map((match) => match.id),
+      });
     }
     return this.toView(candidate, viewer);
   }

@@ -15577,6 +15577,471 @@
         ]
       }
     },
+    "/v1/rush/interest-form": {
+      "get": {
+        "description": "Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.",
+        "operationId": "InterestFormController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's interest form, its QR codes and who it tells",
+        "tags": [
+          "Rush"
+        ]
+      },
+      "patch": {
+        "operationId": "InterestFormController_update_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInterestFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Open or close the form, or change its blurb, questions or contacts",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/labels": {
+      "post": {
+        "operationId": "InterestFormController_addLabel_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddInterestFormLabelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a QR source label",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/labels/{labelId}": {
+      "delete": {
+        "operationId": "InterestFormController_removeLabel_v1",
+        "parameters": [
+          {
+            "name": "labelId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a QR source label",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/interest-form/replace": {
+      "post": {
+        "operationId": "InterestFormController_replace_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSettingsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace the form: a new link, the old link and QR codes stop working",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/form": {
+      "get": {
+        "operationId": "InterestFormController_candidateForm_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateFormDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A candidate's newest interest-form submission: contact details and answers",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}": {
+      "get": {
+        "operationId": "PublicInterestFormController_get_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "src",
+            "required": false,
+            "in": "query",
+            "description": "The QR code's source label.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInterestFormDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "An interest form's public fields, with no account needed",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/code": {
+      "post": {
+        "description": "409 `interest_form.closed`; 400 `interest_form.email.invalid` or `interest_form.email.wrong_domain` (an address off the chapter's school domains); 409 `interest_form.verification_unavailable`; 429 `interest_form.code.cooldown` or `interest_form.code.rate_limited`; 503 `interest_form.code.send_failed`.",
+        "operationId": "PublicInterestFormController_startCode_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartInterestFormCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormCodeSentDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a one-time code to the address, before the form shows",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/verify": {
+      "post": {
+        "description": "400 `interest_form.code.missing`, `interest_form.code.expired` or `interest_form.code.wrong`; 429 `interest_form.code.too_many_attempts`.",
+        "operationId": "PublicInterestFormController_verify_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInterestFormCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormVerifiedDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check the code; answers the proof the submission spends",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
+    "/v1/interest-forms/{slug}/submissions": {
+      "post": {
+        "description": "400 `interest_form.proof.invalid` (expired or spent: verify again), `interest_form.consent.required` or `interest_form.answers.invalid`; 409 `interest_form.closed`.",
+        "operationId": "PublicInterestFormController_submit_v1",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitInterestFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterestFormSubmittedDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Submit the form: the PNM joins the chapter's pipeline, and the council's master list once the link is accepted",
+        "tags": [
+          "Interest form"
+        ]
+      }
+    },
     "/v1/geofences": {
       "get": {
         "operationId": "StudyGeofenceController_list_v1",
@@ -36866,7 +37331,9 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -36967,7 +37434,9 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -37115,11 +37584,22 @@
           },
           "created_by": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true,
+            "description": "Who added the candidate; null for one the PNM's own interest form created."
           },
           "created_by_name": {
             "type": "string",
-            "description": "Who added the candidate, by current name."
+            "nullable": true,
+            "description": "Who added the candidate, by current name; null with `created_by`."
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "pnm"
+            ],
+            "description": "`manual` when a member added them, `pnm` when their interest form did (#5977)."
           },
           "created_at": {
             "type": "string",
@@ -37163,6 +37643,7 @@
           "bid_status",
           "created_by",
           "created_by_name",
+          "origin",
           "created_at",
           "tag_ids",
           "viewer_rating",
@@ -37407,6 +37888,679 @@
         },
         "required": [
           "body"
+        ]
+      },
+      "InterestFormOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "InterestFormQuestionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "short_answer",
+              "paragraph",
+              "multiple_choice",
+              "checkboxes",
+              "dropdown",
+              "yes_no"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormOptionDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "required"
+        ]
+      },
+      "InterestFormDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "description": "The public page is `/f/<slug>`."
+          },
+          "path": {
+            "type": "string",
+            "example": "/f/k3mz8qpt2a"
+          },
+          "is_open": {
+            "type": "boolean"
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
+          },
+          "ask_referrer": {
+            "type": "boolean"
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "path",
+          "is_open",
+          "blurb",
+          "questions",
+          "ask_referrer",
+          "contacts_group_id",
+          "updated_at"
+        ]
+      },
+      "InterestFormLabelDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "example": "tabling-quad"
+          },
+          "path": {
+            "type": "string",
+            "example": "/f/k3mz8qpt2a?src=tabling-quad",
+            "description": "The path the label's QR code opens."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "path"
+        ]
+      },
+      "InterestFormSkippedContactDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ]
+      },
+      "InterestFormSettingsDto": {
+        "type": "object",
+        "properties": {
+          "offered": {
+            "type": "boolean",
+            "description": "False for an NPHC chapter, which never gets an interest form."
+          },
+          "form": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InterestFormDto"
+              }
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormLabelDto"
+            }
+          },
+          "contacts_skipped": {
+            "description": "Members of the contacts Group without `rush:view`, who aren't told.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormSkippedContactDto"
+            }
+          }
+        },
+        "required": [
+          "offered",
+          "form",
+          "labels",
+          "contacts_skipped"
+        ]
+      },
+      "UpdateInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "is_open": {
+            "type": "boolean",
+            "description": "Open or close the public page."
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "A few lines at the top of the form; empty or null clears it."
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "maxItems": 10,
+            "description": "The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`."
+          },
+          "ask_referrer": {
+            "type": "boolean",
+            "description": "Ask \"Who referred you?\"."
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The recruitment contacts Group told of each submission; null for none."
+          }
+        }
+      },
+      "AddInterestFormLabelDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "A QR source label, such as `tabling-quad`. Spaces and capitals are folded to dashes and lowercase.",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "CandidateFormReferrerDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ]
+      },
+      "CandidateFormAnswerDto": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
+        ]
+      },
+      "CandidateFormSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true
+          },
+          "referrer_text": {
+            "type": "string",
+            "nullable": true
+          },
+          "referrer_suggestion": {
+            "nullable": true,
+            "description": "The member the referrer text names, when exactly one does.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CandidateFormReferrerDto"
+              }
+            ]
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CandidateFormAnswerDto"
+            }
+          }
+        },
+        "required": [
+          "submitted_at",
+          "email",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "class_year",
+          "phone",
+          "source_label",
+          "referrer_text",
+          "referrer_suggestion",
+          "answers"
+        ]
+      },
+      "CandidateFormDto": {
+        "type": "object",
+        "properties": {
+          "submission": {
+            "nullable": true,
+            "description": "The candidate's newest form submission; null for none.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CandidateFormSubmissionDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "submission"
+        ]
+      },
+      "PublicInterestFormChapterDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "university": {
+            "type": "string"
+          },
+          "mark_text": {
+            "type": "string",
+            "nullable": true
+          },
+          "accent_color": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "university",
+          "mark_text",
+          "accent_color"
+        ]
+      },
+      "PublicInterestFormVerifyDto": {
+        "type": "object",
+        "properties": {
+          "school_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The school whose address gets the code; null takes any address."
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "school_name",
+          "domains"
+        ]
+      },
+      "ConsentRunDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "strong": {
+            "type": "boolean",
+            "description": "A name shown in bold."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "PublicInterestFormConsentDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Stored with each submission."
+          },
+          "runs": {
+            "description": "The approved consent text (`ifc-recruitment.md` § Consent and privacy text), shown above the submit button.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRunDto"
+            }
+          },
+          "agree_label": {
+            "type": "string",
+            "example": "I agree, and I'm 18 or older"
+          }
+        },
+        "required": [
+          "version",
+          "runs",
+          "agree_label"
+        ]
+      },
+      "PublicInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "is_open": {
+            "type": "boolean",
+            "description": "False shows \"Recruitment isn't open\"."
+          },
+          "chapter": {
+            "$ref": "#/components/schemas/PublicInterestFormChapterDto"
+          },
+          "blurb": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "description": "Empty while the form is closed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestFormQuestionDto"
+            }
+          },
+          "ask_referrer": {
+            "type": "boolean"
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true,
+            "description": "The `src` label, when it's one of the form's QR codes."
+          },
+          "verify": {
+            "$ref": "#/components/schemas/PublicInterestFormVerifyDto"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/PublicInterestFormConsentDto"
+          }
+        },
+        "required": [
+          "slug",
+          "is_open",
+          "chapter",
+          "blurb",
+          "questions",
+          "ask_referrer",
+          "source_label",
+          "verify",
+          "consent"
+        ]
+      },
+      "StartInterestFormCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The PNM's address. At a chapter with a school, only an address on one of the school's verified domains is sent a code.",
+            "example": "student@rpi.edu",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "InterestFormCodeSentDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resend_after_seconds": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "email",
+          "expires_at",
+          "resend_after_seconds"
+        ]
+      },
+      "ConfirmInterestFormCodeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "code": {
+            "type": "string",
+            "description": "The six-digit code from the email.",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ]
+      },
+      "InterestFormPrefillDto": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "class_year",
+          "phone"
+        ]
+      },
+      "InterestFormVerifiedDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "proof": {
+            "type": "string",
+            "description": "Send with the submission. Good for 30 minutes and spent once."
+          },
+          "prefill": {
+            "nullable": true,
+            "description": "The details this address last gave, filled in only after the code matched.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InterestFormPrefillDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "proof",
+          "prefill"
+        ]
+      },
+      "SubmitInterestFormDto": {
+        "type": "object",
+        "properties": {
+          "proof": {
+            "type": "string",
+            "description": "The proof a matched code answered (`POST …/verify`). Spent by this submission.",
+            "maxLength": 100
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "last_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 7,
+            "maxLength": 32
+          },
+          "answers": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "description": "Answers to the chapter's questions keyed by question id, as a chat form card's answers are."
+          },
+          "referrer": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "\"Who referred you?\", free text."
+          },
+          "source_label": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "The QR code's source label; one the form doesn't have is recorded as none."
+          },
+          "agree": {
+            "type": "boolean",
+            "description": "\"I agree, and I'm 18 or older\": must be true."
+          }
+        },
+        "required": [
+          "proof",
+          "first_name",
+          "last_name",
+          "agree"
+        ]
+      },
+      "InterestFormSubmittedDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter_name"
         ]
       },
       "GeofenceCircleDto": {

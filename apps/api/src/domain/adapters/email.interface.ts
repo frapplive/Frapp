@@ -30,6 +30,31 @@ export interface SendSchoolCodeEmailParams {
   validMinutes: number;
 }
 
+export interface SendInterestFormCodeEmailParams {
+  /** The address the PNM typed on the form. */
+  to: string;
+  /** The six-digit code. */
+  code: string;
+  /** The chapter whose form asked for it. */
+  chapterName: string;
+  validMinutes: number;
+}
+
+export interface SendInterestFormReceiptEmailParams {
+  to: string;
+  chapterName: string;
+  /** The public form, so the person can find it again. */
+  formUrl: string;
+  /** The council their details also went to, or null for none. */
+  councilName: string | null;
+}
+
+export interface SendInterestFormPushedUpEmailParams {
+  to: string;
+  chapterName: string;
+  councilName: string;
+}
+
 /**
  * Transport for transactional invite email. Delivery is best-effort per
  * address: implementations must never throw, and report success/failure via
@@ -43,4 +68,20 @@ export interface IEmailProvider {
    * `false` when the code didn't go out.
    */
   sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean>;
+  /** The interest form's one-time code (#5977). Same contract. */
+  sendInterestFormCodeEmail(
+    params: SendInterestFormCodeEmailParams,
+  ): Promise<boolean>;
+  /** The confirmation after an interest-form submission (#5977). */
+  sendInterestFormReceiptEmail(
+    params: SendInterestFormReceiptEmailParams,
+  ): Promise<boolean>;
+  /**
+   * A form submitter's details went to the council once the chapter's link
+   * was accepted (`ifc-recruitment.md` § Before the chapter's council link
+   * is accepted).
+   */
+  sendInterestFormPushedUpEmail(
+    params: SendInterestFormPushedUpEmailParams,
+  ): Promise<boolean>;
 }

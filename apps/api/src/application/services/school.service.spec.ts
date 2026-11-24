@@ -113,6 +113,9 @@ describe('SchoolService', () => {
     email = {
       sendInviteEmail: jest.fn().mockResolvedValue(true),
       sendSchoolCodeEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormCodeEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormReceiptEmail: jest.fn().mockResolvedValue(true),
+      sendInterestFormPushedUpEmail: jest.fn().mockResolvedValue(true),
     };
     service = new SchoolService(repo, email);
   });

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { InterestFormModule } from '../interest-form/interest-form.module';
 import { AffiliationService } from '../../application/services/affiliation.service';
 import { PnmService } from '../../application/services/pnm.service';
 import { PnmRetentionWorkerService } from '../../application/workers/pnm-retention-worker.service';
@@ -19,6 +20,8 @@ import { PNM_REPOSITORY } from '#domain/repositories/pnm.repository.interface';
 import { AuthModule } from '../auth/auth.module';
 import { RbacModule } from '../rbac/rbac.module';
 // `SCHOOL_REPOSITORY`: a chapter's school links name a school.
+// `InterestFormModule`: an accepted council link, or a season opening, pushes
+// the chapter's interest-form PNMs up to the master list (#5977).
 import { SchoolModule } from '../school/school.module';
 
 /**
@@ -28,7 +31,7 @@ import { SchoolModule } from '../school/school.module';
  * sweep.
  */
 @Module({
-  imports: [AuthModule, RbacModule, SchoolModule],
+  imports: [AuthModule, RbacModule, SchoolModule, InterestFormModule],
   controllers: [
     ChapterAffiliationController,
     CouncilChaptersController,

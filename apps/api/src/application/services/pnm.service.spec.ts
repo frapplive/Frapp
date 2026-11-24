@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { InterestFormService } from './interest-form.service';
 import { PnmService } from './pnm.service';
 import type { IPnmRepository } from '#domain/repositories/pnm.repository.interface';
 import type { IAffiliationRepository } from '#domain/repositories/affiliation.repository.interface';
@@ -132,12 +133,14 @@ function setup() {
     ]),
   };
   const chapters = { findById: jest.fn().mockResolvedValue(council()) };
+  const interestForms = { pushUpChapter: jest.fn().mockResolvedValue(0) };
   const service = new PnmService(
     pnms,
     affiliations as unknown as IAffiliationRepository,
     chapters as unknown as IChapterRepository,
+    interestForms as unknown as InterestFormService,
   );
-  return { service, pnms, affiliations, chapters };
+  return { service, pnms, affiliations, chapters, interestForms };
 }
 
 describe('PnmService — the master list', () => {

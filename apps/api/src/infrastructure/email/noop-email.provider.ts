@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   IEmailProvider,
+  SendInterestFormCodeEmailParams,
+  SendInterestFormPushedUpEmailParams,
+  SendInterestFormReceiptEmailParams,
   SendInviteEmailParams,
   SendSchoolCodeEmailParams,
 } from '#domain/adapters/email.interface';
@@ -36,6 +39,34 @@ export class NoopEmailProvider implements IEmailProvider {
   sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean> {
     this.logger.debug(
       `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) school code for ${params.schoolName}`,
+    );
+    return Promise.resolve(!this.reportDeliveryFailure);
+  }
+
+  /** Logs neither the code nor the address, as the school code. */
+  sendInterestFormCodeEmail(
+    params: SendInterestFormCodeEmailParams,
+  ): Promise<boolean> {
+    this.logger.debug(
+      `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) interest form code for ${params.chapterName}`,
+    );
+    return Promise.resolve(!this.reportDeliveryFailure);
+  }
+
+  sendInterestFormReceiptEmail(
+    params: SendInterestFormReceiptEmailParams,
+  ): Promise<boolean> {
+    this.logger.debug(
+      `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) interest form receipt for ${params.chapterName}`,
+    );
+    return Promise.resolve(!this.reportDeliveryFailure);
+  }
+
+  sendInterestFormPushedUpEmail(
+    params: SendInterestFormPushedUpEmailParams,
+  ): Promise<boolean> {
+    this.logger.debug(
+      `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) interest form push-up for ${params.chapterName}`,
     );
     return Promise.resolve(!this.reportDeliveryFailure);
   }

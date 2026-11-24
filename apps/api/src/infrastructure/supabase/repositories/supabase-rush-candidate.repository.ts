@@ -2,7 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { SUPABASE_CLIENT } from '../supabase.provider';
 import type { FrappSupabaseClient } from '../database.types';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
-import type { IRushCandidateRepository } from '#domain/repositories/rush-candidate.repository.interface';
+import {
+  RUSH_NAME_MATCHES_MAX,
+  type IRushCandidateRepository,
+} from '#domain/repositories/rush-candidate.repository.interface';
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import { SupabaseQueryError } from '../supabase-query-error';
 
@@ -27,15 +30,18 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
   async findByNameKey(
     chapterId: string,
     nameKey: string,
-  ): Promise<RushCandidate | null> {
+  ): Promise<RushCandidate[]> {
+    // A list, not `.maybeSingle()`: two PNMs from the interest form may
+    // share a name (#5977), and two rows must answer 409, never a 500.
     const { data, error } = await this.supabase
       .from('rush_candidates')
       .select('*')
       .eq('chapter_id', chapterId)
       .eq('name_key', nameKey)
-      .maybeSingle();
+      .order('created_at', { ascending: true })
+      .limit(RUSH_NAME_MATCHES_MAX);
     if (error) throw new SupabaseQueryError(error);
-    return data;
+    return data ?? [];
   }
 
   async create(

@@ -106,11 +106,28 @@ export class RushPipelineCandidateDto implements RushPipelineCandidate {
   @ApiProperty({ enum: ['none', 'extended'] })
   bid_status: RushBidStatus;
 
-  @ApiProperty({ format: 'uuid' })
-  created_by: string;
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      "Who added the candidate; null for one the PNM's own interest form created.",
+  })
+  created_by: string | null;
 
-  @ApiProperty({ description: 'Who added the candidate, by current name.' })
-  created_by_name: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Who added the candidate, by current name; null with `created_by`.',
+  })
+  created_by_name: string | null;
+
+  @ApiProperty({
+    enum: ['manual', 'pnm'],
+    description:
+      '`manual` when a member added them, `pnm` when their interest form did (#5977).',
+  })
+  origin: 'manual' | 'pnm';
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;

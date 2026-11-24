@@ -6,7 +6,10 @@ import type {
   RushStage,
   RushTag,
 } from '../entities/rush-pipeline.entity';
-import type { RushCandidate } from '../entities/rush-candidate.entity';
+import type {
+  RushCandidate,
+  RushCandidateRow,
+} from '../entities/rush-candidate.entity';
 
 export const RUSH_PIPELINE_REPOSITORY = 'RUSH_PIPELINE_REPOSITORY';
 
@@ -37,7 +40,7 @@ export interface IRushPipelineRepository {
     stages: readonly RushStageWrite[],
   ): Promise<RushStage[]>;
 
-  listCandidates(chapterId: string): Promise<RushCandidate[]>;
+  listCandidates(chapterId: string): Promise<RushCandidateRow[]>;
   setCandidateStage(
     candidateId: string,
     chapterId: string,

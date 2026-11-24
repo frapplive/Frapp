@@ -296,10 +296,26 @@ describe('RushService', () => {
 
   describe('findViewByName', () => {
     it('404s when the name is unknown', async () => {
-      mockRushRepo.findByNameKey.mockResolvedValue(null);
+      mockRushRepo.findByNameKey.mockResolvedValue([]);
       await expect(
         service.findViewByName('ch-1', sees('user-1'), 'Nobody'),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('409s with every id when several prospects share the name (#5977)', async () => {
+      mockRushRepo.findByNameKey.mockResolvedValue([
+        { ...baseCandidate, id: 'cand-1' },
+        { ...baseCandidate, id: 'cand-2' },
+      ]);
+      await expect(
+        service.findViewByName('ch-1', sees('user-1'), 'Jake Smith'),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'rush.candidate.several_match',
+          message: 'Several prospects match',
+          candidate_ids: ['cand-1', 'cand-2'],
+        },
+      });
     });
 
     it('rejects a blank name', async () => {

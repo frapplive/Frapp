@@ -4624,6 +4624,172 @@ export interface paths {
         patch: operations["RushPipelineController_editNote_v1"];
         trace?: never;
     };
+    "/v1/rush/interest-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The chapter's interest form, its QR codes and who it tells
+         * @description Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.
+         */
+        get: operations["InterestFormController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Open or close the form, or change its blurb, questions or contacts */
+        patch: operations["InterestFormController_update_v1"];
+        trace?: never;
+    };
+    "/v1/rush/interest-form/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a QR source label */
+        post: operations["InterestFormController_addLabel_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/interest-form/labels/{labelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a QR source label */
+        delete: operations["InterestFormController_removeLabel_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/interest-form/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the form: a new link, the old link and QR codes stop working */
+        post: operations["InterestFormController_replace_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's newest interest-form submission: contact details and answers */
+        get: operations["InterestFormController_candidateForm_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An interest form's public fields, with no account needed */
+        get: operations["PublicInterestFormController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a one-time code to the address, before the form shows
+         * @description 409 `interest_form.closed`; 400 `interest_form.email.invalid` or `interest_form.email.wrong_domain` (an address off the chapter's school domains); 409 `interest_form.verification_unavailable`; 429 `interest_form.code.cooldown` or `interest_form.code.rate_limited`; 503 `interest_form.code.send_failed`.
+         */
+        post: operations["PublicInterestFormController_startCode_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the code; answers the proof the submission spends
+         * @description 400 `interest_form.code.missing`, `interest_form.code.expired` or `interest_form.code.wrong`; 429 `interest_form.code.too_many_attempts`.
+         */
+        post: operations["PublicInterestFormController_verify_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the form: the PNM joins the chapter's pipeline, and the council's master list once the link is accepted
+         * @description 400 `interest_form.proof.invalid` (expired or spent: verify again), `interest_form.consent.required` or `interest_form.answers.invalid`; 409 `interest_form.closed`.
+         */
+        post: operations["PublicInterestFormController_submit_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geofences": {
         parameters: {
             query?: never;
@@ -11876,8 +12042,11 @@ export interface components {
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
-            /** Format: uuid */
-            created_by: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
+             */
+            created_by: string | null;
             /** Format: date-time */
             created_at: string;
             /** @description Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0. */
@@ -11911,8 +12080,11 @@ export interface components {
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
-            /** Format: uuid */
-            created_by: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
+             */
+            created_by: string | null;
             /** Format: date-time */
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the candidate row committed and the card did not. Absent means no card was attempted. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
@@ -11957,10 +12129,18 @@ export interface components {
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
-            /** Format: uuid */
-            created_by: string;
-            /** @description Who added the candidate, by current name. */
-            created_by_name: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created.
+             */
+            created_by: string | null;
+            /** @description Who added the candidate, by current name; null with `created_by`. */
+            created_by_name: string | null;
+            /**
+             * @description `manual` when a member added them, `pnm` when their interest form did (#5977).
+             * @enum {string}
+             */
+            origin: "manual" | "pnm";
             /** Format: date-time */
             created_at: string;
             tag_ids: string[];
@@ -12044,6 +12224,198 @@ export interface components {
         };
         RushNoteInputDto: {
             body: string;
+        };
+        InterestFormOptionDto: {
+            id: string;
+            label: string;
+        };
+        InterestFormQuestionDto: {
+            id: string;
+            /** @enum {string} */
+            type: "short_answer" | "paragraph" | "multiple_choice" | "checkboxes" | "dropdown" | "yes_no";
+            title: string;
+            required: boolean;
+            options?: components["schemas"]["InterestFormOptionDto"][];
+        };
+        InterestFormDto: {
+            /** Format: uuid */
+            id: string;
+            /** @description The public page is `/f/<slug>`. */
+            slug: string;
+            /** @example /f/k3mz8qpt2a */
+            path: string;
+            is_open: boolean;
+            blurb: string | null;
+            questions: components["schemas"]["InterestFormQuestionDto"][];
+            ask_referrer: boolean;
+            /** Format: uuid */
+            contacts_group_id: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        InterestFormLabelDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example tabling-quad */
+            label: string;
+            /**
+             * @description The path the label's QR code opens.
+             * @example /f/k3mz8qpt2a?src=tabling-quad
+             */
+            path: string;
+        };
+        InterestFormSkippedContactDto: {
+            /** Format: uuid */
+            user_id: string;
+            display_name: string;
+        };
+        InterestFormSettingsDto: {
+            /** @description False for an NPHC chapter, which never gets an interest form. */
+            offered: boolean;
+            form: components["schemas"]["InterestFormDto"] | null;
+            labels: components["schemas"]["InterestFormLabelDto"][];
+            /** @description Members of the contacts Group without `rush:view`, who aren't told. */
+            contacts_skipped: components["schemas"]["InterestFormSkippedContactDto"][];
+        };
+        UpdateInterestFormDto: {
+            /** @description Open or close the public page. */
+            is_open?: boolean;
+            /** @description A few lines at the top of the form; empty or null clears it. */
+            blurb?: string | null;
+            /** @description The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`. */
+            questions?: Record<string, never>[];
+            /** @description Ask "Who referred you?". */
+            ask_referrer?: boolean;
+            /**
+             * Format: uuid
+             * @description The recruitment contacts Group told of each submission; null for none.
+             */
+            contacts_group_id?: string | null;
+        };
+        AddInterestFormLabelDto: {
+            /** @description A QR source label, such as `tabling-quad`. Spaces and capitals are folded to dashes and lowercase. */
+            label: string;
+        };
+        CandidateFormReferrerDto: {
+            /** Format: uuid */
+            user_id: string;
+            display_name: string;
+        };
+        CandidateFormAnswerDto: {
+            question: string;
+            answer: string;
+        };
+        CandidateFormSubmissionDto: {
+            /** Format: date-time */
+            submitted_at: string;
+            email: string;
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            class_year: number | null;
+            phone: string | null;
+            source_label: string | null;
+            referrer_text: string | null;
+            /** @description The member the referrer text names, when exactly one does. */
+            referrer_suggestion: components["schemas"]["CandidateFormReferrerDto"] | null;
+            answers: components["schemas"]["CandidateFormAnswerDto"][];
+        };
+        CandidateFormDto: {
+            /** @description The candidate's newest form submission; null for none. */
+            submission: components["schemas"]["CandidateFormSubmissionDto"] | null;
+        };
+        PublicInterestFormChapterDto: {
+            name: string;
+            university: string;
+            mark_text: string | null;
+            accent_color: string | null;
+        };
+        PublicInterestFormVerifyDto: {
+            /** @description The school whose address gets the code; null takes any address. */
+            school_name: string | null;
+            domains: string[];
+        };
+        ConsentRunDto: {
+            text: string;
+            /** @description A name shown in bold. */
+            strong?: boolean;
+        };
+        PublicInterestFormConsentDto: {
+            /** @description Stored with each submission. */
+            version: string;
+            /** @description The approved consent text (`ifc-recruitment.md` § Consent and privacy text), shown above the submit button. */
+            runs: components["schemas"]["ConsentRunDto"][];
+            /** @example I agree, and I'm 18 or older */
+            agree_label: string;
+        };
+        PublicInterestFormDto: {
+            slug: string;
+            /** @description False shows "Recruitment isn't open". */
+            is_open: boolean;
+            chapter: components["schemas"]["PublicInterestFormChapterDto"];
+            blurb: string | null;
+            /** @description Empty while the form is closed. */
+            questions: components["schemas"]["InterestFormQuestionDto"][];
+            ask_referrer: boolean;
+            /** @description The `src` label, when it's one of the form's QR codes. */
+            source_label: string | null;
+            verify: components["schemas"]["PublicInterestFormVerifyDto"];
+            consent: components["schemas"]["PublicInterestFormConsentDto"];
+        };
+        StartInterestFormCodeDto: {
+            /**
+             * @description The PNM's address. At a chapter with a school, only an address on one of the school's verified domains is sent a code.
+             * @example student@rpi.edu
+             */
+            email: string;
+        };
+        InterestFormCodeSentDto: {
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+            resend_after_seconds: number;
+        };
+        ConfirmInterestFormCodeDto: {
+            email: string;
+            /** @description The six-digit code from the email. */
+            code: string;
+        };
+        InterestFormPrefillDto: {
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            class_year: number | null;
+            phone: string | null;
+        };
+        InterestFormVerifiedDto: {
+            email: string;
+            /** @description Send with the submission. Good for 30 minutes and spent once. */
+            proof: string;
+            /** @description The details this address last gave, filled in only after the code matched. */
+            prefill: components["schemas"]["InterestFormPrefillDto"] | null;
+        };
+        SubmitInterestFormDto: {
+            /** @description The proof a matched code answered (`POST …/verify`). Spent by this submission. */
+            proof: string;
+            first_name: string;
+            last_name: string;
+            preferred_name?: string | null;
+            /** @example 2030 */
+            class_year?: number | null;
+            phone?: string | null;
+            /** @description Answers to the chapter's questions keyed by question id, as a chat form card's answers are. */
+            answers?: {
+                [key: string]: string | string[];
+            };
+            /** @description "Who referred you?", free text. */
+            referrer?: string | null;
+            /** @description The QR code's source label; one the form doesn't have is recorded as none. */
+            source_label?: string | null;
+            /** @description "I agree, and I'm 18 or older": must be true. */
+            agree: boolean;
+        };
+        InterestFormSubmittedDto: {
+            chapter_name: string;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -25335,6 +25707,321 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RushNoteDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_get_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_update_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInterestFormDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_addLabel_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddInterestFormLabelDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_removeLabel_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_replace_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_candidateForm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateFormDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_get_v1: {
+        parameters: {
+            query?: {
+                /** @description The QR code's source label. */
+                src?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicInterestFormDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_startCode_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartInterestFormCodeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormCodeSentDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_verify_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmInterestFormCodeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormVerifiedDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_submit_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitInterestFormDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSubmittedDto"];
                 };
             };
             /** @description Error */

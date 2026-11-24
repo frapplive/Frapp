@@ -36,6 +36,7 @@ import type {
   PnmSource,
   RecruitmentSeasonStatus,
 } from '#domain/entities/pnm.entity';
+import { InterestFormService } from './interest-form.service';
 
 /** The fields a master-list row shows, as logged (`council_pnm_access_log.fields`). */
 const LIST_FIELDS = ['name', 'school_email', 'class_year'];
@@ -113,6 +114,7 @@ export class PnmService {
     @Inject(AFFILIATION_REPOSITORY)
     private readonly affiliations: IAffiliationRepository,
     @Inject(CHAPTER_REPOSITORY) private readonly chapters: IChapterRepository,
+    private readonly interestForms: InterestFormService,
   ) {}
 
   // Seasons --------------------------------------------------------------------
@@ -147,6 +149,7 @@ export class PnmService {
         message: `Your council already has a ${term} season.`,
       });
     }
+    if (created.status === 'open') await this.pushUpChapters(councilId);
     return created;
   }
 
@@ -171,6 +174,9 @@ export class PnmService {
     );
     const updated = await this.pnms.updateSeason(councilId, term, patch);
     if (!updated) throw seasonNotFound();
+    if (updated.status === 'open' && current.status !== 'open') {
+      await this.pushUpChapters(councilId);
+    }
     return updated;
   }
 
@@ -436,6 +442,18 @@ export class PnmService {
     const season = await this.pnms.findSeason(councilId, term);
     if (!season) throw seasonNotFound();
     return season;
+  }
+
+  /**
+   * A season opened: each accepted chapter's interest-form PNMs join the
+   * master list (#5977, `ifc-recruitment.md` § Before the chapter's council
+   * link is accepted). Never throws.
+   */
+  private async pushUpChapters(councilId: string): Promise<void> {
+    const chapters = await this.acceptedChapters(councilId).catch(() => []);
+    for (const chapter of chapters) {
+      await this.interestForms.pushUpChapter(chapter.id);
+    }
   }
 
   private async acceptedChapters(

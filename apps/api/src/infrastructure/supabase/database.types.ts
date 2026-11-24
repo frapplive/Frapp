@@ -40,6 +40,8 @@ import type {
   ChapterGroup,
   ChapterGroupMember,
   ChapterGroupMembership,
+  ChapterInterestForm,
+  ChapterInterestFormLabel,
   ChapterPointsConfig,
   ChapterServiceConfig,
   ChapterWorkflow,
@@ -89,6 +91,8 @@ import type {
   GifFavorite,
   GoogleCalendarConnection,
   GoogleCalendarOAuthState,
+  InterestFormSubmission,
+  InterestFormVerification,
   Invite,
   Meeting,
   MeetingDateReminder,
@@ -240,6 +244,8 @@ export interface Database {
       chapter_goals: TableDefinition<ChapterGoalRow>;
       chapter_group_members: TableDefinition<ChapterGroupMember>;
       chapter_groups: TableDefinition<ChapterGroup>;
+      chapter_interest_form_labels: TableDefinition<ChapterInterestFormLabel>;
+      chapter_interest_forms: TableDefinition<ChapterInterestForm>;
       chapter_pledge_classes: TableDefinition<PledgeClass>;
       chapter_points_config: TableDefinition<ChapterPointsConfig>;
       chapter_service_config: TableDefinition<ChapterServiceConfig>;
@@ -288,6 +294,8 @@ export interface Database {
       gif_favorites: TableDefinition<GifFavorite>;
       google_calendar_connections: TableDefinition<GoogleCalendarConnection>;
       google_calendar_oauth_states: TableDefinition<GoogleCalendarOAuthState>;
+      interest_form_submissions: TableDefinition<InterestFormSubmission>;
+      interest_form_verifications: TableDefinition<InterestFormVerification>;
       invites: TableDefinition<Invite>;
       meeting_date_reminders: TableDefinition<MeetingDateReminder>;
       meeting_drafts: TableDefinition<MeetingDraft>;
@@ -591,6 +599,21 @@ export interface Database {
           claim_outcome: StripeWebhookClaimOutcome;
           claim_attempts: number;
         }[];
+      };
+      /**
+       * `20261124144042` (#5977). Checks a code typed on an interest form and,
+       * on a match, stores the hash of the proof the submission spends.
+       */
+      confirm_interest_form_code: {
+        Args: {
+          p_form_id: string;
+          p_verification_id: string;
+          p_code_hash: string;
+          p_proof_hash: string;
+          p_proof_ttl_seconds: number;
+          p_max_attempts: number;
+        };
+        Returns: Json;
       };
       /**
        * `20261123220535` (#5929). Checks a school-email code against the
@@ -1160,6 +1183,14 @@ export interface Database {
         Returns: number;
       };
       /**
+       * `20261124144042` (#5977). A chapter's form PNMs join its council's
+       * master list once the link is accepted and a season is open.
+       */
+      push_up_chapter_form_interests: {
+        Args: { p_chapter_id: string };
+        Returns: Json;
+      };
+      /**
        * `20261112170000` (#4314), `kind` since `20261116171551` — a chat window's readable messages, oldest
        * conversation first; one row with a null `message_id` when it holds
        * none, no row when it is gone or its channel is a DM.
@@ -1595,6 +1626,22 @@ export interface Database {
         };
         Returns: string;
       };
+      /** `20261124144042` (#5977). Records an interest form's code under its ceilings. */
+      start_interest_form_code: {
+        Args: {
+          p_form_id: string;
+          p_email: string;
+          p_code_salt: string;
+          p_code_hash: string;
+          p_ip_hash: string | null;
+          p_ttl_seconds: number;
+          p_window_seconds: number;
+          p_max_per_address: number;
+          p_max_per_ip: number;
+          p_cooldown_seconds: number;
+        };
+        Returns: Json;
+      };
       /**
        * `20261123220535` (#5929). Opens a school-email code, counting the
        * address, IP and account ceilings under advisory locks. Answers
@@ -1614,6 +1661,25 @@ export interface Database {
           p_max_per_ip: number;
           p_max_per_account: number;
           p_cooldown_seconds: number;
+        };
+        Returns: Json;
+      };
+      /** `20261124144042` (#5977). The whole interest-form submission, in one transaction. */
+      submit_interest_form: {
+        Args: {
+          p_form_id: string;
+          p_verification_id: string;
+          p_proof_hash: string;
+          p_first_name: string;
+          p_last_name: string;
+          p_preferred_name: string | null;
+          p_class_year: number | null;
+          p_phone: string | null;
+          p_answers: Json;
+          p_referrer_text: string | null;
+          p_source_label: string | null;
+          p_consent_version: string;
+          p_consent_boxes: string[];
         };
         Returns: Json;
       };
