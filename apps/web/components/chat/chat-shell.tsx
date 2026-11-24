@@ -239,6 +239,7 @@ import { WelcomeCard } from "@/components/onboarding/welcome-card";
 import { SetupChecklistSection } from "./setup-checklist";
 import { NowCard } from "@/components/events/now-card";
 import { ChannelMenu } from "./channel-menu";
+import { useIsNarrow } from "@/lib/use-is-narrow";
 import { AllThreadsPopover } from "./all-threads-popover";
 import {
   anchorFor,
@@ -381,6 +382,14 @@ function matchMember(
  * pending, so scrolling up still opens it once it loads.
  */
 const JUMP_MAX_OLDER_PAGES = 20;
+
+/**
+ * Below this width the channel header has no room for the name, its
+ * description and four buttons: Threads moves into the channel menu. The
+ * header is 640px or less beside a page (#5575) and when a thread opens
+ * beside the channel on a laptop.
+ */
+const NARROW_CHANNEL_HEADER_BELOW = 640;
 
 type UnreachableReason = "far" | "missing" | "error" | "unloaded";
 
@@ -895,6 +904,17 @@ export function ChatShell({
   const [membersHidden, setMembersHidden] = useState(defaultMembersHidden);
   const [membersSheetOpen, setMembersSheetOpen] = useState(false);
   const membersButtonRef = useRef<HTMLButtonElement>(null);
+  /*
+    The channel header measures itself, because chat's width says little
+    about the window's: beside a page, or squeezed by a thread beside it, the
+    header is phone-narrow on a wide screen. Narrow, the Threads button moves
+    into the channel menu so the channel's name keeps the row (Paul,
+    2026-11-24: the name read "A..." beside four buttons). `null` before the
+    first measure draws the wide header, as the server does.
+  */
+  const [channelHeaderRef, narrowHeader] = useIsNarrow<HTMLElement>(
+    NARROW_CHANNEL_HEADER_BELOW,
+  );
   const wideWindow = useMediaQuery(WIDE_CHAT_QUERY);
   // Room for the column: a wide window, and no tool page beside chat.
   const isWideChat = wideWindow && !toolBeside;
@@ -3574,6 +3594,12 @@ export function ChatShell({
   // The members column is on screen: a wide window, not hidden, and no
   // thread beside the chat in its place.
   const membersBeside = isWideChat && !membersHidden && !threadBeside;
+  const allThreads = {
+    channelNameFor: threadChannelLabel,
+    nameFor,
+    viewerId: userId,
+    onOpenThread: openThreadInChannel,
+  };
   // The open thread (#3785), drawn over the chat column or beside it.
   const threadPanel =
     activeChannel && threadRootId ? (
@@ -3756,7 +3782,10 @@ export function ChatShell({
           is not chrome moved below it. Four popover triggers used to live here
           and are now behind `ChannelMenu`'s single `⋯`.
         */}
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+        <header
+          ref={channelHeaderRef}
+          className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4"
+        >
           {/*
             Below `lg` this is the only way back to the list, because the list
             is not on screen. Hidden at `lg`, where both columns are.
@@ -3861,13 +3890,11 @@ export function ChatShell({
                 </PopoverContent>
               </Popover>
             ) : null}
-            <AllThreadsPopover
-              channelNameFor={threadChannelLabel}
-              nameFor={nameFor}
-              viewerId={userId}
-              onOpenThread={openThreadInChannel}
-            />
+            {narrowHeader ? null : (
+              <AllThreadsPopover {...allThreads} />
+            )}
             <ChannelMenu
+              threads={narrowHeader ? allThreads : undefined}
               activeChannelId={activeChannelId}
               messages={shownMessages}
               hiddenPins={hiddenPins}

@@ -18,9 +18,11 @@ import {
   DirectMessageGlyph,
   MuteGlyph,
   PinGlyph,
+  StartThreadGlyph,
 } from "./chat-glyphs";
 import { LinkGlyph } from "@/components/profile/profile-glyphs";
 import { ChannelLinksPanel, useChannelLinkCount } from "./channel-links-panel";
+import { AllThreadsPanel, type AllThreadsProps } from "./all-threads-popover";
 import { ChatGlyph, SearchGlyph } from "@/components/layout/nav-glyphs";
 import { cn } from "@/lib/utils";
 import { EYEBROW } from "@/components/ui/typography";
@@ -53,6 +55,7 @@ import {
 } from "@/lib/chat/chat-density";
 import type { ChatMessage } from "@repo/chat-core/types";
 import {
+  ALL_THREADS_TITLE,
   CHANNEL_LEVEL_DETAIL,
   HIDE_CONVERSATION_CONFIRM_ACTION,
   HIDE_CONVERSATION_CONFIRM_BODY,
@@ -60,6 +63,8 @@ import {
   PIN_TO_TOP_LABEL,
   UNPIN_FROM_TOP_LABEL,
   hideConversationConfirmTitle,
+  unreadThreadCount,
+  useMemberThreads,
   type ChatNotificationLevel,
 } from "@repo/hooks";
 
@@ -116,7 +121,8 @@ type View =
   | "notifications"
   | "display"
   | "hide"
-  | "background";
+  | "background"
+  | "threads";
 
 type ChannelMenuProps = {
   /** The channel currently open, or `null` when none is selected yet. */
@@ -193,6 +199,13 @@ type ChannelMenuProps = {
     error: string | null;
     onPick: (pick: ChatBackgroundPick) => void;
   };
+  /**
+   * All threads, as a row here rather than the header's own Threads button.
+   * The shell passes it only while the header is too narrow for that button
+   * (chat beside a page, or a thread open beside the channel), so the
+   * channel's name keeps the room (Paul, 2026-11-24). Absent, no row.
+   */
+  threads?: AllThreadsProps;
 };
 
 type MenuRow = {
@@ -224,6 +237,7 @@ const VIEW_TITLES: Record<Exclude<View, "menu">, string> = {
   display: "Display",
   hide: HIDE_CONVERSATION_LABEL,
   background: "Background",
+  threads: ALL_THREADS_TITLE,
 };
 
 export function ChannelMenu({
@@ -250,6 +264,7 @@ export function ChannelMenu({
   catchUp,
   displayLock,
   background,
+  threads,
 }: ChannelMenuProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("menu");
@@ -289,7 +304,24 @@ export function ChannelMenu({
   }, [view, open]);
 
   const linkCount = useChannelLinkCount(activeChannelId, open);
+  // Always read, because hooks can't be conditional; it is the same cached
+  // query the header's Threads button reads, so this costs no extra request.
+  const memberThreads = useMemberThreads();
+  const unreadThreads = threads
+    ? unreadThreadCount(memberThreads.data ?? [])
+    : 0;
   const rows: MenuRow[] = [
+    // First when it is here: it stands in for a header button.
+    ...(threads
+      ? [
+          {
+            view: "threads" as const,
+            label: ALL_THREADS_TITLE,
+            Glyph: StartThreadGlyph,
+            count: unreadThreads || undefined,
+          },
+        ]
+      : []),
     { view: "search", label: "Search messages", Glyph: SearchGlyph },
     {
       view: "pins",
@@ -381,7 +413,7 @@ export function ChannelMenu({
         <Button
           variant="ghost"
           size="icon"
-          className={compactControlClassName}
+          className={cn(compactControlClassName, "relative")}
           // NOT disabled without a channel. Four separate triggers collapsed
           // into this one, and two of the panels behind it are chapter-wide:
           // `BookmarksPanel` never reads a channel id, and `ChatSearchPanel`
@@ -390,9 +422,20 @@ export function ChannelMenu({
           // offline in exactly the states this lane keeps the frame up for — a
           // stale `?channel=` link, or a chapter with no channels yet. Only
           // `NotificationLevelPanel` needs one, and it has its own `disabled`.
-          aria-label="Channel menu"
+          aria-label={
+            unreadThreads > 0
+              ? `Channel menu, ${unreadThreads} threads with new replies`
+              : "Channel menu"
+          }
         >
           <MoreHorizontal className="h-5 w-5" />
+          {/* The header's Threads button's dot, carried here with its row. */}
+          {unreadThreads > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary"
+            />
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -552,6 +595,15 @@ export function ChannelMenu({
                 // shutting the panel after each removal would make clearing
                 // several bookmarks four clicks apiece.
                 onRemove={onRemoveBookmark}
+              />
+            ) : null}
+            {view === "threads" && threads ? (
+              <AllThreadsPanel
+                {...threads}
+                onOpenThread={(channelId, rootId) => {
+                  close();
+                  threads.onOpenThread(channelId, rootId);
+                }}
               />
             ) : null}
             {view === "links" && activeChannelId ? (

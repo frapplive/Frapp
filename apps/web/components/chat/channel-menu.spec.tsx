@@ -141,6 +141,31 @@ vi.mock("./channel-links-panel", () => ({
     channelId ? linkState.count : undefined,
 }));
 
+// The narrow header's Threads row (Paul, 2026-11-24): the list is
+// `all-threads-popover.spec.tsx`'s; here only the count and the hand-off.
+const threadsState = vi.hoisted(() => ({
+  data: [] as { unread_count: number }[],
+}));
+vi.mock("@repo/hooks", async () => ({
+  ...(await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks")),
+  useMemberThreads: () => ({ data: threadsState.data }),
+}));
+vi.mock("./all-threads-popover", () => ({
+  AllThreadsPanel: ({
+    onOpenThread,
+  }: {
+    onOpenThread: (channelId: string, rootId: string) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="threads-panel"
+      onClick={() => onOpenThread("chan-2", "root-9")}
+    >
+      thread
+    </button>
+  ),
+}));
+
 import { ChannelMenu } from "./channel-menu";
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -667,5 +692,43 @@ describe("ChannelMenu Always formal (#3787)", () => {
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
     expect(onChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("ChannelMenu Threads row (narrow header, 2026-11-24)", () => {
+  const threads = () => ({
+    channelNameFor: () => "general",
+    nameFor: () => "Someone",
+    viewerId: "u1",
+    onOpenThread: vi.fn(),
+  });
+
+  it("draws no Threads row while the header has its own button", async () => {
+    const user = userEvent.setup();
+    threadsState.data = [{ unread_count: 2 }];
+    renderMenu();
+    await openMenu(user);
+    expect(
+      screen.queryByRole("button", { name: /^Threads/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leads with Threads and its unread count, and opens a thread from it", async () => {
+    const user = userEvent.setup();
+    threadsState.data = [{ unread_count: 2 }, { unread_count: 0 }];
+    const props = threads();
+    renderMenu({ threads: props });
+    // The header's dot moves onto the menu button with the row.
+    await user.click(
+      screen.getByRole("button", {
+        name: "Channel menu, 1 threads with new replies",
+      }),
+    );
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Threads");
+    await user.click(screen.getByRole("button", { name: "Threads, 1" }));
+    await user.click(screen.getByTestId("threads-panel"));
+    expect(props.onOpenThread).toHaveBeenCalledWith("chan-2", "root-9");
+    expect(screen.queryByTestId("threads-panel")).not.toBeInTheDocument();
   });
 });
