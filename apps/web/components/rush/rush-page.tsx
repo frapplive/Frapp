@@ -1,5 +1,6 @@
 "use client";
 
+import { localIsoDate } from "@repo/formatting";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -17,7 +18,6 @@ import { vocab } from "@repo/org-archetypes";
 import {
   isRushFollowUpForViewer,
   rushFollowUpsDueCount,
-  rushLocalDayKey,
 } from "@repo/validation";
 import { PageActions } from "@/components/layout/page-actions";
 import { SearchGlyph } from "@/components/layout/nav-glyphs";
@@ -103,7 +103,7 @@ export function RushPage() {
   const [viewPick, setViewPick] = useState<RushView | null>(null);
   const [query, setQuery] = useState("");
   const mover = useRushMove();
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
 
   if (isOffline && anyReadUncached(permissionsQuery, pipeline)) {
     return (
@@ -231,7 +231,7 @@ export function RushPage() {
   return (
     <div className="@container space-y-6">
       <PageActions>
-        <span className="shrink-0 text-sm text-muted-foreground tabular-nums @max-[48rem]:hidden">
+        <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
           {rushListSubtitle(open, due)}
         </span>
         {candidates.length > 0 ? (

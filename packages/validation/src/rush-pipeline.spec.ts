@@ -247,7 +247,7 @@ describe("contacts, follow-ups and the stale alert (#5934)", () => {
     expect(formatRushDay("2026-11-23", today)).toBe("Yesterday");
     expect(formatRushDay("2026-11-25", today)).toBe("Tomorrow");
     expect(formatRushDay("2026-11-26", today)).toBe("Thursday");
-    expect(formatRushDay("2026-11-19", today)).toBe("Thursday");
+    expect(formatRushDay("2026-11-19", today)).toBe("November 19");
     expect(formatRushDay("2026-11-03", today)).toBe("November 3");
     expect(formatRushDay("2027-01-04", today)).toBe("January 4, 2027");
     expect(shiftRushDayKey("2026-12-31", 1)).toBe("2027-01-01");

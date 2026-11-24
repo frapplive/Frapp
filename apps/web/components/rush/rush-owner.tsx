@@ -24,22 +24,6 @@ export interface RushMemberOption {
 const NO_OWNER: RushMemberOption = { user_id: "", display_name: "No owner" };
 
 /**
- * Members for a picker: named ones only, by name, the viewer first, so
- * assigning yourself is the first row.
- */
-export function rushMemberOptions(
-  roster: readonly RushMemberOption[] | undefined,
-  viewerId: string | null,
-): RushMemberOption[] {
-  const named = (roster ?? []).filter((m) => m.display_name.trim() !== "");
-  const sorted = [...named].sort((a, b) =>
-    a.display_name.localeCompare(b.display_name),
-  );
-  const me = sorted.find((m) => m.user_id === viewerId);
-  return me ? [me, ...sorted.filter((m) => m !== me)] : sorted;
-}
-
-/**
  * The words for a refused owner or follow-up write, the phone's words
  * (`rushOwnerProblem` in `@repo/hooks`): someone got there first (409), the
  * member picked can't work prospects (400), or someone already owns them

@@ -414,8 +414,9 @@ export class RushPipelineController {
   @ApiOkResponse({ type: RushFollowUpDto })
   async clearFollowUp(
     @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.pipelineService.clearFollowUp(id, chapterId);
+    return this.pipelineService.clearFollowUp(id, chapterId, userId);
   }
 }

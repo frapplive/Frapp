@@ -1,3 +1,4 @@
+import { localIsoDate } from "@repo/formatting";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
@@ -12,7 +13,7 @@ import {
   rushTagOverflow,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { rushFollowUpsDueCount, rushLocalDayKey } from "@repo/validation";
+import { rushFollowUpsDueCount } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_YOU } from "@/components/back-row";
@@ -78,7 +79,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * due today ("48 prospects · 3 follow-ups due today"). A row says who the
  * prospect is, who owns them and (for a role that may see results) their
  * rating, as ChapterBuilder's names list carries a name, its recruiter and a
- * score; then a follow-up mark ("Follow-up Thu", or "Needs follow-up" for a
+ * score; then a follow-up mark ("Follow-up Thursday", or "Needs follow-up" for a
  * stale prospect, never on a closed one) and the first two tags. A row's
  * long press offers Log contact to a role that works prospects.
  *
@@ -100,7 +101,7 @@ export function RushListScreen() {
   const [adding, setAdding] = useState(false);
   const [logging, setLogging] = useState<string | null>(null);
   const canWork = entry.access.add;
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
 
   const data = pipeline.data;
   const tabs = useMemo(

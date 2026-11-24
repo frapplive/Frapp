@@ -123,7 +123,7 @@ export function rushOwnerWords(
     : "No owner";
 }
 
-/** "Last contacted Tuesday · by Chris", or "No contact logged yet". */
+/** "Last contacted November 18 · by Chris", or "No contact logged yet". */
 export function rushLastContactLine(
   candidate: Pick<WorkCandidate, "last_contact_on" | "last_contact_by_name">,
   today: string,
@@ -185,7 +185,23 @@ export function rushFollowUpTarget(
   return { id, words: `For ${name ?? "a former member"}` };
 }
 
-/** One line of the contact history: "Texted · Tuesday · by Chris". */
+/**
+ * Members for an owner or follow-up picker: named ones only, by name, the
+ * viewer first, so assigning yourself is the first row. A blank name would
+ * draw an empty row.
+ */
+export function rushMemberOptions<
+  M extends { user_id: string; display_name: string },
+>(roster: readonly M[] | undefined, viewerId: string | null): M[] {
+  const named = (roster ?? []).filter((m) => m.display_name.trim() !== "");
+  const sorted = [...named].sort((a, b) =>
+    a.display_name.localeCompare(b.display_name),
+  );
+  const me = sorted.find((m) => m.user_id === viewerId);
+  return me ? [me, ...sorted.filter((m) => m !== me)] : sorted;
+}
+
+/** One line of the contact history: "Texted · November 18 · by Chris". */
 export function rushContactLine(contact: RushContact, today: string): string {
   return [
     RUSH_CONTACT_KIND_PAST[contact.kind],

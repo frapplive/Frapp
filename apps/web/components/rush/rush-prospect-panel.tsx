@@ -15,6 +15,7 @@ import {
   rushNotesMode,
   rushRowMark,
   rushLastContactLine,
+  rushMemberOptions,
 } from "@repo/hooks";
 import { formatDay } from "@repo/formatting";
 import { RUSH_CLOSED_REASON_LABELS, sortRushStages } from "@repo/validation";
@@ -42,7 +43,7 @@ import { RushRatingControl } from "./rush-rating";
 import { RushNotes } from "./rush-notes";
 import { LogContactMenu, RushContactHistory } from "./rush-contacts";
 import { RushFollowUpControl } from "./rush-follow-up";
-import { RushOwnerControl, rushMemberOptions } from "./rush-owner";
+import { RushOwnerControl } from "./rush-owner";
 
 export interface RushProspectPanelProps {
   candidate: RushPipelineCandidate | null;
@@ -55,7 +56,7 @@ export interface RushProspectPanelProps {
   viewerId: string | null;
   /** The chapter's stale days, from the pipeline read. */
   staleDays: number;
-  /** `YYYY-MM-DD` on this device (`rushLocalDayKey`). */
+  /** `YYYY-MM-DD` on this device (`localIsoDate` in `@repo/formatting`). */
   today: string;
   /** The page's word for recruitment, for the way back ("Back to Rush"). */
   term: string;
@@ -76,7 +77,7 @@ export interface RushProspectPanelProps {
  * may use it (`rushPipelineAccess`).
  *
  * Its state comes first (#5934, rulebook § 6 "a record says its state
- * first"): "Last contacted Tue · by Chris" with Log contact beside it, then
+ * first"): "Last contacted November 18 · by Chris" with Log contact beside it, then
  * Stage, Owner and Follow-up, the rows a recruiter works the prospect by; the
  * logged contacts sit above the notes.
  */
@@ -131,7 +132,7 @@ function ProspectBody({
   const canTag = access.writeNotes && writable;
   const closed = current?.category === "closed";
   const work = rushRowMark(candidate, staleDays, today, closed);
-  // Nobody logs a contact with themself (`rush.md` § Contacts).
+  // Nobody logs a contact with themself (`rush.md` § Contacts, owner and follow-ups).
   const self = !!viewerId && candidate.user_id === viewerId;
   const viewerName =
     members.find((member) => member.user_id === viewerId)?.display_name ?? null;
@@ -215,7 +216,7 @@ function ProspectBody({
           <FieldRow label="Follow-up">
             <RushFollowUpControl
               candidate={candidate}
-              canEdit={access.add && writable}
+              canEdit={access.add && writable && !self}
               stale={work?.tone === "stale"}
               closed={closed}
               today={today}

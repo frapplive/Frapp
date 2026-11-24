@@ -1,3 +1,4 @@
+import { localIsoDate } from "@repo/formatting";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -17,7 +18,6 @@ import {
   RUSH_CONTACT_LOOKBACK_DAYS,
   RUSH_CONTACT_NOTE_MAX,
   formatRushDay,
-  rushLocalDayKey,
   shiftRushDayKey,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -95,7 +95,7 @@ export function RushLogContactSheet({
     roster?.find((member) => member.user_id === viewerId)?.display_name ??
     undefined;
 
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
   const draftName = rushContactDraftKey(candidateId);
   const opening = useKeptSheetOpening<LogContactDraft>(draftName);
   const [note, setNote] = useState(opening?.note ?? "");

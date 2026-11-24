@@ -1,9 +1,10 @@
+import { localIsoDate } from "@repo/formatting";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rushPipelineAccess, rushNotesMode } from "@repo/hooks";
 import { dropAllKeptDrafts } from "@repo/hooks/kept-drafts";
-import { rushLocalDayKey, shiftRushDayKey } from "@repo/validation";
+import { shiftRushDayKey } from "@repo/validation";
 
 const {
   notesEnabled,
@@ -99,7 +100,7 @@ const TAGS = [
   { id: "t-2", chapter_id: "c", label: "Athlete", created_at: "" },
 ];
 
-const TODAY = rushLocalDayKey();
+const TODAY = localIsoDate(new Date());
 
 const PROSPECT = {
   id: "a",

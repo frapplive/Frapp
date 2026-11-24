@@ -18,13 +18,13 @@ import {
   type RushPipelineCandidate,
   rushAppliedTags,
   rushNotesMode,
+  rushMemberOptions,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
-import { formatDayHeading } from "@repo/formatting";
+import { formatDayHeading, localIsoDate } from "@repo/formatting";
 import {
   RUSH_CLOSED_REASON_LABELS,
   RUSH_MANUAL_CLOSED_REASONS,
-  rushLocalDayKey,
   sortRushStages,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -210,7 +210,7 @@ export function RushProspectScreen() {
   const canTag = access.writeNotes && data.tags.length > 0;
   const notesMode = rushNotesMode(access, candidate.user_id, viewerId);
 
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
   // Nobody logs a contact with themself; while the viewer's id is unknown, a
   // linked prospect offers none either (as `rushNotesMode` holds notes back).
   const linkedToViewer =
@@ -218,8 +218,9 @@ export function RushProspectScreen() {
     (viewerId === null || candidate.user_id === viewerId);
   const canLog = access.add && !linkedToViewer;
   const isOpen = candidate.closed_reason == null;
-  const canFollowUp = access.add && isOpen;
-  const followUpLine = rushFollowUpLine(candidate, today);
+  // A closed prospect takes no follow-up, and nobody works their own.
+  const canFollowUp = access.add && isOpen && !linkedToViewer;
+  const followUpLine = isOpen ? rushFollowUpLine(candidate, today) : null;
   const ownsIt = viewerId !== null && candidate.owner_id === viewerId;
   const ownerWords = candidate.owner_id
     ? ownsIt
@@ -262,16 +263,12 @@ export function RushProspectScreen() {
 
   const ownerOptions: SheetOption[] = [
     { value: null, label: "No owner" },
-    ...(viewerId !== null && viewerId !== candidate.user_id
-      ? [{ value: viewerId, label: "You" }]
-      : []),
-    ...[...(roster ?? [])]
-      .filter(
-        (member) =>
-          member.user_id !== viewerId && member.user_id !== candidate.user_id,
-      )
-      .sort((a, b) => a.display_name.localeCompare(b.display_name))
-      .map((member) => ({ value: member.user_id, label: member.display_name })),
+    ...rushMemberOptions(roster, viewerId)
+      .filter((member) => member.user_id !== candidate.user_id)
+      .map((member) => ({
+        value: member.user_id,
+        label: member.user_id === viewerId ? "You" : member.display_name,
+      })),
   ];
 
   const toggleTag = (tagId: string) => {

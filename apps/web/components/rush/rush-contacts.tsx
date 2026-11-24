@@ -1,5 +1,6 @@
 "use client";
 
+import { localIsoDate } from "@repo/formatting";
 import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
@@ -20,7 +21,6 @@ import {
   RUSH_CONTACT_KIND_LABELS,
   RUSH_CONTACT_LOOKBACK_DAYS,
   RUSH_CONTACT_NOTE_MAX,
-  rushLocalDayKey,
   shiftRushDayKey,
 } from "@repo/validation";
 import { SectionLabel } from "@/components/shared/section-label";
@@ -78,7 +78,7 @@ export function LogContactMenu({
       {
         candidateId: candidate.id,
         kind,
-        contactedOn: rushLocalDayKey(),
+        contactedOn: localIsoDate(new Date()),
         byName: viewerName ?? undefined,
       },
       {
@@ -153,7 +153,7 @@ function LogContactDialog({
   const log = useLogRushContact();
   const keys = useKeptDraftKeys();
   const form = `rush-contact:${candidate.id}`;
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
   const [opening] = useState(() =>
     readKeptDraft<ContactDraft>(keys.draft(form)),
   );
@@ -272,7 +272,7 @@ function LogContactDialog({
 const CONTACTS_SHOWN = 5;
 
 /**
- * The prospect's logged contacts, newest first: "Texted · Tue · by Chris",
+ * The prospect's logged contacts, newest first: "Texted · November 18 · by Chris",
  * with its note under it for a reader who may see notes (the server leaves
  * the note out otherwise). Drawn only once there is one: the line at the top
  * of the panel already says when nobody has logged any.

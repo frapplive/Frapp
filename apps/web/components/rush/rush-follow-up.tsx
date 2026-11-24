@@ -35,15 +35,11 @@ import { IconButton } from "@/components/ui/icon-button";
 import { INPUT_CLASSES, Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toastFailure } from "@/lib/failure-toast";
-import { cn } from "@/lib/utils";
-import {
-  RushMemberName,
-  rushAssignProblem,
-  type RushMemberOption,
-} from "./rush-owner";
+import { cn, getErrorMessage } from "@/lib/utils";
+import { RushMemberName, type RushMemberOption } from "./rush-owner";
 
 /**
- * The panel's Follow-up value and its controls (#5934): "Thu, invite to house
+ * The panel's Follow-up value and its controls (#5934): "Thursday, invite to house
  * dinner", with who it's for when that isn't the viewer, the day in the
  * warning colour once it's due; with none set, "None", and "Needs follow-up"
  * once nobody has logged a contact for the chapter's stale days. `rush:add`
@@ -225,7 +221,15 @@ function FollowUpDialog({
       onClose();
     } catch (error) {
       kept.release();
-      setProblem(rushAssignProblem(error));
+      // The server's own sentence: a follow-up's 400s are several (closed,
+      // a day out of range, a member who can't work prospects), unlike the
+      // owner route's one.
+      setProblem(
+        getErrorMessage(
+          error,
+          "Couldn't save the follow-up. Retry in a moment.",
+        ),
+      );
     }
   }
 

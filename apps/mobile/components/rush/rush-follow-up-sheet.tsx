@@ -1,3 +1,4 @@
+import { localIsoDate } from "@repo/formatting";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -15,7 +16,6 @@ import {
   RUSH_FOLLOW_UP_AHEAD_DAYS,
   RUSH_FOLLOW_UP_NOTE_MAX,
   formatRushDay,
-  rushLocalDayKey,
   shiftRushDayKey,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -100,7 +100,7 @@ export function RushFollowUpSheet({
   const save = useSetRushFollowUp();
   const clear = useClearRushFollowUp();
 
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
   const draftName = rushFollowUpDraftKey(candidate.id);
   const opening = useKeptSheetOpening<FollowUpDraft>(draftName);
   const [day, setDay] = useState(() =>

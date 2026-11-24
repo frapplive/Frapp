@@ -210,7 +210,7 @@ export const RUSH_CONTACT_KIND_LABELS: Record<RushContactKind, string> = {
   event: "At an event",
 };
 
-/** Each kind as a history line reads: "Texted · Tuesday · by Chris". */
+/** Each kind as a history line reads: "Texted · November 18 · by Chris". */
 export const RUSH_CONTACT_KIND_PAST: Record<RushContactKind, string> = {
   text: "Texted",
   call: "Called",
@@ -236,14 +236,6 @@ export const RUSH_FOLLOW_UP_AHEAD_DAYS = 180;
 export const RUSH_STALE_DAYS_DEFAULT = 7;
 export const RUSH_STALE_DAYS_MIN = 1;
 export const RUSH_STALE_DAYS_MAX = 60;
-
-/** `YYYY-MM-DD` of `date` on this device's own calendar. */
-export function rushLocalDayKey(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 /** A `YYYY-MM-DD` day moved by whole days. */
 export function shiftRushDayKey(day: string, days: number): string {
@@ -357,8 +349,10 @@ const MONTHS = [
 /**
  * A recruitment day as the screens say it, relative to `today`, written out
  * as the rulebook's § Words and dates asks (no "Thu", no "Nov 3"): "Today",
- * "Yesterday", "Tomorrow", the weekday within the week either side
- * ("Thursday"), else "November 3", with the year only when it differs.
+ * "Yesterday", "Tomorrow", the weekday within the coming week ("Thursday"),
+ * else "November 3", with the year only when it differs. A past day is never
+ * a weekday, so an overdue follow-up can't read like next week's, as
+ * `@repo/formatting`'s `formatDayHeading` does.
  */
 export function formatRushDay(day: string, today: string): string {
   const diff = rushDaysBetween(today, day);
@@ -367,7 +361,8 @@ export function formatRushDay(day: string, today: string): string {
   if (diff === 1) return "Tomorrow";
   const [y, m, d] = day.split("-").map(Number);
   const at = new Date(Date.UTC(y!, m! - 1, d!));
-  if (diff > -7 && diff < 7) return WEEKDAYS[at.getUTCDay()]!;
+  // A weekday only ahead: a past one would read the same as next week's.
+  if (diff > 1 && diff < 7) return WEEKDAYS[at.getUTCDay()]!;
   const monthDay = `${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
   return day.slice(0, 4) === today.slice(0, 4) ? monthDay : `${monthDay}, ${y}`;
 }

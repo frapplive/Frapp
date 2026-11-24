@@ -36,6 +36,7 @@ import {
   RUSH_STALE_DAYS_DEFAULT,
   isBetaOffModule,
   isModuleEnabled,
+  rushDaysBetween,
   rushStaleOn,
 } from '@repo/validation';
 import { RbacService } from '../services/rbac.service';
@@ -170,6 +171,22 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export const RUSH_NOTIFICATION_CATEGORY = 'rush';
 
 /**
+ * The stale push's body, with the real gap: a prospect who went stale weeks
+ * before anyone owned them says weeks, not the chapter's stale days.
+ */
+function staleBody(
+  row: { last_contact_on: string | null; created_at: string },
+  todayKey: string,
+): string {
+  const since = row.last_contact_on ?? row.created_at.slice(0, 10);
+  const days = rushDaysBetween(since, todayKey);
+  const span = `${days} ${days === 1 ? 'day' : 'days'}`;
+  return row.last_contact_on === null
+    ? `Nobody has logged a contact in the ${span} since they were added.`
+    : `No contact logged in ${span}.`;
+}
+
+/**
  * Today's date key in `timeZone` (null: the member's fallback zone) when its
  * clock reads inside the daily reminder window, else null: the reminder waits
  * for a later tick. A zone this runtime cannot resolve reads as the fallback.
@@ -299,8 +316,23 @@ export class ScheduledJobsService {
   @ReportedCron(CronExpression.EVERY_HOUR)
   async handleRushFollowUpSweep(): Promise<void> {
     const now = new Date();
-    await this.sweepRushFollowUps(now);
-    await this.sweepRushStale(now);
+    // Each runs whatever the other does: a failed read in one must not cost
+    // the other its hour, which can be one of only three in a morning.
+    for (const [site, sweep] of [
+      ['rush-follow-up-sweep', () => this.sweepRushFollowUps(now)],
+      ['rush-stale-sweep', () => this.sweepRushStale(now)],
+    ] as const) {
+      try {
+        await sweep();
+      } catch (error) {
+        reportCaughtFailure(this.logger, {
+          level: 'error',
+          site,
+          message: `${site} failed`,
+          error,
+        });
+      }
+    }
   }
 
   /**
@@ -980,8 +1012,8 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Recruitment follow-ups (#5934, `spec/behavior/rush.md` § Contacts and
-   * follow-ups): the member a follow-up is for gets a push and an inbox item
+   * Recruitment follow-ups (#5934, `spec/behavior/rush.md` § Contacts, owner
+   * and follow-ups): the member a follow-up is for gets a push and an inbox item
    * on the morning it comes due, in their own zone, as a task's due reminder
    * goes out. One push per follow-up day; a follow-up moved to another day
    * gets that day's.
@@ -1024,7 +1056,10 @@ export class ScheduledJobsService {
             this.rushWorker(row.chapter_id, row.follow_up_user_id),
           resolveFailureLevel: 'warning',
           title: `Follow up with ${row.display_name} today`,
-          body: row.follow_up_note ?? 'Your follow-up is due today.',
+          // Never what to do: that is the chapter's words about the prospect,
+          // and a push shows on a lock screen (`rush.md`: no push carries a
+          // note). The prospect's screen says it.
+          body: 'Your follow-up is due today.',
           category: RUSH_NOTIFICATION_CATEGORY,
           target: { screen: 'rush', candidateId: row.id },
         });
@@ -1082,10 +1117,7 @@ export class ScheduledJobsService {
           recipients: () => this.rushWorker(row.chapter_id, row.owner_id),
           resolveFailureLevel: 'warning',
           title: `${row.display_name} needs a follow-up`,
-          body:
-            row.last_contact_on === null
-              ? `Nobody has logged a contact in the ${staleDays} ${staleDays === 1 ? 'day' : 'days'} since they were added.`
-              : `No contact logged in ${staleDays} ${staleDays === 1 ? 'day' : 'days'}.`,
+          body: staleBody(row, todayKey),
           category: RUSH_NOTIFICATION_CATEGORY,
           target: { screen: 'rush', candidateId: row.id },
         });
@@ -1135,7 +1167,10 @@ export class ScheduledJobsService {
   }
 
   /** `[userId]` while they can still work prospects in the chapter, else `[]`. */
-  private async rushWorker(chapterId: string, userId: string): Promise<string[]> {
+  private async rushWorker(
+    chapterId: string,
+    userId: string,
+  ): Promise<string[]> {
     const can = await this.rbac.memberHasAnyPermission(chapterId, userId, [
       SystemPermissions.RUSH_ADD,
     ]);

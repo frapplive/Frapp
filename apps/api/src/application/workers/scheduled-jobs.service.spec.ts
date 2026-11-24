@@ -1945,7 +1945,9 @@ describe('ScheduledJobsService', () => {
         'chap-1',
         expect.objectContaining({
           title: 'Follow up with Alex Kim today',
-          body: 'Invite to house dinner',
+          // Never what to do: no push carries the chapter's words about a
+          // prospect.
+          body: 'Your follow-up is due today.',
           category: 'rush',
           data: { target: { screen: 'rush', candidateId: 'cand-1' } },
         }),
@@ -2054,6 +2056,76 @@ describe('ScheduledJobsService', () => {
           body: 'Nobody has logged a contact in the 3 days since they were added.',
         }),
       );
+    });
+
+    it('says the real gap, not the stale days, for a prospect stale long ago', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([
+        { ...OWNED, last_contact_on: null, created_at: '2026-07-06T12:00:00Z' },
+      ]);
+      await service.sweepRushStale(MORNING);
+      expect(notifyUser).toHaveBeenCalledWith(
+        'user-2',
+        'chap-1',
+        expect.objectContaining({
+          body: 'Nobody has logged a contact in the 30 days since they were added.',
+        }),
+      );
+    });
+
+    it('tells a stale owner only in their morning, where recruitment is on, while they can work prospects', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([
+        OWNED,
+        { ...OWNED, id: 'cand-off', chapter_id: 'chap-off' },
+      ]);
+      findRushChapters.mockResolvedValue({
+        enabledModules: new Map<string, Record<string, boolean> | null>([
+          ['chap-1', null],
+          ['chap-off', { rush: false }],
+        ]),
+        staleDays: new Map(),
+      });
+      timeZonesFor.mockResolvedValue(
+        new Map([['user-2', 'America/Los_Angeles']]),
+      );
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).not.toHaveBeenCalled();
+
+      timeZonesFor.mockResolvedValue(new Map([['user-2', 'UTC']]));
+      memberHasAnyPermission.mockResolvedValue(false);
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).toHaveBeenCalledTimes(1);
+      expect(claimDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-2',
+        'STALE',
+        '2026-08-05',
+      );
+      expect(releaseDispatch).toHaveBeenCalled();
+      expect(notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('runs the stale sweep even when the follow-up sweep fails', async () => {
+      jest.useFakeTimers({ now: MORNING });
+      try {
+        findRushFollowUpsDueBetween.mockResolvedValue([FOLLOW_UP]);
+        timeZonesFor.mockRejectedValueOnce(new Error('down'));
+        findOwnedOpenRushCandidates.mockResolvedValue([OWNED]);
+        const error = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation();
+
+        await service.handleRushFollowUpSweep();
+
+        expect(notifyUser).toHaveBeenCalledWith(
+          'user-2',
+          'chap-1',
+          expect.objectContaining({ title: 'Sam Lee needs a follow-up' }),
+        );
+        error.mockRestore();
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('sends nothing when the chapters cannot be read', async () => {

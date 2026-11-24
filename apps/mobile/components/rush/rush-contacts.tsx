@@ -1,7 +1,7 @@
+import { localIsoDate } from "@repo/formatting";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRushContacts, type RushContact } from "@repo/hooks";
-import { rushLocalDayKey } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { InlineNote } from "@/components/inline-note";
 import { ListSection, SectionHeader } from "@/components/list-section";
@@ -13,7 +13,7 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 export const RUSH_CONTACTS_SHOWN = 5;
 
 /**
- * A prospect's logged contacts (#5934), newest first: "Texted · Tue · by
+ * A prospect's logged contacts (#5934), newest first: "Texted · November 18 · by
  * Chris", and the note under it for a reader who may see it (the API leaves
  * it out otherwise). The newest {@link RUSH_CONTACTS_SHOWN} show, then Show
  * all, so a prospect worked all week doesn't push the notes off the screen;
@@ -70,7 +70,7 @@ export function RushContacts({
   }
   const list = contacts.data ?? [];
   if (list.length === 0) return null;
-  const today = rushLocalDayKey();
+  const today = localIsoDate(new Date());
   const shown = all ? list : list.slice(0, RUSH_CONTACTS_SHOWN);
   const more = list.length - shown.length;
   return (

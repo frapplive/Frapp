@@ -250,7 +250,10 @@ export class RushPipelineService {
           last_contact_by: candidate.last_contact_by,
           last_contact_by_name: nameOf(candidate.last_contact_by),
           follow_up_on: candidate.follow_up_on,
-          follow_up_note: candidate.follow_up_note,
+          // What to do about a prospect is the chapter's words about them,
+          // so a member linked to the prospect doesn't read it, as with notes.
+          follow_up_note:
+            candidate.user_id === viewer.id ? null : candidate.follow_up_note,
           follow_up_user_id: candidate.follow_up_user_id,
           follow_up_user_name: nameOf(candidate.follow_up_user_id),
         };
@@ -268,7 +271,7 @@ export class RushPipelineService {
     stageKey: string,
     closedReason: string | null | undefined,
   ): Promise<RushCandidate> {
-    const candidate = await this.requireCandidate(candidateId, chapterId);
+    const candidate = await this.requireRow(candidateId, chapterId);
     const stages = await this.listStages(chapterId);
     const target = stages.find((stage) => stage.key === stageKey);
     if (!target) throw new BadRequestException('Unknown stage');
@@ -287,12 +290,19 @@ export class RushPipelineService {
       // `null` is "no reason", as the response types it.
       throw new BadRequestException('Only a Closed stage takes a reason');
     }
-    return this.pipelineRepo.setCandidateStage(
+    const moved = await this.pipelineRepo.setCandidateStage(
       candidateId,
       chapterId,
       target.key,
       reason,
     );
+    // A closed prospect takes no follow-up (`rush.md` § Contacts, owner and
+    // follow-ups), so closing drops it rather than keeping it to come back,
+    // due and pushed, if they are reopened.
+    if (target.category === 'closed' && candidate.follow_up_on !== null) {
+      await this.pipelineRepo.setFollowUp(candidateId, chapterId, null);
+    }
+    return moved;
   }
 
   async createTag(chapterId: string, label: string): Promise<RushTag> {
@@ -527,7 +537,7 @@ export class RushPipelineService {
   }
 
   /**
-   * Logs a contact (`spec/behavior/rush.md` § Contacts and follow-ups). It
+   * Logs a contact (`spec/behavior/rush.md` § Contacts, owner and follow-ups). It
    * becomes the candidate's last contact unless a later one is logged,
    * clears their follow-up, and on the first contact moves a candidate still
    * in a New stage to the first visible Contacted stage.
@@ -551,7 +561,9 @@ export class RushPipelineService {
     if (
       !isDayKey(day) ||
       day > shiftRushDayKey(today, 1) ||
-      day < shiftRushDayKey(today, -RUSH_CONTACT_LOOKBACK_DAYS)
+      // A day of slack each way: the member's calendar can sit a day either
+      // side of the server's UTC date, and the clients count from their own.
+      day < shiftRushDayKey(today, -(RUSH_CONTACT_LOOKBACK_DAYS + 1))
     ) {
       throw new BadRequestException(
         `contacted_on is a real day, not in the future and within ${RUSH_CONTACT_LOOKBACK_DAYS} days`,
@@ -613,8 +625,15 @@ export class RushPipelineService {
     actorId: string,
     ownerId: string | null,
     canManage: boolean,
-  ): Promise<{ id: string; owner_id: string | null; owner_name: string | null }> {
+  ): Promise<{
+    id: string;
+    owner_id: string | null;
+    owner_name: string | null;
+  }> {
     const candidate = await this.requireRow(candidateId, chapterId);
+    if (ownerId !== null && ownerId === candidate.user_id) {
+      throw new BadRequestException('Nobody owns themself as a prospect');
+    }
     if (ownerId !== null) await this.requireWorker(chapterId, ownerId);
 
     let saved: RushCandidateRow | null;
@@ -649,6 +668,21 @@ export class RushPipelineService {
     if (!saved) {
       throw new ConflictException('Someone else just claimed this prospect');
     }
+    // A follow-up that was the old owner's goes with the prospect to the new
+    // one, so the push reaches whoever owns them now (#5934's "a push to
+    // their owner"). One set for someone else stays theirs.
+    if (
+      saved.owner_id !== null &&
+      saved.owner_id !== candidate.owner_id &&
+      candidate.follow_up_on !== null &&
+      candidate.follow_up_user_id === candidate.owner_id
+    ) {
+      await this.pipelineRepo.setFollowUp(candidateId, chapterId, {
+        on: candidate.follow_up_on,
+        note: candidate.follow_up_note,
+        userId: saved.owner_id,
+      });
+    }
     const names = await this.userNames([saved.owner_id]);
     return {
       id: saved.id,
@@ -676,8 +710,9 @@ export class RushPipelineService {
     const day = input.due_on;
     if (
       !isDayKey(day) ||
+      // A day of slack each way, as `logContact` allows.
       day < shiftRushDayKey(today, -1) ||
-      day > shiftRushDayKey(today, RUSH_FOLLOW_UP_AHEAD_DAYS)
+      day > shiftRushDayKey(today, RUSH_FOLLOW_UP_AHEAD_DAYS + 1)
     ) {
       throw new BadRequestException(
         `due_on is a real day, from today to ${RUSH_FOLLOW_UP_AHEAD_DAYS} days ahead`,
@@ -689,12 +724,34 @@ export class RushPipelineService {
       'A follow-up',
     );
     const candidate = await this.requireRow(candidateId, chapterId);
+    this.refuseSelfFollowUp(candidate, actorId);
     if (candidate.closed_reason !== null) {
       throw new BadRequestException(
         'This prospect is closed. Move them back to an open stage first.',
       );
     }
-    const forUser = input.for_user_id ?? candidate.owner_id ?? actorId;
+    // Named: it must be someone who can work prospects. Not named: the
+    // owner while they still can, else whoever sets it, so an owner who
+    // left the chapter doesn't block every follow-up on the prospect.
+    let forUser = input.for_user_id ?? null;
+    // Re-saving a follow-up whose member has since left names them again
+    // (the phone keeps who it's for); that falls back like an unnamed one.
+    if (
+      forUser !== null &&
+      forUser === candidate.follow_up_user_id &&
+      !(await this.canWork(chapterId, forUser))
+    ) {
+      forUser = null;
+    }
+    if (forUser === null) {
+      const owner = candidate.owner_id;
+      forUser =
+        owner !== null &&
+        owner !== candidate.user_id &&
+        (await this.canWork(chapterId, owner))
+          ? owner
+          : actorId;
+    }
     if (candidate.user_id === forUser) {
       throw new BadRequestException(
         "A follow-up can't be for the prospect themself",
@@ -712,8 +769,12 @@ export class RushPipelineService {
   async clearFollowUp(
     candidateId: string,
     chapterId: string,
+    actorId: string,
   ): Promise<RushFollowUpView> {
-    await this.requireRow(candidateId, chapterId);
+    this.refuseSelfFollowUp(
+      await this.requireRow(candidateId, chapterId),
+      actorId,
+    );
     return this.followUpView(
       await this.pipelineRepo.setFollowUp(candidateId, chapterId, null),
     );
@@ -751,11 +812,30 @@ export class RushPipelineService {
     };
   }
 
-  /** A member of the chapter who can work prospects, or a 400 saying so. */
-  private async requireWorker(chapterId: string, userId: string): Promise<void> {
-    const ok = await this.rbac.memberHasAnyPermission(chapterId, userId, [
+  /** A member linked to the prospect doesn't work their own follow-up. */
+  private refuseSelfFollowUp(
+    candidate: RushCandidateRow,
+    userId: string,
+  ): void {
+    if (candidate.user_id === userId) {
+      throw new ForbiddenException(
+        "You can't set or clear a follow-up about yourself",
+      );
+    }
+  }
+
+  private canWork(chapterId: string, userId: string): Promise<boolean> {
+    return this.rbac.memberHasAnyPermission(chapterId, userId, [
       SystemPermissions.RUSH_ADD,
     ]);
+  }
+
+  /** A member of the chapter who can work prospects, or a 400 saying so. */
+  private async requireWorker(
+    chapterId: string,
+    userId: string,
+  ): Promise<void> {
+    const ok = await this.canWork(chapterId, userId);
     if (!ok) {
       throw new BadRequestException(
         "That member can't work prospects. Their role needs “Add and work prospects”.",
@@ -846,9 +926,7 @@ export class RushPipelineService {
   private async userNames(
     ids: readonly (string | null)[],
   ): Promise<Map<string, string>> {
-    const unique = [
-      ...new Set(ids.filter((id): id is string => id !== null)),
-    ];
+    const unique = [...new Set(ids.filter((id): id is string => id !== null))];
     if (unique.length === 0) return new Map();
     const users = await this.userRepo.findByIds(unique);
     return new Map(users.map((user) => [user.id, user.display_name]));

@@ -31,7 +31,7 @@ export interface RushBoardProps {
   selectedId: string | null;
   /** The chapter's stale days, from the pipeline read. */
   staleDays: number;
-  /** `YYYY-MM-DD` on this device (`rushLocalDayKey`). */
+  /** `YYYY-MM-DD` on this device (`localIsoDate` in `@repo/formatting`). */
   today: string;
   onOpen: (candidate: RushPipelineCandidate) => void;
   /** Move into one of `stages` (`useRushMove().request`). */
@@ -51,7 +51,7 @@ export interface RushBoardProps {
  * Bid status is not a stage, so nothing here changes it.
  *
  * A card says who owns the prospect and their follow-up (#5934): "Owned by
- * Chris Lee · Follow-up Thu", and, once it is due or nobody has logged a
+ * Chris Lee · Follow-up Thursday", and, once it is due or nobody has logged a
  * contact for the chapter's stale days, a warning badge. Closed prospects
  * show neither.
  */

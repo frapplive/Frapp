@@ -563,7 +563,7 @@ describe('RushPipelineService', () => {
     });
 
     it('404s for an unknown candidate', async () => {
-      candidateRepo.findById.mockResolvedValue(null);
+      pipelineRepo.findCandidate.mockResolvedValue(null);
       await expect(
         service.moveStage('cand-x', CHAPTER, 'contacted', undefined),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -604,8 +604,8 @@ describe('RushPipelineService', () => {
     });
 
     it('clears the reason on a move out of Closed', async () => {
-      candidateRepo.findById.mockResolvedValue({
-        ...baseCandidate,
+      pipelineRepo.findCandidate.mockResolvedValue({
+        ...baseRow,
         stage: 'closed',
         closed_reason: 'no_response',
       });
@@ -1027,7 +1027,10 @@ describe('RushPipelineService', () => {
       it.each([
         ['an unknown kind', { kind: 'pigeon', contacted_on: '2026-11-24' }],
         ['a future day', { kind: 'text', contacted_on: '2026-11-26' }],
-        ['a day that does not exist', { kind: 'text', contacted_on: '2026-02-30' }],
+        [
+          'a day that does not exist',
+          { kind: 'text', contacted_on: '2026-02-30' },
+        ],
         ['a day long past', { kind: 'text', contacted_on: '2025-01-01' }],
         [
           'a long note',
@@ -1247,13 +1250,176 @@ describe('RushPipelineService', () => {
       });
 
       it('clears it', async () => {
-        const result = await service.clearFollowUp('cand-1', CHAPTER);
+        const result = await service.clearFollowUp('cand-1', CHAPTER, 'user-1');
         expect(result.follow_up_on).toBeNull();
         expect(pipelineRepo.setFollowUp).toHaveBeenCalledWith(
           'cand-1',
           CHAPTER,
           null,
         );
+      });
+    });
+
+    describe('review fixes', () => {
+      it('refuses making a prospect their own owner', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          user_id: 'user-1',
+        });
+        await expect(
+          service.setOwner('cand-1', CHAPTER, 'user-1', 'user-1', true),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(pipelineRepo.setOwner).not.toHaveBeenCalled();
+      });
+
+      it("moves the old owner's follow-up to the new owner, and leaves one for someone else", async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'author-1',
+          follow_up_on: '2026-11-26',
+          follow_up_note: 'Dinner',
+          follow_up_user_id: 'author-1',
+        });
+        await service.setOwner('cand-1', CHAPTER, 'chair', 'user-1', true);
+        expect(pipelineRepo.setFollowUp).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          { on: '2026-11-26', note: 'Dinner', userId: 'user-1' },
+        );
+
+        pipelineRepo.setFollowUp.mockClear();
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'author-1',
+          follow_up_on: '2026-11-26',
+          follow_up_user_id: 'someone-else',
+        });
+        await service.setOwner('cand-1', CHAPTER, 'chair', 'user-1', true);
+        expect(pipelineRepo.setFollowUp).not.toHaveBeenCalled();
+      });
+
+      it('refuses a member setting or clearing a follow-up about themself', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          user_id: 'user-1',
+        });
+        await expect(
+          service.setFollowUp(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { due_on: '2026-11-26', for_user_id: 'author-1' },
+            NOW,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(
+          service.clearFollowUp('cand-1', CHAPTER, 'user-1'),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(pipelineRepo.setFollowUp).not.toHaveBeenCalled();
+      });
+
+      it('refuses a follow-up for the prospect themself', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          user_id: 'linked',
+        });
+        await expect(
+          service.setFollowUp(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { due_on: '2026-11-26', for_user_id: 'linked' },
+            NOW,
+          ),
+        ).rejects.toThrow("A follow-up can't be for the prospect themself");
+      });
+
+      it('falls back to whoever sets it when the owner can no longer work prospects', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'gone',
+        });
+        rbac.memberHasAnyPermission.mockImplementation(
+          async (_chapter: string, userId: string) => userId !== 'gone',
+        );
+        const result = await service.setFollowUp(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { due_on: '2026-11-26' },
+          NOW,
+        );
+        expect(result.follow_up_user_id).toBe('user-1');
+      });
+
+      it('moves a re-saved follow-up off a member who left', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          owner_id: 'author-1',
+          follow_up_on: '2026-11-25',
+          follow_up_user_id: 'gone',
+        });
+        rbac.memberHasAnyPermission.mockImplementation(
+          async (_chapter: string, userId: string) => userId !== 'gone',
+        );
+        const result = await service.setFollowUp(
+          'cand-1',
+          CHAPTER,
+          'user-1',
+          { due_on: '2026-11-26', for_user_id: 'gone' },
+          NOW,
+        );
+        expect(result.follow_up_user_id).toBe('author-1');
+      });
+
+      it('takes the edge days a member a calendar day off UTC can pick', async () => {
+        // 9 PM Eastern on Nov 23 is Nov 24 UTC; the device offers Nov 23 − 120.
+        await expect(
+          service.logContact(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { kind: 'text', contacted_on: '2026-07-26' },
+            NOW,
+          ),
+        ).resolves.toBeDefined();
+        // Morning in UTC+10 is a day ahead; the device offers its today + 180.
+        await expect(
+          service.setFollowUp(
+            'cand-1',
+            CHAPTER,
+            'user-1',
+            { due_on: '2027-05-24' },
+            NOW,
+          ),
+        ).resolves.toBeDefined();
+      });
+
+      it('drops the follow-up when a prospect is closed', async () => {
+        pipelineRepo.findCandidate.mockResolvedValue({
+          ...baseRow,
+          follow_up_on: '2026-11-26',
+          follow_up_user_id: 'user-1',
+        });
+        await service.moveStage('cand-1', CHAPTER, 'closed', 'no_response');
+        expect(pipelineRepo.setFollowUp).toHaveBeenCalledWith(
+          'cand-1',
+          CHAPTER,
+          null,
+        );
+      });
+
+      it('hides what to do on a prospect linked to the viewer', async () => {
+        pipelineRepo.listCandidates.mockResolvedValue([
+          { ...baseRow, user_id: VIEWER, follow_up_note: 'Ask about grades' },
+          { ...baseRow, id: 'cand-2', follow_up_note: 'Dinner' },
+        ]);
+        const pipeline = await service.getPipeline(CHAPTER, {
+          id: VIEWER,
+          canViewResults: Promise.resolve(false),
+        });
+        expect(pipeline.candidates[0].follow_up_note).toBeNull();
+        expect(pipeline.candidates[1].follow_up_note).toBe('Dinner');
       });
     });
   });

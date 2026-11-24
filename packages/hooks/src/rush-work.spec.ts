@@ -94,7 +94,7 @@ describe("the prospect screen's lines", () => {
         { last_contact_on: "2026-11-20", last_contact_by_name: "Chris" },
         TODAY,
       ),
-    ).toBe("Last contacted Friday · by Chris");
+    ).toBe("Last contacted November 20 · by Chris");
     expect(rushLastContactLine(OPEN, TODAY)).toBe("No contact logged yet");
   });
 
@@ -172,7 +172,7 @@ describe("the contact history", () => {
       created_at: "2026-11-24T18:00:00.000Z",
     };
     expect(rushContactLine(contact, "2026-11-28")).toBe(
-      "Texted · Tuesday · by Chris",
+      "Texted · November 24 · by Chris",
     );
   });
 });

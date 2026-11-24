@@ -574,7 +574,7 @@ describe("contacts (#5934)", () => {
       last_contact_by_name: "Chris Diaz",
     };
     expect(screenText(render())).toContain(
-      "Last contacted Friday · by Chris Diaz",
+      "Last contacted November 20 · by Chris Diaz",
     );
   });
 
@@ -664,7 +664,7 @@ describe("contacts (#5934)", () => {
     expect(text).toContain("Contacts");
     expect(text).toContain("Texted · Today · by Chris Diaz");
     expect(text).toContain("Said yes to dinner");
-    expect(text).toContain("Saw at an event · Wednesday · by Amy Bell");
+    expect(text).toContain("Saw at an event · November 18 · by Amy Bell");
   });
 
   it("doesn't read a history for a prospect nobody has reached", () => {

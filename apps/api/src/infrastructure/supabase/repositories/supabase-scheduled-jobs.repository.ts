@@ -16,6 +16,7 @@ import {
 } from '#domain/entities';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import { SupabaseQueryError } from '../supabase-query-error';
+import { chunkIds } from '#domain/utils/chunk-ids';
 import { eventRequiresAnyone } from '@repo/validation';
 import type { Task, TaskSeries } from '#domain/entities';
 import type {
@@ -287,26 +288,34 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
     if (ids.length === 0) {
       return { enabledModules: new Map(), staleDays: new Map() };
     }
-    const [chapters, settings] = await Promise.all([
-      this.supabase.from('chapters').select('id, enabled_modules').in('id', ids),
-      this.supabase
-        .from('rush_settings')
-        .select('chapter_id, stale_days')
-        .in('chapter_id', ids),
-    ]);
-    if (chapters.error) throw new SupabaseQueryError(chapters.error);
-    if (settings.error) throw new SupabaseQueryError(settings.error);
-    return {
-      enabledModules: new Map(
-        (chapters.data ?? []).map((row) => [
+    // Chunked: a sweep's chapters come from a cross-chapter read, so the
+    // list grows with the product, and one long `in (...)` is a 414.
+    const enabledModules = new Map<string, Record<string, boolean> | null>();
+    const staleDays = new Map<string, number>();
+    for (const chunk of chunkIds(ids)) {
+      const [chapters, settings] = await Promise.all([
+        this.supabase
+          .from('chapters')
+          .select('id, enabled_modules')
+          .in('id', chunk),
+        this.supabase
+          .from('rush_settings')
+          .select('chapter_id, stale_days')
+          .in('chapter_id', chunk),
+      ]);
+      if (chapters.error) throw new SupabaseQueryError(chapters.error);
+      if (settings.error) throw new SupabaseQueryError(settings.error);
+      for (const row of chapters.data ?? []) {
+        enabledModules.set(
           row.id,
           (row.enabled_modules as Record<string, boolean> | null) ?? null,
-        ]),
-      ),
-      staleDays: new Map(
-        (settings.data ?? []).map((row) => [row.chapter_id, row.stale_days]),
-      ),
-    };
+        );
+      }
+      for (const row of settings.data ?? []) {
+        staleDays.set(row.chapter_id, row.stale_days);
+      }
+    }
+    return { enabledModules, staleDays };
   }
 
   async findDueTaskSeries(now: Date, limit: number): Promise<TaskSeries[]> {
