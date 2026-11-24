@@ -349,13 +349,14 @@ npm run start:dev -w apps/api   # bypasses the infisical-wrapped dev:api script
 
 ### What bringup provisions, per app
 
-Two files, both gitignored, both regenerated from the same `supabase status` read each session.
+Three files, all gitignored, all regenerated from the same `supabase status` read each session.
 Nothing else is written; anything not listed here has a working default or is not needed to build.
 
 | File | Serves | Contents |
 |---|---|---|
 | `apps/api/.env.local` | `npm run start:dev -w apps/api` | The full `supabase status -o env` dump remapped to `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`, plus the three `STRIPE_*` vars (real test keys when the session has them, clearly-marked placeholders otherwise), `PORT=3001`, `NODE_ENV=development` |
 | `apps/web/.env.local` | `npm run build -w apps/web`, `npm run dev -w apps/web` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL=http://127.0.0.1:3001` |
+| `apps/mobile/.env.local` | The phone app's web build, which the capture scripts drive (`npx expo start --web --port 3002` in `apps/mobile`; [`demo-data.md` § Mobile setup](../../guides/demo-data.md#mobile-setup)) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_API_URL=http://localhost:3001`, `EXPO_PUBLIC_WEB_SECURE_STORE=1` (sandbox only: it keeps the session in `localStorage`, and must never be set for a hosted build) |
 
 `apps/landing` and `apps/mobile` get **nothing, deliberately**. Landing's only `NEXT_PUBLIC_*` var
 defaults to the production origin in `apps/landing/lib/auth-urls.ts`, and mobile has no build script

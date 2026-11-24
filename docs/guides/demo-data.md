@@ -289,16 +289,24 @@ single run self-consistent; across runs, re-run `setup-demo.sh` first.
 
 ### Mobile setup
 
-`scripts/cloud-sandbox-up.sh` writes `apps/api/.env.local` and
-`apps/web/.env.local` but not `apps/mobile/.env.local`. Write that one by hand
-(it is gitignored), taking the anon key from `apps/api/.env.local`:
+In a cloud sandbox, `scripts/cloud-sandbox-up.sh` writes `apps/mobile/.env.local`
+beside the API's and the web app's (since 2026-11-24; until then it was written
+by hand, and a session that skipped it got a sign-in screen that never signed
+in). On a laptop, write it yourself (it is gitignored), taking the anon key from
+`npm run -s supabase -- status -o env`:
 
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<SUPABASE_ANON_KEY from apps/api/.env.local>
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from supabase status>
 EXPO_PUBLIC_API_URL=http://localhost:3001
 EXPO_PUBLIC_WEB_SECURE_STORE=1
 ```
+
+In a sandbox the capture script also needs the sandbox's browser:
+`CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/demo/capture-mobile.mjs`.
+Expo inlines `EXPO_PUBLIC_*` when it bundles, so start it after the file exists
+(`npx expo start --web --port 3002 --clear` from `apps/mobile`), and give the
+first bundle a minute before the script signs in.
 
 Ask (s17) has no client flag. The app draws it only when the API says AI is
 on for the member (`AI_ENABLED` on the server, Ask on for the chapter, and a
@@ -313,7 +321,7 @@ Two API-side values matter for the check-in screens:
 
 - `EVENT_CHECK_IN_TOKEN_SECRET` in `apps/api/.env.local`. Unset, the mint route
   503s and s22 renders "Code unavailable" instead of a QR. Any non-empty string
-  works locally.
+  works locally, and the cloud sandbox's bring-up writes one.
 - The demo seed marks exactly one event (`Chapter Meeting`) with a
   `check_in_zone`, which is what makes the scanner's geofence line render. The
   other events deliberately have none, so both branches of
