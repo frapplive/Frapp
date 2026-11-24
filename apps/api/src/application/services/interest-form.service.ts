@@ -12,7 +12,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  chapterTextMark,
   INTEREST_FORM_AGREE_BOX,
   INTEREST_FORM_AGREE_LABEL,
   INTEREST_FORM_BLURB_MAX_LENGTH,
@@ -47,7 +46,7 @@ import {
   schoolWrongDomainLine,
   type ConsentRun,
 } from '@repo/validation';
-import { orgHidingGreekLettersIn } from '@repo/org-archetypes';
+import { chapterCardMarkText } from '#domain/utils/chapter-card-mark';
 import { EMAIL_PROVIDER } from '#domain/adapters/email.interface';
 import type { IEmailProvider } from '#domain/adapters/email.interface';
 import { SystemPermissions } from '#domain/constants/permissions';
@@ -501,16 +500,13 @@ export class InterestFormService {
     ]);
     const label = sourceLabel ? normalizeInterestFormLabel(sourceLabel) : '';
     const school = place.schools[0] ?? null;
-    const branding = orgHidingGreekLettersIn(chapter.name)
-      ? { ...chapter.branding, show_greek_letters: false }
-      : chapter.branding;
     return {
       slug: form.slug,
       is_open: form.is_open,
       chapter: {
         name: chapter.name,
         university: chapter.university,
-        mark_text: chapterTextMark(branding)?.text ?? null,
+        mark_text: chapterCardMarkText(chapter),
         accent_color: chapter.accent_color,
       },
       blurb: form.blurb,

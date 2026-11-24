@@ -88,6 +88,7 @@ const addedDaysAgo = (days: number) => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCandidateForm: () => ({ data: undefined }),
   useMyPermissions: () => ({
     data: { permissions: permissions.current },
     isPending: false,
@@ -434,7 +435,10 @@ describe("follow-ups on the recruitment page (#5934)", () => {
       ],
     };
     renderPage();
-    expect(screen.getByRole("tab", { name: "Follow up" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Follow up" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByText("Jake Smith")).toBeInTheDocument();
     expect(screen.getByText("Owen Park")).toBeInTheDocument();
     expect(screen.queryByText("Leo Grant")).toBeNull();
@@ -444,7 +448,10 @@ describe("follow-ups on the recruitment page (#5934)", () => {
 
   it("opens on All when the viewer has nothing to follow up", () => {
     renderPage();
-    expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("says what Follow up holds once it is empty", () => {

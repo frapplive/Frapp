@@ -58,13 +58,12 @@ import {
 } from '../../infrastructure/email/invite-link.util';
 import {
   assertHttpsJoinOrigin,
-  chapterTextMark,
   dedupeEmails,
   EVERYONE_ROLE_NAME,
   MEMBER_JOINED_AUDIENCE,
   needsBaseRole,
 } from '@repo/validation';
-import { orgHidingGreekLettersIn } from '@repo/org-archetypes';
+import { chapterCardMarkText } from '#domain/utils/chapter-card-mark';
 
 /**
  * What an invite is for, read without using it up (#3352). Only what the
@@ -74,8 +73,8 @@ export interface InvitePreview {
   chapter_name: string;
   university: string;
   /**
-   * The chapter's text mark, resolved by `chapterTextMark` after the org
-   * override in `preview`. The rule clients read is the `mark_text`
+   * The chapter's text mark, resolved by `chapterCardMarkText`, which
+   * applies the org override first. The rule clients read is the `mark_text`
    * description on `InvitePreviewResponseDto` (invite.dto.ts).
    */
   mark_text: string | null;
@@ -1040,19 +1039,10 @@ export class InviteService {
       this.resolveRedeemRole(invite),
     ]);
     if (!chapter) return null;
-    // An organization that never displays its letters (FIJI) keeps them off
-    // the card even when the chapter's stored switch was never turned off, as
-    // for one created before its org profile knew to (#3421). The match reads
-    // the organization's name inside the chapter's ("Phi Gamma Delta Tau
-    // Nu"), the override web's nav crest and mobile's Chat home also apply.
-    // Done here rather than on the card so every client gets it.
-    const branding = orgHidingGreekLettersIn(chapter.name)
-      ? { ...chapter.branding, show_greek_letters: false }
-      : chapter.branding;
     const preview: InvitePreview = {
       chapter_name: chapter.name,
       university: chapter.university,
-      mark_text: chapterTextMark(branding)?.text ?? null,
+      mark_text: chapterCardMarkText(chapter),
       accent_color: chapter.accent_color,
       invited_by: inviter?.display_name ?? null,
       role: shownInviteRole(role),

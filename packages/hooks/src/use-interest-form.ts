@@ -238,10 +238,10 @@ export function useInterestFormWithdrawalPreview(token: string | null) {
   const client = useFrappClient();
   return useQuery({
     queryKey: ["interest-form", "withdrawal", token],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await client.POST(
         "/v1/interest-forms/withdrawal/preview",
-        { body: { token: token ?? "" } },
+        { body: { token: token ?? "" }, signal },
       );
       if (error) throw error;
       return data;
