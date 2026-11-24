@@ -907,9 +907,19 @@ It was s03's first beat, shown only when the photo or the name was missing, unti
 
 | State | Title | Copy |
 |---|---|---|
-| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`. |
+| Screen | `How the chapter sees you` | `Your photo and name go on every message you send.` The profile photo (tap to choose on the phone; `Add photo` / `Change photo` beside it on web, as on Profile), then the field labelled `Your name`, placeholder `First and last name`. One gold button: `Continue` when About you or (on the phone) the notifications screen follows, else `Go to chat`. |
 | No name | as above | Under the field: `Add your name so the chapter knows who's talking.` |
 | Save failed | as above | Under the field: `Couldn't save your name. Check your connection and try again.` The member stays with what they typed. |
+
+### About you (after a join)
+
+The optional screen after the name on web (`/welcome`) and the phone (s03), shown only when phone, major, graduation year or birthday is empty (#5284). Copy in `ONBOARDING_ABOUT_COPY` (`packages/validation/src/onboarding-about.ts`); the field labels, placeholders and hints are the profile form's (`PROFILE_FIELD_COPY`, `BIRTHDAY_COPY`), so the step and Profile read the same.
+
+| State | Title | Copy |
+|---|---|---|
+| Screen | `About you` | `Officers use this to reach you, and it fills in your profile in the directory.` Then Phone (hint `Members of your chapter see it on your profile.`), Major and Grad year, Birthday. One gold button: `Continue` on the phone when the notifications screen follows, else `Go to chat`; under it the quiet `Skip for now`. |
+| Refused value | as above | The profile form's refusal on the field (a phone, a year, half a birthday): on the phone once the member leaves the field or presses the button, on web when they press it (as `/profile`). Nothing is sent. |
+| Save failed | as above | `Couldn't save that. Check your connection and try again.` The member stays with what they typed. |
 
 ### Display step (onboarding)
 
@@ -1127,7 +1137,7 @@ Who gets it, and what it changes, is owned by [`../mobile/screens.md`](../mobile
 | State | Title | Description | Home |
 |---|---|---|---|
 | The sheet | `<name>'s roles and groups` | Section headings as web's list (each tier's name, `Other roles`, `Groups`); search field `Search roles and groups`; under it one fixed-height status line, blank until `Saving…` and `Saved` (it said `Tap a role to add or remove it.` until 2026-11-07) | mobile `components/directory/member-roles-sheet.tsx` |
-| A row the viewer can't tick | — | Under the name, why: `Changes with Transfer presidency` (President), `Ranks at or above yours`, `They rank above you` (`They rank at or above you` until #5843), `Would take away a base role ranked at or above yours`, `Gives “<permission>”, which your role doesn't have` (or `Gives <n> permissions your role doesn't have`; #5730), `Checking what your role can give`, `Your role can't give roles`, `Your role can't change groups`; the row can't be tapped | `@repo/hooks` `member-assignments.ts` (`ASSIGN_CAPTIONS`), shared with web |
+| A row the viewer can't tick | — | Under the name, why: `Changes with Transfer presidency` (President), `Ranks at or above yours`, `Your role isn't in any tier` (a viewer outside the tiers, who reaches no other member; `They rank above you` until #5903, `They rank at or above you` until #5843), `Would take away a base role ranked at or above yours`, `Gives “<permission>”, which your role doesn't have` (or `Gives <n> permissions your role doesn't have`; #5730), `Checking what your role can give`, `Your role can't give roles`, `Your role can't change groups`; the row can't be tapped | `@repo/hooks` `member-assignments.ts` (`ASSIGN_CAPTIONS`), shared with web |
 | Empty | — | `This chapter has no roles or groups yet.`, or `Nothing matches that search.` while searching | mobile `components/directory/member-roles-sheet.tsx` |
 | Removing the last role carrying `members:view` | `Take away <name>'s access?` | `Without this role, <name> can't open chat, the member list or events.` Buttons `Cancel` and `Remove <role>` | `@repo/hooks` (`ASSIGN_COPY`), shared with web |
 | Group save failed | `Couldn't add to that group` or `Couldn't take out of that group` | The API's reason (a channel names the group, the group is full, the member has left) | same |

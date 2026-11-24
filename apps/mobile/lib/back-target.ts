@@ -4,6 +4,7 @@ import {
   NavigationRouteContext,
 } from "expo-router/react-navigation";
 import type { Href } from "expo-router";
+import { SECTION_NAMES } from "@repo/validation";
 import { goBackTo } from "@/lib/href";
 
 /**
@@ -25,16 +26,16 @@ import { goBackTo } from "@/lib/href";
  */
 export const SCREEN_TITLES = {
   index: "Chat",
-  activity: "Activity",
+  activity: SECTION_NAMES.activity,
   // Tab 3 since #5310, where Calendar was; a pushed screen behind Chat
   // home's door until then.
-  messages: "Messages",
+  messages: SECTION_NAMES.messages,
   // Tab 4 since #3839: the member's profile and the hub that was More.
   you: "You",
   // A pushed screen since #5310, opened from Activity's Calendar row. The
   // route stays `events` so links and notification targets keep working; it
   // holds tasks too, so it is named for the calendar (#4610).
-  events: "Calendar",
+  events: SECTION_NAMES.calendar,
   // One day's hour grid, pushed from the month's day heading (#5310).
   "calendar-day": "Day",
   // A pushed screen since #4610, opened from Activity, Calendar and Up next.
@@ -47,13 +48,13 @@ export const SCREEN_TITLES = {
   "event-details": "Event",
   notifications: "Notifications",
   // Pushed from Chat home (#5139).
-  search: "Search",
+  search: SECTION_NAMES.search,
   preferences: "Settings",
   "service-hours": "Service hours",
   study: "Study hours",
   dues: "Dues",
   documents: "Documents",
-  directory: "Directory",
+  directory: SECTION_NAMES.directory,
   // A member's profile, pushed from the Directory or chat (#5568).
   member: "Profile",
   invite: "Invite members",

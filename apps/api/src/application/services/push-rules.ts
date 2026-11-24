@@ -162,7 +162,7 @@ export function defaultLevelFor(
   // The level is still stated here so anything reading a level directly agrees
   // with the decision the chain makes.
   if (messageKind === 'imported') return 'off';
-  // An Ask Frapp answer posted to the channel (#4713) is absolute the same
+  // A Frapp Intelligence answer posted to the channel (#4713) is absolute the same
   // way: it notifies nobody, whatever the channel or the member chose.
   if (messageKind === 'ask_answer') return 'off';
   if (isDirectChannel(channel)) return 'all';
@@ -197,7 +197,7 @@ export type PushOutcome =
  * setting anyone wants, and `ChatPushWorkerService.handleMessage` already exits
  * before it gets here.
  *
- * A posted Ask Frapp answer (`ask_answer`, #4713) is refused the same way and
+ * A posted Frapp Intelligence answer (`ask_answer`, #4713) is refused the same way and
  * for a plainer reason: the member who asked chose to put it in the channel,
  * and nobody else asked for it (`spec/behavior/ai.md` § Posting an answer to the channel). A
  * name in the answer is not a mention; the row is written with none.

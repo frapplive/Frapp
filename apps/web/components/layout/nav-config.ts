@@ -16,6 +16,7 @@ import {
 import { RushGlyph } from "@/components/chat/chat-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
+import { SECTION_NAMES } from "@repo/validation";
 
 /**
  * Permission-aware dashboard navigation.
@@ -198,7 +199,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         // its read leaves out any that are off. No permission either: the
         // read needs `members:view`, which every member role holds.
         id: "activity",
-        label: "Activity",
+        label: SECTION_NAMES.activity,
         icon: ActivityGlyph,
         href: "/activity",
         description: "Your week, what is left to do, and what you made.",
@@ -317,12 +318,12 @@ export const DASHBOARD_NAV: NavSection[] = [
      * one Chat uses. It is not a claim that this group is an app home.
      */
     id: "directory",
-    label: "Directory",
+    label: SECTION_NAMES.directory,
     anchor: true,
     items: [
       {
         id: "members",
-        label: "Directory",
+        label: SECTION_NAMES.directory,
         icon: DirectoryGlyph,
         href: "/members",
         description:

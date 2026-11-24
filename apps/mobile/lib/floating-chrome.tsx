@@ -41,7 +41,7 @@ export const FLOATING_TAB_BAR = {
 } as const;
 
 /**
- * The Ask Frapp bar: a glass capsule the width of the tab bar and its +,
+ * The Frapp Intelligence bar: a glass capsule the width of the tab bar and its +,
  * sitting just above them on the four tab screens, and in their row while
  * the bar is folded ({@link useBarFolded}, #4904) (#4702, Paul 2026-11-13:
  * "in a bar above the normal liquid glass bottom, not only when you open the
@@ -114,7 +114,7 @@ function createFlagStore() {
   };
 }
 
-/** Whether the Ask Frapp bar is on screen: the tab bar writes it. */
+/** Whether the Frapp Intelligence bar is on screen: the tab bar writes it. */
 const askBar = createFlagStore();
 
 /** Called by the tab bar when the bar appears or goes. */
@@ -123,7 +123,7 @@ export function setAskBarShown(shown: boolean): void {
 }
 
 /**
- * How far the Ask Frapp bar raises whatever floats above the tab bar on this
+ * How far the Frapp Intelligence bar raises whatever floats above the tab bar on this
  * screen: the bar and its gap for a member who has Ask, on a tab screen, and
  * 0 anywhere else.
  */
@@ -137,7 +137,7 @@ export function useAskBarLift(): number {
 
 /**
  * Bottom padding a scrolling screen adds inside its safe area so its last row
- * clears the floating bar, and the Ask Frapp bar above it where there is
+ * clears the floating bar, and the Frapp Intelligence bar above it where there is
  * one. 0 where no bar floats: any screen pushed over the tabs, or anything
  * outside them.
  */

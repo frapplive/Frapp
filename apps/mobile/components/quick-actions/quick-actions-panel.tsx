@@ -93,7 +93,7 @@ export type QuickActionsPanelProps = {
  * can use but hasn't placed. Every change is kept as it is made, so Done and
  * closing the panel both leave it as the member left it.
  *
- * Ask Frapp is not in here. It was a bar across the top of this panel until
+ * Frapp Intelligence is not in here. It was a bar across the top of this panel until
  * 2026-11-13, when it moved above the tab bar itself (`ask/ask-bar.tsx`,
  * #4702), where a member sees it without opening anything.
  */

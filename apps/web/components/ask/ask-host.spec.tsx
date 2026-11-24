@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Ask Frapp's front door on web: the floating Ask bar (#5476, Paul's pick of
+ * Frapp Intelligence's front door on web: the floating Ask bar (#5476, Paul's pick of
  * 2026-11-18). The host hands the bar a way in (`useAskEntry`), which opens
  * the Ask page (`/ask`, Paul's pick of 2026-11-22).
  */
@@ -103,7 +103,7 @@ beforeEach(() => {
   nav.replace.mockReset();
 });
 
-describe("who gets Ask Frapp", () => {
+describe("who gets Frapp Intelligence", () => {
   it("is a member the server has AI for, in a chapter with Ask on, who may use it", () => {
     render(
       <AskHost>

@@ -233,5 +233,5 @@ curl http://localhost:3001/v1/events -H "Authorization: Bearer <token>" -H "x-ch
 ```
 
 A fresh token carries no `active_chapter_id` claim, so chapter-scoped routes need the
-`x-chapter-id` header. Once the token carries the claim, a header that disagrees with it gets
-`403 chapter.context.mismatch`.
+`x-chapter-id` header. Once the token carries the claim, the header still wins: it names the
+chapter, and the claim is only the default when no header is sent (ADR-27).

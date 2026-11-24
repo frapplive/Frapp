@@ -9,7 +9,7 @@
  *   same shape (`ai_suggestion_change_fields_ok`). A text field says only
  *   its verdict here.
  * - `words`, the text fields as proposed and as saved, which the caller
- *   keeps only sealed, and only when the decider said yes to Frapp AI.
+ *   keeps only sealed, and only when the decider said yes to Frapp Intelligence.
  */
 
 export type ChangeFieldType =

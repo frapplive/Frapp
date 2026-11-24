@@ -111,6 +111,7 @@ function task(overrides: Partial<TaskView> = {}): TaskView {
     group_id: null,
     meeting_id: null,
     followed_by: null,
+    attachments: [],
     created_at: '2026-11-01T00:00:00.000Z',
     ...overrides,
   };

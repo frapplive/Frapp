@@ -279,7 +279,7 @@ export class ActService {
       chapterId: member.chapterId,
       batchId: randomUUID(),
       requestedFor: member.userId,
-      source: { ...source, title: 'Ask Frapp' },
+      source: { ...source, title: 'Frapp Intelligence' },
       askId: member.askId ?? null,
       drewOnChat: member.drewOnChat === true,
       request:
@@ -371,7 +371,8 @@ export class ActService {
     ) {
       throw new ForbiddenException({
         code: 'ai.act.forbidden',
-        message: 'You do not have permission to have Ask take actions.',
+        message:
+          'You do not have permission to have Frapp Intelligence take actions.',
       });
     }
     const proposing = this.tools.filter((tool) => tool.effect === 'propose');

@@ -9,7 +9,7 @@ import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
 
 /**
- * An Ask Frapp answer posted to a channel, on the phone (#4713): what every
+ * A Frapp Intelligence answer posted to a channel, on the phone (#4713): what every
  * reader of the channel is shown, and what each chip does for them.
  */
 

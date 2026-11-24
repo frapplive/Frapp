@@ -526,7 +526,7 @@ describe("Chapter settings → AI (#4789)", () => {
   it("isn't drawn where the server has no AI", () => {
     h.aiSettings = settings();
     expect(screenText(render(<ChapterSettingsScreen />))).not.toContain(
-      "Ask Frapp",
+      "Questions and requests",
     );
   });
 
@@ -535,7 +535,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings();
     h.updateAi.mockClear();
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.value).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.value).toBe(true);
     act(() => aiSwitch(tree, "Minutes from notes").props.onValueChange(true));
     expect(h.updateAi).toHaveBeenCalledWith(
       { meeting_notes: true },
@@ -549,7 +549,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings({ ask: false });
     const off = render(<ChapterSettingsScreen />);
     expect(aiSwitch(off, "Include channel messages").props.disabled).toBe(true);
-    expect(screenText(off)).toContain("Turn on Ask Frapp first.");
+    expect(screenText(off)).toContain("Turn on Questions and requests first.");
 
     h.aiSettings = settings({ ask: false, chat_source: true });
     const on = render(<ChapterSettingsScreen />);
@@ -574,7 +574,7 @@ describe("Chapter settings → AI (#4789)", () => {
     h.aiSettings = settings();
     h.aiSaving = true;
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.disabled).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(aiSwitch(tree, "Minutes from notes").props.disabled).toBe(true);
   });
 
@@ -606,14 +606,14 @@ describe("Chapter settings → AI (#4789)", () => {
     h.permissions = ["roles:manage", "members:view"];
     const text = screenText(render(<ChapterSettingsScreen />));
     expect(text).toContain("Roles");
-    expect(text).not.toContain("Ask Frapp");
+    expect(text).not.toContain("Questions and requests");
   });
 
   it("shows an officer the switches read-only, saying only the president changes them", () => {
     h.aiConsent = { answer: "yes" };
     h.aiSettings = settings({ can_change: false });
     const tree = render(<ChapterSettingsScreen />);
-    expect(aiSwitch(tree, "Ask Frapp").props.disabled).toBe(true);
+    expect(aiSwitch(tree, "Questions and requests").props.disabled).toBe(true);
     expect(screenText(tree)).toContain(
       "Only the chapter president can turn these on or off.",
     );

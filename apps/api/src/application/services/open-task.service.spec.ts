@@ -64,6 +64,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   group_id: null,
   meeting_id: null,
   followed_by: null,
+  attachments: [],
   created_at: '2026-11-18T00:00:00.000Z',
   ...over,
 });

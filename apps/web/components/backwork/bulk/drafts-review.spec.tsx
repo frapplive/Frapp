@@ -249,20 +249,22 @@ describe("Backwork drafts AI fill (#5233)", () => {
     expect(state.fill).not.toHaveBeenCalled();
   });
 
-  it("stops asking, and says why, when the member hasn't turned on Frapp AI", async () => {
+  it("stops asking, and says why, when the member hasn't turned on Frapp Intelligence", async () => {
     state.fill.mockRejectedValue({ statusCode: 403, code: "ai.consent.required" });
     state.drafts = [draft("a", {}), draft("b", {}), draft("c", {})];
     render(<DraftsReview />);
-    expect(await screen.findByText("Turn on Frapp AI to have drafts filled in from their pages.")).toBeInTheDocument();
+    expect(await screen.findByText("Turn on Frapp Intelligence to have drafts filled in from their pages.")).toBeInTheDocument();
     expect(state.fill).toHaveBeenCalledTimes(2);
   });
 
-  it("says so when the president has Frapp AI off, and stops asking", async () => {
+  it("says so when the president has Frapp Intelligence off, and stops asking", async () => {
     state.fill.mockRejectedValue({ statusCode: 403, code: "ai.chapter_off" });
     state.drafts = [draft("a", {}), draft("b", {}), draft("c", {})];
     render(<DraftsReview />);
     expect(
-      await screen.findByText("Frapp AI is off for your chapter, so drafts aren't filled in for you."),
+      await screen.findByText(
+        "Your chapter's president has turned off questions and requests, so drafts aren't filled in for you.",
+      ),
     ).toBeInTheDocument();
     expect(state.fill).toHaveBeenCalledTimes(2);
   });
@@ -329,7 +331,7 @@ describe("Backwork drafts AI fill (#5233)", () => {
     render(<DraftsReview />);
     await waitFor(() => expect(state.fill).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText(/Filling in/)).not.toBeInTheDocument());
-    expect(screen.queryByText(/Frapp AI/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Frapp Intelligence/)).not.toBeInTheDocument();
     expect(state.fill).toHaveBeenCalledTimes(2);
   });
 });

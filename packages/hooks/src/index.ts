@@ -114,6 +114,7 @@ export * from "./use-event-types";
 export * from "./use-events";
 export * from "./use-events-now";
 export * from "./use-frapp-client";
+export * from "./use-frapp-links";
 export * from "./use-gifs";
 export * from "./use-google-calendar";
 export * from "./use-google-drive";

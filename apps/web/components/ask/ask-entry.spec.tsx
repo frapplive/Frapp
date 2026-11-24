@@ -189,7 +189,7 @@ describe("the entry and the Ask page together", () => {
     nav.go("/ask");
     render(<Page />);
     expect(field()).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent("Loading Ask Frapp");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Frapp Intelligence");
     expect(nav.pathname).toBe("/ask");
   });
 });

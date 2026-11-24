@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AskAnswerCard } from "./ask-answer-card";
 
 /**
- * An Ask Frapp answer posted to a channel, as everyone who reads the channel
+ * A Frapp Intelligence answer posted to a channel, as everyone who reads the channel
  * sees it (#4713).
  */
 

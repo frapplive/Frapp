@@ -370,7 +370,7 @@ describe('ChatReportService', () => {
       );
     });
 
-    it('names the member who posted an Ask Frapp answer, not the Frapp sender (#4713)', async () => {
+    it('names the member who posted a Frapp Intelligence answer, not the Frapp sender (#4713)', async () => {
       channelAccess.assertMessageAccess.mockResolvedValue({
         ...baseMessage,
         sender_id: '00000000-0000-0000-0000-000000000000',
@@ -1966,7 +1966,7 @@ describe('reportedContentSnapshot', () => {
     metadata: {},
   };
 
-  it('keeps the question a posted Ask Frapp answer was given (#4713)', () => {
+  it('keeps the question a posted Frapp Intelligence answer was given (#4713)', () => {
     const posted = {
       content: 'Dues are due on the 1st.',
       type: 'TEXT' as const,

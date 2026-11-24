@@ -11,7 +11,7 @@ import {
   eventPagePhase,
   deleteOffersSeriesChoice,
   readEventAgenda,
-  readEventAttachments,
+  readFrappLinks,
   SERIES_SCOPE_COPY,
 } from "@repo/validation";
 import type React from "react";
@@ -289,7 +289,7 @@ export function EventDetailSheet({
   // This meeting's own agenda and attachments (#4934). The read has no
   // response schema, so both are read defensively.
   const agenda = readEventAgenda(resolvedEvent?.agenda);
-  const attachments = readEventAttachments(resolvedEvent?.attachments);
+  const attachments = readFrappLinks(resolvedEvent?.attachments);
   // `checkInZoneState`: a zone with a bad point refuses every check-in, which
   // is not "no zone", and a zoneless event whose check-in needs an officer's
   // code (#4808) is not "check in from anywhere" either.

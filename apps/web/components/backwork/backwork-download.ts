@@ -3,7 +3,7 @@ import { selectDownloadUrl } from "@repo/hooks";
 /**
  * Downloads one backwork file: a fresh signed link from `GET /v1/backwork/:id`
  * (`useFetchBackworkResource`), opened in a new tab. The library's Download
- * and a file Frapp AI found (#5209) both go through here.
+ * and a file Frapp Intelligence found (#5209) both go through here.
  *
  * A new tab, not this one: the link forces a download (#3867), but a server
  * from before it signs an inline link, and a storage error answers with a

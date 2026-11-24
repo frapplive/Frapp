@@ -24,7 +24,7 @@ import { useToast } from "@/lib/hooks/use-toast";
  * Chapter settings → AI (#4308, `spec/behavior/ai.md` § Consent, gate 1):
  * the president's switch for each AI feature family, laid out like a module
  * page (#4073): the title, a line on who turns them on, then the switches. No
- * company names (Paul, 2026-11-17): they are on Meet Frapp AI and in the
+ * company names (Paul, 2026-11-17): they are on Meet Frapp Intelligence and in the
  * privacy policy.
  *
  * The rail shows this row only while the server has AI
@@ -38,7 +38,7 @@ import { useToast } from "@/lib/hooks/use-toast";
  * the same split: one owner switch per feature, visible to admins.
  *
  * "Include channel messages" only changes what Ask reads, so it sits nested
- * under Ask Frapp and waits for it, the way iOS draws a dependent switch.
+ * under Questions and requests and waits for it, the way iOS draws a dependent switch.
  * The server stores it either way; the page just won't let a president turn
  * on something that does nothing yet, and still lets them turn it off.
  */

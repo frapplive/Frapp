@@ -12,8 +12,8 @@ const COOLDOWN_MS = 30_000;
 
 /**
  * Why the fill stopped for this visit to the page:
- * - `consent`: the member hasn't said yes to Frapp AI.
- * - `chapter_off`: the president has Frapp AI turned off.
+ * - `consent`: the member hasn't said yes to Frapp Intelligence.
+ * - `chapter_off`: the president has Frapp Intelligence turned off.
  * - `off`: AI is off on this server. The page says nothing.
  */
 export type DraftAutofillStop = "consent" | "chapter_off" | "off";

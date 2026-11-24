@@ -318,7 +318,7 @@ export function AppNav({
       {isCollapsed ? null : <LiveMeetingCard />}
       {isDrawer || !hasAsk || sharedFoot ? null : (
         /*
-         * Ask Frapp's one home from `lg` up (#5560, Paul's pick of
+         * Frapp Intelligence's one home from `lg` up (#5560, Paul's pick of
          * 2026-11-19): the foot of the column on every layout, so it never
          * moves as panes open and close and covers no page. In the rail it is
          * the crest alone above the expand toggle; with a toggle in the
@@ -346,7 +346,7 @@ export function AppNav({
          * and the tooltip.
          *
          * Changed in #5560 (Paul's pick, 2026-11-19): for a member with Ask
-         * the expanded column's foot is one row, Ask Frapp's bar filling it
+         * the expanded column's foot is one row, Frapp Intelligence's bar filling it
          * and the toggle a 34px glyph at its end, named by its label and
          * tooltip. A second row cost the 48px a full sidebar doesn't have at
          * 1024x768 (`tests/visual/nav-fit.spec.ts`).

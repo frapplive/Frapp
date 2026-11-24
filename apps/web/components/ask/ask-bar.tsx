@@ -8,11 +8,11 @@ import { useAskEntry } from "./ask-host";
 import { FrappCrest } from "./frapp-crest";
 
 /**
- * Ask Frapp's front door on web (#5476, Paul's pick of 2026-11-18): the
+ * Frapp Intelligence's front door on web (#5476, Paul's pick of 2026-11-18): the
  * phone's floating Ask bar (`apps/mobile/components/ask/ask-bar.tsx`) brought
  * to the dashboard, so a member meets the same door on both. A glass capsule
  * with the crest in the chapter's colour, the conversation's own words
- * ("Ask Frapp anything") and its send arrow at the end, so it reads as the
+ * ("What do you need?") and its send arrow at the end, so it reads as the
  * field it opens rather than as a banner. A click opens the Ask page
  * (`/ask`, #5854's second step, Paul's pick of 2026-11-22), or puts focus in
  * its field when that page is already up. On the Ask page the bar is marked
@@ -29,7 +29,7 @@ import { FrappCrest } from "./frapp-crest";
  * of a channel and asks there through `@Frapp` (#4713). Shawn and Paul
  * didn't want Ask in the top bar's search field (#4904 until #5476).
  *
- * Its name is its words ("Ask Frapp anything", or "Ask Frapp" compact), so
+ * Its name is its words ("What do you need?", or "Frapp Intelligence" compact), so
  * what a voice-control user reads on it is what it answers to (WCAG 2.5.3).
  *
  * Only for a member with Ask (`useAskEntry`); anyone else gets nothing.
@@ -70,7 +70,7 @@ export function AskBar({
   rail?: boolean;
   /**
    * For the Channels column (240px from `lg` up), where the field's words
-   * would be cut: the bar reads "Ask Frapp" instead.
+   * would be cut: the bar reads "Frapp Intelligence" instead.
    */
   compact?: boolean;
 }) {
@@ -102,19 +102,30 @@ export function AskBar({
       onClick={ask.openAsk}
       className={cn(
         // The Default control step (48), fully round, as the phone's bar.
-        "flex h-12 w-full items-center gap-3 rounded-full border pl-[18px] pr-2 text-left transition hover:brightness-125",
+        "flex h-12 w-full items-center rounded-full border text-left transition hover:brightness-125",
+        // The sidebar's shared row leaves the name about 135px: the Small
+        // type step and no send arrow, or "Frapp Intelligence" is cut.
+        compact ? "gap-2 pl-3 pr-2" : "gap-3 pl-[18px] pr-2",
         GLASS,
         FOCUS_RING_SHELL,
         className,
       )}
     >
       <FrappCrest className="h-[22px] w-[18px] shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate text-body text-muted-foreground">
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-muted-foreground",
+          compact ? "text-sm" : "text-body",
+        )}
+      >
         {compact ? ASK_COPY.name : ASK_COPY.placeholder}
       </span>
       <span
         aria-hidden="true"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-subtle"
+        className={cn(
+          "h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-subtle",
+          compact ? "hidden" : "grid",
+        )}
       >
         <svg
           viewBox={ASK_SEND_GLYPH.viewBox}
