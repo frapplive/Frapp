@@ -480,17 +480,26 @@ const STAGING_IDENTITY = Object.freeze({
  * store app's clients in app.json's `extra.googleSignIn`: until these are set,
  * every Google sign-in in Frapp Staging opens Supabase's web sheet ("wants to
  * use …supabase.co to Sign In"), as a new member's did on 2026-11-20 (#4148).
- * The values match app.json's today; they part once the staging iOS and
- * Android clients exist. The Web client is the one staging Supabase's
- * Google provider lists ("Frapp Web (staging)", in Google Cloud project
- * "Frapp sign-in"). An empty ID keeps that platform on the browser flow, as in
- * app.json; recording one is a native change (see `withGoogleSignIn`).
+ * The Web client is the one staging Supabase's Google provider lists
+ * ("Frapp Web (staging)", in Google Cloud project "Frapp sign-in"). The iOS
+ * client is "iOS Client (staging)" there, for bundle ID
+ * `live.frapp.mobile.staging` (Paul, 2026-11-24), and "Android Client
+ * (staging)" is its Android client, for that package and the SHA-1 of Play's
+ * app signing key (Paul, 2026-11-24). Android signs in against the Web client,
+ * so Supabase needs nothing for it. Staging Supabase has to list
+ * it after the Web client, with Skip nonce check on, or the app falls back to
+ * the browser flow (docs/ops/deployment/supabase.md, Native Google Sign-In,
+ * steps 3 and 4). An empty ID keeps that
+ * platform on the browser flow, as in app.json; recording one is a native
+ * change (see `withGoogleSignIn`).
  */
 const STAGING_GOOGLE_SIGN_IN = Object.freeze({
   webClientId:
     "661618060468-nefnjm72f4at1hfrl48bf4fjb2l18uel.apps.googleusercontent.com",
-  iosClientId: "",
-  androidClientId: "",
+  iosClientId:
+    "661618060468-60r0l5n3vck4g04u5n2p7ep3t4h1q67n.apps.googleusercontent.com",
+  androidClientId:
+    "661618060468-mgt5cpb7s6m796u998tf821s8k8v3mbo.apps.googleusercontent.com",
 });
 
 const APP_VARIANT_VALUE_ERROR = [
