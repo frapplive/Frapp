@@ -58,8 +58,8 @@ import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
  * done.
  *
  * **A page, chat beside it** (Paul's pick of 2026-11-22, after "too small
- * and not smooth"). The Ask bar opens it in the main area as the sidebar
- * opens Events, beside chat at the width the member set, with no scrim, so
+ * and not smooth"). The sidebar's New row opens it in the main area as the
+ * other rows open their pages, beside chat at the width the member set, with no scrim, so
  * a member can ask while reading a channel. The thread and the field keep
  * to one centred column of at most 720px, the field pinned under it, as
  * ChatGPT, Claude and Gemini draw theirs; on a narrow window it is the whole
@@ -69,7 +69,7 @@ import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
  * place and measures over a dimmed app (#4904).
  *
  * A source, a channel an answer names and the page a confirmed card leaves
- * for are ordinary links: following one leaves the page, and the Ask bar
+ * for are ordinary links: following one leaves the page, and New
  * comes back to the same thread. Edit on an event card grows the card into
  * the event form in place (`Panel`'s `docked="inline"`).
  *
@@ -133,9 +133,9 @@ function offsetIn(view: HTMLElement, child: HTMLElement): number {
 }
 
 /**
- * The Ask page's body: the conversation for a member with Ask, and nothing
- * while that is being read or for anyone else (`AskHost` takes a member who
- * lost Ask to chat).
+ * New's page (#5946): the conversation for a member with Frapp
+ * Intelligence, its loading shape while that is read, and for anyone else
+ * the greeting and what they can start, with no field.
  */
 export function AskPage() {
   const entry = useAskEntry();

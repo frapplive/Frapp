@@ -92,8 +92,9 @@ These cause most of the iterations, so they come first.
   tab bar's quick-actions "+". Whether the phone moves it into the header is open with Paul (11-19).
   (11-05, 11-19, P8.2)
 - **Every page beside chat can close** (`ToolPageHeader`'s close; Escape too), and its title sits in its
-  own 48px header at 1056px and wider, paired with chat's channel header. Top-level pages show the title
-  alone, no chapter-name prefix; only Settings pages read "Settings › X". (11-05, 11-11)
+  own 48px header at `lg` (1024px) and wider, paired with chat's channel header (1056px until 11-24,
+  #5946). Top-level pages show the title alone, no chapter-name prefix; only Settings pages read
+  "Settings › X". (11-05, 11-11)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
   its tools inside itself, not in drawers. (11-11, 11-12)
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a
@@ -193,7 +194,8 @@ These cause most of the iterations, so they come first.
   A done state or a search miss is one inline line; a card survives only for errors. Don't "customise the
   shit that was already bad" with nicer copy on the same card. Hide features a member can't use or set
   up. (11-05, P1.3, P1.4)
-- **One connection indicator**, the pill in the top bar. Never draw your own offline notice. (11-06)
+- **One connection indicator**, the pill in the sidebar's head (in the top bar below `lg`). Never draw your
+  own offline notice. (11-06; changed 11-24, #5946)
 - **Plain-words errors:** what happened and what to do, never a permission key, status code or raw
   provider error. "Your role can't …". (11-05, 11-06, P2.3)
 - **No fake or placeholder identity:** real names and real avatars, never "Member 000000" or an account

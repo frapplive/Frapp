@@ -253,7 +253,9 @@ outbox's promise, which is true there and nowhere else.
 | ONLINE | live, or none | nothing | |
 
 Indicator behavior:
-- **Web: in the top bar**, first in its right cluster, before the notifications bell
+- **Web: in the sidebar's head from `lg` up, and the top bar below it** (#5946), the dot
+  alone before the notifications bell, its sentence a click away. Until #5946 it was
+  **in the top bar**, first in its right cluster, before the notifications bell
   (`apps/web/components/shared/connection-pill.tsx`). It floated just below the bar
   from #2244 until 2026-11-06, which kept it out of the layout but put it over the
   first row of every page, chat's channel header included. In the bar it covers

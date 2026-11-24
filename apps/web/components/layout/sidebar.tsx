@@ -233,7 +233,7 @@ export function Sidebar({
               to fit. When there is a problem the pill takes its 28px from
               the name, which truncates; the bell and the toggle stay put.
             */}
-            <ConnectionPill placement="sidebar" />
+            <ConnectionPill placement="inline" />
             <NotificationsBell side="bottom" align="start" />
             {toggle}
           </>
@@ -337,7 +337,7 @@ export function Sidebar({
       >
         {rail ? (
           <>
-            <ConnectionPill placement="sidebar" />
+            <ConnectionPill placement="inline" />
             <NotificationsBell side="right" align="end" />
             {toggle}
           </>

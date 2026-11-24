@@ -35,23 +35,15 @@ import {
  *
  * ## Where it sits
  *
- * `sidebar`: in the sidebar's head from `lg` up, before the notifications
- * bell, where the top bar's was until the top bar went (#5946). The head has
- * the chapter's name to fit, so it is always the dot alone, in a slot the
- * head keeps whether or not there is anything to say; the sentence is a
- * click away.
- *
- * `top-bar`: in the dashboard's top bar below `lg`, before the notifications
- * bell. It
- * floated below the bar until 2026-11-06 (#2244), which kept it out of the
+ * `inline`: in a row of the shell's chrome, before the notifications bell:
+ * the sidebar's head from `lg` up and the top bar below it (#5946). Until
+ * 2026-11-06 it floated below the top bar (#2244), which kept it out of the
  * layout but put it over the first row of every page, chat's channel header
- * included. In the bar it covers nothing. It draws its label only from `xl`,
- * where the right cell (`flex-1`, `justify-end`) has room for it beside the
- * bell, Ask and the avatar: at 1024px a chat-width bar gives that cell about
- * 245px, too little for a 130px label too. Below `xl` it draws the dot alone,
- * in a 28px slot the top bar keeps whether or not there is anything to say,
- * so a state that flaps never resizes the find field or the title. The
- * sentence is a click or tap away at every width.
+ * included; in a row it covers nothing. Both rows have little room (the head
+ * has the chapter's name to fit), so it is always the dot alone and the
+ * sentence is a click or tap away. Where it appears it takes its 28px from
+ * the chapter's name or the find field, which give way; the bell and the
+ * controls beside it never move.
  *
  * `floating`: mounted by the root layout for the routes with no bar (sign-in,
  * onboarding), a fixed pill at the top of the viewport that takes no pointer.
@@ -65,7 +57,7 @@ import {
 export function ConnectionPill({
   placement = "floating",
 }: {
-  placement?: "floating" | "top-bar" | "sidebar";
+  placement?: "floating" | "inline";
 }) {
   const { state } = useNetwork();
   const transport = useOpenChatTransport();
@@ -92,9 +84,7 @@ export function ConnectionPill({
             className={cn(
               "pointer-events-auto flex h-7 max-w-full shrink-0 items-center gap-2 rounded-full border border-border bg-popover px-2.5 text-caption text-foreground animate-slide-down hover:bg-card-hover",
               FOCUS_RING_ALWAYS,
-              placement === "top-bar" &&
-                "max-xl:w-7 max-xl:justify-center max-xl:px-0",
-              placement === "sidebar" && "w-7 justify-center px-0",
+              placement === "inline" && "w-7 justify-center px-0",
             )}
           >
             <span
@@ -108,8 +98,7 @@ export function ConnectionPill({
               aria-hidden="true"
               className={cn(
                 "truncate font-medium",
-                placement === "top-bar" && "max-xl:hidden",
-                placement === "sidebar" && "hidden",
+                placement === "inline" && "hidden",
               )}
             >
               {indicator.label}
@@ -118,7 +107,7 @@ export function ConnectionPill({
         </PopoverTrigger>
         {/* The sentence, a tap away on a touch screen with no hover title. */}
         <PopoverContent
-          align={placement === "sidebar" ? "start" : "end"}
+          align={placement === "inline" ? "start" : "end"}
           className="w-64"
         >
           <p className="text-caption text-foreground">

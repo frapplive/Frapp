@@ -3298,7 +3298,7 @@ export function ChatShell({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (escapeBelongsElsewhere(event.target)) return;
-      // Beside a tool the panel is one pane wide, as below `lg` (#5575).
+      // From `lg` up there is no list pane to go back to (#5946).
       if (twoColumns) return;
       if (narrowPane === "thread" && channelsPaneState === "ready") {
         backToChannels();

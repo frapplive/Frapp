@@ -98,13 +98,8 @@ export function TopBar({
       <FindField className="min-w-0 flex-1 basis-0 sm:max-w-[520px]" />
 
       <div className="flex shrink-0 items-center justify-end gap-1.5">
-        {/*
-          A fixed 28px slot, so a pill coming or going never resizes the find
-          field.
-        */}
-        <div className="flex w-7 shrink-0 justify-end">
-          <ConnectionPill placement="sidebar" />
-        </div>
+        {/* The find field gives way to it; the bell stays put. */}
+        <ConnectionPill placement="inline" />
         <NotificationsBell />
       </div>
     </header>
