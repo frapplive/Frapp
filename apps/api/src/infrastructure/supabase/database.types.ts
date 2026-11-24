@@ -120,6 +120,13 @@ import type {
   RushCandidate,
   RushCandidateVote,
   ScheduledNotificationDispatch,
+  School,
+  SchoolChapter,
+  SchoolEmailDomain,
+  SchoolEmailVerification,
+  SchoolMember,
+  SchoolSearchRow,
+  SchoolSlug,
   SemesterArchive,
   ServiceEntry,
   ServiceLeaderboardRow,
@@ -136,6 +143,13 @@ import type {
   UserAiConsent,
   UserSettings,
 } from '#domain/entities';
+import type {
+  RushCandidateNote,
+  RushCandidateRating,
+  RushCandidateTag,
+  RushStage,
+  RushTag,
+} from '#domain/entities/rush-pipeline.entity';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -291,9 +305,20 @@ export interface Database {
       push_tokens: TableDefinition<PushToken>;
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
+      rush_candidate_notes: TableDefinition<RushCandidateNote>;
+      rush_candidate_ratings: TableDefinition<RushCandidateRating>;
+      rush_candidate_tags: TableDefinition<RushCandidateTag>;
       rush_candidate_votes: TableDefinition<RushCandidateVote>;
       rush_candidates: TableDefinition<RushCandidate>;
+      rush_stages: TableDefinition<RushStage>;
+      rush_tags: TableDefinition<RushTag>;
       scheduled_notification_dispatches: TableDefinition<ScheduledNotificationDispatch>;
+      school_chapters: TableDefinition<SchoolChapter>;
+      school_email_domains: TableDefinition<SchoolEmailDomain>;
+      school_email_verifications: TableDefinition<SchoolEmailVerification>;
+      school_members: TableDefinition<SchoolMember>;
+      school_slugs: TableDefinition<SchoolSlug>;
+      schools: TableDefinition<School>;
       semester_archives: TableDefinition<SemesterArchive>;
       service_entries: TableDefinition<ServiceEntry>;
       stripe_webhook_events: TableDefinition<StripeWebhookEvent>;
@@ -551,6 +576,21 @@ export interface Database {
           claim_attempts: number;
         }[];
       };
+      /**
+       * `20261124182353` (#5929). Checks a school-email code against the
+       * account's open verification and writes the `school_members` row on a
+       * match. Answers `{ ok, reason, attempts_left, member_id }`.
+       */
+      confirm_school_email_verification: {
+        Args: {
+          p_user_id: string;
+          p_school_id: string;
+          p_verification_id: string;
+          p_code_hash: string;
+          p_max_attempts: number;
+        };
+        Returns: Json;
+      };
       /** `20260602210000` — `returns setof tasks`. */
       confirm_task_completion: {
         Args: { p_task_id: string; p_chapter_id: string };
@@ -705,6 +745,14 @@ export interface Database {
           stripped_member_ids: string[];
           given_everyone_member_ids: string[];
         } | null;
+      };
+      /**
+       * `20261124182353` (#5929). Deletes the user's open school-email code
+       * whose email didn't go out.
+       */
+      discard_school_email_verification: {
+        Args: { p_user_id: string; p_verification_id: string };
+        Returns: undefined;
       };
       /**
        * `20261106170000`. An import's rows being imported, added up per
@@ -1346,6 +1394,15 @@ export interface Database {
         Returns: ChatMessage[];
       };
       /**
+       * `20261124182353` (#5929). Schools by name, short name or alias for
+       * the onboarding step, best match first; suspended schools left out.
+       * Global reference data, no tenant scope; at most 50 rows.
+       */
+      search_schools: {
+        Args: { p_query: string; p_limit: number };
+        Returns: SchoolSearchRow[];
+      };
+      /**
        * `20261114171856` (#4958) — adds (`p_join`: a marked role, never for
        * an alum) or removes (any unkeyed role outside the tiers) a role on a
        * member, under the role-then-member locks `delete_role` takes. One
@@ -1467,6 +1524,28 @@ export interface Database {
           p_audio_seconds?: number;
         };
         Returns: string;
+      };
+      /**
+       * `20261124182353` (#5929). Opens a school-email code, counting the
+       * address, IP and account ceilings under advisory locks. Answers
+       * `{ ok, reason, id, expires_at, retry_after_seconds }`.
+       */
+      start_school_email_verification: {
+        Args: {
+          p_user_id: string;
+          p_school_id: string;
+          p_email: string;
+          p_code_salt: string;
+          p_code_hash: string;
+          p_ip_hash: string | null;
+          p_ttl_seconds: number;
+          p_window_seconds: number;
+          p_max_per_address: number;
+          p_max_per_ip: number;
+          p_max_per_account: number;
+          p_cooldown_seconds: number;
+        };
+        Returns: Json;
       };
       /**
        * `20260604120000` — `returns setof members`. Returns both updated rows

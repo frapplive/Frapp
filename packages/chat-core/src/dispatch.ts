@@ -1429,6 +1429,9 @@ async function dispatchRushAdd(
         error: apiErrorMessage(result.error, "Couldn't add that candidate"),
       };
     }
+    // The recruitment page lists every prospect (#5924): refresh its read
+    // so a page left open shows the one just added.
+    void ctx.queryClient.invalidateQueries({ queryKey: ["rush"] });
     if (data?.card_posted === false) {
       markLocalRecorded(ctx, {
         channelId,

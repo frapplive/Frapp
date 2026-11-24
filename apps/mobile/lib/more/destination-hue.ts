@@ -33,6 +33,11 @@ import { roleColor, type RoleColorHex } from "@repo/validation";
  *
  * Settings is slate. Chapter settings shared it, the same kind of place,
  * until it left You for Chat home's chapter menu (2026-11-19).
+ *
+ * The recruitment row (#5924) is the eleventh place and the palette has ten,
+ * so it shares green with Create a chapter, the one pair that never meets:
+ * Create a chapter is drawn only for someone with no chapter, and the
+ * recruitment row only inside one ({@link SHARED_HUE_PAIRS}).
  */
 export type YouDestination =
   | "study"
@@ -44,7 +49,8 @@ export type YouDestination =
   | "settings"
   | "chapter"
   | "invite"
-  | "hostCheckIn";
+  | "hostCheckIn"
+  | "recruitment";
 
 export const YOU_DESTINATION_HUE: Record<YouDestination, RoleColorHex> = {
   study: roleColor("periwinkle"),
@@ -57,7 +63,18 @@ export const YOU_DESTINATION_HUE: Record<YouDestination, RoleColorHex> = {
   chapter: roleColor("green"),
   invite: roleColor("lime"),
   hostCheckIn: NOTIFICATION_TILE_HUE.events,
+  recruitment: roleColor("green"),
 };
+
+/**
+ * Places that share a hue because You never draws both at once (see above).
+ * Only this list may repeat a hue; `destination-hue.spec.ts` holds the rest
+ * apart.
+ */
+export const SHARED_HUE_PAIRS: readonly (readonly [
+  YouDestination,
+  YouDestination,
+])[] = [["chapter", "recruitment"]];
 
 /** The hex a place's tile and glyph draw in. */
 export function destinationHue(place: YouDestination): RoleColorHex {

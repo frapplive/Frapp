@@ -113,6 +113,21 @@ export function navigation(
 }
 
 /**
+ * Follows a link the way Next's `Link` would for the page: points the address
+ * at its `href` and re-renders, so the page reads the new query string. Used
+ * for the Chapter tab's rows, which open `?tab=org&page=<page>`, by a spec
+ * whose `navigation` reads `window.location.search`, which the page's own tab
+ * switch moves with `replaceState` (dropping `?page=` as it does live). Such a
+ * spec resets the address in `beforeEach`.
+ */
+export function followLink(link: HTMLElement, rerender: () => void) {
+  const href = link.getAttribute("href");
+  if (!href) throw new Error("followLink: the link has no href");
+  window.history.replaceState(null, "", href);
+  rerender();
+}
+
+/**
  * `@/components/shared/can` as a pass-through, for a page spec that tests
  * what the page renders rather than what `Can` hides: the gate has its own
  * tests. A spec that tests the gating itself mocks `Can` by hand instead, as

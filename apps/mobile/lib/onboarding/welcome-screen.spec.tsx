@@ -74,9 +74,30 @@ const COMPLETE_USER = {
   birthday_day: 10,
 };
 let currentUser: Record<string, unknown> | undefined = COMPLETE_USER;
+/** `/v1/schools/mine` (#5929): verified somewhere, so no school beat. */
+let mySchools: unknown[] = [{ school: { id: "s-1" } }];
 
 const track = vi.fn();
 vi.mock("@/lib/use-latest-track", () => ({ useLatestTrack: () => track }));
+
+/** The school beat has its own spec; here it only has to be reached. */
+vi.mock("@/components/onboarding/school-step", async () => {
+  const { Pressable, Text } = await import("@/test/react-native-stub").then(
+    (m) => m.reactNativeStub,
+  );
+  return {
+    SchoolStep: (props: { initialQuery: string; onLeave: () => void }) =>
+      React.createElement(
+        Pressable,
+        { onPress: props.onLeave },
+        React.createElement(
+          Text,
+          null,
+          `school beat: ${props.initialQuery || "none"}`,
+        ),
+      ),
+  };
+});
 
 /** The photo control has its own spec; here it only has to be there. */
 vi.mock("@/components/profile/profile-photo", () => ({
@@ -98,7 +119,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     ],
   }),
   useChannels: () => ({ isPending: false, isError: false, data: [] }),
-  useCurrentChapter: () => ({ data: undefined }),
+  useCurrentChapter: () => ({
+    data: { university: "Rensselaer Polytechnic Institute" },
+  }),
+  useMySchools: () => ({ data: mySchools, isFetched: true, isError: false }),
   useUpdateOnboarding: () => ({ mutateAsync: completeOnboarding }),
   useCurrentUser: () => ({
     data: currentUser,
@@ -121,6 +145,10 @@ import {
 import { WELCOME_DUE_STORAGE_KEY } from "@/lib/onboarding/welcome-due";
 
 type Node = ReactTestRenderer["root"];
+
+beforeEach(() => {
+  mySchools = [{ school: { id: "s-1" } }];
+});
 
 /**
  * Renders s03. By default it also answers the name screen, keeping the name,
@@ -196,6 +224,69 @@ async function press(target: Node | undefined) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
 }
+
+describe("s03 welcome, the school beat (#5929)", () => {
+  beforeEach(() => {
+    pushAvailable = false;
+    permission = null;
+    completeOnboarding.mockClear();
+    vi.mocked(vi.mocked(useRouter)().replace).mockClear();
+    mySchools = [];
+  });
+
+  const schoolBeat = (root: Node) =>
+    texts(root).find((t) => t.includes("school beat"));
+
+  it("follows the name for a member with no verified school, from the chapter's school", async () => {
+    const { root } = await render();
+
+    expect(schoolBeat(root)).toContain("Rensselaer Polytechnic Institute");
+    expect(vi.mocked(useRouter)().replace).not.toHaveBeenCalled();
+  });
+
+  it("goes on to chat when the beat is left, with no primer to ask", async () => {
+    const { root } = await render();
+
+    await press(
+      pressables(root).find((p) =>
+        p
+          .findAllByType("Text" as never, { deep: true })
+          .some((t) => String(t.props.children).includes("school beat")),
+      ),
+    );
+
+    expect(completeOnboarding).toHaveBeenCalledWith({
+      has_completed_onboarding: true,
+    });
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+
+  it("goes on to notifications when there is push to ask about", async () => {
+    pushAvailable = true;
+    permission = OFF;
+    const { root } = await render();
+
+    await press(
+      pressables(root).find((p) =>
+        p
+          .findAllByType("Text" as never, { deep: true })
+          .some((t) => String(t.props.children).includes("school beat")),
+      ),
+    );
+
+    expect(texts(root).some((t) => t.includes("Turn on notifications"))).toBe(
+      true,
+    );
+  });
+
+  it("asks no school of a member already verified at one", async () => {
+    mySchools = [{ school: { id: "s-1" } }];
+    const { root } = await render();
+
+    expect(schoolBeat(root)).toBeUndefined();
+    expect(vi.mocked(useRouter)().replace).toHaveBeenCalledWith("/");
+  });
+});
 
 describe("s03 welcome, notifications step", () => {
   beforeEach(() => {

@@ -71,7 +71,7 @@ const REQUIRED_ENV_VARS = [
 // `selectEmailProvider()` uses a no-op provider that logs instead of sending,
 // so local dev / tests / CI never need a real email credential — the invite
 // tokens still get created either way, only delivery is skipped.
-//   - RESEND_API_KEY    enables the Resend transport for invite emails
+//   - RESEND_API_KEY    enables the Resend transport for invite and school-code emails
 //   - RESEND_FROM_EMAIL optional from-address override (default a Frapp address
 //                       that must be verified with Resend before it will send)
 //

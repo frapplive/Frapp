@@ -38,10 +38,11 @@ import {
   ThemedRefreshControl,
   type ScreenRefresh,
 } from "@/components/pull-to-refresh";
+import { ViewLabels, type ViewOption } from "@/components/view-labels";
 import { KeyboardAvoidingArea } from "@/lib/keyboard";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
-type ScreenShellProps = {
+type ScreenShellProps<V extends string = string> = {
   title: string;
   /**
    * The `‹ You` / `‹ Calendar` row above the title, on a screen reached from
@@ -95,6 +96,14 @@ type ScreenShellProps = {
    * those on 2026-11-04 (`spec/ui/mobile/patterns.md` § Screen headers).
    */
   subtitle?: string;
+  /**
+   * The screen's views (Unread and All, Mine and Everyone's) as plain words on
+   * the title's line, after a hairline: `ViewLabels`, where Paul picked them on
+   * 2026-11-24 in place of a boxed switch over the list
+   * (`spec/ui/design-system/components.md` § View labels). A member with one
+   * view gets the title alone, drawn as it is without this prop.
+   */
+  views?: ScreenViews<V>;
   /**
    * Trailing control rendered on the title row, right-aligned and vertically
    * centred against the title.
@@ -155,6 +164,14 @@ type ScreenShellProps = {
   children: ReactNode;
 };
 
+/** A screen's views, as `ViewLabels` takes them. */
+export type ScreenViews<T extends string = string> = {
+  accessibilityLabel: string;
+  options: readonly ViewOption<T>[];
+  value: T;
+  onChange: (next: T) => void;
+};
+
 /**
  * A page title: the headline role (24/700) at the board's -0.3 tracking, one
  * level above the card titles under it (spec/ui/mobile/patterns.md § Screen
@@ -180,7 +197,7 @@ export function screenTitleStyle(tokens: SignetTokens) {
  * The title draws in `screenTitleStyle`. Which role it takes, and why, lives in
  * spec/ui/mobile/patterns.md § Screen headers.
  */
-export function ScreenShell({
+export function ScreenShell<V extends string = string>({
   title,
   back,
   backAction,
@@ -188,6 +205,7 @@ export function ScreenShell({
   titleMark,
   titleMenu,
   subtitle,
+  views,
   headerAction,
   refresh,
   overlay,
@@ -197,7 +215,7 @@ export function ScreenShell({
   avoidKeyboard = false,
   scrollRef,
   children,
-}: ScreenShellProps) {
+}: ScreenShellProps<V>) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   // Room under the last row for the floating bar, and for the create button
@@ -210,6 +228,7 @@ export function ScreenShell({
   // title block, which scrolls away.
   const body = flattenChildren(children);
   const barScroll = useBarScroll();
+  const hasViews = views !== undefined && views.options.length > 1;
   const stickyHeaderIndices = body.flatMap((child, index) =>
     child.type === StickyHeader ? [index + 1] : [],
   );
@@ -256,8 +275,31 @@ export function ScreenShell({
                         menu={titleMenu}
                         tokens={tokens}
                       />
+                      {hasViews ? (
+                        <>
+                          <View style={styles.viewsRuleCentred} />
+                          <ViewLabels {...views!} />
+                        </>
+                      ) : null}
                       {/* The row's slack, outside the button. */}
                       <View style={styles.titleSlack} />
+                    </>
+                  ) : hasViews ? (
+                    <>
+                      {titleMark}
+                      {/* One line on the title's baseline: the title gives
+                          way (it truncates), the views never wrap. */}
+                      <View style={styles.titleAndViews}>
+                        <Text
+                          accessibilityRole="header"
+                          numberOfLines={1}
+                          style={styles.titleBesideViews}
+                        >
+                          {title}
+                        </Text>
+                        <View style={styles.viewsRule} />
+                        <ViewLabels {...views!} />
+                      </View>
                     </>
                   ) : (
                     <>
@@ -473,6 +515,32 @@ function createStyles(tokens: SignetTokens) {
     title: {
       flex: 1,
       ...screenTitleStyle(tokens),
+    },
+    titleAndViews: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "baseline",
+    },
+    titleBesideViews: {
+      flexShrink: 1,
+      ...screenTitleStyle(tokens),
+    },
+    // Stands on the title's baseline and rises its cap height, so it reads
+    // as part of the title's line. 12 from the title; the first label's own
+    // 8 of padding makes 12 on its far side too.
+    viewsRule: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      marginLeft: tokens.spacing.md,
+      marginRight: tokens.spacing.xs,
+      backgroundColor: tokens.color.border.hairline,
+    },
+    // Beside a title menu, whose row centres: the same rule, centred on it.
+    viewsRuleCentred: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      marginRight: -tokens.spacing.xs,
+      backgroundColor: tokens.color.border.hairline,
     },
     // The button hugs its title, so the space after the chevron is not a tap
     // target, and the header actions keep their place at the far end.
