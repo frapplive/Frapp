@@ -129,6 +129,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
     ],
   },
   {
