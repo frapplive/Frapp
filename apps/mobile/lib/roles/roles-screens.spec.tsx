@@ -1103,10 +1103,43 @@ describe("Role and group colors on the phone (#5966, #5791)", () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
     const tree = render(<RoleScreen />);
     const row = tree.root.find(
-      (node) =>
-        node.props.label === "Color" && node.props.value === "No color",
+      (node) => node.props.label === "Color" && node.props.value === "No color",
     );
     expect(row.props.onPress).toBeUndefined();
+  });
+
+  it("leaves the color of a role at or above the officer's own rank read-only", () => {
+    // `me` holds Treasurer (Officers): a roles manager edits only roles
+    // ranked below their own.
+    h.permissions = ["roles:manage", "members:view", "chapter-config:view"];
+    const colorRow = (roleId: string) => {
+      vi.mocked(useLocalSearchParams).mockReturnValue({ roleId });
+      const tree = render(<RoleScreen />);
+      return tree.root.find(
+        (node) =>
+          node.props.label === "Color" && node.props.value === "No color",
+      );
+    };
+    expect(colorRow("r-tres").props.onPress).toBeUndefined();
+    expect(colorRow("r-bro").props.onPress).toBeTypeOf("function");
+  });
+
+  it("puts a failed group color save on the group's row", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "In house" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    await act(async () => {
+      colorSheet(tree).props.onChange("#3DD6C4");
+    });
+    expect(screenText(tree)).toContain(
+      "Couldn't update In house. The color was not changed.",
+    );
   });
 
   it("lets a groups manager set a group's color from its row", async () => {

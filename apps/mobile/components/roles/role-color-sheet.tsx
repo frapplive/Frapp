@@ -11,13 +11,15 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { hsvToHex, type Hsv } from "@repo/color";
 import {
+  commitRoleColorHex,
   isRoleColorSwatch,
   parseRoleColorInput,
   pickRoleColor,
+  ROLE_COLOR_HUE_STOPS,
   ROLE_COLOR_PICKER_COPY as COPY,
   ROLE_COLOR_SWATCH_COLUMNS,
-  roleColorLabel,
   roleColorPickerStart,
+  roleColorPreviewName,
   roleColorPickNote,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
@@ -48,7 +50,6 @@ const BANDS = [
   ROLE_COLOR_SWATCH_COLUMNS.slice(5),
 ] as const;
 
-const HUE_STOPS = [0, 60, 120, 180, 240, 300, 360];
 const SQUARE_HEIGHT = 168;
 const SNAP_POINTS = ["88%"];
 
@@ -60,17 +61,23 @@ const SNAP_POINTS = ["88%"];
  * saturation and brightness square, hue bar and hex field, the anatomy
  * Discord's role color picker and iOS's own color picker share.
  *
- * A swatch is applied and the sheet closes, as `OptionSheet` does. Custom is
- * applied as it's set (a drag on its release, the hex on Done), like iOS's
- * color picker, with no Save: a pick that wouldn't read is made lighter, and
- * red or gold moves to the nearest allowed hue, with one line saying so
- * (`pickRoleColor`). The host saves each `onChange`.
+ * A swatch is applied and the sheet closes, as `OptionSheet` does. Custom
+ * shows its color as it's set and applies it once, when the sheet closes, with
+ * no Save, so a session of drags is one save: a pick that wouldn't read is
+ * made lighter, and red or gold moves to the nearest allowed hue, with one
+ * line saying so (`pickRoleColor`). The host saves each `onChange`.
  */
 export const RoleColorSheet = forwardRef<
   BottomSheetModal,
   {
     value: string | null;
     onChange: (next: string | null) => void;
+    /**
+     * What's being colored (a role's or group's id): a sheet that serves
+     * several starts fresh for each, with Custom open only when its color is
+     * custom.
+     */
+    subject?: string;
     /** The role's or group's name, for the preview's chip. */
     previewName: string;
     /** The viewer's own name, for the preview's line in chat. */
@@ -83,6 +90,7 @@ export const RoleColorSheet = forwardRef<
   {
     value,
     onChange,
+    subject = "",
     previewName,
     memberName,
     chapterColors = [],
@@ -94,33 +102,44 @@ export const RoleColorSheet = forwardRef<
   const styles = createStyles(tokens);
   const backgroundStyle = useSheetBackgroundStyle();
   const closeSheet = useSheetClose(ref);
-  const custom = value !== null && !isRoleColorSwatch(value);
-  // What the sheet shows while Custom is moving, before it's applied.
+  const isCustom = (color: string | null) =>
+    color !== null && !isRoleColorSwatch(color);
+  // Custom's color while it's being set; applied once, when the sheet closes.
   const [draft, setDraft] = useState<string | null>(value);
-  const [customOpen, setCustomOpen] = useState(custom);
+  const [dirty, setDirty] = useState(false);
+  const [customOpen, setCustomOpen] = useState(isCustom(value));
   const [note, setNote] = useState<string | null>(null);
-  const [seen, setSeen] = useState(value);
-  if (seen !== value) {
-    setSeen(value);
+  const [seen, setSeen] = useState({ subject, value });
+  if (seen.subject !== subject) {
+    setSeen({ subject, value });
     setDraft(value);
+    setDirty(false);
+    setCustomOpen(isCustom(value));
+    setNote(null);
+  } else if (seen.value !== value) {
+    setSeen({ subject, value });
+    if (!dirty) setDraft(value);
   }
 
   const pickPreset = (next: string | null) => {
+    setDirty(false);
+    setDraft(next);
     setNote(null);
     onChange(next);
     closeSheet();
   };
 
-  const applyCustom = (hex: string, commit: boolean) => {
+  const moveCustom = (hex: string) => {
     const pick = pickRoleColor(hex);
     if (!pick) return;
     setDraft(pick.hex);
+    setDirty(pick.hex !== value);
     setNote(roleColorPickNote(pick));
-    if (commit && pick.hex !== value) onChange(pick.hex);
   };
 
-  const shown = customOpen ? draft : value;
-  const draftIsCustom = shown !== null && !isRoleColorSwatch(shown);
+  // What will be applied: Custom's color once it's been moved, else the saved one.
+  const shown = dirty ? draft : value;
+  const draftIsCustom = isCustom(shown);
 
   return (
     <BottomSheetModal
@@ -134,8 +153,12 @@ export const RoleColorSheet = forwardRef<
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
       onDismiss={() => {
+        // One save for the whole Custom session, however many drags it took.
+        const applied = dirty && draft !== value ? draft : value;
+        if (applied !== value) onChange(applied);
+        setDirty(false);
         setNote(null);
-        setCustomOpen(value !== null && !isRoleColorSwatch(value));
+        setCustomOpen(isCustom(applied));
       }}
     >
       <SheetBackToClose onClose={closeSheet} />
@@ -178,7 +201,7 @@ export const RoleColorSheet = forwardRef<
             <View
               style={[
                 styles.tileDot,
-                draftIsCustom
+                draftIsCustom && shown
                   ? { backgroundColor: shown }
                   : styles.tileDotRainbow,
               ]}
@@ -189,9 +212,9 @@ export const RoleColorSheet = forwardRef<
 
         {customOpen ? (
           <CustomColor
+            key={subject}
             value={draft}
-            onMove={(hex) => applyCustom(hex, false)}
-            onCommit={(hex) => applyCustom(hex, true)}
+            onMove={moveCustom}
             note={note}
             tokens={tokens}
             styles={styles}
@@ -257,7 +280,7 @@ function Preview({
   memberName?: string | null;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const name = previewName.trim() || roleColorLabel(value);
+  const name = roleColorPreviewName(previewName, value);
   return (
     <View accessibilityLabel={COPY.preview} style={styles.preview}>
       <View style={styles.chip}>
@@ -316,22 +339,21 @@ function Swatch({
 }
 
 /**
- * Custom on the phone: the square and the bar follow a finger (applied when
- * it lifts), and the hex field applies on Done. A dragged thumb stays under
- * the finger and a typed hex moves the thumbs to the color that's saved; the
- * preview shows the readable color either way.
+ * Custom on the phone: the square and the bar follow a finger, and the hex
+ * field takes its text on Done. A dragged thumb stays under the finger and a
+ * typed hex moves the field and the thumbs to the color that will be saved;
+ * the preview shows that readable color either way. The sheet applies it when
+ * it closes.
  */
 function CustomColor({
   value,
   onMove,
-  onCommit,
   note,
   tokens,
   styles,
 }: {
   value: string | null;
   onMove: (hex: string) => void;
-  onCommit: (hex: string) => void;
   note: string | null;
   tokens: SignetTokens;
   styles: ReturnType<typeof createStyles>;
@@ -350,10 +372,10 @@ function CustomColor({
     setWidth(event.nativeEvent.layout.width);
   const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
-  const moveTo = (next: Hsv, commit: boolean) => {
+  const moveTo = (next: Hsv) => {
     setHsv(next);
     setHexError(false);
-    (commit ? onCommit : onMove)(hsvToHex(next));
+    onMove(hsvToHex(next));
   };
 
   const squareAt = (x: number, y: number): Hsv => ({
@@ -371,31 +393,32 @@ function CustomColor({
   const squarePan = Gesture.Pan()
     .runOnJS(true)
     .minDistance(0)
-    .onBegin((event) => moveTo(squareAt(event.x, event.y), false))
-    .onUpdate((event) => moveTo(squareAt(event.x, event.y), false))
-    .onFinalize((event) => moveTo(squareAt(event.x, event.y), true));
+    .onBegin((event) => moveTo(squareAt(event.x, event.y)))
+    .onUpdate((event) => moveTo(squareAt(event.x, event.y)));
   const huePan = Gesture.Pan()
     .runOnJS(true)
     .minDistance(0)
-    .onBegin((event) => moveTo(hueAt(event.x), false))
-    .onUpdate((event) => moveTo(hueAt(event.x), false))
-    .onFinalize((event) => moveTo(hueAt(event.x), true));
+    .onBegin((event) => moveTo(hueAt(event.x)))
+    .onUpdate((event) => moveTo(hueAt(event.x)));
 
-  const step = (change: Partial<Hsv>) => moveTo({ ...hsv, ...change }, true);
+  const step = (change: Partial<Hsv>) => moveTo({ ...hsv, ...change });
   const percent = (n: number) => Math.round(n * 100);
   const pure = hsvToHex({ h: hsv.h, s: 1, v: 1 });
 
   const commitHex = () => {
-    if (hexText.trim() === (value ?? "")) return;
-    const hex = parseRoleColorInput(hexText);
-    if (!hex) {
+    const pick = commitRoleColorHex(hexText, value);
+    if (pick === null) return;
+    if (pick === "invalid") {
       setHexError(true);
       return;
     }
     setHexError(false);
-    // The thumbs go to the color that's saved, which the note explains.
-    setHsv(roleColorPickerStart(pickRoleColor(hex)?.hex ?? hex));
-    onCommit(hex);
+    // The field and the thumbs go to the color that will be saved, which the
+    // note explains, even when it's the color already shown.
+    setHexText(pick.hex);
+    setHsv(roleColorPickerStart(pick.hex));
+    // The typed color, not the adjusted one, so the note can say what changed.
+    onMove(parseRoleColorInput(hexText) ?? pick.hex);
   };
 
   return (
@@ -474,7 +497,7 @@ function CustomColor({
             <Svg width={width} height={HUE_HEIGHT} style={styles.hueTrack}>
               <Defs>
                 <LinearGradient id="hue" x1="0" y1="0" x2="1" y2="0">
-                  {HUE_STOPS.map((h) => (
+                  {ROLE_COLOR_HUE_STOPS.map((h) => (
                     <Stop
                       key={h}
                       offset={String(h / 360)}

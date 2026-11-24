@@ -40,6 +40,7 @@ import {
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
 import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import { usePendingColors } from "@/components/roles/role-color-row";
 import { RoleColorSheet } from "@/components/roles/role-color-sheet";
 import { describeError } from "@/lib/roles/save-error";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
@@ -117,6 +118,7 @@ export default function ChapterRolesScreen() {
   const groupsQuery = useGroups({ enabled: true });
   const groupColor = useGroupColor(
     canAny(["groups:manage"], permissions),
+    groupsQuery.data,
     groupsQuery.dataUpdatedAt,
   );
   const groups = useMemo(() => {
@@ -403,39 +405,37 @@ export default function ChapterRolesScreen() {
 /**
  * A group's color on the phone (#5966, folding in #5791): a `groups:manage`
  * holder taps a group's row for the same picker as a role's, as web's group
- * editor offers it; each pick saves at once. Naming, members and pinging stay
- * where they are.
+ * editor offers it; a swatch saves on the tap and Custom when the sheet
+ * closes. Naming, members and pinging stay where they are. The sheet reads
+ * the group live from the groups read, so it follows a save that lands while
+ * it's open.
  */
-function useGroupColor(canEdit: boolean, groupsUpdatedAt: number) {
+function useGroupColor(
+  canEdit: boolean,
+  groups: readonly ChapterGroup[] | undefined,
+  groupsUpdatedAt: number,
+) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const updateGroup = useUpdateGroup();
   const chapterColors = useChapterRoleColors({ enabled: canEdit });
   const memberName = useViewerDisplayName();
-  const [editing, setEditing] = useState<ChapterGroup | null>(null);
-  // The color being saved, shown until the groups read after it lands.
-  const [pending, setPending] = useState<{
-    groupId: string;
-    color: string | null;
-    sentAt: number;
-  } | null>(null);
+  const colors = usePendingColors(groupsUpdatedAt);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = groups?.find((group) => group.id === editingId) ?? null;
   const [failure, setFailure] = useState<{
     groupId: string;
     message: string;
   } | null>(null);
-  if (pending && groupsUpdatedAt > pending.sentAt) setPending(null);
 
   const shown = (group: ChapterGroup) =>
-    pending?.groupId === group.id
-      ? pending.color
-      : roleColorOrNull(group.color);
+    colors.shown(group.id, roleColorOrNull(group.color));
 
   async function save(group: ChapterGroup, color: string | null) {
-    setPending({ groupId: group.id, color, sentAt: Date.now() });
-    setFailure(null);
-    try {
-      await updateGroup.mutateAsync({ id: group.id, body: { color } });
-    } catch (error) {
-      setPending(null);
+    setFailure((current) => (current?.groupId === group.id ? null : current));
+    const error = await colors.save(group.id, color, () =>
+      updateGroup.mutateAsync({ id: group.id, body: { color } }),
+    );
+    if (error) {
       setFailure({
         groupId: group.id,
         message: describeError(
@@ -452,13 +452,14 @@ function useGroupColor(canEdit: boolean, groupsUpdatedAt: number) {
     shown,
     failure,
     open: (group: ChapterGroup) => {
-      setEditing(group);
+      setEditingId(group.id);
       sheetRef.current?.present();
     },
     sheet: canEdit ? (
       <RoleColorSheet
         ref={sheetRef}
         value={editing ? shown(editing) : null}
+        subject={editing?.id ?? ""}
         onChange={(next) => {
           if (editing) void save(editing, next);
         }}

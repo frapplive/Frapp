@@ -32,6 +32,7 @@ import {
 } from "@/components/sheet-scaffold";
 import { OptionSheet, type SheetOption } from "@/components/option-sheet";
 import { ForwardGlyph } from "@/components/control-glyphs";
+import { RoleColorDot } from "@/components/roles/role-color-row";
 import { RoleColorSheet } from "@/components/roles/role-color-sheet";
 import { successHaptic } from "@/lib/haptics";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
@@ -282,14 +283,7 @@ export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
                 >
                   <Text style={styles.optionLabel}>{NEW_ROLE_COPY.color}</Text>
                   <View style={styles.optionValueRow}>
-                    <View
-                      style={[
-                        styles.colorDot,
-                        color
-                          ? { backgroundColor: color }
-                          : styles.colorDotNone,
-                      ]}
-                    />
+                    <RoleColorDot value={color} />
                     <Text style={styles.colorValue} numberOfLines={1}>
                       {roleColorLabel(color)}
                     </Text>
@@ -396,11 +390,6 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
       alignItems: "center",
       justifyContent: "flex-end",
       gap: tokens.spacing.xs,
-    },
-    colorDot: { width: 14, height: 14, borderRadius: 7 },
-    colorDotNone: {
-      borderWidth: 1.5,
-      borderColor: tokens.color.text.mutedForeground,
     },
     colorValue: {
       ...typeRole(tokens.typography.role.body),

@@ -10,13 +10,15 @@ import {
 import { Ban, Pipette } from "lucide-react";
 import { hsvToHex, type Hsv } from "@repo/color";
 import {
+  commitRoleColorHex,
   isRoleColorSwatch,
   parseRoleColorInput,
   pickRoleColor,
+  ROLE_COLOR_HUE_STOPS,
   ROLE_COLOR_PICKER_COPY as COPY,
   ROLE_COLOR_SWATCH_COLUMNS,
-  roleColorLabel,
   roleColorPickerStart,
+  roleColorPreviewName,
   roleColorPickNote,
 } from "@repo/validation";
 
@@ -30,9 +32,9 @@ import {
 import { cn } from "@/lib/utils";
 
 /** The hue bar's track: pure hues every 60 degrees, as every HSV picker draws it. */
-const HUE_TRACK = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360]
-  .map((h) => hsvToHex({ h, s: 1, v: 1 }))
-  .join(", ")})`;
+const HUE_TRACK = `linear-gradient(to right, ${ROLE_COLOR_HUE_STOPS.map((h) =>
+  hsvToHex({ h, s: 1, v: 1 }),
+).join(", ")})`;
 
 /**
  * The role and group color control (#3485, #5784, #5966), on the pattern of
@@ -211,7 +213,7 @@ function ColorPreview({
   previewName: string;
   memberName?: string | null;
 }) {
-  const name = previewName.trim() || roleColorLabel(value);
+  const name = roleColorPreviewName(previewName, value);
   return (
     <div
       role="group"
@@ -278,16 +280,19 @@ function CustomColor({
   };
 
   const commitHex = () => {
-    if (hexText.trim() === (value ?? "")) return;
-    const hex = parseRoleColorInput(hexText);
-    if (!hex) {
+    const pick = commitRoleColorHex(hexText, value);
+    if (pick === null) return;
+    if (pick === "invalid") {
       setHexError(true);
       return;
     }
     setHexError(false);
-    // The thumbs go to the color that's saved, which the note explains.
-    setHsv(roleColorPickerStart(pickRoleColor(hex)?.hex ?? hex));
-    onPick(hex);
+    // The field and the thumbs go to the color that's saved, which the note
+    // explains, even when it's the color already shown.
+    setHexText(pick.hex);
+    setHsv(roleColorPickerStart(pick.hex));
+    // The typed color, not the adjusted one, so the note can say what changed.
+    onPick(parseRoleColorInput(hexText) ?? pick.hex);
   };
 
   return (

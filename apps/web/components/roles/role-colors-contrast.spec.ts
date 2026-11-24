@@ -84,7 +84,7 @@ describe("custom role colors", () => {
 
   it("read at AA on every surface, at rest and lifted on a hovered row", () => {
     // Every grid swatch, and custom picks across the square and hue bar.
-    const picks = ROLE_COLOR_SWATCHES.map((swatch) => [
+    const picks: [string, string][] = ROLE_COLOR_SWATCHES.map((swatch) => [
       swatch.label,
       swatch.hex,
     ]);
@@ -98,7 +98,7 @@ describe("custom role colors", () => {
         picks.push([picked, pickRoleColor(picked)!.hex]);
       }
     }
-    for (const [hue, hex] of picks as [string, string][]) {
+    for (const [hue, hex] of picks) {
       for (const [name, surface] of Object.entries(RESTING_SURFACES)) {
         expect(
           ratio(hex, surface),

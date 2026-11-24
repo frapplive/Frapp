@@ -44,7 +44,7 @@ import {
 } from "@/components/roles/override-sheet";
 import {
   RoleColorRow,
-  useOptimisticColor,
+  usePendingColors,
 } from "@/components/roles/role-color-row";
 import { Toggle } from "@/components/toggle";
 import { describeError } from "@/lib/roles/save-error";
@@ -148,13 +148,10 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
   const wildcard = isWildcardRole(role);
   const count = memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
+  const editable = canManage && reachesRole(reach, role, tiers);
   const lockedReason = wildcard
     ? "This role can do everything. That only moves through Transfer presidency."
-    : lockedReasonFor(
-        data,
-        canManage && reachesRole(reach, role, tiers),
-        "role",
-      );
+    : lockedReasonFor(data, editable, "role");
 
   return (
     <ScreenShell back={BACK_TO_ROLES} title={role.name}>
@@ -185,7 +182,7 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
         />
         <RoleColor
           role={role}
-          editable={canManage && reachesRole(reach, role, tiers)}
+          editable={editable}
           rolesUpdatedAt={data.rolesQuery.dataUpdatedAt}
         />
       </ListSection>
@@ -227,16 +224,10 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
 }
 
 /**
- * Non-chapter business (#4958, Shawn 2026-11-14): whether members add and
- * remove this role themselves. Only a safe role can be marked
- * (`spec/behavior/rbac.md` § Self-assignable roles), so on one that isn't the
- * switch says why and only turns off. A marked role that became unsafe some
- * other way can still be unmarked.
- */
-/**
  * The role's color (#5966, #5791), set here as on web's role page with the
- * same picker; it saves on each pick, like every switch on this screen.
- * Read-only for an officer who can't edit this role.
+ * same picker; a swatch saves on the tap and Custom when its sheet closes,
+ * like every switch on this screen saving on its own. Read-only for an
+ * officer who can't edit this role.
  */
 function RoleColor({
   role,
@@ -248,17 +239,15 @@ function RoleColor({
   rolesUpdatedAt: number;
 }) {
   const updateRole = useUpdateRole();
-  const color = useOptimisticColor(roleColorOrNull(role.color), rolesUpdatedAt);
+  const colors = usePendingColors(rolesUpdatedAt);
   const [failure, setFailure] = useState<string | null>(null);
 
   async function save(next: string | null) {
-    color.start(next);
     setFailure(null);
-    try {
-      await updateRole.mutateAsync({ id: role.id, body: { color: next } });
-      color.saved();
-    } catch (error) {
-      color.failed();
+    const error = await colors.save(role.id, next, () =>
+      updateRole.mutateAsync({ id: role.id, body: { color: next } }),
+    );
+    if (error) {
       setFailure(
         describeError(
           role.name,
@@ -271,7 +260,8 @@ function RoleColor({
 
   return (
     <RoleColorRow
-      value={color.value}
+      value={colors.shown(role.id, roleColorOrNull(role.color))}
+      subject={role.id}
       name={role.name}
       onChange={(next) => void save(next)}
       disabled={!editable}
@@ -280,6 +270,13 @@ function RoleColor({
   );
 }
 
+/**
+ * Non-chapter business (#4958, Shawn 2026-11-14): whether members add and
+ * remove this role themselves. Only a safe role can be marked
+ * (`spec/behavior/rbac.md` § Self-assignable roles), so on one that isn't the
+ * switch says why and only turns off. A marked role that became unsafe some
+ * other way can still be unmarked.
+ */
 function PickableSwitch({
   role,
   lockedReason,

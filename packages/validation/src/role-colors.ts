@@ -471,6 +471,33 @@ export function roleColorPickerStart(value: string | null): Hsv {
   return (value && hexToHsv(value)) || CUSTOM_START;
 }
 
+/** Where the hue bar's track paints a pure hue, in HSV degrees, on both apps. */
+export const ROLE_COLOR_HUE_STOPS = [0, 60, 120, 180, 240, 300, 360] as const;
+
+/** The name the preview paints: the role's or group's, or the color's own while it has none. */
+export function roleColorPreviewName(
+  previewName: string,
+  value: string | null,
+): string {
+  return previewName.trim() || roleColorLabel(value);
+}
+
+/**
+ * What the hex field does with its text on Enter, Done or leaving it: nothing
+ * when the text is the color already shown, `"invalid"` when it isn't a hex,
+ * or the pick it makes ({@link pickRoleColor}). The field then shows the
+ * pick's hex, so it never keeps a color that can't be saved.
+ */
+export function commitRoleColorHex(
+  text: string,
+  shown: string | null,
+): RoleColorPick | "invalid" | null {
+  if (shown !== null && text.trim().toUpperCase() === shown.toUpperCase()) {
+    return null;
+  }
+  return pickRoleColor(text) ?? "invalid";
+}
+
 /** How many of the chapter's own colors the picker offers. */
 export const CHAPTER_ROLE_COLORS_SHOWN = 10;
 

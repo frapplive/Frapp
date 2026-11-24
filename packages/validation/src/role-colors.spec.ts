@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   adjustRoleColor,
   chapterRoleColors,
+  commitRoleColorHex,
   isPaintableRoleColor,
   isRoleColorSwatch,
   parseRoleColorInput,
@@ -26,6 +27,7 @@ import {
   roleColorLabel,
   roleColorOrNull,
   roleColorPickNote,
+  roleColorPreviewName,
   topRoleColor,
 } from "./role-colors";
 
@@ -248,6 +250,12 @@ describe("chapterRoleColors", () => {
     ).toEqual(["#10B981", "#4ADE80"]);
   });
 
+  it("puts the most used first, not the first seen", () => {
+    expect(
+      chapterRoleColors(["#4ADE80", "#10B981", "#10B981", "#10B981"]),
+    ).toEqual(["#10B981", "#4ADE80"]);
+  });
+
   it("offers at most ten", () => {
     const many = Array.from(
       { length: 14 },
@@ -366,5 +374,30 @@ describe("topRoleColor", () => {
     ];
     expect(topRoleColor(tied, ["a", "b"])).toBe("#F47FA4");
     expect(topRoleColor([...tied].reverse(), ["a", "b"])).toBe("#F47FA4");
+  });
+});
+
+describe("commitRoleColorHex", () => {
+  it("does nothing for the color already shown, in any case", () => {
+    expect(commitRoleColorHex("#10b981", "#10B981")).toBeNull();
+    expect(commitRoleColorHex(" #10B981 ", "#10B981")).toBeNull();
+  });
+
+  it("refuses text that isn't a hex", () => {
+    expect(commitRoleColorHex("blue", null)).toBe("invalid");
+  });
+
+  it("makes the pick, even when it adjusts to the color already shown", () => {
+    const shown = pickRoleColor("#FF0000")!.hex;
+    const pick = commitRoleColorHex("#FF0000", shown);
+    expect(pick).toEqual(pickRoleColor("#FF0000"));
+  });
+});
+
+describe("roleColorPreviewName", () => {
+  it("names the role, or the color while the role has no name", () => {
+    expect(roleColorPreviewName("  Rush chair ", "#F2994A")).toBe("Rush chair");
+    expect(roleColorPreviewName("  ", "#F2994A")).toBe("Orange");
+    expect(roleColorPreviewName("", null)).toBe("No color");
   });
 });
