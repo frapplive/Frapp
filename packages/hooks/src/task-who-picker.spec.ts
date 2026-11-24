@@ -14,6 +14,7 @@ import {
   OTHER_ROLES_HEADING,
   personName,
   personTicked,
+  peopleToAdd,
   pickerMode,
   ROLES_HEADING,
   setTick,
@@ -571,5 +572,22 @@ describe("a tier as a pick (#5473)", () => {
     });
     expect(initialWhoTab(TIER)).toBe("sets");
     expect(initialOpenTiers(TIER, directory).has("t-exec")).toBe(true);
+  });
+});
+
+describe("peopleToAdd (#5905)", () => {
+  it("is everyone ticked minus who already has a copy", () => {
+    const who: TaskWho = {
+      kind: "each",
+      target: { kind: "people", userIds: ["u-sam", "u-alex"] },
+    };
+    expect(peopleToAdd(who, directory, new Set(["u-sam"]))).toEqual(["u-alex"]);
+    expect(peopleToAdd(null, directory, new Set(["u-sam"]))).toEqual([]);
+  });
+
+  it("reads a whole-chapter value as its members", () => {
+    expect(
+      peopleToAdd(CHAPTER, directory, new Set(["u-viewer", "u-sam"])),
+    ).toEqual(["u-alex", "u-blank"]);
   });
 });

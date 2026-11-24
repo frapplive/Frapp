@@ -21,7 +21,7 @@ const { mockOffline, state, voteMutate, bidMutate, toast } = vi.hoisted(
       liveError: false,
       candidateIds: [] as (string | undefined)[],
       /** `undefined`: the permissions read hasn't answered (loading, or failed). */
-      permissions: ["members:view"] as string[] | undefined,
+      permissions: [] as string[] | undefined,
       votePending: false,
       bidPending: false,
     },
@@ -150,6 +150,10 @@ function refuse(mutate: typeof voteMutate, error: unknown) {
   (options as { onError: (error: unknown) => void }).onError(error);
 }
 
+/** What the seeded Member role holds for recruitment (`RUSH_MEMBER_PERMISSIONS`). */
+const MEMBER_KEYS = ["members:view", "rush:view", "rush:add", "rush:vote", "rush:bid", "rush:view_results"];
+const without = (key: string) => MEMBER_KEYS.filter((held) => held !== key);
+
 describe("RushCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -157,7 +161,7 @@ describe("RushCard", () => {
     state.live = liveCandidate();
     state.liveError = false;
     state.candidateIds = [];
-    state.permissions = ["members:view"];
+    state.permissions = [...MEMBER_KEYS];
     state.votePending = false;
     state.bidPending = false;
     memberView();
@@ -223,6 +227,49 @@ describe("RushCard", () => {
 
     expect(state.candidateIds.every((id) => id === undefined)).toBe(true);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("doesn't ask for a candidate without rush:view", () => {
+    state.permissions = without("rush:view");
+    render(<RushCard message={makeMessage()} isConfirmed />);
+
+    expect(state.candidateIds.every((id) => id === undefined)).toBe(true);
+  });
+
+  // #4084: the card offers only what the role holds, and never draws a
+  // hidden count as 0.
+  it("leaves Vote out for a role without rush:vote", () => {
+    state.permissions = without("rush:vote");
+    render(<RushCard message={makeMessage()} isConfirmed />);
+
+    expect(
+      screen.queryByRole("button", { name: "Vote" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extend bid" })).toBeEnabled();
+  });
+
+  it("leaves Extend bid out for a role without rush:bid", () => {
+    state.permissions = without("rush:bid");
+    render(<RushCard message={makeMessage()} isConfirmed />);
+
+    expect(screen.getByRole("button", { name: "Vote" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Extend bid" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no count when the server leaves it out, only the viewer's own vote", () => {
+    const hidden: Record<string, unknown> = liveCandidate({
+      viewer_has_voted: true,
+    });
+    delete hidden.vote_count;
+    state.live = hidden;
+    state.permissions = without("rush:view_results");
+    render(<RushCard message={makeMessage()} isConfirmed />);
+
+    expect(screen.getByText("You voted")).toBeInTheDocument();
+    expect(screen.queryByText(/votes?$/)).not.toBeInTheDocument();
+    expect(screen.getByText("Open")).toBeInTheDocument();
   });
 
   it("asks for the candidate while the permissions read hasn't answered", () => {
@@ -321,7 +368,7 @@ describe("RushCard subscription gating", () => {
     mockOffline.value = false;
     state.live = liveCandidate();
     state.liveError = false;
-    state.permissions = ["members:view"];
+    state.permissions = [...MEMBER_KEYS];
     state.votePending = false;
     state.bidPending = false;
   });

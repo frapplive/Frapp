@@ -202,8 +202,55 @@ describe("OptionSheet sections (#5473)", () => {
       label: `Row ${i}`,
     }));
     expect(fitsContent(rows)).toBe(true);
-    expect(fitsContent([{ ...rows[0]!, heading: "Tiers" }, ...rows.slice(1)])).toBe(
-      false,
+    expect(
+      fitsContent([{ ...rows[0]!, heading: "Tiers" }, ...rows.slice(1)]),
+    ).toBe(false);
+  });
+});
+
+describe("OptionSheet with several picks (#5924)", () => {
+  it("checks every value listed and toggles a tapped row without closing", () => {
+    const onSelect = vi.fn();
+    const dismiss = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <OptionSheet
+            ref={React.createRef<never>()}
+            title="Tags"
+            options={SORTS}
+            selected={null}
+            checked={["name", "oldest"]}
+            onSelect={onSelect}
+          />
+        </FrappThemeProvider>,
+        {
+          createNodeMock: (element) =>
+            (element.type as unknown) === "BottomSheetModal"
+              ? { present: vi.fn(), dismiss }
+              : null,
+        },
+      );
+    });
+    trees.push(tree);
+    const boxes = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === "checkbox" &&
+        typeof node.props.onPress === "function",
     );
+    expect(
+      boxes.map((box) => [
+        box.props.accessibilityLabel,
+        box.props.accessibilityState.checked,
+      ]),
+    ).toEqual([
+      ["Name A–Z", true],
+      ["Newest first", false],
+      ["Oldest first", true],
+    ]);
+    act(() => boxes[1]!.props.onPress());
+    expect(onSelect).toHaveBeenCalledWith("newest");
+    expect(dismiss).not.toHaveBeenCalled();
   });
 });

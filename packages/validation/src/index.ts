@@ -261,6 +261,8 @@ export * from "./role-colors";
 export * from "./role-rank";
 // School-email verification (#5929): limits, refusal codes and the step's words.
 export * from "./school-verification";
+// The recruitment pipeline's stage categories, closed reasons and limits (#5924).
+export * from "./rush-pipeline";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).

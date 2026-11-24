@@ -106,7 +106,9 @@ const {
    */
   mockSendReturned: vi.fn(),
   mockUseMyPermissions: vi.fn(() => ({
-    data: { permissions: [] as string[] },
+    data: { permissions: [] as string[] } as
+      | { permissions: string[] }
+      | undefined,
   })),
   searchHit: vi.fn(() => ({
     message: { id: "msg-2" },
@@ -1271,6 +1273,7 @@ vi.mock("./composer", () => ({
     slashCommandsStatus,
     recruitmentVocab,
     canAnnounce,
+    permissions,
     onOpenCommandForm,
     commandForms,
     renderPlusForm,
@@ -1306,6 +1309,7 @@ vi.mock("./composer", () => ({
     ) => string | null;
     recruitmentVocab?: string;
     canAnnounce?: boolean;
+    permissions?: readonly string[];
     isModuleEnabled?: (moduleKey: string) => boolean;
     slashCommandsStatus?: string;
     // The shell-to-editor handoff (#2176) is entirely carried by these two:
@@ -1361,6 +1365,7 @@ vi.mock("./composer", () => ({
         data-polls-enabled={String(isModuleEnabled?.("polls"))}
         data-recruitment={recruitmentVocab ?? ""}
         data-can-announce={String(canAnnounce)}
+        data-permissions={permissions ? permissions.join(",") : "unread"}
         data-command-forms={(commandForms ?? [])
           .map((form) => `${form.command}:${String(form.roleAllows)}`)
           .join(",")}
@@ -1992,6 +1997,29 @@ describe("ChatShell /announce gate (#3414)", () => {
     expect(screen.getByTestId("composer")).toHaveAttribute(
       "data-can-announce",
       "true",
+    );
+  });
+});
+
+// #4084: the palette's `/rush` row is narrowed by the member's permissions,
+// which only the shell reads; a dropped prop would offer every subcommand.
+describe("ChatShell hands the composer the member's permissions", () => {
+  it("passes the permissions read, and none while it hasn't answered", () => {
+    mockUseMyPermissions.mockReturnValue({
+      data: { permissions: ["members:view", "rush:add"] },
+    });
+    const { unmount } = render(<ChatShell />);
+    expect(screen.getByTestId("composer")).toHaveAttribute(
+      "data-permissions",
+      "members:view,rush:add",
+    );
+    unmount();
+
+    mockUseMyPermissions.mockReturnValue({ data: undefined });
+    render(<ChatShell />);
+    expect(screen.getByTestId("composer")).toHaveAttribute(
+      "data-permissions",
+      "unread",
     );
   });
 });

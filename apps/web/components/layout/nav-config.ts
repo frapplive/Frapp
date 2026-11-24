@@ -14,7 +14,9 @@ import {
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
+import { RushGlyph } from "@/components/chat/chat-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
+import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
 import { SECTION_NAMES, type TenantKind } from "@repo/validation";
 
 /**
@@ -59,7 +61,8 @@ import { SECTION_NAMES, type TenantKind } from "@repo/validation";
  * Permission semantics:
  * - `requirePermission` — a single permission string; hide when absent.
  * - `requireAnyOf` — shown when the caller holds at least one listed.
- * - Omitting both renders the item unconditionally.
+ * - `requireAllOf` — shown only when the caller holds every one listed.
+ * - Omitting all three renders the item unconditionally.
  *
  * Every row links to a built route. There are no roadmap rows: a row drawn
  * disabled with nothing behind it is a dead-end control, and the "Coming soon"
@@ -103,9 +106,26 @@ import { SECTION_NAMES, type TenantKind } from "@repo/validation";
  */
 
 type NavPermissionRule =
-  | { requirePermission?: undefined; requireAnyOf?: undefined }
-  | { requirePermission: string; requireAnyOf?: undefined }
-  | { requirePermission?: undefined; requireAnyOf: readonly string[] };
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission: string;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf: readonly string[];
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf: readonly string[];
+    };
 
 export type NavItem = {
   id: string;
@@ -123,10 +143,36 @@ export type NavItem = {
   hiddenUntilSetUp?: UnsetFeatureKey;
   /** The tenant kinds this row serves; omitted, chapters only (above). */
   kinds?: readonly TenantKind[];
+  /**
+   * Named in the chapter's own word (`vocab()` in `@repo/org-archetypes`):
+   * the recruitment row reads Rush, Recruitment or Intake as the chapter
+   * calls it, never a hardcoded "Rush" (`spec/behavior/rush.md` §
+   * Vocabulary). `label` is then the IFC default, what shows before the
+   * chapter read answers. Resolve it with {@link navItemLabel}.
+   */
+  vocabLabel?: VocabKey;
 } & NavPermissionRule;
 
 /** A row a council's space shows as well as a chapter's. */
 const EVERY_TENANT: readonly TenantKind[] = ["chapter", "council"];
+
+/** A row's label in the chapter's words (see `vocabLabel`). */
+export function navItemLabel(
+  item: Pick<NavItem, "label" | "vocabLabel">,
+  vocabulary?: VocabConfig,
+): string {
+  return item.vocabLabel ? vocab(item.vocabLabel, vocabulary) : item.label;
+}
+
+/** The row with its label in the chapter's words. */
+export function withChapterWords(
+  item: NavItem,
+  vocabulary?: VocabConfig,
+): NavItem {
+  return item.vocabLabel
+    ? { ...item, label: navItemLabel(item, vocabulary) }
+    : item;
+}
 
 export type NavSection = {
   id: string;
@@ -219,6 +265,19 @@ export const DASHBOARD_NAV: NavSection[] = [
         href: "/service",
         description: "Log service hours and approve entries for points.",
         module: "hours",
+      },
+      {
+        // The recruitment pipeline (#5924): a board and a list of prospects.
+        // Its routes need `members:view` and `rush:view` with the module on
+        // (`rush-pipeline.controller.ts`), so the row asks for both.
+        id: "rush",
+        label: vocab("recruitment"),
+        vocabLabel: "recruitment",
+        icon: RushGlyph,
+        href: "/rush",
+        description: "Prospects by stage, with tags, ratings and notes.",
+        module: "rush",
+        requireAllOf: ["members:view", "rush:view"],
       },
     ],
   },

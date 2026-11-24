@@ -36,6 +36,7 @@ import {
   HostCheckInGlyph,
   InviteGlyph,
   MinutesGlyph,
+  RecruitmentGlyph,
   ServiceGlyph,
   SettingsGlyph,
   StudyGlyph,
@@ -63,6 +64,7 @@ import {
   type YouDestination,
 } from "@/lib/more/destination-hue";
 import { selectEventRows } from "@/lib/events/select";
+import { useRushEntry } from "@/lib/rush/rush-entry";
 import { selectViewerProfile } from "@/lib/more/profile";
 import {
   dueChip,
@@ -220,6 +222,7 @@ function YouScreen() {
         : undefined,
     [chapter],
   );
+  const rush = useRushEntry();
   const hiddenFeatures = useHiddenUnsetFeatures(
     permissionsQuery.data?.permissions,
     moduleGate,
@@ -398,6 +401,17 @@ function YouScreen() {
           accessibilityHint="Opens the member directory."
           onPress={() => router.push("/directory")}
         />
+        {/* The recruitment pipeline (#5924), named with the chapter's own
+            word ("Rush", "Intake"), only with Recruitment on and for a role
+            that may open it (`useRushEntry`). A row, not a fifth tab. */}
+        {rush.show ? (
+          <ListRow
+            label={rush.term}
+            leading={tile(RecruitmentGlyph, "recruitment")}
+            accessibilityHint="Opens the chapter's prospects."
+            onPress={() => router.push("/rush")}
+          />
+        ) : null}
       </ListSection>
 
       <ListSection>

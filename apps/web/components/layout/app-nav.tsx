@@ -5,7 +5,12 @@ import { useHiddenUnsetFeatures } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { ChapterNavHeader } from "@/components/layout/chapter-nav-header";
-import { DASHBOARD_NAV, type NavItem } from "@/components/layout/nav-config";
+import {
+  DASHBOARD_NAV,
+  withChapterWords,
+  type NavItem,
+} from "@/components/layout/nav-config";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import type { ChatView } from "@/components/layout/shell-prefs";
 import {
   isNavItemVisible,
@@ -176,17 +181,21 @@ export function AppNav({
   const hiddenFeatures = useHiddenUnsetFeatures(permissions, isModuleEnabled);
   // A council's nav keeps only the rows its routes serve (#5933).
   const tenantKind = useTenantKind();
+  // A row named in the chapter's own word (Recruitment's Rush / Intake).
+  const vocabulary = useChapterVocabulary();
 
   const sections = DASHBOARD_NAV.map((section) => {
-    const visibleItems = section.items.filter((item) =>
-      isNavItemVisible(
-        item,
-        permissions,
-        isModuleEnabled,
-        hiddenFeatures,
-        tenantKind,
-      ),
-    );
+    const visibleItems = section.items
+      .filter((item) =>
+        isNavItemVisible(
+          item,
+          permissions,
+          isModuleEnabled,
+          hiddenFeatures,
+          tenantKind,
+        ),
+      )
+      .map((item) => withChapterWords(item, vocabulary));
     if (visibleItems.length === 0) return null;
 
     return (

@@ -151,6 +151,13 @@ import type {
   UserAiConsent,
   UserSettings,
 } from '#domain/entities';
+import type {
+  RushCandidateNote,
+  RushCandidateRating,
+  RushCandidateTag,
+  RushStage,
+  RushTag,
+} from '#domain/entities/rush-pipeline.entity';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -314,8 +321,13 @@ export interface Database {
       push_tokens: TableDefinition<PushToken>;
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
+      rush_candidate_notes: TableDefinition<RushCandidateNote>;
+      rush_candidate_ratings: TableDefinition<RushCandidateRating>;
+      rush_candidate_tags: TableDefinition<RushCandidateTag>;
       rush_candidate_votes: TableDefinition<RushCandidateVote>;
       rush_candidates: TableDefinition<RushCandidateRow>;
+      rush_stages: TableDefinition<RushStage>;
+      rush_tags: TableDefinition<RushTag>;
       scheduled_notification_dispatches: TableDefinition<ScheduledNotificationDispatch>;
       school_chapters: TableDefinition<SchoolChapter>;
       school_email_domains: TableDefinition<SchoolEmailDomain>;
@@ -358,6 +370,20 @@ export interface Database {
           p_user_id: string;
         };
         Returns: ChatChannel[];
+      };
+      /**
+       * `20261124035159` (#5905) — new members' copies of an existing group
+       * task, made from one of its copies with its checklist; a member who
+       * already has a copy is skipped. Returns the copies made.
+       */
+      add_task_group_copies: {
+        Args: {
+          p_chapter_id: string;
+          p_group_id: string;
+          p_template_id: string;
+          p_assignee_ids: string[];
+        };
+        Returns: Task[];
       };
       /**
        * `20261112165020` (#714) — a chapter's AI usage in `[p_from, p_to)`, one
@@ -609,7 +635,7 @@ export interface Database {
        * `20261117172708` (#4295 step 3) — a task for everyone: its group, a
        * copy per member and each copy's checklist in one transaction.
        * Returns the copies. `p_followed_by` since `20261119162318` (#5473);
-       * `p_attachments` since `20261123183858`.
+       * `p_attachments` since `20261124034200`.
        */
       create_task_group: {
         Args: {
@@ -634,7 +660,7 @@ export interface Database {
       /**
        * `20261116044044` (#5119) — a repeating task's series and its first
        * copy in one transaction. Returns the first copy. `p_attachments`
-       * since `20261123183858`.
+       * since `20261124034200`.
        */
       create_task_series: {
         Args: {
