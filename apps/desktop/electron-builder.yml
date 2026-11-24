@@ -25,6 +25,14 @@ extraResources:
   - from: ../../packages/brand-assets/assets/signet-emblem-B-32.png
     to: tray.png
 
+# The sign-in link back from the browser (#4841, src/shared/auth-link.ts).
+# This writes it into the macOS and Linux bundles; Windows registers it at
+# first launch (`setAsDefaultProtocolClient` in src/main/index.ts).
+protocols:
+  - name: Frapp sign-in
+    schemes:
+      - frapp-desktop
+
 mac:
   icon: ../../packages/brand-assets/assets/signet-emblem-B-1024.png
   category: public.app-category.social-networking

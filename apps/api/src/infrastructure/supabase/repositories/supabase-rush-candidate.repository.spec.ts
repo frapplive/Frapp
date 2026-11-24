@@ -129,6 +129,7 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
         display_name: 'Pat Lee',
         user_id: null,
         stage: 'new',
+        closed_reason: null,
         bid_status: 'none',
         created_by: USER_SHARED,
       }),
