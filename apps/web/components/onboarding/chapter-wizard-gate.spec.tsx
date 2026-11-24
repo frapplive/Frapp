@@ -38,11 +38,18 @@ vi.mock("@repo/hooks", () => ({
     invitesCalls.push(userId);
     return userId
       ? invites
-      : { data: undefined, isSuccess: false, isError: false, isFetching: false };
+      : {
+          data: undefined,
+          isSuccess: false,
+          isError: false,
+          isFetching: false,
+        };
   },
 }));
 
-const { auth } = vi.hoisted(() => ({ auth: { userId: "user-1" as string | null } }));
+const { auth } = vi.hoisted(() => ({
+  auth: { userId: "user-1" as string | null },
+}));
 vi.mock("@/lib/auth/use-auth-user-id", () => ({
   useAuthUserId: () => auth.userId,
 }));

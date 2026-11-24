@@ -4,6 +4,7 @@ import type {
 } from '@supabase/supabase-js';
 import type { Request } from 'express';
 import type { SubscriptionStatus } from '#domain/entities/chapter.entity';
+import type { SchoolMember } from '#domain/entities/school.entity';
 
 export interface AppUserContext {
   id: string;
@@ -71,6 +72,12 @@ export interface RequestContext extends Request {
   appUserLookup?: () => Promise<string | null>;
   member?: MemberContext;
   chapterId?: string;
+  /**
+   * Set by `SchoolGuard` (ADR-27 decision 3, #5929): the school a campus
+   * request named in `x-school-id`, and the caller's live membership there.
+   */
+  schoolId?: string;
+  schoolMember?: SchoolMember;
   subscriptionStatus?: SubscriptionStatus;
   /**
    * `chapters.enabled_modules` as `ChapterGuard` read it. `null` is a chapter

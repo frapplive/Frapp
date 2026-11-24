@@ -415,6 +415,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/schools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search schools
+         * @description Schools by name, short name or another name, best match first, at most 20. Each says whether a student can verify there today.
+         */
+        get: operations["SchoolController_search_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your schools
+         * @description The schools where the caller proved a school address, newest first. Empty for someone who hasn't verified, or skipped.
+         */
+        get: operations["SchoolController_listMine_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/{schoolId}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a code to your school email
+         * @description Emails a six-digit code to an address on one of the school's verified domains. 404 `school.not_found`; 409 `school.verification_unavailable` when the school can't verify students yet; 400 `school.email.invalid` for anything but a plain `local@domain` address, or `school.email.wrong_domain`; 429 `school.code.cooldown` within a minute of the last code, or `school.code.rate_limited` past the hourly ceilings per address, IP or account; 503 `school.code.send_failed`.
+         */
+        post: operations["SchoolController_startVerification_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/{schoolId}/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm your school email with its code
+         * @description Checks the code and makes the caller a member of the school. 400 `school.code.missing`, `school.code.expired` or `school.code.wrong`; 429 `school.code.too_many_attempts`; 409 `school.email.taken` when another account verified that address, or `school.verification_unavailable`.
+         */
+        post: operations["SchoolController_confirmVerification_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/school": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The school a campus page names
+         * @description The school in `x-school-id` and the caller's membership there. 403 `school.context.invalid` for a school the caller isn't verified at (or that doesn't exist); 400 `school.context.required` without the header.
+         */
+        get: operations["SchoolPageController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roles": {
         parameters: {
             query?: never;
@@ -7625,6 +7725,65 @@ export interface components {
             };
             member_visible: boolean;
             created_at: string;
+        };
+        SchoolSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Rensselaer Polytechnic Institute */
+            name: string;
+            /** @example RPI */
+            short_name: string;
+            /**
+             * @description The school's current URL slug (`/s/<slug>`, ADR-27).
+             * @example rpi
+             */
+            slug: string | null;
+            /** @description Whether a student can verify at this school today: the school is verified and has at least one verified email domain. */
+            verifiable: boolean;
+            /**
+             * @description The school's verified email domains, for the address field's placeholder. Empty when it can't verify students.
+             * @example [
+             *       "rpi.edu"
+             *     ]
+             */
+            email_domains: string[];
+        };
+        MySchoolDto: {
+            school: components["schemas"]["SchoolSummaryDto"];
+            /** @enum {string} */
+            status: "pnm" | "member" | "alum";
+            /** @description The school address the code went to. */
+            verified_email: string | null;
+            /** Format: date-time */
+            verified_at: string;
+        };
+        StartSchoolVerificationDto: {
+            /**
+             * @description The caller's school address. Only an address on one of the school's verified domains is sent a code.
+             * @example student@rpi.edu
+             */
+            email: string;
+        };
+        SentSchoolCodeDto: {
+            /** @description The address the code went to, in lower case. */
+            email: string;
+            /**
+             * Format: date-time
+             * @description When the code stops working.
+             */
+            expires_at: string;
+            /**
+             * @description Seconds before another code can be asked for.
+             * @example 60
+             */
+            resend_after_seconds?: number;
+        };
+        ConfirmSchoolVerificationDto: {
+            /**
+             * @description The six-digit code from the email.
+             * @example 123456
+             */
+            code: string;
         };
         PermissionCatalogEntryDto: {
             /** @description The API constant's name, e.g. `EVENTS_CREATE`. */
@@ -15046,6 +15205,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChapterAuditLogEntryDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_search_v1: {
+        parameters: {
+            query: {
+                /** @description Part of the school's name, short name or another name for it ("rens", "RPI"). Under 2 characters answers an empty list. */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolSummaryDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_listMine_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_startVerification_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartSchoolVerificationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentSchoolCodeDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_confirmVerification_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSchoolVerificationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolPageController_get_v1: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The school a campus page (`/s/<slug>`) acts in. */
+                "x-school-id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"];
                 };
             };
             /** @description Error */

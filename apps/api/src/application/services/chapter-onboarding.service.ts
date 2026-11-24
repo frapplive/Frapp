@@ -18,6 +18,7 @@ import { LEGAL_POLICY_VERSION } from '#domain/constants/legal';
 import { ChapterService } from './chapter.service';
 import { ActivationService } from './activation.service';
 import { LegalAcceptanceService } from './legal-acceptance.service';
+import { SchoolService } from './school.service';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import type { Chapter } from '#domain/entities/chapter.entity';
 import { SYSTEM_SENDER_ID } from '#domain/constants/chat';
@@ -101,7 +102,8 @@ export interface ChapterOnboardingInput {
  *  3. seed the archetype's default custom fields into chapter_custom_fields,
  *  4. post a one-time welcome system_audit message into #general,
  *  5. for manual-entry chapters (no directory match), record a
- *     chapter_directory_requests row so the curated seed can be backfilled.
+ *     chapter_directory_requests row so the curated seed can be backfilled;
+ *     for a directory match, propose the chapter's school link (#5929).
  */
 @Injectable()
 export class ChapterOnboardingService {
@@ -121,6 +123,7 @@ export class ChapterOnboardingService {
     private readonly legalAcceptance: LegalAcceptanceService,
     @Inject(CHAPTER_REPOSITORY)
     private readonly chapterRepo: IChapterRepository,
+    private readonly schools: SchoolService,
   ) {}
 
   async onboard(userId: string, dto: ChapterOnboardingInput): Promise<Chapter> {
@@ -235,6 +238,23 @@ export class ChapterOnboardingService {
           error: err,
         }),
     );
+
+    // The Find step matched a directory row: propose the chapter's link to
+    // that row's school, which an officer confirms later (#5929,
+    // school-layer.md § 2.4 and § 7 step 3). Nothing about the chapter
+    // changes until then, so a failure here is reported and moves on.
+    if (dto.directory_id) {
+      await this.schools
+        .proposeLinkFromDirectory(chapter.id, dto.directory_id, userId)
+        .catch((err) =>
+          reportCaughtFailure(this.logger, {
+            level: 'warning',
+            site: 'onboarding-school-link',
+            message: "Failed to propose the chapter's school link",
+            error: err,
+          }),
+        );
+    }
 
     if (!dto.directory_id) {
       await this.recordDirectoryRequest(

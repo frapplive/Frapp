@@ -1,6 +1,8 @@
 # School layer: data model and permissions
 
-**Status: Proposed, pending Paul.** Nothing here is built, and nothing is scheduled: recruitment sits behind the beta, and no build issues are filed until Paul sets a date. Paul made the recruitment calls on 2026-11-11, recorded in [#4218 § Decisions for Paul](https://github.com/pdcarlson/Frapp/pull/4218); [§ 8](#8-open-questions-for-paul) lists what they settle here and what is still open. Asked by Winston (`whewitt-frapp`), 2026-11-11, for [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Until Paul accepts it, the specs listed in [§ 9](#9-specs-this-would-change) describe the system, and this doc changes none of them.
+**Status: Partly built; the rest proposed, pending Paul.** § 2.1, § 2.2 and a minimal § 2.4 are built for [#5929](https://github.com/frapplive/Frapp/issues/5929), scheduled under [#5833](https://github.com/frapplive/Frapp/issues/5833) (dated note below). _(Until 2026-11-23 this line read: nothing here is built, and nothing is scheduled: recruitment sits behind the beta, and no build issues are filed until Paul sets a date.)_ Paul made the recruitment calls on 2026-11-11, recorded in [#4218 § Decisions for Paul](https://github.com/pdcarlson/Frapp/pull/4218); [§ 8](#8-open-questions-for-paul) lists what they settle here and what is still open. Asked by Winston (`whewitt-frapp`), 2026-11-11, for [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Until Paul accepts it, the specs listed in [§ 9](#9-specs-this-would-change) describe the system, and this doc changes none of them.
+
+_(Updated 2026-11-23, [#5929](https://github.com/frapplive/Frapp/issues/5929); Winston, `gampheadband`.)_ **Scheduled and partly built.** Paul approved the IFC recruitment work on 2026-11-23, due 2027-01-11; the plan and record are on [#5833](https://github.com/frapplive/Frapp/issues/5833). **§ 2.1 and § 2.2 are built** in the PR that closes #5929 (`20261124182353_school_layer_schools_and_membership.sql`), with the school-email code, `SchoolGuard` (§ 4.2), § 4.1's posture for these tables, the § 4.3 tests that apply to them, a minimal `school_chapters` (§ 2.4) and an optional onboarding step. Everything else here is still a proposal pending Paul, and so are the open questions in § 8. Three calls Winston made for that build are recorded where they apply, each as "Winston, 2026-11-23": no seeded email domains (§ 7), default school slugs (§ 2.1) and the minimal `school_chapters` (§ 2.4).
 
 _Corrected 2026-11-23 (#5924):_ Paul approved the recruitment build on 2026-11-23, tracked in [#5833](https://github.com/frapplive/Frapp/issues/5833), so this is no longer unscheduled. The first slice is built: `rush_stages`, `rush_candidates.closed_reason` and `rush:read_notes` from [§ 2.5](#25-pnms-and-interest), plus the tags, notes and ratings tables the recruitment doc needed (migration `20261124065057_rush_pipeline.sql`; behavior in [`rush.md` § Pipeline](../behavior/rush.md#pipeline)). The migration is the source of truth for their columns and constraints. Everything else here is still proposed, and the sentence above stands for it.
 
@@ -141,6 +143,12 @@ create unique index school_email_domains_verified_key
 
 **Names.** `schools.name` and `short_name` are the school's own, editable by staff. `aliases` is copied from the directory rows the school was matched from, the same aliases `search_school_names` already matches in `20261107043000_chapter_directory_search.sql`. School search can then reuse them, so founders searching "ESU" and "Example State" land on one school.
 
+**As built (#5929, 2026-11-23).**
+- **`schools.directory_university`** (unique) records the exact `chapter_directory.university` a school was seeded from, so chapter setup's Find step finds a directory row's school without fuzzy matching. The draft above had no such column.
+- **Default slugs (Winston, 2026-11-23).** A school's slug is its short name when no other directory school carries that short name (`rpi`), else its full name (`arizona-state-university`: "ASU" names eight schools). A short name under 3 characters or a reserved word falls back to the full name, and a taken slug gets `-2`. ADR-27's format and reserved words apply. Staff rename later; no API writes `school_slugs`.
+- **`search_schools`** finds a school by name, short name or alias for the onboarding step, and says whether it can verify students today.
+- **`verify_school_domain`** is built with the overlap check above. The `.edu` match and the staff queue aren't: nothing proposes a domain yet (§ 7 step 4).
+
 ### 2.2 School membership
 
 ```sql
@@ -184,7 +192,13 @@ create unique index school_members_verified_email_key
 
 **Directory visibility** is off by default (`hidden`). What other chapters can see of a visible member is a phase 5 decision.
 
-**Account deletion.** `anonymize_user` tombstones the `users` row in place, so `on delete cascade` never fires (its latest definition, `20261111180000_document_pins_and_stars.sql`, says so). The function must delete the person's `school_members` rows explicitly ([§ 3.5](#35-retention-and-deletion)).
+**Account deletion.** `anonymize_user` tombstones the `users` row in place, so `on delete cascade` never fires (its latest definition, `20261111180000_document_pins_and_stars.sql`, says so). The function must delete the person's `school_members` rows explicitly ([§ 3.5](#35-retention-and-deletion)). _(Built 2026-11-23, #5929, as the trigger `users_drop_school_rows` on `users.deleted_at` instead: see As built below.)_
+
+**As built (#5929, 2026-11-23).**
+- **The code** is sign-in's pattern: six digits emailed to the address and typed on the screen that asked, good for 10 minutes and once, with 5 wrong tries. The codes live in `school_email_verifications`, which stores a salted hash, never the code, and an unkeyed hash of the IP (it keeps the raw address out, but isn't anonymous). Rows older than a day are deleted when the next code is asked for; nothing deletes them on a schedule. Only the account's newest code is checked, a code whose email didn't go out is deleted, the domain is read after the last `@`, and the per-address ceiling and "one address, one account" compare the mailbox with any `+tag` folded (`school_email_key`). Two service-role functions own it: `start_school_email_verification` counts the ceilings per address, per IP and per account under advisory locks, and `confirm_school_email_verification` checks the code and writes the `school_members` row in the same transaction. The limits are in [`spec/behavior/README.md` § School-email codes](../behavior/README.md#school-email-codes).
+- **The onboarding step writes status `member`**: it is the table's "any other way" row. A row that exists with `pnm` or `alum` keeps that status when the person proves the address again, and `left_at` clears.
+- **Account deletion** is a trigger, `users_drop_school_rows` on `users.deleted_at`, rather than a statement in `anonymize_user`, as the other per-person tables added since November do. It deletes the person's `school_members` and code rows whichever path writes the tombstone, and no later redefinition of `anonymize_user` can drop it.
+- **Routes:** `GET /v1/schools?q=`, `GET /v1/schools/mine`, `POST /v1/schools/:id/verification` and `…/verification/confirm`, all auth only. `GET /v1/school` is the first `SchoolGuard` route.
 
 ### 2.3 Councils
 
@@ -302,6 +316,8 @@ create unique index council_chapters_live_pair
 **A chapter may sit in more than one council**, for example a Panhellenic chapter at a campus that also has a multicultural council. Each council still sees only its own registrations ([§ 2.5](#25-pnms-and-interest)).
 
 **No school is required to start a chapter.** Winston set that requirement aside. A chapter with no affiliation works as today, and adding one later changes no chapter data and, under ADR-27's flat `/c/<slug>`, no chapter URL.
+
+**Built minimal (Winston, 2026-11-23, #5929).** `school_chapters` exists with the columns above minus `ended_at`, and `status` limited to `proposed` and `active`; the two indexes are as drawn. Chapter setup's Find step writes `proposed` when its matched directory row's university has a school (`ChapterOnboardingService`, best effort). Nothing confirms a link yet, and `GET /v1/chapters`' `school` is still always null (`ChapterService`); filling it from an `active` link is for the PR that builds confirmation. The full § 2.4, with `declined`, `ended`, councils and `council_chapters`, extends this table.
 
 ### 2.5 PNMs and interest
 
@@ -672,7 +688,7 @@ create trigger academic_record_access_log_append_only
 | 30 days after the season closes | The chapter's notes, ratings, contact logs, form answers and follow-ups are deleted. Stage, bid outcome and dates stay (the recruitment doc's rule) |
 | The season closes plus N days, for a PNM who never joined | `delete_pnm` runs for them. N is a council setting, default 180, so someone who rushes again next term keeps their history. These defaults are the recruitment doc's decision 7 for Paul |
 | PNM revokes their release | Revocation is immediate and prospective. `revoke_ferpa_release` deletes the record, resets the verdict to `pending` with `release_id` null, and logs `revoke_purge`. The council's eligibility officers are notified. Deleting rather than keeping is the hub's "safest default"; whether the law requires it is lawyer question 4 |
-| A Frapp user deletes their account | `anonymize_user` (called by `AccountDeletionService`) gains explicit statements, because the tombstoned `users` row fires no cascade: delete the person's `school_members` rows, and call `delete_pnm` for every `pnms` row with their `user_id`. That cascades registrations, interests, eligibility, releases and records. This is the PII scrub [`data-retention.md`](../behavior/data-retention.md) requires. Each chapter keeps its own candidate row with `pnm_id` null, as it keeps candidates today |
+| A Frapp user deletes their account | `anonymize_user` (called by `AccountDeletionService`) gains explicit statements, because the tombstoned `users` row fires no cascade: delete the person's `school_members` rows _(built 2026-11-23, #5929, as the trigger `users_drop_school_rows` on `users.deleted_at`, which also deletes their school-email codes)_, and call `delete_pnm` for every `pnms` row with their `user_id`. That cascades registrations, interests, eligibility, releases and records. This is the PII scrub [`data-retention.md`](../behavior/data-retention.md) requires. Each chapter keeps its own candidate row with `pnm_id` null, as it keeps candidates today |
 | A PNM with no account asks for deletion | Staff, or the council's `council:recruitment_manage` holder, calls `delete_pnm`, with the same cascade. Whether each chapter's own candidate row must also go is ⚑ [Q9](#8-open-questions-for-paul) |
 | A council is deleted | Everything keyed to its `council_id` cascades: seasons, registrations, events, releases and academic records. The access log is kept. The school's `pnms` rows stay while another council at the school uses them; chapter candidates stay, unlinked |
 | The school ends Frapp's access under a DPA | `purge_academic_records` runs for that school's councils, logging a row per record |
@@ -729,6 +745,8 @@ Each rule here builds on ADR-27's guard order: `ChapterGuard` resolves the tenan
    - **A council reaching a chapter's officers** (phase 2). This is a council write that delivers into each accepted chapter's notifications, for the roles the chapter has marked as council contacts. It isn't a read of the chapter.
    - **School pages.** They resolve a school through `x-school-id` and ADR-27's `SchoolGuard`, which checks for a live `school_members` row. They read `schools`, the school's active `school_chapters`, the public fields of those tenants, and what campus spaces owns or chapters push up: `campus_posts`, `campus_events` and their RSVPs, opted-in `school_members` rows, `school_member_chapters` and `campus_role_holders` ([§ 2.7](#27-what-campus-spaces-add)). Never `members`.
 
+   _(Built 2026-11-23, #5929: `SchoolGuard` requires the header (`400 school.context.required` without it, since nothing chooses a school for a person), serves a live member of a school that isn't suspended, and answers anything else, including an unknown id or a chapter id, with the same `403 school.context.invalid`. It never runs beside `ChapterGuard`, which `route-access-ledger.spec.ts` checks. Frapp staff have no platform identity yet, so it admits no one else.)_
+
 ### 4.3 Tests that must exist
 
 These extend the layers [`multi-tenancy.md` § How the invariant is tested](../behavior/multi-tenancy.md) already requires, on top of ADR-27's ten.
@@ -762,7 +780,7 @@ These extend the layers [`multi-tenancy.md` § How the invariant is tested](../b
 
 **Function and migration level** (`npm run check:pglite-migrations`, which runs SQL against a real Postgres):
 - **Purge:** `purge_academic_records` deletes exactly the rows past `purge_after`, and keeps the one a second short of it.
-- **Account deletion:** `anonymize_user` deletes `school_members` and every `pnms` row for the user, with its cascade, and leaves the chapter's candidate row with `pnm_id` null.
+- **Account deletion:** `anonymize_user` deletes `school_members` and every `pnms` row for the user, with its cascade, and leaves the chapter's candidate row with `pnm_id` null. _(The `school_members` half is built and tested, 2026-11-23, #5929: `anonymize_user` leaves no `school_members` or code row, through the `users_drop_school_rows` trigger; `scripts/pglite/tiers/school-layer.mjs`.)_
 - **Merge:** `merge_pnms` refuses when either side has a record, a non-pending verdict or a release. On success it moves interests without violating the unique indexes.
 - **Append-only:** the access log refuses update and delete as the service role.
 - **Domains:** `verify_school_domain` refuses an overlapping domain.
@@ -869,7 +887,7 @@ Plainly, for Paul.
 Nothing any chapter can do changes. No `chapters`, `members` or `roles` value is written beyond the new columns' defaults.
 
 1. **Schema.** Add `chapters.kind` (default `'chapter'`) and the council columns, plus the new tables. Step 1 backfills nothing.
-2. **Propose schools from the data we have.**
+2. **Propose schools from the data we have.** _(2026-11-23, #5929: schools are seeded from `chapter_directory`'s universities by the migration itself, one per distinct university, retired rows aside. Linking existing chapters to them still waits for the reviewed sheet below.)_
    - **Sources.** `chapters.university` is free text and `not null` (`00000000000000_initial_schema.sql`). `chapter_directory` held 13,327 rows with `university`, `university_short` and aliases at `88c2b85` (`20261107043100_chapter_directory_wikipedia_rows.sql`). A chapter claimed from the directory has `directory_id`.
    - **The script.** A new script (say `scripts/school-backfill.mjs`) writes a review sheet: chapter, its `university` text, the proposed school and match confidence. A chapter with `directory_id` takes its directory row's school. Any other chapter's text is matched by normalized name and alias.
    - **A person reviews the sheet.** Free text like "ESU", "Example State" and "Example State University" must land on one school, and only a person can confirm the long tail.
@@ -879,6 +897,7 @@ Nothing any chapter can do changes. No `chapters`, `members` or `roles` value is
    - **Unmatched chapters** get nothing.
    - **Phi Gamma Delta** is placed through the same sheet and the same confirmation. The production run is Paul's.
 4. **Email domains** have no source in our data. They're proposed when a school's first council or chapter asks, and verified by the `.edu` match or the staff queue.
+   _(Winston, 2026-11-23, #5929: the migration seeds no domain. Staff add each school's verified domains per environment as a `supabase/data-fixes/` entry, starting with `rpi.edu` for RPI (`20261123_5929_rpi_school_domain.sql`, run by Paul). Until a school has one, the onboarding step says "Your school isn't set up for verification yet." and can be skipped.)_
 5. **Members aren't enrolled automatically.** After their chapter joins a school, a member is invited to verify their school email: Winston's scenario of "an existing member whose chapter gets placed in a school". The UI worker owns the prompt.
 6. **Later, in its own migration:** `chapters.university` becomes derived from the primary active `school_chapters` row where one exists. It's dropped only once nothing reads it, and that migration names its readers.
 

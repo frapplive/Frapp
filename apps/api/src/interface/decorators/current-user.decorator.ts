@@ -40,6 +40,13 @@ export const OptionalChapterId = createParamDecorator(
   },
 );
 
+/** The caller's live school membership, as `SchoolGuard` read it. */
+export const CurrentSchoolMember = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext) => {
+    return ctx.switchToHttp().getRequest<RequestContext>().schoolMember;
+  },
+);
+
 export const CurrentMember = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext) => {
     return ctx.switchToHttp().getRequest<RequestContext>().member;
