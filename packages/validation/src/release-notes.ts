@@ -126,6 +126,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "After you join a chapter, a new About you step asks for your phone, major, graduation year and birthday when any are missing, and you can skip it.",
       "Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.",
       "Officers can attach files, minutes, events, chat messages and web links to a task or an event, each shows by its current name, and anything you can't open says so instead of showing its name.",
+      "An officer can now give the president, or anyone ranked above them, roles ranked below their own and take those away, and set their pledge class and order number.",
+      "The assistant is now called Frapp Intelligence, on the web and on your phone.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
