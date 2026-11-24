@@ -320,6 +320,27 @@ describe("Composer slash palette (#396)", () => {
   });
 });
 
+// #4084: the composer hands the member's permissions to the palette, which
+// narrows `/rush` by them; a dropped prop would offer every subcommand.
+describe("Composer slash palette narrows /rush by the member's permissions", () => {
+  it("leaves /rush out for a role holding no rush subcommand", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps({ permissions: ["members:view"] })} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/event")).toBeInTheDocument();
+    expect(screen.queryByText("/rush")).not.toBeInTheDocument();
+  });
+
+  it("offers /rush while the permissions haven't been read", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} />);
+    await openPalette(user);
+
+    expect(await screen.findByText("/rush")).toBeInTheDocument();
+  });
+});
+
 describe("Composer mention wiring", () => {
   it("registers the @-mention extension with a suggestion.items callback", () => {
     capturedExtensions.length = 0;
@@ -2604,19 +2625,24 @@ describe("Composer in the audit log", () => {
 });
 
 /**
- * Ask Frapp has no control in the composer (#4904, Paul's pick of
+ * Frapp Intelligence has no control in the composer (#4904, Paul's pick of
  * 2026-11-13): it was a button here for a day (#4702) and read as out of
  * place. The floating Ask bar asks (#5476); `@Frapp` typed here still does
  * (#4713).
  */
-describe("Composer carries no Ask Frapp control (#4904)", () => {
+describe("Composer carries no Frapp Intelligence control (#4904)", () => {
   it.each([
     ["a channel the member can post in", {}],
     ["a channel that is read-only for the member's role", { isReadOnly: true }],
     ["an alumnus who can read but not post", { canPost: false }],
   ])("draws none in %s", (_, props) => {
     render(<Composer {...baseProps(props)} />);
-    expect(screen.queryByRole("button", { name: /ask frapp/i })).toBeNull();
+    // Every name the entry has had: a control put back would carry one.
+    expect(
+      screen.queryByRole("button", {
+        name: /ask frapp|frapp intelligence|what do you need/i,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -2985,7 +3011,7 @@ describe("Composer asks Frapp instead of posting (#4713)", () => {
     );
     expect(mockToast).toHaveBeenCalledWith({
       title:
-        "Still checking Ask Frapp. Try again in a moment, or take @Frapp out to post this.",
+        "Still checking Frapp Intelligence. Try again in a moment, or take @Frapp out to post this.",
     });
     expect(onSend).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();

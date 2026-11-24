@@ -180,7 +180,7 @@ export const ACT_COPY = {
     "ai.suggestion.incomplete":
       "Something on this card is missing. Fill it in, then confirm.",
   },
-  no_action: "That isn't something Ask can do for you here.",
+  no_action: "That isn't something Frapp Intelligence can do for you here.",
   no_action_can: "It can:",
   action_labels: {
     give_points: "Give or take away points",

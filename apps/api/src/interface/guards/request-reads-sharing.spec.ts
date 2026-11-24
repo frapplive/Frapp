@@ -33,7 +33,11 @@ describe('one GET reads membership and roles once (#3728)', () => {
         table === 'users'
           ? { id: 'user-s' }
           : table === 'chapters'
-            ? { subscription_status: 'active', enabled_modules: null }
+            ? {
+                subscription_status: 'active',
+                enabled_modules: null,
+                kind: 'chapter',
+              }
             : table === 'members'
               ? {
                   id: 'member-s',
@@ -69,7 +73,11 @@ describe('one GET reads membership and roles once (#3728)', () => {
       return Promise.resolve({
         data: {
           user: { id: 'user-s' },
-          chapter: { subscription_status: 'active', enabled_modules: null },
+          chapter: {
+            subscription_status: 'active',
+            enabled_modules: null,
+            kind: 'chapter',
+          },
           member: {
             id: 'member-s',
             user_id: 'user-s',

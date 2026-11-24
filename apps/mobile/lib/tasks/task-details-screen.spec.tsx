@@ -141,8 +141,16 @@ const updateTask = vi.fn<
   (input: { id: string; body: Record<string, unknown> }) => Promise<unknown>
 >(async () => undefined);
 
+const frappLinkNames = vi.hoisted(() => ({
+  value: new Map<string, unknown>(),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Frapp links: names read live, and what the attach picker offers.
+  useFrappLinks: () => ({ resolved: frappLinkNames.value, isLoading: false }),
+  useFrappLinkCandidates: () => ({ candidates: [], isLoading: false }),
+  useDocumentDownloadUrl: () => ({ mutateAsync: vi.fn() }),
   useActiveChapterId: () => "chapter-1",
   useViewerUserId: () => ME,
   usePermissionList: () => permissions,
@@ -171,6 +179,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     mutateAsync: removeFromGroup,
     isPending: false,
   }),
+  useAddToTaskGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSetSubtaskDone: () => ({ mutate: vi.fn(), isPending: false }),
   useAddSubtask: () => ({ mutate: addSubtask, isPending: false }),
   useDeleteSubtask: () => ({ mutate: deleteSubtask, isPending: false }),
@@ -355,6 +364,7 @@ describe("A member's own plain task: a little", () => {
     expect(control(tree, "Mark done")).toBeDefined();
     expect(control(tree, "Edit task")).toBeUndefined();
     expect(control(tree, "Remove people")).toBeUndefined();
+    expect(control(tree, "Add people")).toBeUndefined();
     await act(async () => {
       control(tree, "Mark done")!.props.onPress();
     });
@@ -590,6 +600,18 @@ describe("An officer on a task for everyone: a lot", () => {
     act(() => tree.unmount());
   });
 
+  it("gives an officer Add people beside Who has it, opening the picker with who has it marked (#5905)", () => {
+    const tree = render();
+    const before = whoPicker.presented;
+    press(tree, "Add people");
+    expect(whoPicker.presented).toBe(before + 1);
+    const sheet = tree.root.find(
+      (node) => (node.type as unknown) === "WhoPickerSheet" && !!node.props.add,
+    );
+    expect(sheet.props.add.marked.has(ME)).toBe(true);
+    act(() => tree.unmount());
+  });
+
   it("deletes only this copy from More's plain Delete", async () => {
     const tree = render();
     press(tree, "More");
@@ -658,7 +680,8 @@ describe("An officer on a task for everyone: a lot", () => {
     expect(screenText(tree)).not.toContain("Photos");
     expect(control(tree, `Assignee: ${NAMES[ME]}`)).toBeDefined();
     const picker = tree.root.find(
-      (node) => (node.type as unknown) === "WhoPickerSheet",
+      // The edit's Assign to, not Add people's (#5905).
+      (node) => (node.type as unknown) === "WhoPickerSheet" && !node.props.add,
     );
     await act(async () => {
       picker.props.onChange({ kind: "person", userId: "u-cal" });

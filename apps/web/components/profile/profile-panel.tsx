@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   profileIdentityLine,
@@ -13,23 +13,14 @@ import {
   usePermissionList,
   useUpdateUser,
 } from "@repo/hooks";
-import { formatPhone, formatPhoneInput } from "@repo/formatting";
+import { formatPhone } from "@repo/formatting";
 import {
-  BIRTHDAY_VISIBILITY_DEFAULT,
   type BirthdayDraftProblem,
-  birthdayDraftProblem,
   type BirthdayVisibility,
   can,
   DISPLAY_NAME_MAX_LENGTH,
-  GRADUATION_YEAR_MAX,
-  GRADUATION_YEAR_MIN,
   isDisplayNameLocked,
-  isPhoneNumber,
-  MAJOR_MAX_LENGTH,
-  majorSuggestions,
   NAME_LOCK_COPY,
-  PHONE_INVALID_MESSAGE,
-  PHONE_MAX_LENGTH,
   PROFILE_ALUMNI_SECTION,
   PROFILE_FIELD_COPY,
   showsAfterGraduation,
@@ -42,20 +33,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SuggestField } from "@/components/ui/suggest-field";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/hooks/use-toast";
 import { ProfileSection } from "@/components/profile/profile-section";
 import { OwnCustomFieldsSection } from "@/components/profile/own-custom-fields-section";
-import { profileSaveBody } from "@/components/profile/profile-save-body";
+import {
+  profileSaveBody,
+  profileSaveProblem,
+} from "@/components/profile/profile-save-body";
+import { ProfileAboutFields } from "@/components/profile/profile-about-fields";
 import { PickRolesSection } from "@/components/roles/pick-roles-section";
 import { ProfilePhotoControl } from "@/components/profile/profile-photo-control";
-import { BirthdayFields } from "@/components/profile/birthday-fields";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
 import { anyReadUncached, pausedRead } from "@/components/shared/async-states";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { useNetwork } from "@/lib/providers/network-provider";
-import { getErrorMessage, initials, parseGuardedInt } from "@/lib/utils";
+import { getErrorMessage, initials } from "@/lib/utils";
 import { ProfilePageSkeleton } from "@/components/profile/profile-skeleton";
 
 type CurrentUser = {
@@ -121,6 +114,7 @@ export function ProfilePanel() {
   // Set on a submit the phone refused, cleared when the member edits it
   // (validate on submit, not per keystroke: components.md § Text input).
   const [phoneError, setPhoneError] = useState(false);
+  const [yearError, setYearError] = useState(false);
   // Set on a submit with half a birthday, or a day its month lacks (#4959).
   const [birthdayError, setBirthdayError] =
     useState<BirthdayDraftProblem | null>(null);
@@ -128,20 +122,6 @@ export function ProfilePanel() {
   // The server payload the draft was last seeded from, so a re-seed can tell a
   // field the member edited from one they left alone.
   const seededFrom = useRef<CurrentUser | null>(null);
-
-  // Where the Phone field's caret goes once its formatted value renders. It
-  // runs after every keystroke, not only when the value changed: a keystroke
-  // the formatting undoes (a space mid-number) still has React write the value
-  // back, which would throw the caret to the end.
-  const phoneInput = useRef<HTMLInputElement>(null);
-  const phoneCaret = useRef<number | null>(null);
-  const [phoneKeystrokes, setPhoneKeystrokes] = useState(0);
-  useLayoutEffect(() => {
-    const caret = phoneCaret.current;
-    phoneCaret.current = null;
-    if (caret === null || !phoneInput.current) return;
-    phoneInput.current.setSelectionRange(caret, caret);
-  }, [phoneKeystrokes]);
 
   useEffect(() => {
     if (!userQuery.data) return;
@@ -227,21 +207,18 @@ export function ProfilePanel() {
     const body = profileSaveBody(saved, profileDraft);
     // A locked name is shown, never sent (#5801).
     if (nameLocked) delete body.display_name;
-    if (body.phone && !isPhoneNumber(body.phone)) {
+    const problem = profileSaveProblem(body, profileDraft);
+    if (problem?.field === "phone") {
       setPhoneError(true);
       return;
     }
-    // Month and day go together; the year rides with them (#4959).
-    if (body.birthday_visibility !== undefined) {
-      const birthdayProblem = birthdayDraftProblem(
-        profileDraft.birthday_month ?? null,
-        profileDraft.birthday_day ?? null,
-        profileDraft.birthday_year ?? null,
-      );
-      if (birthdayProblem) {
-        setBirthdayError(birthdayProblem);
-        return;
-      }
+    if (problem?.field === "graduationYear") {
+      setYearError(true);
+      return;
+    }
+    if (problem?.field === "birthday") {
+      setBirthdayError(problem.problem);
+      return;
     }
     try {
       if (Object.keys(body).length > 0) {
@@ -463,131 +440,17 @@ export function ProfilePanel() {
                 </p>
               ) : null}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">{PROFILE_FIELD_COPY.phone.label}</Label>
-              <Input
-                ref={phoneInput}
-                id="phone"
-                type="tel"
-                autoComplete="tel"
-                inputMode="tel"
-                maxLength={PHONE_MAX_LENGTH}
-                value={profile.phone ?? ""}
-                aria-invalid={phoneError || undefined}
-                aria-describedby="phone-hint"
-                onChange={(event) => {
-                  setPhoneError(false);
-                  // Formats as the member types (#5798), keeping the caret
-                  // among the same digits.
-                  const inputType = (event.nativeEvent as InputEvent).inputType;
-                  const typed = formatPhoneInput(
-                    event.target.value,
-                    event.target.selectionStart ?? event.target.value.length,
-                    profile.phone ?? "",
-                    inputType === "deleteContentForward"
-                      ? "forward"
-                      : "backward",
-                  );
-                  phoneCaret.current = typed.caret;
-                  setPhoneKeystrokes((count) => count + 1);
-                  setProfileDraft((prev) => ({
-                    ...prev,
-                    phone: typed.value,
-                  }));
-                }}
-                // A 7-digit local number reads `555-0142` once the member
-                // leaves the field, not half-grouped as a longer one.
-                onBlur={() =>
-                  setProfileDraft((prev) =>
-                    prev.phone
-                      ? { ...prev, phone: formatPhone(prev.phone) }
-                      : prev,
-                  )
-                }
-                placeholder={PROFILE_FIELD_COPY.phone.placeholder}
-              />
-              <p
-                id="phone-hint"
-                role={phoneError ? "alert" : undefined}
-                className={
-                  phoneError
-                    ? "text-caption text-destructive-text"
-                    : "text-caption text-muted-foreground"
-                }
-              >
-                {phoneError
-                  ? PHONE_INVALID_MESSAGE
-                  : PROFILE_FIELD_COPY.phone.hint}
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
-              <div className="grid gap-2">
-                <Label htmlFor="major">{PROFILE_FIELD_COPY.major.label}</Label>
-                <SuggestField
-                  id="major"
-                  value={profile.major ?? ""}
-                  maxLength={MAJOR_MAX_LENGTH}
-                  onChange={(major) =>
-                    setProfileDraft((prev) => ({ ...prev, major }))
-                  }
-                  suggestions={majorSuggestions(
-                    chapterMajors,
-                    profile.major ?? "",
-                  )}
-                  suggestionsLabel={PROFILE_FIELD_COPY.major.suggestionsLabel}
-                  placeholder={PROFILE_FIELD_COPY.major.placeholder}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="graduation-year">
-                  {PROFILE_FIELD_COPY.graduationYear.label}
-                </Label>
-                <Input
-                  id="graduation-year"
-                  aria-label={PROFILE_FIELD_COPY.graduationYear.accessibleLabel}
-                  type="number"
-                  inputMode="numeric"
-                  min={GRADUATION_YEAR_MIN}
-                  max={GRADUATION_YEAR_MAX}
-                  value={profile.graduation_year ?? ""}
-                  placeholder={PROFILE_FIELD_COPY.graduationYear.placeholder}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    // Cleared means "no year". The range
-                    // (`GRADUATION_YEAR_MIN`–`GRADUATION_YEAR_MAX`) is refused
-                    // at submit, by the input's `min`/`max` and by the API,
-                    // not here: guarding it on change would refuse the "2"
-                    // on the way to "2026" (components.md § Text input,
-                    // "When an error shows").
-                    const next =
-                      raw.trim() === "" ? null : parseGuardedInt(raw);
-                    if (next === undefined) return;
-                    setProfileDraft((prev) => ({
-                      ...prev,
-                      graduation_year: next,
-                    }));
-                  }}
-                />
-              </div>
-            </div>
-            <BirthdayFields
-              value={{
-                month: profile.birthday_month ?? null,
-                day: profile.birthday_day ?? null,
-                year: profile.birthday_year ?? null,
-                visibility:
-                  profile.birthday_visibility ?? BIRTHDAY_VISIBILITY_DEFAULT,
-              }}
-              problem={birthdayError}
-              onChange={(next) => {
-                setBirthdayError(null);
-                setProfileDraft((prev) => ({
-                  ...prev,
-                  birthday_month: next.month,
-                  birthday_day: next.day,
-                  birthday_year: next.year,
-                  birthday_visibility: next.visibility,
-                }));
+            <ProfileAboutFields
+              value={profile}
+              majors={chapterMajors}
+              phoneInvalid={phoneError}
+              yearInvalid={yearError}
+              birthdayProblem={birthdayError}
+              onChange={(patch) => {
+                if ("phone" in patch) setPhoneError(false);
+                if ("graduation_year" in patch) setYearError(false);
+                if ("birthday_month" in patch) setBirthdayError(null);
+                setProfileDraft((prev) => ({ ...prev, ...patch }));
               }}
             />
             <div className="grid gap-2">

@@ -62,8 +62,8 @@ const ACTION_PHRASES: Readonly<Record<string, string>> = {
   ai_settings_updated: "changed the AI settings",
   chapter_goals_updated: "changed the chapter's goals",
   ai_diagnostics_started:
-    "turned on saving Ask Frapp answers for the Frapp team",
-  ai_diagnostics_stopped: "turned off saving Ask Frapp answers",
+    "turned on saving Frapp Intelligence answers for the Frapp team",
+  ai_diagnostics_stopped: "turned off saving Frapp Intelligence answers",
 };
 
 /** `accent_color` → `accent color`: a key as words, never as a key. */

@@ -120,6 +120,24 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-24",
+    title: "New in this update",
+    changes: [
+      "After you join a chapter, a new About you step asks for your phone, major, graduation year and birthday when any are missing, and you can skip it.",
+      "Tasks past their due date now sit under their own Overdue heading at the top of My tasks, above Today.",
+      "Officers can attach files, minutes, events, chat messages and web links to a task or an event, each shows by its current name, and anything you can't open says so instead of showing its name.",
+      "An officer can now give the president, or anyone ranked above them, roles ranked below their own and take those away, and set their pledge class and order number.",
+      "The assistant is now called Frapp Intelligence, on the web and on your phone.",
+      "Officers no longer see Send back on a task they completed themselves, and Mark not done takes it back instead.",
+      "Recruitment cards now offer Vote and Extend bid only to roles your chapter lets do them, and show a candidate's vote count only to roles allowed to see results.",
+      "Officers can now add more people to a task they already sent to a group, and each new person gets their own copy.",
+    ],
+    phone: [
+      "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
+      "Edit on an event card in Ask Frapp now opens the event form right in the card, with your question still above it.",
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "New in this update",
     changes: [

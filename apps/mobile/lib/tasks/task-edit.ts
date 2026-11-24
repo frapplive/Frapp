@@ -9,8 +9,10 @@ import {
   taskFieldSaveScope,
   taskSaveScope,
   taskSeriesLive,
+  type FrappLink,
   type RepeatDraft,
   type TaskProofKind,
+  sameFrappLinks,
 } from "@repo/validation";
 import { parsePointReward, storedDueOf, TASK_FORM_COPY } from "./create-task";
 import type { TaskRowModel } from "./board";
@@ -266,6 +268,19 @@ export function followerSave(
 }
 
 /**
+ * Attached as it should stand (`spec/behavior/frapp-links.md`): sent whole,
+ * and only when it changed. On a group task's copy it goes with
+ * `scope: "group"` (`scopedEdit`), since every copy holds the same list.
+ */
+export function attachmentsSave(
+  row: TaskRowModel,
+  next: readonly FrappLink[],
+): TaskFieldSave {
+  if (sameFrappLinks(next, row.attachments)) return NONE;
+  return { kind: "save", body: { attachments: [...next] } };
+}
+
+/**
  * The reference photos as they should stand, in order, against the set as
  * it stands (`stored`): sent whole, and only when it changed.
  */
@@ -328,6 +343,9 @@ export function rowAfter(row: TaskRowModel, body: TaskEdit): TaskRowModel {
     ...(body.assignee_id !== undefined ? { assigneeId: body.assignee_id } : {}),
     ...(body.followed_by !== undefined
       ? { followedBy: body.followed_by ?? null }
+      : {}),
+    ...(body.attachments !== undefined
+      ? { attachments: body.attachments as FrappLink[] }
       : {}),
     ...(body.recurrence_rule !== undefined && row.series
       ? {

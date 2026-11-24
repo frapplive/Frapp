@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { FrappLink } from '@repo/validation';
 import type {
   ActivityItemRead,
   ActivityItemSnooze,
@@ -130,6 +131,7 @@ import type {
   TaskPhoto,
   TaskSeries,
   TaskSubtask,
+  TenantSlug,
   User,
   UserAiConsent,
   UserSettings,
@@ -302,6 +304,7 @@ export interface Database {
       task_series: TableDefinition<TaskSeries>;
       task_subtasks: TableDefinition<TaskSubtask>;
       tasks: TableDefinition<Task>;
+      tenant_slugs: TableDefinition<TenantSlug>;
       user_ai_consents: TableDefinition<UserAiConsent>;
       user_settings: TableDefinition<UserSettings>;
       users: TableDefinition<User>;
@@ -326,6 +329,20 @@ export interface Database {
           p_user_id: string;
         };
         Returns: ChatChannel[];
+      };
+      /**
+       * `20261124035159` (#5905) — new members' copies of an existing group
+       * task, made from one of its copies with its checklist; a member who
+       * already has a copy is skipped. Returns the copies made.
+       */
+      add_task_group_copies: {
+        Args: {
+          p_chapter_id: string;
+          p_group_id: string;
+          p_template_id: string;
+          p_assignee_ids: string[];
+        };
+        Returns: Task[];
       };
       /**
        * `20261112165020` (#714) — a chapter's AI usage in `[p_from, p_to)`, one
@@ -561,7 +578,8 @@ export interface Database {
       /**
        * `20261117172708` (#4295 step 3) — a task for everyone: its group, a
        * copy per member and each copy's checklist in one transaction.
-       * Returns the copies. `p_followed_by` since `20261119162318` (#5473).
+       * Returns the copies. `p_followed_by` since `20261119162318` (#5473);
+       * `p_attachments` since `20261124034200`.
        */
       create_task_group: {
         Args: {
@@ -579,12 +597,14 @@ export interface Database {
           p_proof_kind: string;
           p_subtask_titles: string[];
           p_followed_by: string | null;
+          p_attachments?: FrappLink[];
         };
         Returns: Task[];
       };
       /**
        * `20261116044044` (#5119) — a repeating task's series and its first
-       * copy in one transaction. Returns the first copy.
+       * copy in one transaction. Returns the first copy. `p_attachments`
+       * since `20261124034200`.
        */
       create_task_series: {
         Args: {
@@ -602,6 +622,7 @@ export interface Database {
           p_first_due_at: string | null;
           p_latest_due_at: string;
           p_next_due_date: string;
+          p_attachments?: FrappLink[];
         };
         Returns: Task[];
       };

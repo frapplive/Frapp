@@ -17,7 +17,8 @@ import { codeOf, statusOf } from "@repo/api-sdk";
 /**
  * A 403 from the permissions check, which carries no machine code. A 403 with
  * a `chapter.*` code is the chapter guard instead: not a member of that
- * chapter, or a token that hasn't caught up with a chapter switch yet
+ * chapter, a tenant of a kind the route doesn't serve, or (before ADR-27,
+ * #5918) a token that hadn't caught up with a chapter switch yet
  * (`chapter.context.mismatch`, which clears on its own). No role fixes those,
  * so they keep the generic copy.
  */

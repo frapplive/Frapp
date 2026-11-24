@@ -3778,6 +3778,23 @@ export interface paths {
         patch: operations["TaskController_updateSubtask_v1"];
         trace?: never;
     };
+    "/v1/tasks/{id}/group/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add members to a group task: each gets a To do copy of it (#5905) */
+        post: operations["TaskController_addToGroup_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tasks/{id}/group/remove": {
         parameters: {
             query?: never;
@@ -3871,6 +3888,26 @@ export interface paths {
          * @description Any active member, whether or not they could claim it. They get the usual assignment push. Answers the new task as `GET /v1/tasks/:id` reads it; 409 once someone has claimed it.
          */
         post: operations["OpenTaskController_assign_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenants/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find one of your tenants by its URL slug
+         * @description Returns the chapter or council a slug names, only if the caller is its member. A slug the tenant retired returns the tenant with its current slug and `redirected: true`. An unknown slug, and another tenant's current or retired slug, all answer the same 404 `tenant.not_found`.
+         */
+        get: operations["TenantController_resolve_v1"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4021,12 +4058,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get what Meet Frapp AI shows and the caller’s answer
+         * Get what Meet Frapp Intelligence shows and the caller’s answer
          * @description The current sheet (every provider and every kind of data sent) and the caller’s answer on it. `answer: null` means not answered, which counts as No: show the sheet.
          */
         get: operations["AiConsentController_getConsent_v1"];
         /**
-         * Answer Meet Frapp AI (turn Frapp AI on or off)
+         * Answer Meet Frapp Intelligence (turn Frapp Intelligence on or off)
          * @description Records Yes or No on the sheet version the caller was shown, from the sheet or later from Settings. One answer covers every chapter the caller is in, and needs no chapter: someone who has left every chapter can still say No.
          */
         put: operations["AiConsentController_answerConsent_v1"];
@@ -4767,6 +4804,23 @@ export interface paths {
         post?: never;
         /** Remove your star from a document (idempotent) */
         delete: operations["ChapterDocumentController_unstarDocument_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/frapp-links/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone */
+        post: operations["FrappLinkController_resolve_v1"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5998,7 +6052,7 @@ export interface paths {
         put?: never;
         /**
          * Start linking your Discord account
-         * @description Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the browser to their Settings page with a one-time token that `POST /v1/discord/author-link/confirm` spends.
+         * @description Mints a single-use handshake bound to you and this chapter and returns the Discord authorize URL, which asks for `identify` only. Discord returns the member to Settings with a one-time token that `POST /v1/discord/author-link/confirm` spends: the web page by default, or with `client: mobile` the phone app at `return_url`, which must be the app’s own Settings address.
          */
         post: operations["DiscordAuthorLinkController_begin_v1"];
         delete?: never;
@@ -6116,7 +6170,7 @@ export interface paths {
         put?: never;
         /**
          * Tidy up words dictated into Ask
-         * @description The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Ask Frapp, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp AI’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.
+         * @description The words the phone’s own speech recogniser heard, tidied for the member to read, edit and send themselves (#5276, `spec/behavior/ai.md` § Frapp Intelligence, Dictation): filler words and false starts out, only the last version of a self-correction kept, punctuation and capitalisation in, times and counts as digits. Never answered, and no fact, name or meaning changed. The words go to Frapp Intelligence’s model provider to be tidied; nothing is stored or logged, and nothing is posted or sent as a question. A provider refusal, a reply the model got wrong, a provider failure, a spend cap, or a cleanup that comes back empty or much longer than what was said all answer 200 with the words as sent, trimmed, so nothing the member said is lost.
          */
         post: operations["AskController_cleanDictation_v1"];
         delete?: never;
@@ -6267,7 +6321,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Post an Ask Frapp answer to a channel, or ask what posting would warn about
+         * Post a Frapp Intelligence answer to a channel, or ask what posting would warn about
          * @description The answer comes from the receipt the server sealed into it for the caller, so only an answer Frapp sent can be posted, and only by the member it was sent to. Before anything is written, everything the answer drew on is checked against everyone who can read the channel; `restricted` lists what not all of them could open. With `confirm` false nothing is written. With `confirm` true the answer is posted, by the Frapp sender, only when `acknowledged` names every entry of `restricted`; otherwise `posted` is false and the current list comes back. A posted answer notifies nobody. Posting the same answer to the same channel twice writes one row; the second call is refused.
          */
         post: operations["AskPostController_post_v1"];
@@ -7092,6 +7146,60 @@ export interface components {
             branding?: components["schemas"]["BrandingDto"];
             /** @description The admin accepted the Terms of Service and Privacy Policy, for the chapter and for themselves. Must be true (spec/behavior/legal.md). The acceptance timestamp and policy version are recorded server-side from the session — never from this payload. */
             accept_terms_privacy: boolean;
+        };
+        ChapterMemberViewDto: {
+            id: string;
+            name: string;
+            university: string;
+            /**
+             * @description Read by the client subscription gate. Load-bearing — see `chapter-member-view.ts`.
+             * @enum {string}
+             */
+            subscription_status: "incomplete" | "active" | "past_due" | "canceled";
+            /** @description Timestamp the chapter entered `past_due`, or null. Drives the 3-day client grace window; the grace predicate fails open without it. */
+            past_due_since: string | null;
+            accent_color: string | null;
+            logo_path: string | null;
+            donation_url: string | null;
+            created_at: string;
+            updated_at: string;
+            org_archetype?: string;
+            enabled_modules?: {
+                [key: string]: boolean;
+            };
+            vocabulary?: {
+                [key: string]: unknown;
+            };
+            branding?: {
+                [key: string]: unknown;
+            };
+            theme_palette?: {
+                [key: string]: unknown;
+            };
+            /** @description Per-chapter opt-out for the pseudonymous analytics pipeline. Mobile reads it off this payload. */
+            analytics_opt_out?: boolean;
+            /** @description Set when the chapter has lost its President outside a voluntary transfer (spec/behavior/rbac.md § Presidency Transfer). Every member reads this, not just `roles:manage` holders — see `PresidencyClaimBanner`. */
+            needs_president?: boolean;
+        };
+        ChapterMembershipSummaryDto: {
+            /** Format: uuid */
+            member_id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            role_ids: string[];
+            has_completed_onboarding: boolean;
+            /** @description Module keys whose ops-setup nudge this member has dismissed in this chapter. */
+            dismissed_ops_nudges: string[];
+            chapter: components["schemas"]["ChapterMemberViewDto"];
+            /**
+             * @description The tenant's current URL slug (ADR-27), what its pages live under as `/c/<slug>/…`.
+             * @example fiji-rpi
+             */
+            slug: string | null;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /** @description The tenant's school. Always null until the school layer lands (#5835); declared now so clients are written against the final shape. */
+            school: string | null;
         };
         CurrentChapterResponseDto: {
             id: string;
@@ -7937,18 +8045,38 @@ export interface components {
             tabled_from?: components["schemas"]["EventAgendaTabledFromDto"] | null;
         };
         EventAttachmentDto: {
-            /** @description The client's id for the attachment. Unique within the event. */
+            /** @description The client's id for the entry. Unique within its list. */
             id: string;
             /** @enum {string} */
-            kind: "link" | "document";
-            /** @description A `link` attachment's address: http or https only. */
+            kind: "link" | "document" | "minutes" | "event" | "message";
+            /** @description A `link`'s address: http or https only. Never fetched. */
             url?: string;
             /**
              * Format: uuid
-             * @description A `document` attachment's Chapter Files document (`GET /v1/documents/{id}` opens it). An id that isn't the chapter's is a 400.
+             * @description A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400.
              */
             document_id?: string;
-            /** @description What the list shows. For a document, its name when it was attached. */
+            /**
+             * Format: uuid
+             * @description `minutes`: the meeting whose minutes it opens.
+             */
+            meeting_id?: string;
+            /**
+             * Format: uuid
+             * @description `event`: the event.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message's channel. On a save it is taken from the message, whatever is sent.
+             */
+            channel_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message.
+             */
+            message_id?: string;
+            /** @description A web link's title. On a record it is the kind's own word ("Document", "Minutes", "Event", "Message"), which the API sets whatever is sent, so no record's name is stored where a member who can't open it would read it. */
             title: string;
         };
         GeofenceCoordinateDto: {
@@ -7982,7 +8110,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8029,7 +8157,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8080,7 +8208,7 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
@@ -8125,7 +8253,7 @@ export interface components {
             notes: string | null;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. */
             agenda: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments: components["schemas"]["EventAttachmentDto"][];
             /** @description Optional check-in geofence. `null` means the event has no zone. */
             check_in_zone: components["schemas"]["GeofenceCoordinateDto"][] | null;
@@ -8168,8 +8296,10 @@ export interface components {
             notes?: string;
             /** @description This meeting's agenda, in order: at most 30 short items. Sent whole; it replaces the stored list, and `[]` clears it (null is refused). Belongs to this one meeting: with `scope: 'series'` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none. Once the meeting has started only check-offs (`done`) change: adding, removing, moving or rewording an item is a 409 `event.agenda_locked`. */
             agenda?: components["schemas"]["EventAgendaItemDto"][];
-            /** @description This meeting's attachments, in order: at most 10 titled links or Chapter Files documents. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A document must be one of the chapter's files when it is added; one the meeting already holds stays even if the file was deleted since. */
+            /** @description This meeting's attachments, in order: at most 10 Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and `[]` clears it. Per meeting, like `agenda`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send `attachments_all_kinds: true` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept. */
             attachments?: components["schemas"]["EventAttachmentDto"][];
+            /** @description Set with `attachments` by a build that sends every Frapp link kind, so the list replaces what is stored. Without it, the stored minutes, event and message links are kept, since phone builds from before Frapp links drop the kinds they cannot read. */
+            attachments_all_kinds?: boolean;
             /** @description Optional check-in geofence: polygon vertices a member must stand inside to check in. At least 3 points; the closing edge is implicit. Omit for an event with no geofence. Send an empty array to clear an existing zone. */
             check_in_zone?: components["schemas"]["GeofenceCoordinateDto"][];
             /** @description Human-readable name for `check_in_zone`, shown on the mobile scanner ("Inside the Great Hall zone"). */
@@ -9994,6 +10124,41 @@ export interface components {
             /** @description Short-lived signed URL to view the photo. */
             url: string;
         };
+        FrappLinkDto: {
+            /** @description The client's id for the entry. Unique within its list. */
+            id: string;
+            /** @enum {string} */
+            kind: "link" | "document" | "minutes" | "event" | "message";
+            /** @description A `link`'s address: http or https only. Never fetched. */
+            url?: string;
+            /**
+             * Format: uuid
+             * @description A `document`'s Chapter Files document. A new one that isn't the chapter's is a 400.
+             */
+            document_id?: string;
+            /**
+             * Format: uuid
+             * @description `minutes`: the meeting whose minutes it opens.
+             */
+            meeting_id?: string;
+            /**
+             * Format: uuid
+             * @description `event`: the event.
+             */
+            event_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message's channel. On a save it is taken from the message, whatever is sent.
+             */
+            channel_id?: string;
+            /**
+             * Format: uuid
+             * @description `message`: the message.
+             */
+            message_id?: string;
+            /** @description A `link`'s title (its domain when empty). An event's `document` keeps the name it had when attached, for older phone builds; every other record's name is read live with `POST /v1/frapp-links/resolve` and never stored. */
+            title?: string;
+        };
         CreateTaskDto: {
             title: string;
             description?: string;
@@ -10023,6 +10188,8 @@ export interface components {
             audience_tier_id?: string;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. */
             followed_by?: string;
+            /** @description What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. */
+            attachments?: components["schemas"]["FrappLinkDto"][];
             /** @description Due date (YYYY-MM-DD). Omit, or send null, for a task with no due date (#5761): it is never overdue, gets no due reminders and can't repeat. */
             due_date?: string | null;
             /**
@@ -10135,6 +10302,8 @@ export interface components {
             meeting_id: string | null;
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. */
             followed_by: string | null;
+            /** @description What is attached (Frapp links), in order. A record carries ids only: name it with `POST /v1/frapp-links/resolve`, which never names one the reader may not open. */
+            attachments: components["schemas"]["FrappLinkDto"][];
             /** Format: date-time */
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the task row committed and the card did not, so no Realtime echo will arrive to reconcile the caller’s optimistic placeholder — drop it and warn, without implying the create failed. Absent means the server reported no outcome (a dashboard create, or a request that did not attempt a card) — leave the placeholder for the echo. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
@@ -10182,6 +10351,8 @@ export interface components {
             proof_kind?: "none" | "photo" | "link";
             /** @description The tier, role or group the task is from (#5473): `tier:<id>`, `role:<id>` or `group:<id>`, as channel access lists spell an entry, or null. Its active members, read when they ask, can read the task and its progress (list and get), without its proof photos or link, and get its finished and overdue pushes. It grants nothing else: Confirm and Send back stay with `tasks:manage`. On create the creator must be in it; not on a repeating task. Null takes it off. A new one must name a tier, role or group the editor is in; the one the task has stays whoever edits. With `scope: group` it changes every copy, confirmed ones too. Not with `scope: series`. */
             followed_by?: string | null;
+            /** @description What is attached, in order: at most 10 Frapp links (web links, or the chapter's documents, minutes, events and chat messages). Sent whole; it replaces the stored list, and `[]` clears it. A record must be the chapter's when it is added; one the task already holds stays even if it was deleted since. A record's title is never stored. With `scope: group` every copy not yet confirmed takes it; with `scope: series` the next copies are made with it. */
+            attachments?: components["schemas"]["FrappLinkDto"][];
             /**
              * @description On a copy of a repeating task (#5119): `instance` (default) edits this task only; `series` ("All upcoming tasks") edits what the next copies are made from and the series’ open copy, while it is still to come and not marked done. Done and overdue copies never change, and a copy keeps its day: a `due_date` other than its own is a 400 (move one copy with `instance`). On a copy of a group task (#4295 step 3): `group` ("Everyone’s copy") makes the edit to every copy not yet confirmed; `assignee_id` and `reference_photo_paths` change one copy only, so they are a 400 with it.
              * @enum {string}
@@ -10288,6 +10459,15 @@ export interface components {
             /** @description True to check it off, false to uncheck it. */
             done: boolean;
         };
+        AddToTaskGroupDto: {
+            /** @description The members who get a copy, 1 to 500, each an active member of the chapter (a 400 otherwise). A member who already has a copy is skipped. */
+            assignee_ids: string[];
+        };
+        AddToTaskGroupResponseDto: {
+            /** @description The members who got a copy; anyone who already had one is left out. */
+            added: string[];
+            group: components["schemas"]["TaskGroupSummaryDto"];
+        };
         RemoveFromTaskGroupDto: {
             /** @description The members whose copy goes, 1 to 1000. A member with no copy is skipped; a confirmed copy, or every copy, is a 400. */
             assignee_ids: string[];
@@ -10357,6 +10537,20 @@ export interface components {
              */
             assignee_id: string;
         };
+        ResolvedTenantDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chapter" | "council";
+            /**
+             * @description The tenant's current slug. Differs from the one asked for when that slug was retired, in which case the client replaces its URL with this one.
+             * @example fiji-rpi
+             */
+            slug: string;
+            /** @description True when the slug asked for is one this tenant has retired, so the URL should move to `slug`. */
+            redirected: boolean;
+        };
         AiSuggestionSourceDto: {
             /** @enum {string} */
             type: "meeting" | "event" | "channel" | "task" | "request";
@@ -10387,7 +10581,7 @@ export interface components {
              * @description With `audience`: only the members holding a role in this tier (2026-11-22).
              */
             audience_tier_id?: string;
-            /** @description Points on completion (2026-11-22). Only an Ask Frapp card proposes them, or an officer edit sets them. */
+            /** @description Points on completion (2026-11-22). Only a Frapp Intelligence card proposes them, or an officer edit sets them. */
             point_reward?: number;
             /**
              * @description What Mark done needs, when it is more than nothing (2026-11-22).
@@ -10770,7 +10964,7 @@ export interface components {
             answer: "yes" | "no";
         };
         AiChapterSettingsDto: {
-            /** @description Ask Frapp is on for the chapter. */
+            /** @description The Questions and requests switch: members can ask Frapp Intelligence. */
             ask: boolean;
             /** @description Drafting minutes, and tasks suggested from them, is on. */
             meeting_notes: boolean;
@@ -10944,8 +11138,8 @@ export interface components {
             created_by: string;
             /** Format: date-time */
             created_at: string;
-            /** @description Ballot count. Voter names are never returned. */
-            vote_count: number;
+            /** @description Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0. */
+            vote_count?: number;
             /** @description Whether the authenticated caller has already voted. */
             viewer_has_voted: boolean;
         };
@@ -11206,6 +11400,42 @@ export interface components {
         SetDocumentAccessDto: {
             /** @description Who can see the file (#3642): null or left out for the same as its folder, or the tiers, roles and groups named, which narrow the folder's (a member passes both). Not empty. The caller's own tier and every tier above it are always kept. */
             who_can_see?: string[] | null;
+        };
+        FrappLinkTargetDto: {
+            /** @enum {string} */
+            kind: "document" | "minutes" | "event" | "message";
+            /** Format: uuid */
+            document_id?: string;
+            /** Format: uuid */
+            meeting_id?: string;
+            /** Format: uuid */
+            event_id?: string;
+            /** Format: uuid */
+            channel_id?: string;
+            /** Format: uuid */
+            message_id?: string;
+        };
+        ResolveFrappLinksDto: {
+            /** @description The records to read, at most 40. A record asked twice is answered once. */
+            targets: components["schemas"]["FrappLinkTargetDto"][];
+        };
+        FrappLinkResolvedDto: {
+            /** @description Which target this answers: `document:<id>`, `minutes:<id>`, `event:<id>` or `message:<message id>`. */
+            key: string;
+            /**
+             * @description `ok`: the caller may open it. `hidden`: it exists but they may not, and its name is not sent. `removed`: deleted, or not this chapter’s.
+             * @enum {string}
+             */
+            state: "ok" | "removed" | "hidden";
+            /** @description The document's, meeting's or event's name; a message's channel name. Null unless `ok`. */
+            title: string | null;
+            /** @description The meeting's or event's start, or when the message was sent (ISO 8601). Null unless `ok`, and on a document. */
+            date: string | null;
+            /** @description Who sent the message. Null on every other kind. */
+            author: string | null;
+        };
+        ResolveFrappLinksResponseDto: {
+            links: components["schemas"]["FrappLinkResolvedDto"][];
         };
         CreatePollDto: {
             /** @description Poll question */
@@ -12130,7 +12360,7 @@ export interface components {
              * @description The task a task card is about.
              */
             task_id: string | null;
-            /** @description One sentence Frapp AI wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written. */
+            /** @description One sentence Frapp Intelligence wrote for the card, or null: a plain card, because AI is off for the caller or the server, or the kind is never written. */
             line: string | null;
             /** @description A task card's suggested place to start, when AI wrote one. */
             start_here: string | null;
@@ -12537,6 +12767,18 @@ export interface components {
             discord_username: string | null;
             linked_at: string | null;
         };
+        BeginDiscordAuthorLinkDto: {
+            /**
+             * @description Where Discord sends the member back: the web Settings → Linked apps (the default), or the phone app at `return_url`.
+             * @enum {string}
+             */
+            client?: "web" | "mobile";
+            /**
+             * @description For `mobile`: the app’s Settings address, `frapp://preferences` (outside production, the staging app’s `frapp-staging://preferences` too). Any other address is refused, Expo Go’s included.
+             * @example frapp://preferences
+             */
+            return_url?: string;
+        };
         BeginDiscordAuthorLinkResponseDto: {
             /** @description Send the member here. Asks Discord for the `identify` scope only, with a single-use state bound to this member and chapter. */
             authorize_url: string;
@@ -12544,7 +12786,7 @@ export interface components {
             expires_at: string;
         };
         ConfirmDiscordAuthorLinkDto: {
-            /** @description The one-time token the OAuth callback put on the redirect to the Settings page. It links the Discord account only for the member who started the handshake, in the chapter it was started in. */
+            /** @description The one-time token the OAuth callback put on the redirect to Settings (the web page, or the phone app). It links the Discord account only for the member who started the handshake, in the chapter it was started in. */
             handshake: string;
         };
         ConfirmDiscordAuthorLinkResponseDto: {
@@ -13128,7 +13370,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             /**
-             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp AI on.
+             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on.
              * @enum {string|null}
              */
             held: "consent_required" | null;
@@ -13138,7 +13380,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             /**
-             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp AI on.
+             * @description Why these notes would be left out of a draft now: their writer has not turned Frapp Intelligence on.
              * @enum {string|null}
              */
             held: "consent_required" | null;
@@ -14042,7 +14284,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ChapterMembershipSummaryDto"][];
+                };
             };
             /** @description Error */
             default: {
@@ -22068,6 +22312,40 @@ export interface operations {
             };
         };
     };
+    TaskController_addToGroup_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddToTaskGroupDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddToTaskGroupResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     TaskController_removeFromGroup_v1: {
         parameters: {
             query?: never;
@@ -22272,6 +22550,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TenantController_resolve_v1: {
+        parameters: {
+            query: {
+                /** @description The slug from the page's URL (`/c/<slug>/…`). Matched in lower case; anything that is not a slug the caller's own tenant holds or held answers 404. */
+                slug: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedTenantDto"];
+                };
             };
             /** @description Error */
             default: {
@@ -24475,6 +24784,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    FrappLinkController_resolve_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveFrappLinksDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveFrappLinksResponseDto"];
+                };
             };
             /** @description Error */
             default: {
@@ -26930,7 +27271,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BeginDiscordAuthorLinkDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {
@@ -27658,7 +28003,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp AI on (`ai.consent.required`). */
+            /** @description The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp Intelligence on (`ai.consent.required`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27702,7 +28047,7 @@ export interface operations {
                     "application/json": components["schemas"]["BackworkDraftFillResponseDto"];
                 };
             };
-            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has Frapp AI turned off (`ai.chapter_off`). */
+            /** @description The caller has not said yes on the AI sheet (`ai.consent.required`), or the president has turned off questions and requests (`ai.chapter_off`). */
             403: {
                 headers: {
                     [name: string]: unknown;

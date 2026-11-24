@@ -1,5 +1,5 @@
 /**
- * The "You" screen: the first of the two screens a member sees after joining
+ * The "You" screen: the first of the screens a member sees after joining
  * (#5627, epic #5624; Paul's pick 2026-11-19, "Two: name, then
  * notifications"). The same screen on web and the phone (s03): the name,
  * pre-filled when sign-in carried a real one, and an optional photo.

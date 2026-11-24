@@ -4,15 +4,15 @@
 
 /**
  * The youngest a member may be (#2261). Paul chose 17 on 2026-11-19 (#5627),
- * with Frapp AI asking anyone who turns it on to confirm they're 18
+ * with Frapp Intelligence asking anyone who turns it on to confirm they're 18
  * ({@link AI_MINIMUM_AGE}). It was 18 from 2026-09-23 until then. The Terms'
  * Eligibility section says the same (`apps/landing/app/terms/page.tsx`).
  */
 export const MINIMUM_AGE = 17;
 
 /**
- * The youngest anyone may use Frapp AI: Google Cloud's terms bar generative
- * AI in services for people under 18 (ADR-28). Meet Frapp AI's Continue
+ * The youngest anyone may use Frapp Intelligence: Google Cloud's terms bar generative
+ * AI in services for people under 18 (ADR-28). Meet Frapp Intelligence's Continue
  * confirms it (`FRAPP_AI_COPY.disclosure`), and nothing the member asks or
  * writes reaches a model without that yes (gate 2 of `spec/behavior/ai.md`
  * § Consent; the chapter's own records stand behind the president's switch,

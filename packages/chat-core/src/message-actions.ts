@@ -42,7 +42,7 @@ export const CARD_KINDS: ReadonlySet<string> = new Set([
   "rush",
   "signup",
   "form",
-  // An Ask Frapp answer posted to the channel (#4713): the Frapp sender's
+  // A Frapp Intelligence answer posted to the channel (#4713): the Frapp sender's
   // row, with who asked and its sources in `payload`.
   "ask_answer",
   // A role picker (#4958): the roles it lists live in `payload`.
@@ -112,7 +112,7 @@ export function canEditMessage(
 }
 
 /**
- * Whether the viewer posted this Ask Frapp answer to the channel (#4713).
+ * Whether the viewer posted this Frapp Intelligence answer to the channel (#4713).
  * The row is the Frapp sender's, so `isOwnMessage` is false for everyone;
  * the server writes who posted it in `payload.asked_by`, and no client can
  * send the kind.
@@ -125,7 +125,7 @@ export function isOwnPostedAnswer(
 }
 
 /**
- * Delete: your own message, an Ask Frapp answer you posted, or any message
+ * Delete: your own message, a Frapp Intelligence answer you posted, or any message
  * when the viewer holds `channels:manage`. The server resolves that
  * permission in the message's own chapter, after channel access is
  * confirmed; the client only decides whether the control is likely to
@@ -437,8 +437,8 @@ export function canForwardMessage(
 }
 
 /**
- * Report, on its own: anyone else's confirmed, undeleted message. An Ask
- * Frapp answer the viewer posted is theirs, though the row is Frapp's. The web
+ * Report, on its own: anyone else's confirmed, undeleted message. A Frapp
+ * Intelligence answer the viewer posted is theirs, though the row is Frapp's. The web
  * action bar asks this directly, since it gates Reply, Edit and Delete on its
  * own callbacks rather than on a {@link MessageActionsContext}.
  */

@@ -7,7 +7,11 @@ import {
   TaskStatus,
   TaskSubtask,
 } from '../entities/task.entity';
-import type { TaskGroupAudience, TaskProofKind } from '@repo/validation';
+import type {
+  FrappLink,
+  TaskGroupAudience,
+  TaskProofKind,
+} from '@repo/validation';
 
 export const TASK_REPOSITORY = 'TASK_REPOSITORY';
 
@@ -181,6 +185,18 @@ export interface ITaskRepository {
    * copy's checklist, in one transaction. Returns the copies.
    */
   createGroup(input: CreateTaskGroupInput): Promise<Task[]>;
+  /**
+   * New members' copies of an existing group (#5905), in one transaction
+   * that locks the group: each at To do, made from `templateId` (one of the
+   * group's copies) with its checklist titles. A member who already has a
+   * copy is skipped. Returns the copies made.
+   */
+  addGroupCopies(
+    chapterId: string,
+    groupId: string,
+    templateId: string,
+    assigneeIds: string[],
+  ): Promise<Task[]>;
   /** These groups of the chapter, any order. */
   findGroups(chapterId: string, ids: string[]): Promise<TaskGroup[]>;
   /** Every copy of these groups, any order. */
@@ -334,6 +350,8 @@ export interface CreateTaskSeriesInput {
   /** When the first copy is due in the rule's zone (end of day if untimed). */
   latest_due_at: string;
   next_due_date: string;
+  /** What every copy is made with (Frapp links), already checked. */
+  attachments: FrappLink[];
 }
 
 /** What {@link ITaskRepository.createGroup} writes (#4295 step 3). */
@@ -358,4 +376,6 @@ export interface CreateTaskGroupInput {
   meeting_id?: string | null;
   /** The tier, role or group every copy is from (#5473), or null. */
   followed_by?: string | null;
+  /** What every copy holds (Frapp links), already checked. */
+  attachments: FrappLink[];
 }

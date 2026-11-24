@@ -1,8 +1,8 @@
 /**
  * The crest of locked emblem B as one path, for the product surfaces that draw
- * it as a glyph in a colour of their own: the Ask Frapp entries on web and the
- * phone (#4702, Paul 2026-11-13: the crest in the chapter accent on the Ask
- * Frapp front doors, and nowhere else; `spec/ui/brand-identity.md` §2).
+ * it as a glyph in a colour of their own: the Frapp Intelligence entries on web and the
+ * phone (#4702, Paul 2026-11-13: the crest in the chapter accent on the Frapp
+ * Intelligence front doors, and nowhere else; `spec/ui/brand-identity.md` §2).
  *
  * The path is copied from
  * `packages/brand-assets/assets/signet-emblem-B-glyph.svg`, the vector every

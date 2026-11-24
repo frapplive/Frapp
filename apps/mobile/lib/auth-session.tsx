@@ -417,10 +417,11 @@ export function AuthSessionProvider({
   }, [accessToken, status]);
 
   // Chapter context comes from the token claim, never from a local pick
-  // (`chapterId` above). Per `spec/behavior/multi-tenancy.md` the claim is
-  // authoritative and `x-chapter-id` only a fallback, and the API rejects
-  // every request with 403 `chapter.context.mismatch` when they disagree, so
-  // reading the claim makes disagreement impossible by construction. `null` is
+  // (`chapterId` above). Reading the claim and sending it as `x-chapter-id`
+  // makes the two agree by construction. (Until ADR-27, #5918, the API
+  // rejected a disagreeing header with 403 `chapter.context.mismatch`; it now
+  // serves the header's chapter, and mobile moves to the route's tenant in
+  // step 3.) `null` is
   // a safe resolution, not a failure: the API resolves a sole membership
   // server-side when no claim is present (`lib/auth-gate.ts`). Selecting a
   // chapter goes through `lib/select-chapter.ts`, which activates server-side
@@ -554,13 +555,32 @@ export function AuthSessionProvider({
   const signInWithOAuthProvider = useCallback(
     async (provider: OAuthProvider) => {
       // Each failure below is reported once, here, as `oauth_start` with the
-      // error it came from (#3832). A return that reached the app but didn't
+      // error it came from (#3832). A native token Supabase refused for setup
+      // reasons is reported too, before the browser fallback, so one attempt
+      // can send two reports, or one for a sign-in that then worked. A return that reached the app but didn't
       // become a session was already reported by `createSessionFromUrl` as
       // `auth_callback`, so its rethrow is not reported again. A cancel is
       // not a failure.
       const startFailed = (error: unknown): unknown => {
-        reportAuthFailure({ flow: "oauth_start", screen: "/sign-in", error });
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          error,
+        });
         return error;
+      };
+      // Supabase refused the native token for setup reasons and the member
+      // goes on to the browser flow. They never see it, but only a dashboard
+      // change fixes it, so it is reported at error (FRAPP-MOBILE-16).
+      const nativeRefused = (error: unknown) => {
+        reportAuthFailure({
+          flow: "oauth_start",
+          screen: "/sign-in",
+          provider,
+          code: "native_token_refused",
+          error,
+        });
       };
       if (!supabase) throw startFailed(new Error(NOT_CONFIGURED_MESSAGE));
       setCallbackError(null);
@@ -568,9 +588,9 @@ export function AuthSessionProvider({
       let native: "completed" | "cancelled" | "unavailable" = "unavailable";
       try {
         if (provider === "apple") {
-          native = await signInWithNativeApple(supabase);
+          native = await signInWithNativeApple(supabase, nativeRefused);
         } else if (provider === "google") {
-          native = await signInWithNativeGoogle(supabase);
+          native = await signInWithNativeGoogle(supabase, nativeRefused);
         }
       } catch (error) {
         throw startFailed(error);

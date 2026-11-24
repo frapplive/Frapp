@@ -233,17 +233,26 @@ export class TaskAudienceReader {
         if (userIds.length > TASK_PEOPLE_MAX) {
           throw new BadRequestException(`Pick up to ${TASK_PEOPLE_MAX} people`);
         }
-        if (userIds.some((id) => !this.activeIds.has(id))) {
-          throw new BadRequestException(
-            'Everyone you pick must be an active member of the chapter',
-          );
-        }
+        this.assertActive(userIds);
         return this.reaching(
           { kind: 'people', targetId: null, targetName: null },
           userIds,
           'Pick who this task is for',
         );
       }
+    }
+  }
+
+  /**
+   * Every listed person is an active member, alumni left out; a 400
+   * otherwise. The rule a list of people is held to wherever one is picked:
+   * a new task's, and people added to a group task (#5905).
+   */
+  assertActive(userIds: readonly string[]): void {
+    if (userIds.some((id) => !this.activeIds.has(id))) {
+      throw new BadRequestException(
+        'Everyone you pick must be an active member of the chapter',
+      );
     }
   }
 

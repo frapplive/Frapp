@@ -79,11 +79,11 @@ describe("useTabBarClearance", () => {
 });
 
 /**
- * The Ask Frapp bar sits above the tab bar for a member who has Ask (#4702).
+ * The Frapp Intelligence bar sits above the tab bar for a member who has Ask (#4702).
  * The tab bar says when it is there; a tab screen's last row, the create
  * button and the undo bar all move up by it, and a pushed screen never does.
  */
-describe("the Ask Frapp bar's room", () => {
+describe("the Frapp Intelligence bar's room", () => {
   type Seen = { lift: number; clearance: number };
   function Probe({ seen }: { seen: Seen }) {
     seen.lift = useAskBarLift();

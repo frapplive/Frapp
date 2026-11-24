@@ -25,7 +25,7 @@ export {
 // `isModuleEnabled`, and `subscriptionWriteState`.
 export * from "./analytics-opt-out";
 export * from "./api-error-codes";
-// Ask Frapp (#450): the request, the versioned stream format, and its copy.
+// Frapp Intelligence (#450): the request, the versioned stream format, and its copy.
 export * from "./ask";
 // People and channels named in an Ask answer (#4904).
 export * from "./ask-cards";
@@ -35,7 +35,7 @@ export * from "./ask-entities";
 export * from "./ask-feedback";
 // What Ask opens on: the day, a greeting, the first-open starter (#4904).
 export * from "./ask-greeting";
-// An Ask Frapp answer posted to a channel (#4713).
+// A Frapp Intelligence answer posted to a channel (#4713).
 export * from "./ask-post";
 export * from "./ask-source-chip";
 // Ask's working state as a list of steps (#5427).
@@ -131,6 +131,7 @@ export {
 // The bounds a client or a schema here reads. The API-only ones are in
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
+export * from "./frapp-link";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -195,6 +196,7 @@ export * from "./notification-categories";
 // `useNotifications` must agree on (#4962).
 export * from "./notification-inbox";
 // The "You" screen after joining, web and phone (#5627).
+export * from "./onboarding-about";
 export * from "./onboarding-you";
 // ── Ops-setup nudges (issue #492) ────────────────────────────────────────────
 // Shared for the same reason as the categories above: each `key` is written
@@ -256,6 +258,9 @@ export * from "./role-assignment";
 export * from "./role-colors";
 export * from "./role-rank";
 export * from "./screen-copy";
+// The names of the app's places and of what New starts, one list for web and
+// the phone (#5943).
+export * from "./sections";
 // Roles members pick themselves (#4958): the safety rule and its words.
 export * from "./self-assignable-roles";
 export * from "./service-points";
@@ -280,6 +285,8 @@ export * from "./task-proof";
 export * from "./task-row-facts";
 // Who a suggested task names, guessed from its own words (Paul, 2026-11-18).
 export * from "./task-suggestion-guess";
+// Tenant kinds and URL slugs (ADR-27 decision 5, #5918).
+export * from "./tenant-slug";
 export * from "./thumbhash";
 // ── Time zones (issue #687) ──────────────────────────────────────────────────
 export * from "./time-zone";

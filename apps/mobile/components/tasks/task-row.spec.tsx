@@ -64,6 +64,7 @@ function row(overrides: Partial<TaskRowModel> = {}): TaskRowModel {
     meetingId: null,
     followedBy: null,
     followedByName: null,
+    attachments: [],
     group: null,
     openTaskId: null,
     series: null,
@@ -174,7 +175,11 @@ describe("TaskRow — a task a group follows (#5473)", () => {
 
   it("says nothing of it on a task from its creator alone", () => {
     const tree = render(
-      <TaskRow row={row({ dueDate: "2026-09-30" })} now={NOW} onToggle={() => {}} />,
+      <TaskRow
+        row={row({ dueDate: "2026-09-30" })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
     );
     expect(texts(tree).join(" ")).not.toContain("From");
   });
@@ -200,7 +205,9 @@ describe("TaskRow — a copy of a group task (#5699)", () => {
         onToggle={() => {}}
       />,
     );
-    expect(texts(tree)).toContain("Due September 30 · Everyone · 14 of 20 done");
+    expect(texts(tree)).toContain(
+      "Due September 30 · Everyone · 14 of 20 done",
+    );
   });
 
   it("names the role, tier or group a copy went to", () => {
@@ -229,7 +236,11 @@ describe("TaskRow — a copy of a group task (#5699)", () => {
 
   it("says nothing of it on a task for one person", () => {
     const tree = render(
-      <TaskRow row={row({ dueDate: "2026-09-30" })} now={NOW} onToggle={() => {}} />,
+      <TaskRow
+        row={row({ dueDate: "2026-09-30" })}
+        now={NOW}
+        onToggle={() => {}}
+      />,
     );
     expect(texts(tree).join(" ")).not.toContain("Everyone");
   });

@@ -59,6 +59,10 @@ import {
   memberFixture,
   roleFixture,
 } from '#test/helpers/entity-fixtures';
+import {
+  TENANT_SLUG_REPOSITORY,
+  type ITenantSlugRepository,
+} from '#domain/repositories/tenant-slug.repository.interface';
 
 function mockRoleIdForName(name: string): string {
   return `role-${name.toLowerCase().replace(/\s+/g, '-')}`;
@@ -95,8 +99,13 @@ describe('ChapterService', () => {
   };
   let mockChannelRepo: { createMany: jest.Mock };
   let mockAuditLog: AuditLogServiceMock;
+  let mockTenantSlugRepo: jest.Mocked<ITenantSlugRepository>;
 
   beforeEach(async () => {
+    mockTenantSlugRepo = {
+      findBySlug: jest.fn().mockResolvedValue(null),
+      findCurrentByChapterIds: jest.fn().mockResolvedValue([]),
+    };
     mockStorageProvider = {
       getSignedUploadUrl: jest
         .fn()
@@ -215,6 +224,7 @@ describe('ChapterService', () => {
         { provide: CHAT_CHANNEL_REPOSITORY, useValue: mockChannelRepo },
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: ChapterAuditLogService, useValue: mockAuditLog },
+        { provide: TENANT_SLUG_REPOSITORY, useValue: mockTenantSlugRepo },
       ],
     }).compile();
 
@@ -243,6 +253,9 @@ describe('ChapterService', () => {
         id: 'ch-2',
         name: 'Beta',
         university: 'Tech U',
+        // A council is a tenant in the same table (ADR-27); its kind rides
+        // the summary as stored.
+        kind: 'council',
         accent_color: '#1D4ED8',
         created_at: '2024-01-02',
         updated_at: '2024-01-02',
@@ -277,8 +290,22 @@ describe('ChapterService', () => {
     // Returned reversed so the membership-order remap is the thing under
     // test, not PostgREST's result order.
     mockChapterRepo.findByIds.mockResolvedValue([chapters[1], chapters[0]]);
+    // ch-2 has no current slug: the summary says null rather than guessing.
+    mockTenantSlugRepo.findCurrentByChapterIds.mockResolvedValue([
+      {
+        slug: 'alpha-rpi',
+        chapter_id: 'ch-1',
+        retired_at: null,
+        created_at: '2026-11-23',
+      },
+    ]);
 
     const result = await service.listForUser('user-1');
+
+    expect(mockTenantSlugRepo.findCurrentByChapterIds).toHaveBeenCalledWith([
+      'ch-1',
+      'ch-2',
+    ]);
 
     expect(mockMemberRepo.findByUser).toHaveBeenCalledWith('user-1');
     expect(mockChapterRepo.findByIds).toHaveBeenCalledTimes(1);
@@ -300,6 +327,9 @@ describe('ChapterService', () => {
         // would be a silent hole.
         dismissed_ops_nudges: [],
         chapter: toChapterMemberView(chapters[0]),
+        slug: 'alpha-rpi',
+        kind: 'chapter',
+        school: null,
       },
       {
         member_id: 'member-2',
@@ -309,6 +339,9 @@ describe('ChapterService', () => {
         // A stored list passes through untouched.
         dismissed_ops_nudges: ['events'],
         chapter: toChapterMemberView(chapters[1]),
+        slug: null,
+        kind: 'council',
+        school: null,
       },
     ]);
 

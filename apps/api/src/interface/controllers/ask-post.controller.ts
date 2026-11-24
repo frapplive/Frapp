@@ -40,7 +40,7 @@ import type { RequestContext } from '../types/request-context.types';
 export const ASK_ANSWER_POSTED_EVENT = 'ai-answer-posted';
 
 /**
- * Post an Ask Frapp answer to a channel (#4713, `spec/behavior/ai.md`
+ * Post a Frapp Intelligence answer to a channel (#4713, `spec/behavior/ai.md`
  * § Posting an answer to the channel). The same guards as asking: `AiEnabledGuard` first, so a
  * server with `AI_ENABLED` off answers 404 `ai.not_available`, then `ai:use`.
  * The channel is authorized in the service, for posting.
@@ -61,7 +61,7 @@ export class AskPostController {
   @ThrottleExpensiveWrite()
   @ApiOperation({
     summary:
-      'Post an Ask Frapp answer to a channel, or ask what posting would warn about',
+      'Post a Frapp Intelligence answer to a channel, or ask what posting would warn about',
     description:
       'The answer comes from the receipt the server sealed into it for the caller, so only an answer Frapp sent can be posted, and only by the member it was sent to. Before anything is written, everything the answer drew on is checked against everyone who can read the channel; `restricted` lists what not all of them could open. With `confirm` false nothing is written. With `confirm` true the answer is posted, by the Frapp sender, only when `acknowledged` names every entry of `restricted`; otherwise `posted` is false and the current list comes back. A posted answer notifies nobody. Posting the same answer to the same channel twice writes one row; the second call is refused.',
   })
@@ -72,7 +72,7 @@ export class AskPostController {
   })
   @ApiForbiddenResponse({
     description:
-      'The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp AI on (`ai.consent.required`).',
+      'The caller cannot post in this channel, Ask is off for the chapter (`ai.chapter_off`), or the caller has not turned Frapp Intelligence on (`ai.consent.required`).',
   })
   @ApiNotFoundResponse({
     description:

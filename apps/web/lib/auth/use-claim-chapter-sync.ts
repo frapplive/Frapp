@@ -20,9 +20,10 @@ import { readActiveChapterClaim } from "@/lib/auth/active-chapter-claim";
  * member no longer has (item 26) earned a `chapter.context.mismatch` 403 on
  * every request instead.
  *
- * The claim is the authority (spec/behavior/multi-tenancy.md: it outranks the
- * `x-chapter-id` header; mobile derives its chapter from it directly), so the
- * store follows it. Reacting to auth events rather than to `hasHydrated`
+ * The claim is the web's authority until ADR-27 step 2 moves it to the URL
+ * (the API itself has served an `x-chapter-id` header first since #5918;
+ * mobile derives its chapter from the claim directly), so the store follows
+ * it. Reacting to auth events rather than to `hasHydrated`
  * because that flag has three documented ways to stick at `false`
  * (spec/ui/web-dashboard/README.md) — `INITIAL_SESSION` fires once the session
  * is recovered, by which point the synchronous localStorage rehydration has
