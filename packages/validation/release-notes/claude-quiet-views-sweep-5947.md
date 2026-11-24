@@ -1,1 +1,0 @@
-Channels always appear in your chapter's order now, so the channel filter no longer offers Recent or A to Z, and the views in form responses, the GIF picker, Catch me up and the picker for who gets a task are plain words instead of a boxed switch.
