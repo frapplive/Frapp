@@ -554,6 +554,7 @@ describe('Sentry SDK integration', () => {
     // into the payload, so a literal would be echoed back by this file itself.
     const RAW_FIELD_MARKER = ['req', 'raw', 'field', 'marker'].join('_');
     const email = ['treasurer', 'example.com'].join('@');
+    const stripeRequestId = ['req', 'cause1'].join('_');
 
     it('ships the cause as a second exception value, scrubbed like the first', async () => {
       // A real SDK error: its fields (`requestId`, `raw`, `headers`) are what
@@ -561,7 +562,8 @@ describe('Sentry SDK integration', () => {
       const cause = new Stripe.errors.StripeInvalidRequestError({
         message: `No such customer for ${email}`,
         code: 'resource_missing',
-        requestId: RAW_FIELD_MARKER,
+        requestId: stripeRequestId,
+        headers: { 'request-id': RAW_FIELD_MARKER },
       });
       Sentry.captureException(
         new ServiceUnavailableException(
@@ -585,6 +587,10 @@ describe('Sentry SDK integration', () => {
       expect(shippedCause.value).toContain('No such customer for');
       expect(shippedCause.value).not.toContain(email);
       expect(shippedCause.value).toContain('[redacted:email]');
+      // Since stripe 23.2 the SDK opens its own message with the request id
+      // (`[req_…] No such customer…`). It is Stripe's opaque id for the call,
+      // what Stripe support asks for, and no member data, so it stays.
+      expect(shippedCause.value).toContain(`[${stripeRequestId}]`);
       // Only allowlisted keys survive on each value; the provider's own fields
       // never ride along.
       for (const value of values) {

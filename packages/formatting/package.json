@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "@repo/validation": "*",
-    "libphonenumber-js": "1.13.15"
+    "libphonenumber-js": "1.13.17"
   }
 }
