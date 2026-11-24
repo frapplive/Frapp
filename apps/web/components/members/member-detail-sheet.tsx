@@ -68,6 +68,7 @@ import {
 } from "@/components/members/member-detail-rows";
 import { MemberAssignments } from "@/components/members/member-assignments";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { MemberCorrectionDialog } from "@/components/members/member-correction-dialog";
 
 type CustomFieldValue = {
@@ -230,6 +231,7 @@ export function MemberDetailSheet({
   const { avatarTintFor } = useMemberDisplayNames();
   const myPermissionsQuery = useMyPermissions();
   const myPermissions = myPermissionsQuery.data?.permissions;
+  const isCouncil = useIsCouncil();
   const removeMemberMutation = useRemoveMember();
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -585,7 +587,10 @@ export function MemberDetailSheet({
                   !!memberId &&
                   fetched !== null &&
                   !memberQuery.isError &&
-                  can("roles:manage", myPermissions)
+                  can("roles:manage", myPermissions) &&
+                  // Pledge classes are a chapter's (#5933): their routes
+                  // refuse a council.
+                  !isCouncil
                 }
               />
 

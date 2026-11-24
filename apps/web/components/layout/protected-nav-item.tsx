@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { can, canAll, canAny } from "@repo/validation";
+import { can, canAll, canAny, type TenantKind } from "@repo/validation";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ type Props = {
   isModuleEnabled?: (moduleKey: string) => boolean;
   /** The setup gate, from `useHiddenUnsetFeatures` (see `isNavItemVisible`). */
   hiddenFeatures?: ReadonlySet<UnsetFeatureKey>;
+  /** The active tenant's kind, from `useTenantKind` (see `isNavItemVisible`). */
+  tenantKind?: TenantKind;
   /**
    * Act in place instead of navigating (#3779): the desktop shell's Chat row
    * opens and closes the chat panel, and the open tool's row closes it. It
@@ -59,6 +61,8 @@ type Props = {
    */
   count?: { value: number; label: string };
 };
+
+const CHAPTER_ONLY: readonly TenantKind[] = ["chapter"];
 
 function isGranted(
   item: NavItem,
@@ -109,13 +113,22 @@ function isGranted(
  * permissions or the module gate are unresolved, or while a list's read has
  * no answer; it hides on a list that answers "none", or on that list's module
  * being off.
+ *
+ * `tenantKind` is the fourth, the kind gate (#5933): a row hides in a tenant
+ * whose kind it doesn't serve (`NavItem.kinds`, chapters only when omitted),
+ * so a council's nav never offers a page its routes refuse. Undefined while
+ * the kind is unknown, which gates nothing, like the module gate.
  */
 export function isNavItemVisible(
   item: NavItem,
   permissions: readonly string[] | null | undefined,
   isModuleEnabled?: (moduleKey: string) => boolean,
   hiddenFeatures?: ReadonlySet<UnsetFeatureKey>,
+  tenantKind?: TenantKind,
 ): boolean {
+  if (tenantKind && !(item.kinds ?? CHAPTER_ONLY).includes(tenantKind)) {
+    return false;
+  }
   const resolved = permissions !== undefined && permissions !== null;
   const gated =
     item.requirePermission !== undefined ||
@@ -155,6 +168,7 @@ export function ProtectedNavItem({
   focusClassName,
   isModuleEnabled,
   hiddenFeatures,
+  tenantKind,
   collapsed = false,
   onSelect,
   pressed,
@@ -162,7 +176,15 @@ export function ProtectedNavItem({
   highlight,
   count,
 }: Props) {
-  if (!isNavItemVisible(item, permissions, isModuleEnabled, hiddenFeatures)) {
+  if (
+    !isNavItemVisible(
+      item,
+      permissions,
+      isModuleEnabled,
+      hiddenFeatures,
+      tenantKind,
+    )
+  ) {
     return null;
   }
   const isActive = current !== undefined;

@@ -887,6 +887,92 @@
         ]
       }
     },
+    "/v1/councils": {
+      "post": {
+        "description": "Creates a council of the chosen type at a school where the caller holds a verified school email, seeded with its type's role pack. The caller holds Council admin and the title they picked. 403 `council.school_unverified` without a verified school email there; 409 `council.type_taken` when the school already has a council of that type (`other` aside); 429 `chapter.start_daily_limit` past the daily ceiling chapters share.",
+        "operationId": "CouncilsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCouncilDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedCouncilDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council": {
+      "get": {
+        "description": "Its type, recruitment model, whether staff verified it, and its school. Serves the council tenant kind only.",
+        "operationId": "CouncilController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilProfileDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The active council",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
     "/v1/chapters/{id}/config": {
       "get": {
         "operationId": "ChapterConfigController_getConfig_v1",
@@ -19175,64 +19261,9 @@
         ]
       }
     },
-    "/v1/activity-feed": {
-      "get": {
-        "description": "Normalized, newest-first rows aggregated from events, the caller’s own point changes, backwork uploads (only when the caller can view Backwork), new members, and the announcements channel. Read-only aggregation — no separate feed table (`spec/behavior/activity-feed.md`).",
-        "operationId": "ActivityFeedController_getFeed_v1",
-        "parameters": [
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "Max feed rows to return across all domains combined. Clamped to 1–50 inclusive; omitted defaults to 20.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20,
-              "example": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ActivityFeedItemDto"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get the chapter activity feed",
-        "tags": [
-          "Activity Feed"
-        ]
-      }
-    },
     "/v1/activity": {
       "get": {
-        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat. Not `GET /v1/activity-feed`, which is a feed of what happened in the chapter.",
+        "description": "The Activity page’s read (`spec/behavior/activity.md`). `week`: how much of the caller’s week is done, by kind, counted from `week_start`; a `week_start` more than eight days back or a day ahead is not refused but ignored, and `week.start` says which week was counted. `needs_you`: the caller’s open tasks, finished tasks they can confirm, service entries they can approve, open polls they can read and haven’t voted on, and open sign-up sheets, headcounts and forms from others that they haven’t answered (`cards`). `coming_up`: their upcoming events, with whether check-in is open. `made_by_you`: their poll cards, the events they made that invite them and have not closed, and the tasks they assigned (`task_items` counts a task for everyone once; `tasks` is each copy, for older builds); a current client lists the closed polls and confirmed tasks from `GET /v1/activity/archive` instead. `links`: sign-up links (forms, sheets, booking pages) posted in the last 30 days in channels they can read that an officer has not left out of Activity, minus their own, blocked members’, removed ones and ones they marked Done or Hidden. A read-only aggregation: every row comes from its own module under that module’s rule for who may see it, a module the chapter has off contributes nothing, and a poll is listed only from a channel the caller can read in chat.",
         "operationId": "ActivityController_getActivity_v1",
         "parameters": [
           {
@@ -25213,6 +25244,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -25362,6 +25423,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -25499,6 +25590,36 @@
           "org_archetype": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "description": "The tenant kind (ADR-27): `council` draws the council shell (#5933)."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true,
+            "description": "A council's type; null on a chapter (#5933)."
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ],
+            "nullable": true,
+            "description": "A council's recruitment model; null on a chapter (#5933). The role screens hide recruitment keys under `none`."
+          },
           "enabled_modules": {
             "type": "object",
             "additionalProperties": {
@@ -25591,6 +25712,152 @@
         },
         "required": [
           "storage_path"
+        ]
+      },
+      "CreateCouncilDto": {
+        "type": "object",
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The school the council is at. The caller must hold a verified school email there."
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "example": "RPI IFC",
+            "maxLength": 80
+          },
+          "title_key": {
+            "type": "string",
+            "description": "The founder's title: a seeded title's key from the type's role pack (`pickableCouncilTitles` in `@repo/validation`), or `custom` with `custom_title`.",
+            "example": "vp_recruitment",
+            "maxLength": 40
+          },
+          "custom_title": {
+            "type": "string",
+            "description": "With `title_key: 'custom'`: the founder's own title, a new role in the Executive board.",
+            "example": "Recruitment Chair",
+            "maxLength": 40
+          },
+          "accept_terms_privacy": {
+            "type": "boolean",
+            "description": "The founder accepted the Terms of Service and Privacy Policy, for the council and for themselves. Must be true, as chapter onboarding requires (spec/behavior/legal.md)."
+          }
+        },
+        "required": [
+          "school_id",
+          "council_type",
+          "name",
+          "title_key",
+          "accept_terms_privacy"
+        ]
+      },
+      "CreatedCouncilDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chapter",
+              "council"
+            ],
+            "example": "council"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ]
+      },
+      "CouncilSchoolDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name"
+        ]
+      },
+      "CouncilProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ]
+          },
+          "recruitment_model": {
+            "type": "string",
+            "enum": [
+              "open_bidding",
+              "formal",
+              "none"
+            ]
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether Frapp staff verified the council (`council_verified_at`). Every council starts unverified."
+          },
+          "school": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CouncilSchoolDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "council_type",
+          "recruitment_model",
+          "verified",
+          "school"
         ]
       },
       "BetaConfigDto": {
@@ -26223,7 +26490,9 @@
               "documents",
               "geofences",
               "reports",
-              "billing"
+              "billing",
+              "council",
+              "council-recruitment"
             ],
             "description": "The module the permission belongs to: a module catalog key, or `chapter` for a chapter-level permission."
           },
@@ -39215,82 +39484,6 @@
           }
         }
       },
-      "ActivityFeedActorDto": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "display_name": {
-            "type": "string",
-            "description": "Empty when the actor could not be resolved against the current roster (e.g. a member who has since left the chapter) — the server does not invent a placeholder name."
-          },
-          "avatar_url": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "user_id",
-          "display_name",
-          "avatar_url"
-        ]
-      },
-      "ActivityFeedItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable within one response; not a database primary key."
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "event_created",
-              "event_upcoming",
-              "points_change",
-              "backwork_upload",
-              "member_joined",
-              "announcement"
-            ]
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Feed ordering key — newest first."
-          },
-          "title": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string",
-            "nullable": true
-          },
-          "actor": {
-            "nullable": true,
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ActivityFeedActorDto"
-              }
-            ]
-          },
-          "target_id": {
-            "type": "string",
-            "description": "The underlying record id (event, point transaction, backwork resource, joining member’s user id, or announcement channel id) for client-side navigation."
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "timestamp",
-          "title",
-          "body",
-          "actor",
-          "target_id"
-        ]
-      },
       "ActivityTaskDto": {
         "type": "object",
         "properties": {
@@ -40178,35 +40371,6 @@
           "due"
         ]
       },
-      "ActivityFileDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "document",
-              "backwork"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "source",
-          "title",
-          "created_at"
-        ]
-      },
       "ActivityMadeByYouDto": {
         "type": "object",
         "properties": {
@@ -40245,14 +40409,6 @@
             },
             "description": "What the caller assigned that isn’t finished, newest first, at most 25, a task for everyone counted once (#5492): `kind: task`, a one-person task not yet confirmed; `kind: group`, a task for everyone with a copy not yet confirmed, as one row. A confirmed one is in `GET /v1/activity/archive`. Empty unless the caller still holds `tasks:manage`."
           },
-          "files": {
-            "deprecated": true,
-            "description": "Always empty: uploads left Activity (#4291). Served only so a client built before that does not fail on its absence; to be removed.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ActivityFileDto"
-            }
-          },
           "events": {
             "description": "Events the caller made that invite them and whose check-in has not closed, soonest first; a recurring series is one row, its next meeting. Events made before creators were recorded (#3897) are never here.",
             "type": "array",
@@ -40265,7 +40421,6 @@
           "polls",
           "tasks",
           "task_items",
-          "files",
           "events"
         ]
       },

@@ -50,6 +50,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", () => ({
   useSearch: () => searchQuery.current,
   useChannels: () => channelsQuery.current,
@@ -764,6 +772,8 @@ describe("FindBar and Ask (#5476)", () => {
     render(<FindBar />);
     const input = await openAndType(user, "when is the announce party?");
     expect(input).toHaveAttribute("placeholder", FIND_PLACEHOLDER);
-    expect(screen.queryByRole("option", { name: /Frapp Intelligence/ })).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: /Frapp Intelligence/ }),
+    ).toBeNull();
   });
 });

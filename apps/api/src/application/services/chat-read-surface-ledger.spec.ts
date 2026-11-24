@@ -15,9 +15,9 @@ import * as ts from 'typescript';
  * enumerated the rest. So this file **enumerates, and fails on anything it
  * enumerates that is unclassified**:
  *
- * - every operation `openapi.json` gives one of `CHAT_CONTROLLERS`. Four reads
- *   on other controllers serve chat content too (search, the activity feed,
- *   the Activity page, the notification list) and are listed by hand, so a
+ * - every operation `openapi.json` gives one of `CHAT_CONTROLLERS`. Three reads
+ *   on other controllers serve chat content too (search, the Activity page,
+ *   the notification list) and are listed by hand, so a
  *   chat read added to some other controller is the one case this does not
  *   catch;
  * - every policy any migration creates that can read, which is how a client
@@ -424,19 +424,6 @@ const HTTP_LEDGER: Record<string, Entry> = {
       test: 'masks a hit from a member the caller has blocked',
     },
   },
-  ActivityFeedController_getFeed_v1: {
-    // Its announcement items are chat, and masked: a blocked author's
-    // announcement is left out, reading as the caller. Its other items are
-    // chapter records carrying text a member wrote (a backwork title beside
-    // its uploader, an event name, a points reason), which a block does not
-    // hide (#2498).
-    status: 'not-hidden',
-    why: "Announcements are masked. The record items carrying a member's own text (a backwork title, an event name, a points reason) are not: a block is a chat control, and the spec's table row for non-chat modules says so.",
-    proof: {
-      spec: 'application/services/activity-feed.service.spec.ts',
-      test: 'leaves out an announcement whose author the caller has blocked, reading as the caller',
-    },
-  },
   ActivityController_getActivity_v1: {
     // Its poll rows are chat (a card's question, from a channel the caller
     // can read), and masked: a blocked author's poll is left out. Its
@@ -444,7 +431,7 @@ const HTTP_LEDGER: Record<string, Entry> = {
     // timeline's tombstone (`chat-reminder.service.spec.ts`). Its other
     // rows are chapter records carrying text a member wrote (a task title, a
     // service entry's description, an event name), which a block does not
-    // hide (#2498), as on the activity feed above.
+    // hide (#2498).
     status: 'not-hidden',
     why: "Poll rows are masked. The record rows carrying a member's own text (a task title, a service entry's description, an event name) are not: a block is a chat control, and the spec's table row for non-chat modules says so.",
     proof: {
@@ -460,7 +447,7 @@ const HTTP_LEDGER: Record<string, Entry> = {
     // when the list is read, by the sender each row records (#2715). The
     // non-chat rows that quote a member's text are MEMBER_TEXT, which a block
     // does not hide (#2498), so the route as a whole serves another member's
-    // text on purpose, like the activity feed.
+    // text on purpose, like the Activity page.
     status: 'not-hidden',
     why: "Chat rows are masked, including ones written before the block. The non-chat rows carrying a member's own text (a task title, an event name) are not hidden, by the spec's table row for non-chat modules.",
     proof: {
@@ -544,6 +531,11 @@ const DIRECT_READ_LEDGER: Record<string, Entry & { creates: number }> = {
     creates: 1,
     status: 'no-foreign-content',
     why: '`to supabase_auth_admin` only, as `auth_admin_can_read_users`.',
+  },
+  'public.chapters auth_admin_can_read_chapters': {
+    creates: 1,
+    status: 'no-foreign-content',
+    why: "`to supabase_auth_admin` only, as `auth_admin_can_read_users`: the token hook reads each membership's tenant kind (#5933).",
   },
   'public.member_custom_field_values member_custom_field_values_service_role': {
     creates: 1,

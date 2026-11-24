@@ -96,6 +96,8 @@ const USER_ROUTES: Record<string, string> = {
   'ChapterDirectoryController.search':
     'The public chapter directory, searched before the caller belongs to a chapter.',
   'ChapterController.onboard': 'Creates a chapter; the caller is in none yet.',
+  'CouncilsController.create':
+    "Starts a council (#5933); the caller is in none yet, and the service checks they're verified at its school.",
   'ChapterController.listForCurrentUser': "The caller's own chapters.",
   'ChapterController.activate':
     'Activates a chapter the caller is creating; the service checks ownership.',

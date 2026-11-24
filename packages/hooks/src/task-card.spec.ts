@@ -663,7 +663,11 @@ describe("localTaskStatus (#5774)", () => {
     ).toBe("OVERDUE");
     expect(
       localTaskStatus(
-        { status: "COMPLETED", stored_status: "COMPLETED", due_date: "2026-11-18" },
+        {
+          status: "COMPLETED",
+          stored_status: "COMPLETED",
+          due_date: "2026-11-18",
+        },
         evening,
       ),
     ).toBe("COMPLETED");

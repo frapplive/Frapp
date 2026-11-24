@@ -4,6 +4,18 @@ import { useMemo } from "react";
 import { useCurrentChapter } from "@repo/hooks";
 import { chapterMarkFor, CrestTile } from "@/components/layout/crest-tile";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
+import dynamic from "next/dynamic";
+
+/**
+ * Fetched only in a council: it carries the Directory's invite panel, which
+ * would otherwise ride in the shell chunk every dashboard route loads
+ * (`chapter-wizard-gate.tsx` measures what that costs).
+ */
+const CouncilHome = dynamic(
+  () => import("@/components/councils/council-home").then((m) => m.CouncilHome),
+  { ssr: false },
+);
 
 /**
  * The home view (#3779): what the desktop shell shows with nothing open,
@@ -14,8 +26,17 @@ import { useChapterStore } from "@/lib/stores/chapter-store";
  * size), from the same current-chapter read, so the two never disagree, and
  * the accent pairs are the engine's, AA for every seed. An officer-uploaded
  * chapter photo is a later step of #3779; this is the default it will replace.
+ *
+ * A council draws its own home (`council-home.tsx`, #5933): the same crest
+ * and glow, with its type, school and verification, and its first steps.
  */
 export function ChapterHome() {
+  const isCouncil = useIsCouncil();
+  if (isCouncil) return <CouncilHome />;
+  return <ChapterHomeView />;
+}
+
+function ChapterHomeView() {
   const activeChapterId = useChapterStore((s) => s.activeChapterId);
   const { data: chapter } = useCurrentChapter({
     chapterId: activeChapterId,

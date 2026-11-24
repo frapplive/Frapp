@@ -26,6 +26,8 @@ import { EmailModule } from '../email/email.module';
     SchoolService,
     { provide: SCHOOL_REPOSITORY, useClass: SupabaseSchoolRepository },
   ],
-  exports: [SchoolService],
+  // The repository too: starting a council checks the founder's school
+  // membership (#5933, `CouncilService`).
+  exports: [SchoolService, SCHOOL_REPOSITORY],
 })
 export class SchoolModule {}

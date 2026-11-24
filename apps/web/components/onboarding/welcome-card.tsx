@@ -31,6 +31,7 @@ import {
 import { FOCUS_RING } from "@/components/ui/focus";
 import { clearWelcomeDue, isWelcomeDue } from "@/lib/onboarding/welcome-due";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { cn, initials } from "@/lib/utils";
 
 type Me = {
@@ -77,7 +78,11 @@ export function WelcomeCard({
     !closed && !!me?.id && !!chapterId && isWelcomeDue(me.id, chapterId);
   const show = due && inDefaultChannel;
   const chapter = useCurrentChapter({ chapterId, enabled: show });
-  const events = useEvents({ enabled: show });
+  // Upcoming events only where Events is on: a council (#5933), or a chapter
+  // that turned Events off, has none to list and its route refuses the read.
+  const isModuleEnabled = useChapterModuleGate();
+  const eventsOn = isModuleEnabled?.("events") === true;
+  const events = useEvents({ enabled: show && eventsOn });
   const [finishOpen, setFinishOpen] = useState(false);
   const upcoming = useMemo(
     () =>
@@ -89,7 +94,14 @@ export function WelcomeCard({
   );
 
   // Drawn once the events have answered, so the rows never push it taller.
-  if (!show || !me || events.isPending) return null;
+  if (
+    !show ||
+    !me ||
+    isModuleEnabled === undefined ||
+    (eventsOn && events.isPending)
+  ) {
+    return null;
+  }
 
   const chapterName = (chapter.data as { name?: string } | undefined)?.name;
   const title = welcomeCardTitle(chapterName, me.display_name);

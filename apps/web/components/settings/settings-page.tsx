@@ -42,6 +42,8 @@ import {
   isModuleEnabled as isStoredModuleEnabled,
 } from "@repo/validation";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
+import { CouncilSettingsPage } from "@/components/councils/council-settings-page";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { asArray, getErrorMessage } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale-image";
@@ -970,10 +972,33 @@ function SettingsPageContent() {
 // `SettingsPageContent` reads `?tab=` via `useSearchParams`, which Next requires
 // to sit under a Suspense boundary (matches the sign-in/sign-up/join pattern).
 export function SettingsPage() {
+  const activeChapterId = useChapterStore((s) => s.activeChapterId);
+  const tenantKind = useTenantKind();
+  const chapterRead = useCurrentChapter({
+    chapterId: activeChapterId,
+    enabled: !!activeChapterId,
+  });
+  // Held only while the read is actually running: a paused or failed one
+  // falls through to the chapter page, which says it is offline or failed.
+  const kindLoading =
+    !!activeChapterId &&
+    tenantKind === undefined &&
+    chapterRead.fetchStatus === "fetching";
   return (
     <>
       <Suspense fallback={<SettingsBodySkeleton />}>
-        <SettingsPageContent />
+        {
+          // A council's settings are its own few rows (#5933). Its kind is
+          // read before either page mounts, so the chapter page's config,
+          // semester and AI reads never go to a council's routes.
+          kindLoading ? (
+            <SettingsBodySkeleton />
+          ) : tenantKind === "council" ? (
+            <CouncilSettingsPage />
+          ) : (
+            <SettingsPageContent />
+          )
+        }
       </Suspense>
     </>
   );

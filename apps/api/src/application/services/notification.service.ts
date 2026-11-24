@@ -1160,6 +1160,12 @@ export class NotificationService {
    * a user may only read or write notification preferences for a chapter they
    * are an active member of. The chapter here comes from the request query/body
    * rather than the resolved active chapter, so it must be verified explicitly.
+   *
+   * Any tenant kind (#5933, settling #5925's review note): a council's
+   * members get its notifications as a chapter's do, so they keep
+   * preferences there too. Membership is the boundary, as `ChapterGuard`'s
+   * is; there is no chapter-only feature behind a preference to keep from a
+   * council.
    */
   private async assertChapterMembership(
     userId: string,

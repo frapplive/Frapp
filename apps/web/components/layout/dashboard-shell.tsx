@@ -56,8 +56,10 @@ import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
 import { useChapterTheme } from "@/lib/hooks/use-chapter-theme";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { ChapterWizardGate } from "@/components/onboarding/chapter-wizard-gate";
 import { NoAccessRedirect } from "@/components/layout/no-access-redirect";
+import { CouncilRouteGate } from "@/components/layout/council-route-gate";
 import { TermsPromptGate } from "@/components/auth/terms-prompt";
 import { WelcomeGate } from "@/components/onboarding/welcome-gate";
 import { WhatsNewHost } from "@/components/whats-new/whats-new-host";
@@ -407,6 +409,8 @@ export function DashboardShell({
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
   const isModuleEnabled = useChapterModuleGate();
+  // A council's rows and titles (#5933).
+  const tenantKind = useTenantKind();
   // A title named in the chapter's own word (Recruitment's Rush / Intake).
   const chapterVocabulary = useChapterVocabulary();
   // The crumb's parent link follows its nav row's gates, so the top bar never
@@ -419,8 +423,16 @@ export function DashboardShell({
         ? { title: DIRECT_MESSAGES_TITLE }
         : resolvePageTitle(
             pathname,
-            (item) => isNavItemVisible(item, permissions, isModuleEnabled),
+            (item) =>
+              isNavItemVisible(
+                item,
+                permissions,
+                isModuleEnabled,
+                undefined,
+                tenantKind,
+              ),
             chapterVocabulary,
+            tenantKind,
           ),
     [
       onChatRoute,
@@ -429,6 +441,7 @@ export function DashboardShell({
       permissions,
       isModuleEnabled,
       chapterVocabulary,
+      tenantKind,
     ],
   );
 
@@ -514,6 +527,8 @@ export function DashboardShell({
       className="relative flex h-dvh overflow-clip bg-background"
     >
       <ChapterWizardGate />
+      {/* A council member on a chapter-only page (#5933). */}
+      <CouncilRouteGate />
       {/* A member whose roles grant nothing (#3236). */}
       <NoAccessRedirect />
       {/* A member who hasn't accepted the current Terms (#2302). */}

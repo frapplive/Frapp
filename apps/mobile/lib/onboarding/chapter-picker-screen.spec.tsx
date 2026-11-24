@@ -57,7 +57,16 @@ const ETA = {
   chapter_id: "chapter-eta",
   chapter: { name: "Sigma Phi Epsilon", university: "UCLA" },
 };
-let chapters = [TAU_NU, ETA];
+const RPI_IFC = {
+  chapter_id: "council-rpi-ifc",
+  kind: "council",
+  chapter: {
+    name: "RPI IFC",
+    university: "Rensselaer Polytechnic Institute",
+    council_type: "ifc",
+  },
+};
+let chapters: object[] = [TAU_NU, ETA];
 const refetchChapters = vi.fn();
 
 vi.mock("@repo/hooks", () => ({
@@ -276,6 +285,24 @@ describe("chapter picker, opened from Chat", () => {
     } finally {
       os.mockRestore();
     }
+  });
+
+  it("reads a council as one, its type before its school (#5933)", () => {
+    chapters = [TAU_NU, RPI_IFC];
+    const tree = render();
+    expect(drawnText(rowFor(tree.root, "RPI IFC"))).toContain(
+      "Interfraternity Council · Rensselaer Polytechnic Institute",
+    );
+    expect(drawnText(rowFor(tree.root, "FIJI Tau Nu"))).toContain("Rensselaer");
+  });
+
+  it("ends the list with Create a council, which opens council setup (#5933)", () => {
+    const tree = render();
+    act(() => rowFor(tree.root, "Create a council").props.onPress());
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/create-chapter",
+      params: { kind: "council" },
+    });
   });
 
   it("has no line narrating the list under its title", () => {

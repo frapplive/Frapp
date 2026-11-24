@@ -69,7 +69,7 @@ describe('ChapterGuard', () => {
     /** A lookup that fails rather than finding nothing (#3143), by table. */
     errors?: Partial<
       Record<
-        'users' | 'members' | 'chapters' | 'memberships',
+        'users' | 'members' | 'chapters' | 'memberships' | 'servedTenants',
         { code: string; message: string }
       >
     >;
@@ -85,11 +85,16 @@ describe('ChapterGuard', () => {
       /** `chapters.kind`; `chapter` when left out, as the column defaults. */
       kind?: string;
     } | null;
-    /** Rows returned by the auto-resolve lookup (`.eq(user_id).limit(2)`). */
+    /**
+     * Rows returned by the auto-resolve lookup (`.eq(user_id)`), each with
+     * its tenant's kind (`chapter` when left out), which the follow-up
+     * `chapters` read (`.in(id).in(kind).limit(2)`) filters on (#5933).
+     */
     memberships?: Array<{
       id: string;
       role_ids: string[];
       chapter_id: string;
+      kind?: string;
     }>;
   }) => {
     let callCount = 0;
@@ -111,13 +116,31 @@ describe('ChapterGuard', () => {
         .mockResolvedValue(
           error ? { data: null, error } : { data: data ?? null, error: null },
         );
-      const limit = jest
-        .fn()
-        .mockResolvedValue(
-          errors.memberships
-            ? { data: null, error: errors.memberships }
-            : { data: memberships ?? [], error: null },
-        );
+      const membershipRows = errors.memberships
+        ? { data: null, error: errors.memberships }
+        : {
+            data: (memberships ?? []).map(({ kind: _kind, ...row }) => row),
+            error: null,
+          };
+      // The sole-tenant read of `chapters`: the memberships' tenants whose
+      // kind the route serves.
+      const inFilters: Record<string, unknown[]> = {};
+      const servedTenants = () => ({
+        data: (memberships ?? [])
+          .filter(
+            (row) =>
+              (inFilters.id ?? []).includes(row.chapter_id) &&
+              (inFilters.kind ?? []).includes(row.kind ?? 'chapter'),
+          )
+          .slice(0, 2)
+          .map((row) => ({ id: row.chapter_id })),
+        error: errors.servedTenants ?? null,
+      });
+      const limit = jest.fn(() => Promise.resolve(servedTenants()));
+      const inMock: jest.Mock = jest.fn((column: string, values: unknown[]) => {
+        inFilters[column] = values;
+        return { in: inMock, limit };
+      });
       // chapters and users use one .eq; members uses either two .eq calls
       // (explicit chapter) or one .eq + .limit (auto-resolve).
       // users adds `.is('deleted_at', null)` before `.maybeSingle` (#5043).
@@ -127,12 +150,21 @@ describe('ChapterGuard', () => {
       });
       eqMock.mockImplementation((column: string, value: unknown) => {
         (eqArgs[table] ??= []).push([column, value]);
-        return { eq: eqMock, is: isMock, maybeSingle, limit };
+        return {
+          eq: eqMock,
+          is: isMock,
+          maybeSingle,
+          // The auto-resolve read of `members` is awaited as it stands.
+          then: (
+            resolve: (value: unknown) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) => Promise.resolve(membershipRows).then(resolve, reject),
+        };
       });
       return {
         select: jest.fn().mockImplementation((columns: string) => {
           (selectArgs[table] ??= []).push(columns);
-          return { eq: eqMock };
+          return { eq: eqMock, in: inMock };
         }),
       };
     });
@@ -242,6 +274,73 @@ describe('ChapterGuard', () => {
         guard.canActivate(mockExecutionContext(request)),
       ).resolves.toBe(true);
       expect(request.chapterId).toBe('dddddddd-0000-4000-8000-000000000004');
+    });
+
+    // #5933, from #5925's review: the sole tenant is counted among the kinds
+    // the route serves, so a council beside one chapter doesn't make a
+    // chapter route ask which one.
+    it('auto-resolves the one chapter of a member who also holds a council, on a chapter route', async () => {
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        memberships: [
+          membership('dddddddd-0000-4000-8000-000000000004'),
+          {
+            ...membership('eeeeeeee-0000-4000-8000-000000000005'),
+            kind: 'council',
+          },
+        ],
+        chapter: { subscription_status: 'active' },
+      });
+      const request = buildRequest({ headers: {} });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).resolves.toBe(true);
+      expect(request.chapterId).toBe('dddddddd-0000-4000-8000-000000000004');
+    });
+
+    it('auto-resolves the one council on a council route, beside a chapter', async () => {
+      jest
+        .spyOn(reflector, 'getAllAndOverride')
+        .mockImplementation((key) =>
+          key === TENANT_KINDS_KEY ? ['council'] : undefined,
+        );
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        memberships: [
+          membership('dddddddd-0000-4000-8000-000000000004'),
+          {
+            ...membership('eeeeeeee-0000-4000-8000-000000000005'),
+            kind: 'council',
+          },
+        ],
+        chapter: { subscription_status: 'active', kind: 'council' },
+      });
+      const request = buildRequest({ headers: {} });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(request)),
+      ).resolves.toBe(true);
+      expect(request.chapterId).toBe('eeeeeeee-0000-4000-8000-000000000005');
+    });
+
+    it('never auto-resolves a council alone on a chapter route', async () => {
+      mockSupabaseChain({
+        appUser: { id: 'user-1' },
+        memberships: [
+          {
+            ...membership('eeeeeeee-0000-4000-8000-000000000005'),
+            kind: 'council',
+          },
+        ],
+      });
+
+      await expect(
+        guard.canActivate(mockExecutionContext(buildRequest({ headers: {} }))),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { code: 'chapter.context.required' },
+      });
     });
 
     it('requires explicit context from a multi-chapter user (chapter.context.required)', async () => {

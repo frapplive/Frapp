@@ -3,6 +3,7 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useHiddenUnsetFeatures } from "@repo/hooks";
 import { cn } from "@/lib/utils";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { ChapterNavHeader } from "@/components/layout/chapter-nav-header";
 import {
   DASHBOARD_NAV,
@@ -178,13 +179,21 @@ export function AppNav({
   // Study hours with no active zone, and Documents with nothing in it for a
   // viewer who can't upload, leave the nav (`nav-config.ts`, Setup gating).
   const hiddenFeatures = useHiddenUnsetFeatures(permissions, isModuleEnabled);
+  // A council's nav keeps only the rows its routes serve (#5933).
+  const tenantKind = useTenantKind();
   // A row named in the chapter's own word (Recruitment's Rush / Intake).
   const vocabulary = useChapterVocabulary();
 
   const sections = DASHBOARD_NAV.map((section) => {
     const visibleItems = section.items
       .filter((item) =>
-        isNavItemVisible(item, permissions, isModuleEnabled, hiddenFeatures),
+        isNavItemVisible(
+          item,
+          permissions,
+          isModuleEnabled,
+          hiddenFeatures,
+          tenantKind,
+        ),
       )
       .map((item) => withChapterWords(item, vocabulary));
     if (visibleItems.length === 0) return null;
@@ -225,6 +234,7 @@ export function AppNav({
             focusClassName: FOCUS_RING_SHELL,
             isModuleEnabled,
             hiddenFeatures,
+            tenantKind,
             collapsed: isCollapsed,
             highlight: highlighted?.has(item.id)
               ? (HIGHLIGHT_LABEL[item.id] ?? "new")

@@ -1,3 +1,4 @@
+import type { CouncilType } from '@repo/validation';
 import { Chapter, SubscriptionStatus } from '../entities/chapter.entity';
 
 export const CHAPTER_REPOSITORY = 'CHAPTER_REPOSITORY';
@@ -46,6 +47,14 @@ export interface ChapterRecapPushTarget {
 
 export interface IChapterRepository {
   findById(id: string): Promise<Chapter | null>;
+  /**
+   * The council of `councilType` at a school, if one exists (#5933): one of a
+   * type per school, `other` aside (`chapters_one_council_per_type`).
+   */
+  findCouncilBySchoolAndType(
+    schoolId: string,
+    councilType: CouncilType,
+  ): Promise<{ id: string } | null>;
   /**
    * Batch PK lookup. Empty `ids` returns `[]` without querying. Result order
    * is not the request order — callers that need membership order map by id
@@ -119,6 +128,11 @@ export interface IChapterRepository {
     patch: SubscriptionWebhookPatch,
   ): Promise<AppliedSubscriptionWebhook | null>;
   create(data: Partial<Chapter>): Promise<Chapter>;
+  /**
+   * Deletes a tenant row, and through the cascade everything keyed to it.
+   * Only for undoing a council whose seeding failed (#5933).
+   */
+  deleteById(id: string): Promise<void>;
   update(id: string, data: Partial<Chapter>): Promise<Chapter>;
   /**
    * Compare-and-set a derived theme palette onto the chapter: the write lands

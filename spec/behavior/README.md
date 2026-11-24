@@ -27,9 +27,8 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Events, attendance, recurring events, calendar       | [`events.md`](events.md)                   |
 | Onboarding wizard + invites + walkthrough            | [`onboarding.md`](onboarding.md)           |
 | Polls and voting                                     | [`polls.md`](polls.md)                     |
-| Predictions (stake points on chapter questions)      | [`predictions.md`](predictions.md)         |
+| Predictions (API only, no screen; parked)            | [`predictions.md`](predictions.md)         |
 | Member directory and profiles                        | [`members.md`](members.md)                 |
-| Activity feed                                        | [`activity-feed.md`](activity-feed.md)     |
 | Activity page (what needs you, what you made)        | [`activity.md`](activity.md)               |
 | Global search                                        | [`search.md`](search.md)                   |
 | Observability                                        | [`observability.md`](observability.md)     |
@@ -47,7 +46,7 @@ the targets resolve — so add the row in the same change that adds the topic fi
 | Settings shell, customization, audit                 | [`settings/`](settings/README.md)          |
 | Ops integrations                                     | [`integrations.md`](integrations.md)       |
 | Meetings (AI-drafted minutes, suggested tasks)       | [`meetings.md`](meetings.md)               |
-| Vault (encrypted private storage)                    | [`vault.md`](vault.md)                     |
+| Vault (encrypted private storage; parked, not built) | [`vault.md`](vault.md)                     |
 | AI features (corpus scope, citations, non-goals)     | [`ai.md`](ai.md)                           |
 | Chapter config endpoints                             | [`chapter-config.md`](chapter-config.md)   |
 | Council types: IFC, Panhellenic, NPHC, MGC (proposed) | [`council-types.md`](council-types.md)     |
@@ -138,7 +137,7 @@ Writes that reach people outside the chapter also have a rolling 24-hour ceiling
 | --- | --- | --- |
 | Emailed invites (`POST /v1/invites/email`), per chapter | 300 in any 24 hours | `invite.email_daily_limit` |
 | Emailed invites, per sender across every chapter | 300 in any 24 hours | `invite.email_daily_limit` |
-| Chapters started (`POST /v1/chapters/onboard`), per account | 3 in any 24 hours | `chapter.start_daily_limit` |
+| Chapters and councils started (`POST /v1/chapters/onboard`, `POST /v1/councils` since #5933), per account, counted together | 3 in any 24 hours | `chapter.start_daily_limit` |
 
 - A new president inviting a whole 150-member chapter on day one sends 150 emails, and resends to mistyped or bounced addresses stay inside 300. A chapter at its ceiling can still share a join link, which sends no email, and the refusal says so.
 - Every emailed invite whose email was handed to the provider counts, revoked, replaced, used or not, because the email went out. One whose send failed stops counting once the batch finishes (its join link still works, shared by hand), so re-sending to the addresses that failed costs only what goes out. Share-link invites never count. A batch that would pass a ceiling is refused whole, before any token is made or email sent.

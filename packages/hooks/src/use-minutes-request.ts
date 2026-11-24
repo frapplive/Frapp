@@ -59,10 +59,11 @@ export function useRequestMinutes() {
       return data;
     },
     onSuccess: ({ meeting_id, event_id, requested }) => {
-      queryClient.setQueryData(
-        minutesRequestKey(chapterId, event_id),
-        { meeting_id, event_id, requested } satisfies MinutesRequestState,
-      );
+      queryClient.setQueryData(minutesRequestKey(chapterId, event_id), {
+        meeting_id,
+        event_id,
+        requested,
+      } satisfies MinutesRequestState);
     },
     onError: () => {
       // Posted in the meantime, or not recorded: read the event's minutes and

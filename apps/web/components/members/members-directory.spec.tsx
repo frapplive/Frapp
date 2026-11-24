@@ -89,6 +89,9 @@ const leaderboardRead = read([{ user_id: "u-1", total: 42 }]);
 
 const classesRead = read([]);
 
+/** The member view's tenant: a chapter unless a test makes it a council (#5933). */
+const tenant = vi.hoisted(() => ({ council: false }));
+
 /** What `useMemberPhoneReach` answers: `null` until a test sets it. */
 const phoneReachRead = vi.hoisted(() => ({
   value: null as null | {
@@ -96,6 +99,8 @@ const phoneReachRead = vi.hoisted(() => ({
     byUserId: Map<string, unknown>;
   },
 }));
+
+import { useChapterStore } from "@/lib/stores/chapter-store";
 
 // The live-meeting card has its own spec (#5219).
 vi.mock("@/components/meetings/live-meeting-card", () => ({
@@ -144,10 +149,18 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     // every seeded role below President (#2957), so the directory must not
     // depend on it; it reports that refusal here rather than being left out.
     useCurrentChapter: () => ({
-      data: {
-        org_archetype: "ifc",
-        vocabulary: { class: "Line", order: "Roll number" },
-      },
+      data: tenant.council
+        ? {
+            org_archetype: "council",
+            kind: "council",
+            council_type: "ifc",
+            enabled_modules: { points: false, members: true },
+            vocabulary: {},
+          }
+        : {
+            org_archetype: "ifc",
+            vocabulary: { class: "Line", order: "Roll number" },
+          },
     }),
     useOrgConfig: () => ({ data: undefined, isError: true }),
     useUpdateMemberRoles: () => ({
@@ -250,6 +263,7 @@ beforeEach(() => {
   );
   Object.assign(leaderboardRead, read([{ user_id: "u-1", total: 42 }]));
   phoneReachRead.value = null;
+  tenant.council = false;
   permissionsRead.data = { permissions: [] };
   Object.assign(tiersRead, { data: [], isError: false });
 });
@@ -918,6 +932,29 @@ describe("Directory on the greenfield shell", () => {
  * viewer. #2146 deleted the old card grid for showing less than the row and
  * for stranding selection; a tile answers both.
  */
+describe("Directory in a council (#5933)", () => {
+  afterEach(() => useChapterStore.setState({ activeChapterId: null }));
+
+  it("draws no points, sorts by none, and never waits on the refused points read", async () => {
+    tenant.council = true;
+    useChapterStore.setState({ activeChapterId: "council-1" });
+    // A council's routes refuse the leaderboard; that must not fail the list.
+    Object.assign(leaderboardRead, read(undefined), { isError: true });
+    const user = userEvent.setup();
+    render(<MembersDirectory />);
+    expect(screen.queryByText("Couldn't load roles and points")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^Ada Lovelace,/ }),
+    ).not.toHaveAccessibleName(/points/);
+    expect(screen.getByText("Members")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sort: Name A to Z" }));
+    const sorts = (await screen.findAllByRole("menuitem")).map(
+      (item) => item.textContent,
+    );
+    expect(sorts.some((label) => /points/i.test(label ?? ""))).toBe(false);
+  });
+});
+
 describe("Directory as a grid (#4175)", () => {
   beforeEach(() => {
     window.localStorage.setItem("frapp.directory.layout.viewer-1", "grid");

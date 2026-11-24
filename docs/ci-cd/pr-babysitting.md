@@ -682,3 +682,44 @@ So "only reviewed code runs with the App token" is really "only code merged by s
 write access" — fine for a single-maintainer repo, and the thing to revisit first if
 collaborators are ever added. Note this is about the App token, not about what ships: the
 production deploy still requires a human to approve the `production` environment.
+
+## Recheck after a deploy (`scripts/ci/pr-recheck-after-deploy.mjs`)
+
+The base-sync bot's second half (Paul, 2026-11-24). When a deploy gets stuck, for example on a
+migration-order race (#4795, #5958), the Migration drift gate goes red on every open PR, and before
+this nothing turned it green again after the deploy recovered except each PR's next push.
+`pr-recheck-after-deploy.yml` re-runs those gate runs once the recovered state is published.
+
+- **Only the Migration drift gate.** A re-run keeps its run's commit, which for a pull request is
+  GitHub's test merge with `main` as `main` stood when the run started. So re-running CI can't pick
+  up a fix that has since landed on `main`; a PR whose CI broke because `main` was broken still needs
+  `npm run merge:main` from its session. The gate's three jobs read the published migration snapshot
+  (staging's and production's applied migrations) when they run, and `migration-drift` also reads
+  live `origin/main`. `migration-order` and `migration-replay` still measure the PR against its
+  frozen base, so a red that comes from a stale base needs `merge:main` too. Paul chose this scope
+  over also merging `main` into red PRs, or re-running failed CI jobs once (2026-11-24).
+- **When.** On each successful Migration snapshot run that a deploy started (staging or production).
+  The gate reads the databases through that snapshot, so a re-run fired by the deploy itself would
+  read the state from before it.
+- **Which runs.** Open, non-draft PRs from this repo, most recently updated first, at most 30 a sweep
+  (the rest are logged). For each, the newest `pull_request` run of the gate on its head (this
+  repo's run, never a fork's at the same SHA) gets `rerun-failed-jobs` when all of these hold:
+  - it concluded `failure` and is below attempt 3;
+  - when its attempt started, the newest deploy of staging or production had failed, judged by the
+    `deploy` job and not the run (a red prune or alert job after a good deploy says nothing about the
+    database; a skipped Deploy staging run changed nothing and doesn't count);
+  - a deploy of that same environment has succeeded since, and finished before the snapshot that
+    fired the sweep started;
+  - the PR's head is still the run's head, because a re-run joins the gate's per-PR concurrency group
+    and would cancel a newer head's run.
+- **Bounds.** A gate that is red for the PR's own reason while every deploy is green is never re-run.
+  A run gets one re-run per recovery, because its new attempt starts after it. The attempt cap is a
+  backstop. A re-run starts nothing that triggers this workflow again, and merge queue runs are never
+  touched. A sweep stops starting PRs after 9 minutes, inside the job's 15.
+- **Not covered.** A gate that went red with no failed deploy behind it, such as a snapshot that
+  lagged a slow deploy, isn't re-run; push, or re-run it by hand.
+- **Signals.** It posts no comment. The re-run's completion reaches a subscribed session through the
+  PR-activity webhook like any other run, and the run's summary lists each PR and why it was or wasn't
+  re-run.
+- **Token.** `GITHUB_TOKEN` with `actions: write`. It holds neither the base-sync App token nor the
+  `automation` environment, which is why it is its own workflow beside `pr-base-sync.yml`.
