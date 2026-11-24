@@ -79,10 +79,10 @@ vi.mock("@/components/activity/standing-cards", () => ({
   StandingCards: () => <div data-testid="standing-cards" />,
 }));
 
-// The doors and the points and service panels have their own specs
+// The doors and the three panels have their own specs
 // (`standing-stats.spec.tsx`, `my-points-panel.spec.tsx`,
-// `my-service-panel.spec.tsx`; the study panel has none yet); the profile's
-// job is where they sit and which is open.
+// `my-service-panel.spec.tsx`, `my-study-panel.spec.tsx`); the profile's job
+// is where they sit and which is open.
 vi.mock("@/components/standing/standing-stats", () => ({
   StandingStats: () => <div data-testid="standing-stats" />,
 }));
