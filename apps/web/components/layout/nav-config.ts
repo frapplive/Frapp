@@ -1,58 +1,63 @@
 import {
   ActivityGlyph,
   BackworkGlyph,
-  ChatGlyph,
   DirectMessagesGlyph,
   DirectoryGlyph,
   DocumentsGlyph,
   EventsGlyph,
   MeetingsGlyph,
+  RecruitmentGlyph,
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
-import { RushGlyph } from "@/components/chat/chat-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
-import { SECTION_NAMES } from "@repo/validation";
+import { SECTION_NAMES, type TenantKind } from "@repo/validation";
+import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
 
 /**
- * Permission-aware dashboard navigation.
+ * The sidebar's rows (#5946, Paul 2026-11-24; `spec/ui/web-dashboard/README.md`
+ * § Navigation map mirrors this file, and a change to one changes the other).
  *
- * Kept in a single module so the sidebar and the mobile drawer stay in sync.
- * It also names the open page: `page-title.ts` reads each row's label as the
- * top bar's title, so the row and the heading cannot disagree. (There is no
- * command palette; #2141 deleted it.) The row-by-row table in `spec/ui/web-dashboard/README.md`
- * § Navigation map mirrors this file, and a change to one changes the other.
+ * A member opens Frapp with one of three questions, and each has one home
+ * (`spec/product/positioning.md` § Three questions). The sidebar is those
+ * homes and nothing else, the same for every role:
  *
- * Structure (#2946): a Chat anchor with no section header, then Chapter, then
- * Resources, then one unlabeled group holding Directory. Chat leads because chat is the product's home — `/` and
- * `/dashboard` both redirect there. The anchor holds two rows since #3774
- * (Shawn, 2026-11-12): Chat, then Direct messages, which opens the same chat
- * panel on the member's conversations instead of the chapter's channels, the
- * way Slack's DMs entry and Discord's Direct Messages home sit apart from the
- * channel list. Its `href` is the link it is below the side-by-side width,
- * `/chat?view=direct` (`CHAT_VIEW_PARAM`). Profile and the personal Settings page are
- * deliberately absent: they live in the account menu, which the shell hangs
- * off the top-bar avatar (`account-menu.tsx`), because they are about the
- * viewer, not about the chapter. That is the two doors (#3856). Chapter
- * settings is the other door, and it has no row here: it opens from the
- * chapter menu atop this list (`chapter-nav-header.tsx`), beside switching
- * and joining chapters, the way Slack's workspace menu and Discord's server
- * menu hold their settings (Paul, 2026-11-19: one place, not two).
+ * - **New** and **Search** lead, and are not in this file: New opens Frapp
+ *   Intelligence's page with what New starts under its field, and Search
+ *   opens Find (`sidebar.tsx`).
+ * - **Activity** and **Calendar** answer what is on me and what is happening,
+ *   **Messages** what is being said to me, **Resources** and **Directory**
+ *   where it is and who it is (`SIDEBAR_ROWS`).
+ * - **The chapter's channels** follow, in the rest of the column, always in
+ *   view (`chat-shell.tsx` draws the list into the sidebar).
  *
- * **The nav fits a 1024×768 window for every seeded role.** A six-row Admin
- * group (Roles, Study Zones, Reports, Chat Admin, Discord Import, Settings)
- * used to close the list. For a President it needed an 828px-tall window and
- * scrolled on a 768px one. It folded into Chapter settings: Roles is a Settings
- * tab, and the four officer tools keep their own pages behind the Settings rail
- * (`components/settings/settings-access.ts`). Adding a row costs 36px of that
- * budget, and `tests/visual/nav-fit.spec.ts` fails the build when the nav no
- * longer fits.
+ * There are no section headings: five rows need none, and a heading over
+ * each pair spent 37px the channel list wants.
  *
- * There is no `primaryActionLabel`. The shell used to render one per route as a
- * header button, but `primaryActionHref` resolved to the route already open, so
- * it was a link to the current page — and every such action is also reachable
- * inside the page. The board deletes it (`1t`, "per-route primaryActionLabel").
+ * **`MORE_ROWS` is temporary.** Tasks, Meetings and Backwork each fold into
+ * one of the rows above in a later step of #5943 (Tasks into Activity;
+ * Meetings and Backwork into Resources). Points, Study hours and Service
+ * hours left with #5950, onto the person: Profile and the Directory. Recruitment (#5924) landed after
+ * the series was planned and has no home in it yet. Until its step lands a page stays
+ * reachable from the More row, a dropdown under its button, so no page is
+ * orphaned mid-series. A step deletes its rows here and nothing else; when
+ * the list is empty the More row and this export go.
+ *
+ * Until Resources is one page (#5949) its row opens Documents, which keeps
+ * its own title (`title`), and Backwork waits under More.
+ *
+ * What is deliberately absent: Profile, the personal Settings page, Chapter
+ * settings, joining and switching chapters, and What's new all open from the
+ * member's menu at the sidebar's foot (`account-menu.tsx`), one menu for the
+ * member and the chapter, where Claude, Slack and Discord keep theirs.
+ *
+ * It also names the open page: `page-title.ts` reads each row's label (or
+ * `title`) as the page's heading, so the row and the heading cannot disagree.
+ *
+ * **The channel list keeps at least eight rows at 1024x768** for every
+ * seeded role, and `tests/visual/nav-fit.spec.ts` fails the build when the
+ * fixed rows grow into that. A row costs 36px.
  *
  * Permission semantics:
  * - `requirePermission` — a single permission string; hide when absent.
@@ -61,15 +66,14 @@ import { SECTION_NAMES } from "@repo/validation";
  * - Omitting all three renders the item unconditionally.
  *
  * Every row links to a built route. There are no roadmap rows: a row drawn
- * disabled with nothing behind it is a dead-end control, and the "Coming soon"
- * branch that drew one had no producer left when it was deleted (#3089).
+ * disabled with nothing behind it is a dead-end control (#3089).
  *
  * Module gating:
  * - `module` — the `enabled_modules` key (see `@repo/org-archetypes`
  *   `MODULE_CATALOG`) that gates this item. When the chapter disables the
- *   module in Settings → Modules, the item is hidden from the sidebar. Items
- *   without a `module` are always-on or governed purely by permission. Hiding
- *   is fail-safe: while the chapter read is still loading the item stays
+ *   module in Settings → Modules, the item is hidden. Items without a
+ *   `module` are always-on or governed purely by permission. Hiding is
+ *   fail-safe: while the chapter read is still loading the item stays
  *   visible. The shell reads module state from the member-readable current
  *   chapter (`lib/hooks/use-chapter-module-gate.ts`), not the officer-only
  *   config read.
@@ -82,9 +86,16 @@ import { SECTION_NAMES } from "@repo/validation";
  *   Nothing hides while permissions, modules or the list are still loading,
  *   or after the list's read fails.
  *
- * Section gating is derived, never declared: a section renders only when at
- * least one of its items survives every gate (`isNavItemVisible` in
- * `protected-nav-item.tsx`), so a heading never announces an empty group.
+ * Tenant-kind gating (#5933):
+ * - `kinds` — the tenant kinds a row serves. Omitted, a row is a chapter's
+ *   only. A council (ADR-27) is a tenant served by chat, members, roles,
+ *   invites and the audit log, and every other chapter route answers it 403
+ *   (`chapter.context.invalid`), so a council's sidebar keeps only the rows
+ *   that name `council` here, Messages and Directory, beside New, Search and
+ *   the channel list (`sidebar.tsx`). Activity, which has no module to switch
+ *   off, is the row this gate exists for. Opt-in, so a new chapter row never
+ *   reaches a council by default. While the kind is unknown nothing hides,
+ *   as with the module gate (`useTenantKind`).
  */
 
 type NavPermissionRule =
@@ -115,6 +126,11 @@ export type NavItem = {
   /** A Signet duotone glyph (`nav-glyphs.tsx`) — the intent → glyph map is `iconography.md` §6.2. */
   icon: NavGlyphComponent;
   href: string;
+  /**
+   * The page's heading when it is not the row's label: Resources opens
+   * Documents until the two are one page (#5949).
+   */
+  title?: string;
   description?: string;
   /** `enabled_modules` key that gates this item; omit for always-on items. */
   module?: string;
@@ -123,6 +139,8 @@ export type NavItem = {
    * gating" above). Omit for a feature that works with nothing in it.
    */
   hiddenUntilSetUp?: UnsetFeatureKey;
+  /** The tenant kinds this row serves; omitted, chapters only (above). */
+  kinds?: readonly TenantKind[];
   /**
    * Named in the chapter's own word (`vocab()` in `@repo/org-archetypes`):
    * the recruitment row reads Rush, Recruitment or Intake as the chapter
@@ -132,6 +150,9 @@ export type NavItem = {
    */
   vocabLabel?: VocabKey;
 } & NavPermissionRule;
+
+/** A row a council's space shows as well as a chapter's. */
+const EVERY_TENANT: readonly TenantKind[] = ["chapter", "council"];
 
 /** A row's label in the chapter's words (see `vocabLabel`). */
 export function navItemLabel(
@@ -151,161 +172,109 @@ export function withChapterWords(
     : item;
 }
 
-export type NavSection = {
-  id: string;
-  label: string;
-  items: NavItem[];
-  /**
-   * Anchor sections render their items with no heading. Used for Chat, which
-   * is the app's home rather than a member of any group.
-   */
-  anchor?: boolean;
-};
-
-export const DASHBOARD_NAV: NavSection[] = [
+/** The rows between Search and the channel list, in order. */
+export const SIDEBAR_ROWS: NavItem[] = [
   {
-    id: "anchor",
-    label: "Chat",
-    anchor: true,
-    items: [
-      {
-        id: "chat",
-        label: "Chat",
-        icon: ChatGlyph,
-        href: "/chat",
-        description: "The chapter's channels and announcements.",
-      },
-      {
-        id: "direct",
-        label: "Direct messages",
-        icon: DirectMessagesGlyph,
-        href: "/chat?view=direct",
-        description: "Your one-to-one and group conversations.",
-      },
-    ],
+    // What is waiting on the viewer and what they made, gathered from the
+    // modules (#3897). No `module`: the page spans modules, and its read
+    // leaves out any that are off. No permission either: the read needs
+    // `members:view`, which every member role holds.
+    id: "activity",
+    label: SECTION_NAMES.activity,
+    icon: ActivityGlyph,
+    href: "/activity",
+    description: "Your week, what is left to do, and what you made.",
   },
   {
-    id: "chapter",
-    label: "Chapter",
-    items: [
-      {
-        // What is waiting on the viewer and what they made, gathered from
-        // the modules below (#3897). It leads the group because it is the
-        // inbox for the rest of it. No `module`: the page spans modules, and
-        // its read leaves out any that are off. No permission either: the
-        // read needs `members:view`, which every member role holds.
-        id: "activity",
-        label: SECTION_NAMES.activity,
-        icon: ActivityGlyph,
-        href: "/activity",
-        description: "Your week, what is left to do, and what you made.",
-      },
-      {
-        id: "events",
-        label: "Events",
-        icon: EventsGlyph,
-        href: "/events",
-        description: "Schedule, attendance and check-ins.",
-        module: "events",
-      },
-      {
-        id: "tasks",
-        label: "Tasks",
-        icon: TasksGlyph,
-        href: "/tasks",
-        description: "Assign, track, and confirm chapter tasks.",
-        module: "tasks",
-      },
-      {
-        // The recruitment pipeline (#5924): a board and a list of prospects.
-        // Its routes need `members:view` and `rush:view` with the module on
-        // (`rush-pipeline.controller.ts`), so the row asks for both.
-        id: "rush",
-        label: vocab("recruitment"),
-        vocabLabel: "recruitment",
-        icon: RushGlyph,
-        href: "/rush",
-        description: "Prospects by stage, with tags, ratings and notes.",
-        module: "rush",
-        requireAllOf: ["members:view", "rush:view"],
-      },
-    ],
+    // The member's direct and group conversations, the web twin of the
+    // phone's Messages tab. Its count is conversations with anything unread.
+    id: "messages",
+    label: SECTION_NAMES.messages,
+    icon: DirectMessagesGlyph,
+    href: MESSAGES_ROUTE,
+    description: "Your one-to-one and group conversations.",
+    kinds: EVERY_TENANT,
   },
   {
-    id: "resources",
-    label: "Resources",
-    items: [
-      {
-        // A meeting's minutes, read by the members its event invites
-        // (`spec/behavior/meetings.md`). Every member sees the row while the
-        // module is on: the page lists only what the viewer may read.
-        id: "meetings",
-        label: "Meetings",
-        icon: MeetingsGlyph,
-        href: "/meetings",
-        description: "Minutes from chapter, exec and committee meetings.",
-        module: "meetings",
-      },
-      {
-        id: "documents",
-        label: "Documents",
-        icon: DocumentsGlyph,
-        href: "/documents",
-        description: "Chapter files and organizational documents.",
-        module: "documents",
-        hiddenUntilSetUp: "documents",
-      },
-      {
-        id: "backwork",
-        label: "Backwork",
-        icon: BackworkGlyph,
-        href: "/backwork",
-        description: "Academic library with rich filters.",
-        module: "backwork",
-        // The library's read is guarded on either at controller level, so a
-        // viewer with neither (Alumni, a Treasurer-only officer) would open
-        // a page that can only fail. Members hold `backwork:upload`, and an
-        // empty library is theirs to start, so it has no setup gate.
-        requireAnyOf: ["backwork:upload", "backwork:admin"],
-      },
-    ],
+    id: "events",
+    label: SECTION_NAMES.calendar,
+    icon: EventsGlyph,
+    href: "/events",
+    description: "Schedule, attendance and check-ins.",
+    module: "events",
   },
   {
-    /*
-     * Directory sits in its own UNLABELED group.
-     *
-     * Directory and Billing were two sections of one item each, so the
-     * headings "DIRECTORY" and "FINANCE" were each announcing a single row
-     * whose own label already said the same word. The framework board (option
-     * `1b`) merged them and dropped both headings; `1t` lists the two labels as
-     * deleted chrome. Settings joined them when the Admin group folded into it
-     * (#2946). Billing then left the sidebar for Chapter settings' Plan and
-     * billing row (#3827): a president checks the plan once a semester, which
-     * is not a daily nav destination. Chapter settings left it for the
-     * chapter menu atop the nav (Paul, 2026-11-19), which already linked it.
-     * The group keeps a wider top margin so it still reads as its own block.
-     *
-     * `anchor` is the existing "render items with no heading" flag, the same
-     * one Chat uses. It is not a claim that this group is an app home.
-     */
-    id: "directory",
+    id: "documents",
+    label: SECTION_NAMES.resources,
+    title: "Documents",
+    icon: DocumentsGlyph,
+    href: "/documents",
+    description: "Chapter files and organizational documents.",
+    module: "documents",
+    hiddenUntilSetUp: "documents",
+  },
+  {
+    id: "members",
     label: SECTION_NAMES.directory,
-    anchor: true,
-    items: [
-      {
-        id: "members",
-        label: SECTION_NAMES.directory,
-        icon: DirectoryGlyph,
-        href: "/members",
-        description:
-          "Actives and alumni, profile cards, invites, deactivation.",
-        requirePermission: "members:view",
-      },
-    ],
+    icon: DirectoryGlyph,
+    href: "/members",
+    description: "Actives and alumni, profile cards, invites, deactivation.",
+    requirePermission: "members:view",
+    kinds: EVERY_TENANT,
   },
 ];
 
-/** Every nav row, flattened (the plan matrix reads their `module` keys). */
-export const DASHBOARD_NAV_ITEMS: NavItem[] = DASHBOARD_NAV.flatMap(
-  (section) => section.items,
-);
+/**
+ * Pages a later step of #5943 folds into a row above, reachable from the
+ * More row until then (see the header). A step deletes its own rows.
+ */
+export const MORE_ROWS: NavItem[] = [
+  {
+    id: "tasks",
+    label: "Tasks",
+    icon: TasksGlyph,
+    href: "/tasks",
+    description: "Assign, track, and confirm chapter tasks.",
+    module: "tasks",
+  },
+  {
+    // The recruitment pipeline (#5924): a board and a list of prospects.
+    // Its routes need `members:view` and `rush:view` with the module on
+    // (`rush-pipeline.controller.ts`), so the row asks for both.
+    id: "rush",
+    label: vocab("recruitment"),
+    vocabLabel: "recruitment",
+    icon: RecruitmentGlyph,
+    href: "/rush",
+    description: "Prospects by stage, with tags, ratings and notes.",
+    module: "rush",
+    requireAllOf: ["members:view", "rush:view"],
+  },
+  {
+    // A meeting's minutes, read by the members its event invites
+    // (`spec/behavior/meetings.md`). Every member sees the row while the
+    // module is on: the page lists only what the viewer may read.
+    id: "meetings",
+    label: "Meetings",
+    icon: MeetingsGlyph,
+    href: "/meetings",
+    description: "Minutes from chapter, exec and committee meetings.",
+    module: "meetings",
+  },
+  {
+    id: "backwork",
+    label: "Backwork",
+    icon: BackworkGlyph,
+    href: "/backwork",
+    description: "Academic library with rich filters.",
+    module: "backwork",
+    // The library's read is guarded on either at controller level, so a
+    // viewer with neither (Alumni, a Treasurer-only officer) would open
+    // a page that can only fail. Members hold `backwork:upload`, and an
+    // empty library is theirs to start, so it has no setup gate.
+    requireAnyOf: ["backwork:upload", "backwork:admin"],
+  },
+];
+
+/** Every page with a row, flattened (titles, and the plan matrix's modules). */
+export const DASHBOARD_NAV_ITEMS: NavItem[] = [...SIDEBAR_ROWS, ...MORE_ROWS];

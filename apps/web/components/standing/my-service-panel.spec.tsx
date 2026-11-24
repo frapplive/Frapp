@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   ignoresScope: false,
   deleteEntry: vi.fn(() => Promise.resolve()),
   blocked: false,
+  setLogOpen: vi.fn(),
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -97,6 +98,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 vi.mock("@/components/shared/subscription-gate", () => ({
   SubscriptionNotice: () => null,
   useSubscriptionGate: () => ({
+    allowed: !mocks.blocked,
     controlProps: () =>
       mocks.blocked
         ? { disabled: true, "aria-describedby": "subscription-notice" }
@@ -104,7 +106,7 @@ vi.mock("@/components/shared/subscription-gate", () => ({
   }),
   useGatedDialog: () => ({
     open: false,
-    setOpen: vi.fn(),
+    setOpen: mocks.setLogOpen,
     contentProps: {},
   }),
 }));
@@ -279,5 +281,33 @@ describe("MyServicePanel: while the viewer's id is unknown (#1346)", () => {
     expect(
       screen.getByText(/couldn't confirm your account, so withdrawing is unavailable/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("New's Log hours (#5946, #5950)", () => {
+  beforeEach(() => {
+    mocks.viewer = { userId: "u-1", isLoading: false };
+    mocks.permissions = ["service:log"];
+    mocks.rows = [];
+    mocks.blocked = false;
+    mocks.setLogOpen.mockClear();
+  });
+
+  it("opens the form when New sent the member here, and takes the mark off", () => {
+    window.history.replaceState(null, "", "/profile?open=service&new=1");
+    render(<MyServicePanel onClose={() => {}} />);
+    expect(mocks.setLogOpen).toHaveBeenCalledWith(true);
+    expect(window.location.search).toBe("?open=service");
+  });
+
+  it("opens nothing on a plain visit, or while the chapter can't log", () => {
+    window.history.replaceState(null, "", "/profile?open=service");
+    render(<MyServicePanel onClose={() => {}} />);
+    expect(mocks.setLogOpen).not.toHaveBeenCalled();
+    mocks.blocked = true;
+    window.history.replaceState(null, "", "/profile?open=service&new=1");
+    render(<MyServicePanel onClose={() => {}} />);
+    expect(mocks.setLogOpen).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/");
   });
 });

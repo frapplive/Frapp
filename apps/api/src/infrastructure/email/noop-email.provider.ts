@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   IEmailProvider,
   SendInviteEmailParams,
+  SendBidConfirmEmailParams,
+  SendSchoolCodeEmailParams,
 } from '#domain/adapters/email.interface';
 
 /**
@@ -24,6 +26,25 @@ export class NoopEmailProvider implements IEmailProvider {
   sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
     this.logger.debug(
       `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) invite -> ${params.joinUrl}`,
+    );
+    return Promise.resolve(!this.reportDeliveryFailure);
+  }
+
+  /**
+   * Logs neither the code nor the address: a code in a log would verify the
+   * address for whoever reads it.
+   */
+  sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean> {
+    this.logger.debug(
+      `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) school code for ${params.schoolName}`,
+    );
+    return Promise.resolve(!this.reportDeliveryFailure);
+  }
+
+  /** Logs neither the link (its token confirms the bid) nor the address. */
+  sendBidConfirmEmail(params: SendBidConfirmEmailParams): Promise<boolean> {
+    this.logger.debug(
+      `email(noop${this.reportDeliveryFailure ? ',undelivered' : ''}) bid confirmation for ${params.chapterName}`,
     );
     return Promise.resolve(!this.reportDeliveryFailure);
   }

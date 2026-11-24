@@ -151,8 +151,8 @@ describe("useCatchUp", () => {
       screen.getByRole("region", { name: CHAT_CATCH_UP_COPY.name }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: CHAT_CATCH_UP_COPY.ranges.unread }),
-    ).toBeChecked();
+      screen.getByRole("tab", { name: CHAT_CATCH_UP_COPY.ranges.unread }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("asks for the last 24 hours when nothing was new, and offers no new-messages range", async () => {
@@ -164,7 +164,7 @@ describe("useCatchUp", () => {
         since: "2026-11-11T16:00:00.000Z",
       });
       expect(
-        screen.queryByRole("radio", { name: CHAT_CATCH_UP_COPY.ranges.unread }),
+        screen.queryByRole("tab", { name: CHAT_CATCH_UP_COPY.ranges.unread }),
       ).toBeNull();
     } finally {
       vi.useRealTimers();
@@ -177,7 +177,7 @@ describe("useCatchUp", () => {
     try {
       await openPanel();
       await userEvent.click(
-        screen.getByRole("radio", { name: CHAT_CATCH_UP_COPY.ranges.week }),
+        screen.getByRole("tab", { name: CHAT_CATCH_UP_COPY.ranges.week }),
       );
       expect(state.run).toHaveBeenLastCalledWith(CHANNEL, {
         since: "2026-11-05T16:00:00.000Z",
@@ -185,6 +185,27 @@ describe("useCatchUp", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("moves between ranges with the arrow keys without asking, and asks on Enter", async () => {
+    await openPanel();
+    expect(state.run).toHaveBeenCalledTimes(1);
+    const unread = screen.getByRole("tab", {
+      name: CHAT_CATCH_UP_COPY.ranges.unread,
+    });
+    unread.focus();
+    // Each range costs a summary, so arrowing past one must not start it
+    // (the ARIA tabs pattern's manual activation).
+    await userEvent.keyboard("{ArrowRight}");
+    const next = screen.getByRole("tab", {
+      name: CHAT_CATCH_UP_COPY.ranges.day,
+    });
+    expect(next).toHaveFocus();
+    expect(state.run).toHaveBeenCalledTimes(1);
+    expect(unread).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Enter}");
+    expect(state.run).toHaveBeenCalledTimes(2);
+    expect(next).toHaveAttribute("aria-selected", "true");
   });
 
   it("asks for a thread by its first message, with no range to pick", async () => {
@@ -196,7 +217,7 @@ describe("useCatchUp", () => {
       },
     });
     expect(state.run).toHaveBeenCalledWith(CHANNEL, { thread_root_id: "root-1" });
-    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
     expect(
       screen.getByRole("heading", { name: CHAT_CATCH_UP_COPY.thread_title }),
     ).toBeInTheDocument();
@@ -269,7 +290,7 @@ describe("useCatchUp", () => {
     // The range stays live: a disabled control would drop focus out of the
     // panel, and another pick replaces the request in flight.
     expect(
-      screen.getByRole("radio", { name: CHAT_CATCH_UP_COPY.ranges.day }),
+      screen.getByRole("tab", { name: CHAT_CATCH_UP_COPY.ranges.day }),
     ).toBeEnabled();
   });
 

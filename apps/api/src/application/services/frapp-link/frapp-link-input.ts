@@ -2,7 +2,9 @@ import { BadRequestException } from '@nestjs/common';
 import {
   FRAPP_LINKS_MAX,
   frappLinkKey,
+  frappWebLinkOpens,
   frappWebLinkTitle,
+  FRAPP_LINK_NOT_PUBLIC_MESSAGE,
   normalizeFrappLinkUrl,
   FRAPP_LINK_COPY,
   type FrappRecordLink,
@@ -66,12 +68,17 @@ function need(value: string | undefined, what: string): string {
  * https only) and titled, each record kind carrying only its own ids, no two
  * entries with one id, and at most `FRAPP_LINKS_MAX`. Each problem is a 400
  * naming it. A second entry pointing at the same thing is dropped, keeping
- * the first, so a list an older build saved with a repeat still saves. Whether each record is
- * the chapter's is `FrappLinkChecker`'s, since it needs reads.
+ * the first, so a list an older build saved with a repeat still saves. A new
+ * web link must also name a public site a phone can open (`frappWebLinkOpens`,
+ * #5883), except an address the list already held (`stored`): the list is
+ * sent whole, so a link saved before the rule must not block every later
+ * save. Whether each record is the chapter's is `FrappLinkChecker`'s, since
+ * it needs reads.
  */
 export function normalizeFrappLinks(
   items: readonly FrappLinkInput[] | undefined,
   owner: FrappLinkOwner,
+  stored: readonly FrappLink[] = [],
 ): FrappLink[] | undefined {
   if (items === undefined) return undefined;
   if (items.length > FRAPP_LINKS_MAX) {
@@ -79,6 +86,9 @@ export function normalizeFrappLinks(
       `${OWNER_WORDS[owner]} holds at most ${FRAPP_LINKS_MAX} attachments.`,
     );
   }
+  const heldUrls = new Set(
+    stored.flatMap((link) => (link.kind === 'link' ? [link.url] : [])),
+  );
   const cleaned = items.map((item): FrappLink => {
     const id = item.id.trim();
     if (!id) throw new BadRequestException('Every attachment needs an id.');
@@ -89,6 +99,9 @@ export function normalizeFrappLinks(
           throw new BadRequestException(
             'A link attachment needs a web address starting with http:// or https://.',
           );
+        }
+        if (!frappWebLinkOpens(url) && !heldUrls.has(url)) {
+          throw new BadRequestException(FRAPP_LINK_NOT_PUBLIC_MESSAGE);
         }
         return {
           id,

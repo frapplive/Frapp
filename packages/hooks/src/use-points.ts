@@ -82,8 +82,8 @@ export function useLeaderboard(
       return data;
     },
     staleTime: 30_000,
-    // Held by a list that shows points only while the module is on: the route
-    // is module-guarded, and a 403 there would fail the whole list.
+    // Off where Points is, a council included (#5933), and held by a list
+    // that shows points only while the module is on.
     enabled: (options?.enabled ?? true) && !!chapterId,
   });
 }

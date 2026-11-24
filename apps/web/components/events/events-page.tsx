@@ -78,6 +78,7 @@ import {
 } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -832,6 +833,16 @@ export function EventsPage() {
    * those paint `--card`, which on a flush route redraws the card the route
    * deleted (`spec/ui/web-dashboard/README.md` § Page grammar).
    */
+  // New's "New event" (`new-intent.ts`): the form this page's button opens,
+  // once the page that holds it is drawn.
+  useNewIntent(
+    () => openCreate(null),
+    canCreateEvents &&
+      eventWriteGate.allowed &&
+      !eventsQuery.isLoading &&
+      !eventsQuery.isError,
+  );
+
   if (isOffline && anyReadUncached(eventsQuery)) {
     return (
       <div className="space-y-4">

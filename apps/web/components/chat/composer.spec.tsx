@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { AUDIT_LOG_COMPOSER_NOTE } from "@repo/chat-core/audit-log-copy";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
@@ -338,6 +344,73 @@ describe("Composer slash palette narrows /rush by the member's permissions", () 
     await openPalette(user);
 
     expect(await screen.findByText("/rush")).toBeInTheDocument();
+  });
+});
+
+// #5973: a slash command whose name matched several prospects ran nothing
+// and asks which one; the pick runs the same command again by id.
+describe("Composer asks which one when a command names several", () => {
+  afterEach(() => {
+    editorDouble.current = null;
+  });
+
+  it("shows the matches, runs the pick by id, and toasts nothing first", async () => {
+    const text = "/rush vote Jake Smith";
+    editorDouble.current = fakeEditor(text);
+    mockToast.mockClear();
+    const onSlashDispatch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "Several prospects match that name. Pick one.",
+        choices: {
+          title: 'Several prospects match "Jake Smith"',
+          options: [
+            {
+              label: "Jake Smith",
+              detail: "New · added Nov 2",
+              args: "vote id-1",
+            },
+            {
+              label: "Jake Smith",
+              detail: "Met · added Nov 20",
+              args: "vote id-2",
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ ok: true });
+    render(
+      <Composer
+        {...baseProps({
+          draft: text,
+          onSlashDispatch,
+          isModuleEnabled: () => true,
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    const picker = await screen.findByRole("dialog", {
+      name: 'Several prospects match "Jake Smith"',
+    });
+    expect(mockToast).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(picker).getByRole("button", { name: /Met · added Nov 20/ }),
+    );
+
+    await waitFor(() => expect(onSlashDispatch).toHaveBeenCalledTimes(2));
+    expect(onSlashDispatch).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "vote id-2",
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: 'Several prospects match "Jake Smith"',
+        }),
+      ).not.toBeInTheDocument(),
+    );
   });
 });
 

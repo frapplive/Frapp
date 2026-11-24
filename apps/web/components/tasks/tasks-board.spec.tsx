@@ -426,26 +426,28 @@ function liveStatus(): HTMLElement | null {
 const filterButton = () =>
   screen.getByRole("button", { name: /^Filter tasks/ });
 
-/** The header's My tasks / Everyone's switch, or null without one. */
-const viewSwitch = () =>
-  screen.queryByRole("radiogroup", { name: "Whose tasks" });
+/**
+ * The header's My tasks / Everyone's views, plain words beside the title
+ * (`ViewLabels`, #5947), or null without them.
+ */
+const viewSwitch = () => screen.queryByRole("tablist", { name: "Whose tasks" });
 
-/** Which view the header's switch is on. */
+/** Which view the header is on. */
 const viewOn = (name: "My tasks" | "Everyone's") =>
   within(viewSwitch()!)
-    .getByRole("radio", { name })
-    .getAttribute("aria-checked") === "true";
+    .getByRole("tab", { name })
+    .getAttribute("aria-selected") === "true";
 
 /**
  * An officer opens on My tasks (#5578); the chapter's board is Everyone's,
- * picked in the header's switch. Does nothing where the page has none.
+ * picked in the header's views. Does nothing where the page has none.
  */
 async function showEveryones() {
-  const radio = viewSwitch()
-    ? within(viewSwitch()!).getByRole("radio", { name: "Everyone's" })
+  const tab = viewSwitch()
+    ? within(viewSwitch()!).getByRole("tab", { name: "Everyone's" })
     : null;
-  if (!radio || radio.getAttribute("aria-checked") === "true") return;
-  await userEvent.click(radio);
+  if (!tab || tab.getAttribute("aria-selected") === "true") return;
+  await userEvent.click(tab);
 }
 
 /** The Filter menu row a Group or Layout pick sits under. */
@@ -1367,7 +1369,7 @@ describe("TasksBoard quick add (2026-11-18)", () => {
       within(addForm()).getByRole("button", { name: /^who/i }),
     );
     await userEvent.click(
-      await screen.findByRole("radio", { name: "Roles and groups" }),
+      await screen.findByRole("tab", { name: "Roles and groups" }),
     );
     // A chapter with a dozen roles or fewer opens every tier.
     await userEvent.click(
@@ -2878,7 +2880,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
     );
     // A person only: no roles tab, no mode switch.
     expect(
-      screen.queryByRole("radio", { name: "Roles and groups" }),
+      screen.queryByRole("tab", { name: "Roles and groups" }),
     ).toBeNull();
     await userEvent.click(
       await screen.findByRole("radio", { name: /Cole Martin/ }),

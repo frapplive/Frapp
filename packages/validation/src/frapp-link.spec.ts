@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FRAPP_LINKS_MAX,
+  FRAPP_LINK_NOT_PUBLIC_MESSAGE,
   frappLinkKey,
   frappLinkRow,
   frappLinkTitle,
@@ -80,6 +81,49 @@ describe("web link helpers", () => {
     expect(
       frappLinkUrlProblem(`https://a.example/${"x".repeat(2100)}`),
     ).toMatch(/too long/);
+  });
+
+  it.each([
+    "https://test",
+    "http://localhost:3000",
+    "https://192.168.1.20",
+    "https://printer.local",
+  ])("refuses %s, which no phone can open (#5883)", (url) => {
+    expect(frappLinkUrlProblem(url)).toBe(FRAPP_LINK_NOT_PUBLIC_MESSAGE);
+  });
+});
+
+describe("frappLinkRow for a web link", () => {
+  it("opens a public site, showing its domain", () => {
+    expect(
+      frappLinkRow({
+        id: "1",
+        kind: "link",
+        url: "https://docs.google.com/d/1",
+        title: "Budget",
+      }),
+    ).toEqual({
+      name: "Budget",
+      detail: "docs.google.com",
+      opens: true,
+      pending: false,
+    });
+  });
+
+  it("draws one stored before #5883 that no phone can open as text", () => {
+    expect(
+      frappLinkRow({
+        id: "1",
+        kind: "link",
+        url: "https://test",
+        title: "Old notes",
+      }),
+    ).toEqual({
+      name: "Old notes",
+      detail: "test · not a working link",
+      opens: false,
+      pending: false,
+    });
   });
 });
 

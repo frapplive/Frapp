@@ -27,8 +27,8 @@ import {
  * (`page`), so the rail stays on screen and chat does not come back beside it
  * (Paul, 2026-11-12: "I want to phase those out").
  *
- * The chapter menu's "Chapter settings" link (`chapter-nav-header.tsx`, the
- * one door since 2026-11-19), the Settings rail and the page's "nothing here for you" state
+ * The member menu's "Chapter settings" item (`account-menu.tsx`, the one
+ * door since 2026-11-19, on the chapter menu until #5946), the Settings rail and the page's "nothing here for you" state
  * all read this module, so the question "can this viewer open something in
  * Settings?" has one answer. The rules are owned by
  * `spec/behavior/settings/README.md` § Who sees what.
@@ -169,7 +169,7 @@ const TAB_ONLY_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
    * Plan and billing (#3827) reads `GET /v1/billing/status` and the invoice
    * list, both `billing:view`, and no chapter config. It is the gate the
    * sidebar's Billing row used, so whoever reached billing before still does,
-   * and the chapter menu's Chapter settings link admits a treasurer who holds
+   * and the member menu's Chapter settings item admits a treasurer who holds
    * only this. Plan actions stay behind `billing:manage` inside the section.
    */
   billing: ["billing:view"],
@@ -243,7 +243,7 @@ export function visibleSettingsTools(
 
 /**
  * Whether Settings holds anything for this viewer: a tab, or a tool whose
- * module is on. The chapter menu's "Chapter settings" link asks this, so it
+ * module is on. The member menu's "Chapter settings" item asks this, so it
  * never opens onto an empty page. A treasurer whose only tool is Reports loses
  * the link when the chapter switches Reports off, the same way the Reports row
  * used to hide (#2946).

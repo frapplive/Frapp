@@ -51,6 +51,29 @@ describe("which actions a member can use", () => {
     ]);
   });
 
+  it("offers a council's officer invite and message only (#5933)", () => {
+    // A council's module map turns every chapter feature off, and search is
+    // a chapter route.
+    const councilModules = {
+      chat: true,
+      members: true,
+      announcements: true,
+      events: false,
+      tasks: false,
+      meetings: false,
+      hours: false,
+      geofences: false,
+      documents: false,
+    };
+    expect(
+      availableQuickActions({
+        permissions: OFFICER,
+        enabledModules: councilModules,
+        council: true,
+      }),
+    ).toEqual(["invite", "message"]);
+  });
+
   it("offers New minutes first to an officer who records minutes, drafting or not (#5287, #5288)", () => {
     const keys = (permissions: string[]) =>
       availableQuickActions({ permissions, enabledModules: undefined });

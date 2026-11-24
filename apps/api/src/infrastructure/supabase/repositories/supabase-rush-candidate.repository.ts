@@ -6,6 +6,18 @@ import type { IRushCandidateRepository } from '#domain/repositories/rush-candida
 import type { RushCandidate } from '#domain/entities/rush-candidate.entity';
 import { SupabaseQueryError } from '../supabase-query-error';
 
+/**
+ * The columns a {@link RushCandidate} carries. The card and the candidate
+ * routes spread a candidate into their responses, so this never reads `*`:
+ * the pipeline's owner, contact and follow-up columns (#5934) stay off a chat
+ * card. `SupabaseRushPipelineRepository` reads those.
+ */
+/** The most matches a name lookup lists for the picker. */
+const RUSH_NAME_MATCHES_MAX = 20;
+
+const CANDIDATE_COLUMNS =
+  'id, chapter_id, display_name, name_key, user_id, stage, closed_reason, bid_status, bid_state, created_by, created_at';
+
 @Injectable()
 export class SupabaseRushCandidateRepository implements IRushCandidateRepository {
   constructor(
@@ -16,7 +28,7 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
   async findById(id: string, chapterId: string): Promise<RushCandidate | null> {
     const { data, error } = await this.supabase
       .from('rush_candidates')
-      .select('*')
+      .select(CANDIDATE_COLUMNS)
       .eq('id', id)
       .eq('chapter_id', chapterId)
       .maybeSingle();
@@ -27,15 +39,18 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
   async findByNameKey(
     chapterId: string,
     nameKey: string,
-  ): Promise<RushCandidate | null> {
+  ): Promise<RushCandidate[]> {
+    // A single-row read would 500 on two matches; the service decides.
     const { data, error } = await this.supabase
       .from('rush_candidates')
-      .select('*')
+      .select(CANDIDATE_COLUMNS)
       .eq('chapter_id', chapterId)
       .eq('name_key', nameKey)
-      .maybeSingle();
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(RUSH_NAME_MATCHES_MAX);
     if (error) throw new SupabaseQueryError(error);
-    return data;
+    return data ?? [];
   }
 
   async create(
@@ -53,26 +68,15 @@ export class SupabaseRushCandidateRepository implements IRushCandidateRepository
         stage: data.stage,
         closed_reason: data.closed_reason,
         bid_status: data.bid_status,
+        bid_state: data.bid_state,
         created_by: data.created_by,
         ...(data.id ? { id: data.id } : {}),
         ...(data.created_at ? { created_at: data.created_at } : {}),
       })
-      .select()
+      .select(CANDIDATE_COLUMNS)
       .single();
     if (error) throw new SupabaseQueryError(error);
     return created;
-  }
-
-  async setBidExtended(id: string, chapterId: string): Promise<RushCandidate> {
-    const { data, error } = await this.supabase
-      .from('rush_candidates')
-      .update({ bid_status: 'extended' })
-      .eq('id', id)
-      .eq('chapter_id', chapterId)
-      .select()
-      .single();
-    if (error) throw new SupabaseQueryError(error);
-    return data;
   }
 
   async insertVote(

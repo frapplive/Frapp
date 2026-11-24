@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   BadRequestException,
   Body,
@@ -54,6 +55,8 @@ import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 @ApiBearerAuth()
 @UseGuards(AiEnabledGuard, SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.AI_USE)
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('ai/catch-up')
 export class ChatCatchUpController {
   constructor(private readonly catchUpService: ChatCatchUpService) {}

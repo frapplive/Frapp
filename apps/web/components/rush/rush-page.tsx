@@ -1,18 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { localIsoDate } from "@repo/formatting";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   rushPipelineAccess,
-  rushProspectCount,
   useMyPermissions,
   useRushPipeline,
   useViewerUserId,
   type RushPipelineCandidate,
+  rushDashboard,
   rushOpenProspectCount,
+  rushListSubtitle,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
+import { matchesWordStarts } from "@repo/hooks/fuzzy-match";
 import { vocab } from "@repo/org-archetypes";
-import { PageActions } from "@/components/layout/page-actions";
+import {
+  isRushFollowUpForViewer,
+  rushFollowUpsDueCount,
+} from "@repo/validation";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { SearchGlyph } from "@/components/layout/nav-glyphs";
+import {
+  dashboardToolbarSearchClassName,
+  dashboardToolbarSearchGlyphClassName,
+} from "@/components/shared/table-controls";
+import { Input } from "@/components/ui/input";
 import { InlineNote } from "@/components/shared/inline-note";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { anyReadUncached } from "@/components/shared/async-states";
@@ -21,7 +35,7 @@ import {
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
 import { NewButton } from "@/components/ui/new-button";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
@@ -31,12 +45,27 @@ import { RushBoard } from "./rush-board";
 import { RushList } from "./rush-list";
 import { useRushMove } from "./rush-move";
 import { RushProspectPanel } from "./rush-prospect-panel";
+import { RushSummary } from "./rush-summary";
 import { RushPageSkeleton } from "./rush-skeleton";
+
+/** Board and List lay the prospects out; Summary counts them (#5973). */
+type RushLayout = ListLayout | "summary";
 
 const LAYOUT_OPTIONS = [
   { value: "grid", label: "Board" },
   { value: "list", label: "List" },
-] as const satisfies readonly { value: ListLayout; label: string }[];
+  { value: "summary", label: "Summary" },
+] as const satisfies readonly { value: RushLayout; label: string }[];
+
+type RushView = "all" | "follow_up";
+
+const VIEW_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "follow_up", label: "Follow up" },
+] as const satisfies readonly { value: RushView; label: string }[];
+
+/** The notification's deep link: `/rush?prospect=<candidate id>`. */
+export const RUSH_PROSPECT_PARAM = "prospect";
 
 /**
  * The recruitment page (#5924): every prospect the chapter is working, as a
@@ -49,6 +78,17 @@ const LAYOUT_OPTIONS = [
  * hardcoded "Rush" (`spec/behavior/rush.md` § Vocabulary). Its reads need the
  * `rush` module on plus `members:view` and `rush:view`, and the page waits
  * for the permission read rather than drawing controls that might vanish.
+ *
+ * Follow-ups (#5934): the count reads "48 prospects · 3 follow-ups due
+ * today", the viewer's own. **All / Follow up** is the header's view switch
+ * (rulebook § 9: a set people switch to all day is a view, not a filter, as
+ * Tasks' My tasks / Everyone's is): Follow up holds the viewer's due
+ * follow-ups and the prospects they own that need one, the work ChapterBuilder's
+ * follow-up alerts and a HubSpot or Pipedrive "my activities due" list
+ * gather. Like Tasks, the page opens on it when it holds anything and on All
+ * when it doesn't, and keeps that first answer. A role that can't work
+ * prospects has nothing there, so it gets no switch. Search narrows both the
+ * board and the list by name.
  */
 export function RushPage() {
   const { isOffline } = useNetwork();
@@ -63,10 +103,21 @@ export function RushPage() {
   const term = vocab("recruitment", useChapterVocabulary());
   // Every write on the page is a paid op, as the chat card's are (#841).
   const gate = useSubscriptionGate();
-  const [layout, setLayout] = useListLayout("rush");
+  const [listLayout, setListLayout] = useListLayout("rush");
+  // Summary is a look at the whole pipeline, not a way to lay out cards, so
+  // it isn't kept between visits: the page opens on the board or list.
+  const [summary, setSummary] = useState(false);
+  const layout: RushLayout = summary ? "summary" : listLayout;
+  const setLayout = (next: RushLayout) => {
+    setSummary(next === "summary");
+    if (next !== "summary") setListLayout(next);
+  };
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [viewPick, setViewPick] = useState<RushView | null>(null);
+  const [query, setQuery] = useState("");
   const mover = useRushMove();
+  const today = localIsoDate(new Date());
 
   if (isOffline && anyReadUncached(permissionsQuery, pipeline)) {
     return (
@@ -130,34 +181,125 @@ export function RushPage() {
   }
 
   const { stages, tags, candidates } = pipeline.data;
+  const staleDays = pipeline.data.stale_days;
   const open = rushOpenProspectCount(stages, candidates);
+  const due = viewerId ? rushFollowUpsDueCount(candidates, viewerId, today) : 0;
+  const mine = (candidate: RushPipelineCandidate) =>
+    !!viewerId &&
+    isRushFollowUpForViewer(candidate, viewerId, staleDays, today);
+  // Follow up only for a role that can be given one, once the viewer is known.
+  const canSwitchView = access.add && !!viewerId && candidates.length > 0;
+  const firstView: RushView = candidates.some(mine) ? "follow_up" : "all";
+  // The opening view is kept once answered, so logging the last due contact
+  // doesn't move the page under the viewer (Tasks does the same).
+  if (canSwitchView && viewPick === null) setViewPick(firstView);
+  const pageView: RushView = canSwitchView ? (viewPick ?? firstView) : "all";
+  const inView =
+    pageView === "follow_up" ? candidates.filter(mine) : candidates;
+  const searching = query.trim().length > 0;
+  const shown = searching
+    ? inView.filter((c) => matchesWordStarts(c.display_name, query))
+    : inView;
   const opened = candidates.find((c) => c.id === openId) ?? null;
   const writable = gate.allowed;
   const view = {
     stages,
     tags,
-    candidates,
+    candidates: shown,
     access,
     writable,
     selectedId: openId,
+    staleDays,
+    today,
     onOpen: (candidate: RushPipelineCandidate) => setOpenId(candidate.id),
     onMove: mover.request,
   };
 
+  let body;
+  if (candidates.length === 0) {
+    body = (
+      <InlineNote>
+        {access.add
+          ? `No prospects yet. Add one with New prospect, or type /${term.toLowerCase()} add in chat.`
+          : "No prospects yet."}
+      </InlineNote>
+    );
+  } else if (layout === "summary") {
+    // Counts the whole pipeline, whatever the view or search narrows.
+    body = (
+      <RushSummary
+        dashboard={rushDashboard(stages, candidates, {
+          viewerId,
+          staleDays,
+          today,
+          viewResults: access.viewResults,
+        })}
+        canOwn={access.add}
+        onOpen={setOpenId}
+      />
+    );
+  } else if (searching && shown.length === 0) {
+    body = (
+      <InlineNote>
+        {pageView === "follow_up"
+          ? `No one to follow up on matches "${query.trim()}".`
+          : `No prospects match "${query.trim()}".`}
+      </InlineNote>
+    );
+  } else if (shown.length === 0) {
+    body = (
+      <InlineNote>
+        {`Nothing to follow up on. Your follow-ups show here on the day they're due, with prospects you own after ${staleDays} ${staleDays === 1 ? "day" : "days"} without a logged contact.`}
+      </InlineNote>
+    );
+  } else {
+    body = layout === "grid" ? <RushBoard {...view} /> : <RushList {...view} />;
+  }
+
   return (
     <div className="@container space-y-6">
+      {/* Board, List and Summary as plain words beside the title (#5947),
+          none until there is a prospect to lay out. Summary counts the whole
+          pipeline, so it hides the view and search that narrow the others. */}
+      <PageViews>
+        {/* All / Follow up (#5934): which prospects, a view of the page
+            like Tasks' My tasks / Everyone's, for roles that work them. */}
+        <ViewLabels
+          label="Which prospects"
+          options={canSwitchView && !summary ? VIEW_OPTIONS : []}
+          value={pageView}
+          onChange={setViewPick}
+        />
+        <ViewLabels
+          label="Layout"
+          options={candidates.length > 0 ? LAYOUT_OPTIONS : []}
+          value={layout}
+          onChange={setLayout}
+        />
+      </PageViews>
       <PageActions>
-        <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-          {rushProspectCount(open)}
+        <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
+          {rushListSubtitle(open, due)}
         </span>
-        {candidates.length > 0 ? (
-          <SegmentedChoice
-            label="Layout"
-            dense
-            options={LAYOUT_OPTIONS}
-            value={layout}
-            onChange={setLayout}
-          />
+        {candidates.length > 0 && !summary ? (
+          <div className="relative w-44 min-w-0 shrink @max-[34rem]:w-28">
+            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && query) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setQuery("");
+                }
+              }}
+              placeholder="Search"
+              aria-label="Search prospects by name"
+              className={dashboardToolbarSearchClassName}
+            />
+          </div>
         ) : null}
         {access.add ? (
           <NewButton
@@ -169,17 +311,13 @@ export function RushPage() {
         ) : null}
       </PageActions>
       <SubscriptionNotice gate={gate} feature="working prospects" />
-      {candidates.length === 0 ? (
-        <InlineNote>
-          {access.add
-            ? `No prospects yet. Add one with New prospect, or type /${term.toLowerCase()} add in chat.`
-            : "No prospects yet."}
-        </InlineNote>
-      ) : layout === "grid" ? (
-        <RushBoard {...view} />
-      ) : (
-        <RushList {...view} />
-      )}
+      {body}
+      <Suspense fallback={null}>
+        <LinkedProspectParam
+          candidateIds={candidates.map((c) => c.id)}
+          onOpen={setOpenId}
+        />
+      </Suspense>
       {mover.dialog}
       {access.add ? (
         <AddProspectDialog open={adding} onOpenChange={setAdding} />
@@ -191,10 +329,51 @@ export function RushPage() {
         access={access}
         writable={writable}
         viewerId={viewerId}
+        staleDays={staleDays}
+        today={today}
         term={term}
         onClose={() => setOpenId(null)}
         onMove={mover.request}
       />
     </div>
   );
+}
+
+/**
+ * Opens the prospect `/rush?prospect=<id>` names (a follow-up or stale push,
+ * `notifications-popover.tsx`) once the pipeline holds them, then drops the
+ * parameter so a refresh doesn't reopen it, as Tasks' and Events' links do.
+ * An id the pipeline doesn't hold (deleted) opens nothing. Its own component
+ * because `useSearchParams` needs a Suspense boundary of its own.
+ */
+function LinkedProspectParam({
+  candidateIds,
+  onOpen,
+}: {
+  candidateIds: readonly string[];
+  onOpen: (id: string) => void;
+}) {
+  const searchParams = useSearchParams();
+  const linked = searchParams?.get(RUSH_PROSPECT_PARAM) ?? null;
+  const handled = useRef<string | null>(null);
+  const latest = useRef(onOpen);
+  useEffect(() => {
+    latest.current = onOpen;
+  });
+  const holds = linked !== null && candidateIds.includes(linked);
+  useEffect(() => {
+    if (!linked) {
+      handled.current = null;
+      return;
+    }
+    if (handled.current === linked) return;
+    handled.current = linked;
+    if (holds) latest.current(linked);
+    // Next keeps `useSearchParams` in step with the History API, so this
+    // clears the parameter without a navigation.
+    const url = new URL(window.location.href);
+    url.searchParams.delete(RUSH_PROSPECT_PARAM);
+    window.history.replaceState(window.history.state, "", url);
+  }, [linked, holds]);
+  return null;
 }

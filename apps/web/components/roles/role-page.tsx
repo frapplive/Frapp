@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, Eye, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useDeleteRole, useUpdateRole } from "@repo/hooks";
+import {
+  useChapterRoleColors,
+  useDeleteRole,
+  useUpdateRole,
+  useViewerDisplayName,
+} from "@repo/hooks";
 import {
   isActiveRole,
   isEveryoneRole,
@@ -183,6 +188,8 @@ function RoleBody({
   const editable = canManage && reachesRole(reach, role, tiers);
 
   const [name, setName] = useState(role.name);
+  const chapterColors = useChapterRoleColors();
+  const viewerName = useViewerDisplayName();
   // A stored value that may not paint (a pre-#3485 seed in red or gold, or
   // one too dark to read) reads as none, which is also how every client
   // paints it.
@@ -418,6 +425,9 @@ function RoleBody({
                 setColor(next);
                 setColorTouched(true);
               }}
+              previewName={name}
+              memberName={viewerName}
+              chapterColors={chapterColors}
             />
           </div>
           <div className="grid gap-1">

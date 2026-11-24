@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { NEW_ACTION_LABELS } from "@repo/validation";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,8 @@ export function MyServicePanel({ onClose }: { onClose: () => void }) {
   const gate = useSubscriptionGate();
   const logDialog = useGatedDialog(gate);
   const log = useMyServiceLog();
+  // New's "Log hours" (`new-intent.ts`) opens this panel with the form open.
+  useNewIntent(() => logDialog.setOpen(true), log.canLog && gate.allowed);
 
   return (
     <StandingPanelFrame

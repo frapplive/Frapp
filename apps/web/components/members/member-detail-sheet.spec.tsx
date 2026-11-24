@@ -55,6 +55,9 @@ const {
   rolesState: { isError: false, refetch: vi.fn() },
 }));
 
+// The sheet's council check (#5933): these members are a chapter's.
+vi.mock("@/lib/hooks/use-tenant-kind", () => ({ useIsCouncil: () => false }));
+
 vi.mock("@repo/hooks", async () => ({
   // The pure reader of the DM response runs for real.
   dmChannelIdOf: (

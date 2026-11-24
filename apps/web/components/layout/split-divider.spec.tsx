@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SplitDivider } from "./split-divider";
 import {
   PANE_FLOOR,
+  SIDEBAR_WIDTH,
   SPLIT_MIN_WIDTH,
   chatWidthBounds,
   clampChatWidth,
@@ -156,18 +157,21 @@ describe("SplitDivider (#3779, chat on the right since #5575)", () => {
   });
 });
 
-describe("shell layout constants and cookies (#3779, #5575)", () => {
-  it("starts side by side only where both floors fit beside the full nav", () => {
-    expect(240 + 2 * PANE_FLOOR + 2).toBeLessThanOrEqual(SPLIT_MIN_WIDTH);
-    // The shell's Tailwind classes spell the breakpoint out literally.
-    expect(SPLIT_MIN_WIDTH).toBe(1056);
+describe("shell layout constants and cookies (#3779, #5575, #5946)", () => {
+  it("starts side by side where the sidebar appears, with both floors beside it", () => {
+    expect(SIDEBAR_WIDTH + 2 * PANE_FLOOR + 2).toBeLessThanOrEqual(
+      SPLIT_MIN_WIDTH,
+    );
+    // The shell's Tailwind classes spell the breakpoint as `lg`.
+    expect(SPLIT_MIN_WIDTH).toBe(1024);
   });
 
-  it("gives the tool page at 1440px the width it has alone at 820px", () => {
-    // The full nav (border-box, hairline included), then the default panel;
-    // the divider nets no width.
-    const tool = 1440 - 240 - DEFAULT_CHAT_WIDTH;
-    expect(tool).toBeGreaterThanOrEqual(820);
+  it("gives the page at 1440px about 800px beside the docked conversation", () => {
+    // The sidebar (border-box, hairline included), then the default panel;
+    // the divider nets no width. The sidebar grew 24px with #5946, which the
+    // page pays: 801px, where it had 825.
+    const tool = 1440 - SIDEBAR_WIDTH - DEFAULT_CHAT_WIDTH;
+    expect(tool).toBeGreaterThanOrEqual(800);
   });
 
   it("pins chat at its floor on a row too narrow for both floors", () => {

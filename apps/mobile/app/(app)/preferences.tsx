@@ -42,6 +42,11 @@ import { BlockedMembersSheet } from "@/components/settings/blocked-members-sheet
 import { ChatDensitySheet } from "@/components/settings/chat-density-sheet";
 import { ChatLevelSheet } from "@/components/settings/chat-level-sheet";
 import { LinkedAppsSection } from "@/components/settings/linked-apps-section";
+import {
+  COUNCIL_NOTIFICATION_CATEGORIES,
+  useIsCouncil,
+  useServesChapterFeatures,
+} from "@/lib/tenant-kind";
 import { QuietHoursSection } from "@/components/settings/quiet-hours-section";
 import {
   SettingAnchor,
@@ -247,7 +252,11 @@ export default function PreferencesScreen() {
   // The card at the top of Activity: the member's own switch. Offered to
   // everyone since #5464, because the card shows with or without AI; the
   // card's own More turns it off, and only here turns it back on.
-  const nudgeSettings = useActivityNudgeSettings();
+  // A council has no Activity card, no calendar or Discord link, and only
+  // the "someone joins" alert of the chapter's (#5933): those routes refuse it.
+  const council = useIsCouncil();
+  const chapterFeatures = useServesChapterFeatures();
+  const nudgeSettings = useActivityNudgeSettings({ enabled: chapterFeatures });
   const setNudgesEnabled = useSetActivityNudgesEnabled();
   const chatDensitySheetRef = useRef<BottomSheetModal>(null);
   const chatDensity = useChatDensity();
@@ -485,25 +494,31 @@ export default function PreferencesScreen() {
                     onPress={() => chatLevelSheetRef.current?.present()}
                   />
                 </SettingAnchor>
-                {shownNotificationCategories(permissions).map((category) => (
-                  // No description. The shared catalog carries one per category for
-                  // web's Profile card, but on the phone five two-line hints pushed
-                  // Account three screens down, and the labels say enough.
-                  <ListRow
-                    key={category.key}
-                    label={category.label}
-                    trailing={
-                      <Toggle
-                        value={categories[category.key]}
-                        onValueChange={(value) =>
-                          setCategory(category.key, value)
-                        }
-                        disabled={!categoriesEditable}
-                        accessibilityLabel={category.label}
-                      />
-                    }
-                  />
-                ))}
+                {shownNotificationCategories(permissions)
+                  .filter(
+                    (category) =>
+                      !council ||
+                      COUNCIL_NOTIFICATION_CATEGORIES.has(category.key),
+                  )
+                  .map((category) => (
+                    // No description. The shared catalog carries one per category for
+                    // web's Profile card, but on the phone five two-line hints pushed
+                    // Account three screens down, and the labels say enough.
+                    <ListRow
+                      key={category.key}
+                      label={category.label}
+                      trailing={
+                        <Toggle
+                          value={categories[category.key]}
+                          onValueChange={(value) =>
+                            setCategory(category.key, value)
+                          }
+                          disabled={!categoriesEditable}
+                          accessibilityLabel={category.label}
+                        />
+                      }
+                    />
+                  ))}
               </ListSection>
             </SettingAnchor>
 
@@ -591,9 +606,13 @@ export default function PreferencesScreen() {
               </SettingAnchor>
             ) : null}
 
-            <SettingAnchor id="linked-apps">
-              <LinkedAppsSection />
-            </SettingAnchor>
+            {/* Once the tenant is known to be a chapter: its reads are
+                chapter routes. */}
+            {chapterFeatures ? (
+              <SettingAnchor id="linked-apps">
+                <LinkedAppsSection />
+              </SettingAnchor>
+            ) : null}
 
             {/* Only where the server has AI (`AI_ENABLED`): with it off the
           section, like every AI entry, isn't drawn. */}

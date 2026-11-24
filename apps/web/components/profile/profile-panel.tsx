@@ -35,6 +35,7 @@ import {
   STANDING_PARAM,
   standingDoorFrom,
 } from "@/components/standing/standing-doors";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,9 @@ export function ProfilePanel() {
   const nameLocked = isDisplayNameLocked(userQuery.data);
   // Standing is the chapter's: with no active chapter there is none to read.
   const hasChapter = !!useActiveChapterId();
+  // A council keeps no points, service hours or standing (#5933): its routes
+  // refuse those reads, so its Profile shows none of them.
+  const isCouncil = useIsCouncil();
   // `/profile?open=points` (or `service`, `study`) opens that number's panel
   // in place of the page; the figures and gauges below link to it.
   const router = useRouter();
@@ -336,7 +340,7 @@ export function ProfilePanel() {
           Your numbers, each a door to what is behind it (#5950): Points,
           Service hours and Study hours were sidebar pages until then.
         */}
-        <StandingStats />
+        {isCouncil ? null : <StandingStats />}
 
         {/*
           Your class and number, read-only as on the phone: they are an
@@ -362,7 +366,7 @@ export function ProfilePanel() {
           hours are this semester's, beside a goal; the figures above are all
           time, so both stay.
         */}
-        {hasChapter ? <StandingCards /> : null}
+        {hasChapter && !isCouncil ? <StandingCards /> : null}
 
         {/* Non-chapter business roles you pick yourself (#4958). */}
         {canViewMembers ? <PickRolesSection /> : null}
@@ -506,7 +510,7 @@ export function ProfilePanel() {
         <OwnCustomFieldsSection enabled={canViewMembers} />
       </div>
       <StandingPanels
-        open={openDoor}
+        open={isCouncil ? null : openDoor}
         onClose={() => router.replace("/profile", { scroll: false })}
       />
     </div>

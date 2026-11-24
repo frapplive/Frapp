@@ -25,6 +25,7 @@ describe('RushController permissions', () => {
 
   const ROUTES = [
     ['lookup', SystemPermissions.RUSH_VIEW],
+    ['matches', SystemPermissions.RUSH_VIEW],
     ['getOne', SystemPermissions.RUSH_VIEW],
     ['create', SystemPermissions.RUSH_ADD],
     ['vote', SystemPermissions.RUSH_VOTE],

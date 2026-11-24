@@ -14,11 +14,12 @@ a row opens chat's own card to act in place) is
 the phone's screen, the Activity tab (#4610), is in
 [`../ui/mobile/screens.md`](../ui/mobile/screens.md) (supporting routes).
 
-Not to be confused with two other things that use the word:
+Not to be confused with the points activity log (#3715): a member's points history, inside Points.
 
-- [`activity-feed.md`](activity-feed.md), `GET /v1/activity-feed`: a feed of what happened in the
-  chapter (new members, announcements, uploads). No screen renders it.
-- The points activity log (#3715): a member's points history, inside Points.
+There was also a chapter activity feed, `GET /v1/activity-feed`: what happened in the chapter (new
+members, announcements, uploads). No screen ever rendered it after the chat-first redesign removed
+the web home it was written for, and it was deleted on 2026-11-24 with its spec
+([#5951](https://github.com/frapplive/Frapp/issues/5951)).
 
 ## What the read returns
 
@@ -107,9 +108,10 @@ member's own answer, not the event's default:
   without it `GET /v1/tasks/:id` refuses them a task they don't hold, and a row that opens to a
   refusal is worse than no row.
 - **Files:** none. The read listed the chapter documents and backwork the caller uploaded
-  (#3897's ask, "documents and backwork you uploaded"). `made_by_you.files` is still served,
-  always empty and marked deprecated, so a client built before the change (an open web tab, a
-  phone's over-the-air bundle) does not fail on its absence; its removal is tracked separately.
+  (#3897's ask, "documents and backwork you uploaded"). `made_by_you.files` was served for a while
+  after, always empty and marked deprecated, for clients built before the change; no shipped phone
+  build read it, and it was removed on 2026-11-24
+  ([#5951](https://github.com/frapplive/Frapp/issues/5951)).
   Changed in [#4291](https://github.com/pdcarlson/Frapp/issues/4291) by `pdcarlson` for Shawn,
   2026-11-11: removed from the page and the read ("I don't think that files uploaded by you
   needs to be a part of the activity page"). No ability went with it: a member's uploads are in

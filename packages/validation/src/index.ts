@@ -55,6 +55,7 @@ export * from "./chapter-groups";
 export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
+export * from "./chapter-settings-copy";
 // The audit log (#3909): what may change on a line already in it.
 export * from "./chat-audit-log";
 export * from "./chat-backgrounds";
@@ -76,6 +77,8 @@ export * from "./coming-up-tracking";
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// Councils (#5933): profiles, role packs and recruitment models.
+export * from "./council";
 // A member's own custom-field values (#581): the rule the API and both forms check.
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
@@ -263,6 +266,8 @@ export * from "./role-colors";
 export * from "./role-rank";
 // The recruitment pipeline's stage categories, closed reasons and limits (#5924).
 export * from "./rush-pipeline";
+// School-email verification (#5929): limits, refusal codes and the step's words.
+export * from "./school-verification";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).

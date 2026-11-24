@@ -163,7 +163,7 @@ export function useChapterBranding(): ChapterBranding {
   // the mark even when its stored switch was never turned off, as for a
   // chapter created before its org profile knew to (#3421). The match reads
   // the organization's name inside the chapter's ("Phi Gamma Delta Tau Nu").
-  // Web's nav crest applies the same override (`chapter-nav-header.tsx`), and
+  // Web's sidebar crest applies the same override (`chapterMarkFor`), and
   // the invite preview does it for the join card (`InviteService.preview`).
   const storedBranding = data?.branding as Record<string, unknown> | undefined;
   const textMark =

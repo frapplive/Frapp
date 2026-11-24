@@ -50,6 +50,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", () => ({
   useSearch: () => searchQuery.current,
   useChannels: () => channelsQuery.current,
@@ -74,8 +82,17 @@ vi.mock("@/lib/hooks/use-debounced-value", () => ({
   useDebouncedValue: (value: unknown) => debounced.current ?? value,
 }));
 
-import { FindBar } from "./find-bar";
+import { FindField, FindProvider, useFind } from "./find-bar";
 import { FIND_PLACEHOLDER } from "./find-dialog";
+
+/** Find as the top bar draws it below `lg`: the field, inside the provider. */
+function FindBar() {
+  return (
+    <FindProvider>
+      <FindField />
+    </FindProvider>
+  );
+}
 
 // Offsetless instants on purpose: they parse as local time, so the calendar
 // days the assertions name hold in every runner timezone.
@@ -748,7 +765,7 @@ describe("FindBar", () => {
 
 /**
  * Find only finds (#5476, Paul, 2026-11-18). From #4904 its first row asked
- * Frapp; Ask has its own floating bar now (`ask/ask-bar.tsx`).
+ * Frapp; Frapp Intelligence has its own page now, which New opens.
  */
 describe("FindBar and Ask (#5476)", () => {
   beforeEach(() => {
@@ -764,6 +781,57 @@ describe("FindBar and Ask (#5476)", () => {
     render(<FindBar />);
     const input = await openAndType(user, "when is the announce party?");
     expect(input).toHaveAttribute("placeholder", FIND_PLACEHOLDER);
-    expect(screen.queryByRole("option", { name: /Frapp Intelligence/ })).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: /Frapp Intelligence/ }),
+    ).toBeNull();
+  });
+});
+
+/**
+ * From `lg` up the way in is the sidebar's Search row (#5946): any control
+ * inside the provider opens the same dialog, and focus goes back to it.
+ */
+describe("Find from the sidebar's Search row (#5946)", () => {
+  function SearchRow() {
+    const find = useFind();
+    return (
+      <button
+        type="button"
+        onClick={(event) => find.openFind({ returnTo: event.currentTarget })}
+      >
+        Search
+      </button>
+    );
+  }
+
+  beforeEach(() => {
+    channelsQuery.current = { data: [] };
+    searchQuery.current = searchState();
+    debounced.current = null;
+  });
+
+  it("opens the one dialog from a row, and hands focus back to the row on close", async () => {
+    const user = userEvent.setup();
+    render(
+      <FindProvider>
+        <SearchRow />
+      </FindProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toHaveFocus(),
+    );
+  });
+
+  it("still opens on Cmd+F with no field on screen", async () => {
+    render(
+      <FindProvider>
+        <SearchRow />
+      </FindProvider>,
+    );
+    chord();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 });

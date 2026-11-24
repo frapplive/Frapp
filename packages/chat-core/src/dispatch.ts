@@ -76,6 +76,31 @@ export interface DispatchResult {
    * (subscription, module, receipt required) it reads from its own request.
    */
   cause?: unknown;
+  /**
+   * The command named several things and ran nothing: `/<vocab> vote|bid
+   * <name>` when two prospects share the name (`ifc-recruitment.md` § Name
+   * lookup). The caller offers `options` and runs the same command again with
+   * the picked option's `args`, which name it by id. Set only with `ok:
+   * false`, so a caller that ignores it still reports a failure, never a
+   * silent pick.
+   */
+  choices?: DispatchChoices;
+}
+
+/** What {@link DispatchResult.choices} offers. */
+export interface DispatchChoices {
+  /** The picker's heading: "Several prospects match "Jake Smith"". */
+  title: string;
+  options: DispatchChoice[];
+}
+
+export interface DispatchChoice {
+  /** The row's name. */
+  label: string;
+  /** What tells it apart: "Met · added Nov 20". */
+  detail: string;
+  /** The command's arguments that run it for this one. */
+  args: string;
 }
 
 /**
@@ -1319,27 +1344,85 @@ export async function postHours(
   return { ok: true };
 }
 
-async function resolveRushCandidateId(
+/** One prospect a name matched, as the lookup's 409 lists them. */
+interface RushNameMatch {
+  id: string;
+  display_name: string;
+  stage_label: string;
+  created_at: string;
+}
+
+type RushLookup =
+  | { kind: "found"; id: string }
+  | { kind: "several"; matches: RushNameMatch[] }
+  | { kind: "none" };
+
+const RUSH_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Whether a lookup's error is the 409 that means "several match". */
+function isRushSeveralMatch(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "rush.several_match"
+  );
+}
+
+/**
+ * Every prospect a name matches, for the picker
+ * (`GET /v1/rush/candidates/matches`). The 409 only says there are several:
+ * the API's error body carries a code and a message, nothing more.
+ */
+async function rushNameMatches(
+  ctx: ChatActionContext,
+  name: string,
+): Promise<RushNameMatch[] | null> {
+  const result = await ctx.apiClient.GET("/v1/rush/candidates/matches", {
+    params: { query: { name } },
+  });
+  if (!responseStatus(result).ok || !Array.isArray(result.data)) return null;
+  const matches = (result.data as unknown[]).filter(
+    (row): row is RushNameMatch =>
+      !!row &&
+      typeof row === "object" &&
+      typeof (row as RushNameMatch).id === "string" &&
+      RUSH_UUID.test((row as RushNameMatch).id) &&
+      typeof (row as RushNameMatch).display_name === "string",
+  );
+  return matches.length > 1 ? matches : null;
+}
+
+async function resolveRushCandidate(
   ctx: ChatActionContext,
   token: string,
-): Promise<string | null> {
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      token,
-    )
-  ) {
-    return token;
-  }
+): Promise<RushLookup> {
+  if (RUSH_UUID.test(token)) return { kind: "found", id: token };
   try {
     const result = await ctx.apiClient.GET("/v1/rush/candidates", {
       params: { query: { name: token } },
     });
+    const { status, ok } = responseStatus(result);
+    if (status === 409 && isRushSeveralMatch(result.error)) {
+      const matches = await rushNameMatches(ctx, token);
+      if (matches) return { kind: "several", matches };
+    }
     const id = (result.data as { id?: string } | undefined)?.id;
-    if (!responseStatus(result).ok || typeof id !== "string") return null;
-    return id;
+    if (!ok || typeof id !== "string") return { kind: "none" };
+    return { kind: "found", id };
   } catch {
-    return null;
+    return { kind: "none" };
   }
+}
+
+/** "Met · added Nov 20", what tells two prospects with one name apart. */
+function rushMatchDetail(match: RushNameMatch): string {
+  const added = new Date(match.created_at);
+  const day = Number.isNaN(added.getTime())
+    ? null
+    : added.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const stage = match.stage_label || "No stage";
+  return day ? `${stage} · added ${day}` : stage;
 }
 
 /**
@@ -1369,10 +1452,26 @@ async function dispatchRush(
     parsed.value.action === "vote"
       ? (parsed.value.candidateId ?? parsed.value.candidateToken ?? "")
       : parsed.value.candidateToken;
-  const id = await resolveRushCandidateId(ctx, token);
-  if (!id) {
+  const lookup = await resolveRushCandidate(ctx, token);
+  if (lookup.kind === "several") {
+    const action = parsed.value.action;
+    return {
+      ok: false,
+      error: "Several prospects match that name. Pick one.",
+      choices: {
+        title: `Several prospects match "${token}"`,
+        options: lookup.matches.map((match) => ({
+          label: match.display_name,
+          detail: rushMatchDetail(match),
+          args: `${action} ${match.id}`,
+        })),
+      },
+    };
+  }
+  if (lookup.kind === "none") {
     return { ok: false, error: "No candidate matches that name" };
   }
+  const id = lookup.id;
 
   const path =
     parsed.value.action === "vote"

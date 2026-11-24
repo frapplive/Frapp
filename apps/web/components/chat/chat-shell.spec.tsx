@@ -107,8 +107,7 @@ const {
   mockSendReturned: vi.fn(),
   mockUseMyPermissions: vi.fn(() => ({
     data: { permissions: [] as string[] } as
-      | { permissions: string[] }
-      | undefined,
+      { permissions: string[] } | undefined,
   })),
   searchHit: vi.fn(() => ({
     message: { id: "msg-2" },
@@ -260,7 +259,6 @@ const mockSetSidebarFilter = vi.fn();
 const sidebarState = {
   /** `GET /v1/threads` rows, for the rail's thread rows (#5300). */
   memberThreads: [] as unknown[],
-  sort: "chapter" as "chapter" | "recent" | "alpha",
   pinOptions: undefined as { onError?: () => void } | undefined,
   foldOptions: undefined as { onError?: () => void } | undefined,
   filterOptions: undefined as { onError?: () => void } | undefined,
@@ -896,7 +894,6 @@ vi.mock("@repo/hooks", async () => ({
     pinnedIds: sidebarState.pinnedIds,
     collapsed: new Set<string>(),
     filters: { unreadOnly: false, hideMuted: false },
-    sort: sidebarState.sort,
   }),
   useSetChannelPinned: (options?: { onError?: () => void }) => {
     sidebarState.pinOptions = options;
@@ -990,14 +987,11 @@ vi.mock("./channel-list", () => ({
     "Nothing changed. Check your connection and try again.",
   ChannelFilters: ({
     onChange,
-    sort,
   }: {
     onChange: (change: { hide_muted: boolean }) => void;
-    sort?: string;
   }) => (
     <button
       data-testid="filters-hide-muted"
-      data-sort={sort}
       onClick={() => onChange({ hide_muted: true })}
     >
       hide muted
@@ -1204,23 +1198,6 @@ const channelAskState = vi.hoisted(() => ({
 }));
 // Frapp Intelligence's bar (#5476): who gets it is `ask-bar.tsx`'s question
 // (`ask-entry.spec.tsx`); here only where the shell puts it.
-vi.mock("@/components/ask/ask-bar", () => ({
-  AskBar: ({
-    compact,
-    className,
-  }: {
-    compact?: boolean;
-    className?: string;
-  }) => (
-    <button
-      data-testid="ask-bar"
-      data-compact={compact ? "" : undefined}
-      className={className}
-    >
-      Frapp Intelligence
-    </button>
-  ),
-}));
 vi.mock("@/components/ask/ask-in-channel", () => ({
   useChannelAsk: () => channelAskState.ask,
   useChannelAskAccess: () =>
@@ -1858,6 +1835,10 @@ import {
 } from "@repo/chat-core/density";
 import { useOpenChatTransport } from "@repo/hooks/open-chat-transport";
 import { ChatShell, prefillLocalInput } from "./chat-shell";
+import {
+  ChannelListSlot,
+  ChannelListSlotProvider,
+} from "@/components/layout/channel-list-slot";
 
 /**
  * The notice for a jump target the channel's whole history did not hold. The
@@ -4668,13 +4649,14 @@ describe("ChatShell narrow viewports (#2142)", () => {
     return { channels, thread };
   }
 
-  it("shows one column at a time below lg, and both at lg", () => {
+  it("shows one column at a time below lg, and no list column at lg (#5946)", () => {
     render(<ChatShell />);
     const { channels, thread } = columns();
 
-    // Full width when it is the only column; 240px once both fit.
+    // Full width when it is the only column. From `lg` up the chapter's
+    // channels are in the sidebar, so this pane is not drawn there.
     expect(channels.className).toContain("w-full");
-    expect(channels.className).toContain("lg:w-60");
+    expect(channels.className).toContain("lg:hidden");
     // Exactly one of the two is hidden below lg.
     const hiddenBelowLg = [channels, thread].filter((el) =>
       el.className.includes("max-lg:hidden"),
@@ -5084,47 +5066,87 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
     window.matchMedia = realMatchMedia;
   });
 
-  it("draws one channels column, inline, with no way back to a menu", () => {
+  /** The shell, cut down: the sidebar's slot and the panel. */
+  function WithSidebar(props: React.ComponentProps<typeof ChatShell>) {
+    return (
+      <ChannelListSlotProvider>
+        <nav aria-label="Sidebar">
+          <ChannelListSlot />
+        </nav>
+        <ChatShell {...props} />
+      </ChannelListSlotProvider>
+    );
+  }
+  const sidebar = () => screen.getByRole("navigation", { name: "Sidebar" });
+
+  it("draws the chapter's channels into the sidebar from lg up, and no column of its own (#5946)", () => {
     stubWidth(1440);
-    render(<ChatShell />);
-    const channels = screen.getAllByRole("region", { name: "Channels" });
-    expect(channels).toHaveLength(1);
-    expect(channels[0]).toHaveClass("lg:w-60");
-    expect(channels[0]).not.toHaveClass("lg:hidden");
+    render(<WithSidebar />);
+    // The one list, in the sidebar.
+    expect(within(sidebar()).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "channels",
+    );
+    expect(screen.getAllByTestId("channel-list")).toHaveLength(1);
+    // No title and no control over it there (Paul, 2026-11-24): its sort
+    // and filters ride a heading instead.
+    expect(
+      within(sidebar()).queryByRole("heading", { name: "Channels" }),
+    ).toBeNull();
+    // The panel's own list pane is not drawn from `lg` up.
+    expect(screen.getByRole("region", { name: "Channels" })).toHaveClass(
+      "lg:hidden",
+    );
     expect(
       screen.queryByRole("button", { name: "Back to menu" }),
     ).not.toBeInTheDocument();
   });
 
-  it("pushes no history for a pick from lg up, where the list is already on screen (#3824)", () => {
+  it("draws nothing into the sidebar below lg, where the list is a pane of chat's page", () => {
+    stubWidth(800);
+    render(<WithSidebar />);
+    expect(within(sidebar()).queryByTestId("channel-list")).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Channels" })).getByTestId(
+        "channel-list",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("pushes no history for a pick from lg up, and tells the shell what was picked (#3824, #5946)", () => {
     stubWidth(1440);
     window.history.replaceState(null, "");
     const push = vi.spyOn(window.history, "pushState");
+    const onPick = vi.fn();
     try {
-      render(<ChatShell />);
-      fireEvent.click(screen.getByTestId("pick-random"));
+      render(<WithSidebar onPick={onPick} />);
+      fireEvent.click(within(sidebar()).getByTestId("pick-random"));
       expect(push).not.toHaveBeenCalled();
+      // The shell puts the conversation on screen (it may be docked shut).
+      expect(onPick).toHaveBeenCalledWith("channels", "chan-random");
     } finally {
       push.mockRestore();
     }
   });
 
-  it("puts Frapp Intelligence's bar at the foot of the Channels column with chat alone below lg only, and not beside a tool (#5476, #5560)", () => {
+  it("lists the member's conversations beside the open one on Messages, from lg up", () => {
     stubWidth(1440);
-    const view = render(<ChatShell />);
-    const bar = screen.getByTestId("ask-bar");
-    expect(bar).toHaveAttribute("data-compact");
-    // From `lg` up Ask lives in the sidebar's foot (`app-nav.tsx`), so this
-    // one hides there rather than giving the window two.
-    expect(bar).toHaveClass("lg:hidden");
-    // In the Channels column, never in the thread with its message box.
-    expect(screen.getByRole("region", { name: "Channels" })).toContainElement(
-      bar,
+    render(<WithSidebar view="direct" />);
+    const pane = screen.getByRole("region", { name: "Messages" });
+    expect(pane).toHaveClass("lg:w-60");
+    expect(pane).not.toHaveClass("lg:hidden");
+    expect(within(pane).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "direct",
     );
-    view.unmount();
-    // Beside a tool page the page's own bar asks (`dashboard-shell.tsx`).
-    render(<ChatShell toolBeside />);
-    expect(screen.queryByTestId("ask-bar")).toBeNull();
+    expect(
+      within(pane).getByRole("heading", { name: "Messages" }),
+    ).toBeVisible();
+    // The chapter's channels stay in the sidebar beside it.
+    expect(within(sidebar()).getByTestId("channel-list")).toHaveAttribute(
+      "data-kind",
+      "channels",
+    );
   });
 
   it("closes the member column beside a tool, and opens the list as a Panel instead", () => {
@@ -5142,129 +5164,54 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
     expect(document.cookie).not.toContain("frapp_chat_members_hidden=1");
   });
 
-  it("shows one pane at a time beside a tool, from lg up, with the back arrow and no history (#5575)", async () => {
-    stubWidth(1440);
-    window.history.replaceState(null, "");
-    const push = vi.spyOn(window.history, "pushState");
-    try {
-      render(<ChatShell toolBeside />);
-      const channels = screen.getByRole("region", { name: "Channels" });
-      const thread = channels.nextElementSibling as HTMLElement;
-      // The conversation first, the list hidden at every width.
-      expect(channels).toHaveClass("w-full", "hidden");
-      expect(channels).not.toHaveClass("lg:w-60");
-      expect(thread).not.toHaveClass("hidden");
-      // The way back is drawn at every width, not only below `lg`.
-      const back = screen.getByRole("button", { name: "Back to channels" });
-      expect(back).not.toHaveClass("lg:hidden");
-
-      fireEvent.click(back);
-      await waitFor(() => expect(channels).not.toHaveClass("hidden"));
-      expect(thread).toHaveClass("hidden");
-
-      fireEvent.click(screen.getByTestId("pick-random"));
-      await waitFor(() => expect(thread).not.toHaveClass("hidden"));
-      expect(channels).toHaveClass("hidden");
-      // Back still moves between pages, not within the panel.
-      expect(push).not.toHaveBeenCalled();
-    } finally {
-      push.mockRestore();
-    }
-  });
-
-  describe("the one-pane side panel beside a tool (#5575)", () => {
-    const panes = () => {
-      const channels = screen.getByRole("region", { name: "Channels" });
-      return { channels, thread: channels.nextElementSibling as HTMLElement };
-    };
-
-    it("keeps its pane through Back and Forward between tool pages", () => {
+  describe("docked beside a page (#5575, #5946)", () => {
+    it("is the conversation alone, with no list pane and no way back to one", () => {
       stubWidth(1440);
       render(<ChatShell toolBeside />);
-      expect(panes().thread).not.toHaveClass("hidden");
-      // Next's own entry for the previous tool page: no thread-pane marker.
-      act(() => {
-        window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
-      });
-      expect(panes().thread).not.toHaveClass("hidden");
-      expect(panes().channels).toHaveClass("hidden");
-    });
-
-    it("shows the list from the back arrow without going back a page", async () => {
-      // A pick below `lg` pushed its entry (#3824), then the window widened
-      // and a tool opened: Back from here would leave the tool page.
-      stubWidth(800);
-      window.history.replaceState(null, "");
-      const back = vi.spyOn(window.history, "back");
-      try {
-        const { rerender } = render(<ChatShell />);
-        fireEvent.click(
-          screen.getByRole("button", { name: "Back to channels" }),
-        );
-        fireEvent.click(screen.getByTestId("pick-random"));
-        back.mockClear();
-        stubWidth(1440);
-        rerender(<ChatShell toolBeside />);
-        fireEvent.click(
-          screen.getByRole("button", { name: "Back to channels" }),
-        );
-        await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-        expect(back).not.toHaveBeenCalled();
-      } finally {
-        back.mockRestore();
-      }
-    });
-
-    it("goes back to the list on Esc, as below lg", async () => {
-      stubWidth(1440);
-      render(<ChatShell toolBeside />);
-      fireEvent.keyDown(document.body, { key: "Escape" });
-      await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-    });
-
-    it("can be closed from the list pane too (#4223)", async () => {
-      stubWidth(1440);
-      const onClose = vi.fn();
-      render(<ChatShell toolBeside onClose={onClose} />);
-      fireEvent.click(screen.getByRole("button", { name: "Back to channels" }));
-      await waitFor(() => expect(panes().channels).not.toHaveClass("hidden"));
-      const closes = within(panes().channels).getAllByRole("button", {
-        name: "Close chat",
-      });
-      expect(closes).toHaveLength(1);
-      fireEvent.click(closes[0]!);
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it("shows the list the nav's row switched to", () => {
-      stubWidth(1440);
-      const { rerender } = render(<ChatShell toolBeside view="channels" />);
-      expect(panes().channels).toHaveClass("hidden");
-      rerender(<ChatShell toolBeside view="direct" />);
+      expect(screen.getByRole("region", { name: "Channels" })).toHaveClass(
+        "lg:hidden",
+      );
+      expect(screen.queryByTestId("channel-list")).toBeNull();
       expect(
-        screen.getByRole("region", { name: "Direct messages" }),
-      ).not.toHaveClass("hidden");
+        screen.getByRole("button", { name: "Back to channels" }),
+      ).toHaveClass("lg:hidden");
     });
 
-    it("stops claiming the channel while the list shows (#3824)", async () => {
+    it("keeps a docked conversation docked when the page is not Messages, whichever kind it is", async () => {
+      stubWidth(1440);
+      channelsQueryState.value = {
+        data: [
+          ...CHANNELS,
+          {
+            id: "chan-dm",
+            name: "dm-viewer-other",
+            type: "DM",
+            member_ids: ["viewer-1", "other-1"],
+          },
+        ],
+      };
+      render(<ChatShell toolBeside initialChannelId="chan-dm" />);
+      await waitFor(() => {
+        expect(screen.getByTestId("composer")).toHaveTextContent("chan-dm");
+      });
+    });
+
+    it("stops claiming the channel while the panel is out of sight (#3824)", async () => {
       stubWidth(1440);
       const { viewedChannelId } =
         await vi.importActual<typeof import("@repo/hooks")>("@repo/hooks");
-      render(<ChatShell toolBeside initialChannelId="chan-general" />);
+      const { rerender } = render(
+        <ChatShell toolBeside initialChannelId="chan-general" />,
+      );
       expect(viewedChannelId()).toBe("chan-general");
-      fireEvent.click(screen.getByRole("button", { name: "Back to channels" }));
+      // Closed beside the page, or behind Chapter settings: still mounted for
+      // the sidebar's list, and reading nothing.
+      rerender(
+        <ChatShell toolBeside shown={false} initialChannelId="chan-general" />,
+      );
       await waitFor(() => expect(viewedChannelId()).toBeNull());
-      fireEvent.click(screen.getByTestId("pick-general"));
+      rerender(<ChatShell toolBeside initialChannelId="chan-general" />);
       await waitFor(() => expect(viewedChannelId()).toBe("chan-general"));
-    });
-
-    it("moves focus into the pane that appears when its control went with the old one", async () => {
-      stubWidth(1440);
-      render(<ChatShell toolBeside />);
-      const back = screen.getByRole("button", { name: "Back to channels" });
-      back.focus();
-      fireEvent.click(back);
-      await waitFor(() => expect(panes().channels).toHaveFocus());
     });
   });
 
@@ -7108,7 +7055,7 @@ describe("ChatShell's two lists (#3774)", () => {
   };
   const rail = () => screen.getByTestId("channel-list");
 
-  it("lists only channels on Chat, and only direct and group messages on Direct messages", () => {
+  it("lists only channels on Chat, and only direct and group messages on Messages", () => {
     channelsQueryState.value = { data: [...CHANNELS, DM, GROUP] };
     const { unmount } = render(<ChatShell />);
     expect(rail()).toHaveAttribute("data-kind", "channels");
@@ -7120,9 +7067,7 @@ describe("ChatShell's two lists (#3774)", () => {
     render(<ChatShell view="direct" />);
     expect(rail()).toHaveAttribute("data-kind", "direct");
     expect(rail().dataset.ids).toBe("chan-dm,chan-group");
-    expect(
-      screen.getByRole("heading", { name: "Direct messages" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Messages" })).toBeVisible();
   });
 
   it("lands each list on its own last conversation", async () => {
@@ -7258,48 +7203,12 @@ describe("ChatShell's two lists (#3774)", () => {
     expect(screen.queryByTestId("composer")).not.toBeInTheDocument();
   });
 
-  it("reads the latest messages on the channels rail only under Recent, and offers the sort there alone (#2877)", () => {
+  it("never reads the latest messages for the channels rail, which is always in the chapter's order (#5947)", () => {
     latestReads.enabled = [];
-    latestReads.rows = [
-      {
-        channel_id: "chan-group",
-        sender_id: "other-1",
-        author_name: "Cole Bennett",
-        content: "hi",
-        kind: "text",
-        attachment_count: 0,
-        created_at: "2026-11-12T01:20:00.000Z",
-      },
-    ];
     channelsQueryState.value = { data: [...CHANNELS, DM, GROUP] };
-    sidebarState.sort = "recent";
-    try {
-      const { unmount } = render(<ChatShell />);
-      expect(latestReads.enabled.at(-1)).toBe(true);
-      expect(rail()).toHaveAttribute("data-latest", "chan-group");
-      // The times order the rail; no preview line is drawn from them.
-      expect(rail()).not.toHaveAttribute("data-previews");
-      expect(screen.getByTestId("filters-hide-muted")).toHaveAttribute(
-        "data-sort",
-        "recent",
-      );
-      unmount();
-
-      sidebarState.sort = "alpha";
-      latestReads.enabled = [];
-      const alpha = render(<ChatShell />);
-      expect(latestReads.enabled.every((on) => on === false)).toBe(true);
-      expect(rail()).not.toHaveAttribute("data-latest");
-      alpha.unmount();
-
-      // Direct messages always run newest first, so they offer no sort.
-      render(<ChatShell view="direct" />);
-      expect(screen.getByTestId("filters-hide-muted")).not.toHaveAttribute(
-        "data-sort",
-      );
-    } finally {
-      sidebarState.sort = "chapter";
-    }
+    render(<ChatShell />);
+    expect(latestReads.enabled.every((on) => on === false)).toBe(true);
+    expect(rail()).not.toHaveAttribute("data-latest");
   });
 
   it("reads the latest messages only for Direct messages, and words each last line (#3774)", () => {

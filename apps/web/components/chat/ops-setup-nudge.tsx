@@ -117,6 +117,11 @@ export function OpsSetupNudge() {
 
   const nudge = useMemo(() => {
     if (!canDismiss || !activeMembership) return null;
+    // A council's modules are off by its kind, not by choice: nothing to
+    // turn on, and the modules' routes refuse a council (#5933).
+    if ((activeMembership as { kind?: unknown }).kind === "council") {
+      return null;
+    }
     return selectOpsNudge(enabledModules, [
       ...(activeMembership.dismissed_ops_nudges ?? []),
       ...dismissedHere,

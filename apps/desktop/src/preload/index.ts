@@ -17,6 +17,7 @@ const bridge: FrappDesktopBridge = {
   platform: process.platform as FrappDesktopBridge["platform"],
   setBadgeCount: (count) => ipcRenderer.send("frapp-desktop:set-badge-count", count),
   openExternal: (url) => ipcRenderer.invoke("frapp-desktop:open-external", url),
+  showWindow: () => ipcRenderer.send("frapp-desktop:show-window"),
 };
 
 contextBridge.exposeInMainWorld("frappDesktop", bridge);

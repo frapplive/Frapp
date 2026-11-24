@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RushPipelineService } from '../../application/services/rush-pipeline.service';
+import { RushSettingsService } from '../../application/services/rush-settings.service';
 import { RbacService } from '../../application/services/rbac.service';
 import { SupabaseAuthGuard } from '../guards/supabase-auth.guard';
 import { ChapterGuard } from '../guards/chapter.guard';
@@ -34,7 +35,15 @@ import {
   CurrentUser,
 } from '../decorators/current-user.decorator';
 import {
+  LogRushContactDto,
   MoveRushCandidateStageDto,
+  RushContactDto,
+  RushFollowUpDto,
+  RushOwnerDto,
+  RushSettingsDto,
+  SaveRushSettingsDto,
+  SetRushFollowUpDto,
+  SetRushOwnerDto,
   RushCandidateStageDto,
   RateRushCandidateDto,
   RushCandidateTagsDto,
@@ -61,7 +70,11 @@ import { SystemPermissions } from '#domain/constants/permissions';
  * | Tag a candidate; write, edit (own) a note | `rush:notes` |
  * | Read notes | `rush:read_notes` |
  * | Rate | `rush:vote` |
- * | Edit stages and the tag list; delete anyone's note | `rush:manage` |
+ * | Read settings and contacts | `rush:view` |
+ * | Log a contact; set or clear a follow-up | `rush:add` |
+ * | Claim an unowned candidate, let go of your own | `rush:add` |
+ * | Assign anyone; take a candidate over | `rush:manage` |
+ * | Edit stages, the tag list and the settings; delete anyone's note | `rush:manage` |
  */
 @ApiTags('Rush')
 @ApiBearerAuth()
@@ -72,6 +85,7 @@ import { SystemPermissions } from '#domain/constants/permissions';
 export class RushPipelineController {
   constructor(
     private readonly pipelineService: RushPipelineService,
+    private readonly settingsService: RushSettingsService,
     private readonly rbacService: RbacService,
   ) {}
 
@@ -291,5 +305,122 @@ export class RushPipelineController {
       userId,
       canManage,
     );
+  }
+
+  @Get('settings')
+  @RequirePermissions(SystemPermissions.RUSH_VIEW)
+  @ApiOperation({ summary: "The chapter's recruitment settings" })
+  @ApiOkResponse({ type: RushSettingsDto })
+  async settings(@CurrentChapterId() chapterId: string) {
+    return this.settingsService.get(chapterId);
+  }
+
+  @Put('settings')
+  @RequirePermissions(SystemPermissions.RUSH_MANAGE)
+  @ApiOperation({ summary: "Save the chapter's recruitment settings" })
+  @ApiOkResponse({ type: RushSettingsDto })
+  async saveSettings(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: SaveRushSettingsDto,
+  ) {
+    return this.settingsService.save(chapterId, dto, userId);
+  }
+
+  @Get('candidates/:id/contacts')
+  @RequirePermissions(SystemPermissions.RUSH_VIEW)
+  @ApiOperation({
+    summary:
+      "A candidate's logged contacts, newest first (notes only with `rush:read_notes`)",
+  })
+  @ApiOkResponse({ type: [RushContactDto] })
+  async contacts(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const canReadNotes = await this.rbacService.memberHasAnyPermission(
+      chapterId,
+      userId,
+      [SystemPermissions.RUSH_READ_NOTES],
+    );
+    return this.pipelineService.listContacts(id, chapterId, {
+      id: userId,
+      canReadNotes,
+    });
+  }
+
+  @Post('candidates/:id/contacts')
+  @RequirePermissions(SystemPermissions.RUSH_ADD)
+  @ApiOperation({
+    summary:
+      'Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted',
+  })
+  @ApiCreatedResponse({ type: RushContactDto })
+  async logContact(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LogRushContactDto,
+  ) {
+    return this.pipelineService.logContact(id, chapterId, userId, dto);
+  }
+
+  @Put('candidates/:id/owner')
+  @RequireAnyOfPermissions(
+    SystemPermissions.RUSH_ADD,
+    SystemPermissions.RUSH_MANAGE,
+  )
+  @ApiOperation({
+    summary:
+      'Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage`',
+  })
+  @ApiOkResponse({ type: RushOwnerDto })
+  async setOwner(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetRushOwnerDto,
+  ) {
+    const canManage = await this.rbacService.memberHasAnyPermission(
+      chapterId,
+      userId,
+      [SystemPermissions.RUSH_MANAGE],
+    );
+    return this.pipelineService.setOwner(
+      id,
+      chapterId,
+      userId,
+      dto.owner_id,
+      canManage,
+    );
+  }
+
+  @Put('candidates/:id/follow-up')
+  @RequirePermissions(SystemPermissions.RUSH_ADD)
+  @ApiOperation({
+    summary:
+      "Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default)",
+  })
+  @ApiOkResponse({ type: RushFollowUpDto })
+  async setFollowUp(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetRushFollowUpDto,
+  ) {
+    return this.pipelineService.setFollowUp(id, chapterId, userId, dto);
+  }
+
+  @Delete('candidates/:id/follow-up')
+  @RequirePermissions(SystemPermissions.RUSH_ADD)
+  @ApiOperation({ summary: "Clear the candidate's follow-up" })
+  @ApiOkResponse({ type: RushFollowUpDto })
+  async clearFollowUp(
+    @CurrentChapterId() chapterId: string,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.pipelineService.clearFollowUp(id, chapterId, userId);
   }
 }

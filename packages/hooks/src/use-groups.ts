@@ -54,7 +54,9 @@ export function useChapterMajors(options?: { enabled?: boolean }): string[] {
   return useMemo(
     () =>
       (groups.data ?? [])
-        .filter((group) => group.kind === "major" && group.member_ids.length > 0)
+        .filter(
+          (group) => group.kind === "major" && group.member_ids.length > 0,
+        )
         .map((group) => group.name),
     [groups.data],
   );

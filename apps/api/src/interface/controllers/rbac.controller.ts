@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -42,6 +43,8 @@ import { SystemPermissions } from '#domain/constants/permissions';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('roles')
 export class RbacController {
   constructor(private readonly rbacService: RbacService) {}
@@ -55,8 +58,10 @@ export class RbacController {
   @Get('permissions-catalog')
   @ApiOperation({ summary: 'Get system permissions catalog' })
   @ApiOkResponse({ type: PermissionCatalogEntryDto, isArray: true })
-  catalog(): PermissionCatalogEntryDto[] {
-    return this.rbacService.getPermissionsCatalog();
+  catalog(
+    @CurrentChapterId() chapterId: string,
+  ): Promise<PermissionCatalogEntryDto[]> {
+    return this.rbacService.getPermissionsCatalog(chapterId);
   }
 
   @Post()

@@ -52,6 +52,14 @@ vi.mock("@/components/profile/profile-photo-control", () => ({
     mocks.photoControl(props),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {

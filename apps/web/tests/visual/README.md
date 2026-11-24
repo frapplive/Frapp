@@ -7,10 +7,10 @@ suites, all in the **required** `web-responsive-floor` job:
 | --- | --- |
 | `responsive-floor.spec.ts` | every `DASHBOARD_ROUTES` entry at 375px |
 | `pre-auth-floor.spec.ts` | every `PRE_AUTH_ROUTES` entry at 375px, plus one guard |
-| `nav-fit.spec.ts` | the sidebar fits a 1024×768 window with every row showing (#2946) |
+| `nav-fit.spec.ts` | the sidebar's channel list keeps room for eight rows at 1024×768 with every row showing (#5946; until then, that the twelve-row nav fit, #2946) |
 | `pre-auth-fit.spec.ts` | `/sign-in` and `/sign-up` fit a 1280×650 window without scrolling |
 | `document-fit.spec.ts` | no `DASHBOARD_ROUTES` entry scrolls the document at 1280×420 (#4000) |
-| `beside-chat-floor.spec.ts` | every tool page (the dashboard routes but `/chat` and `/settings`, which takes the whole width and hides chat, plus Chat admin and the Alumni tab) holds 375px beside chat in a 1440px window (#4033); its header says how to run it signed in against the demo seed |
+| `beside-chat-floor.spec.ts` | every tool page (the dashboard routes but `/chat` and `/messages`, which are chat's own, and `/settings`, which takes the whole width and hides chat, plus Chat admin and the Alumni tab) holds 375px beside chat in a 1440px window (#4033); its header says how to run it signed in against the demo seed |
 
 The floor suites and `document-fit.spec.ts` read `routes.ts`. Add a screen
 there and those specs pick it up. `nav-fit.spec.ts` measures one route, because the sidebar is the

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DASHBOARD_NAV_ITEMS } from "@/components/layout/nav-config";
-import { currentFor } from "@/components/layout/app-nav";
+import { currentFor } from "@/components/layout/sidebar";
 import { resolvePageTitle } from "@/components/layout/page-title";
 
 /**
@@ -13,8 +13,9 @@ import { resolvePageTitle } from "@/components/layout/page-title";
  *
  * - Title: the page header draws its title and its close (`ToolPageHeader`)
  *   from `resolvePageTitle`; a route it can't name opens untitled.
- * - Sidebar: a nav row is current on the route or a route under it, or the
- *   route is one of the doors outside the nav listed below.
+ * - Sidebar: a nav row is current on the route or a route under it (a page
+ *   still under More lights More, `sidebar.tsx`), or the route is one of the
+ *   doors outside the nav listed below.
  */
 
 const DASHBOARD = path.resolve(__dirname, "../../app/(dashboard)");
@@ -45,19 +46,23 @@ function onlyRedirects(file: string): boolean {
   );
 }
 
-/** Chat is the shell's own home, with no tool page to close. */
-const NOT_A_TOOL_PAGE = new Set(["/", "/chat"]);
+/**
+ * The conversation is the shell's own page, with no tool page to close:
+ * alone on `/chat`, and beside its list on Messages, which lights its row.
+ */
+const NOT_A_TOOL_PAGE = new Set(["/", "/chat", "/messages"]);
 
 /**
  * Pages outside the sidebar, and the door each opens from. A page here still
  * needs a title (so its header has a close); it just has no row to light.
  */
 const OFF_NAV_DOORS: Readonly<Record<string, string>> = {
-  "/profile": "account menu",
-  "/preferences": "account menu",
-  "/settings": "chapter menu",
-  "/whats-new": "account menu",
-  "/ask": "Ask bar at the sidebar's foot",
+  "/profile": "the member's menu at the sidebar's foot",
+  "/preferences": "the member's menu at the sidebar's foot",
+  "/settings": "the member's menu at the sidebar's foot",
+  "/whats-new": "the member's menu at the sidebar's foot",
+  // New's own row, which lights on it (`sidebar.tsx`).
+  "/ask": "the New row",
 };
 
 const ALL = routes(DASHBOARD).filter((r) => !NOT_A_TOOL_PAGE.has(r));

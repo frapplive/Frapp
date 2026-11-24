@@ -32,6 +32,9 @@ import {
   NOT_SELF_ASSIGNABLE_CODE,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   selfAssignableRefusal,
+  isCouncilPermission,
+  keysForRecruitmentModel,
+  COUNCIL_SHARED_PERMISSIONS,
 } from '@repo/validation';
 import {
   AI_PERMISSIONS,
@@ -265,6 +268,9 @@ export class RbacService {
     // none takes its tier's.
     const listed = data.permissions ?? [];
     const holds = listed.length > 0 ? listed : tierPermissions;
+    // Before the held check, so a reserved key reads as reserved, not as one
+    // the caller lacks (#5933).
+    await this.assertNoReservedPermissions(chapterId, listed);
     assertPermissionsHeld(context.reach, holds);
     if (data.self_assignable === true) {
       assertSafeToPick({
@@ -355,6 +361,13 @@ export class RbacService {
           : context.tiers.find((candidate) => candidate.id === tierId);
       after = effectivePermissions(tier?.permissions ?? [], overrides);
     }
+    // Before the held checks, so a reserved key reads as reserved (#5933).
+    await this.assertNoReservedPermissions(chapterId, [
+      ...(data.permissions ?? []),
+      ...Object.entries(data.permission_overrides ?? {})
+        .filter(([, on]) => on === true)
+        .map(([permission]) => permission),
+    ]);
     assertPermissionsHeld(context.reach, [
       ...addedPermissions(role.permissions, after),
       ...switchedOn,
@@ -592,6 +605,40 @@ export class RbacService {
   }
 
   /**
+   * `school-layer.md` § 4.2 rule 3 (#5933): a chapter's role or tier write
+   * refuses a `council:` string, `400 roles.permission.reserved`. A council
+   * key gates only council routes, which refuse a chapter by kind, so in a
+   * chapter it would be a switch that does nothing. The chapter is read only
+   * when the list holds such a string.
+   */
+  async assertNoReservedPermissions(
+    chapterId: string,
+    permissions: Iterable<string>,
+  ): Promise<void> {
+    const reserved = [...permissions].filter(isCouncilPermission);
+    if (reserved.length === 0) return;
+    const chapter = await this.chapterRepo.findById(chapterId);
+    if (chapter?.kind === 'council') {
+      // A council whose model is `none` holds no `council-recruitment` key
+      // (`council-types.md` § Default role titles), and its catalog offers
+      // none, so a write that adds one is refused the same way.
+      const model = chapter.recruitment_model ?? 'none';
+      const refused = reserved.filter(
+        (key) => keysForRecruitmentModel([key], model).length === 0,
+      );
+      if (refused.length === 0) return;
+      throw new BadRequestException({
+        code: 'roles.permission.reserved',
+        message: `This council doesn't run recruitment, so its roles can't hold ${refused.join(', ')}.`,
+      });
+    }
+    throw new BadRequestException({
+      code: 'roles.permission.reserved',
+      message: `Only a council's roles can hold ${reserved.join(', ')}.`,
+    });
+  }
+
+  /**
    * `onCreated` runs after the role is inserted and before its audit row is
    * written, for a caller that must record the new id whatever the audit write
    * then does. The audit write can fail after the role exists (#1599), and a
@@ -605,6 +652,7 @@ export class RbacService {
     data: Partial<Role>,
     onCreated?: (role: Role) => Promise<void>,
   ): Promise<Role> {
+    await this.assertNoReservedPermissions(chapterId, data.permissions ?? []);
     // Only the seeded President role may carry the wildcard: letting
     // `roles:manage` mint a new `*` role would bypass the presidency-transfer
     // safeguard entirely (spec/behavior/rbac.md).
@@ -662,6 +710,15 @@ export class RbacService {
     if (!role) throw new NotFoundException('Role not found');
     if (role.chapter_id !== chapterId)
       throw new ForbiddenException('Role not in current chapter');
+
+    // Only what this write adds can be refused: a list, or overrides it
+    // switches on.
+    await this.assertNoReservedPermissions(chapterId, [
+      ...(data.permissions ?? []),
+      ...Object.entries(data.permission_overrides ?? {})
+        .filter(([, on]) => on === true)
+        .map(([permission]) => permission),
+    ]);
 
     // An update may keep a wildcard the role already holds (the President
     // role's permissions stay editable) but may never introduce one — that
@@ -1139,11 +1196,28 @@ export class RbacService {
    * API constant's name, kept because clients already key on it; the label,
    * description, module and scope come from `PERMISSION_REGISTRY`.
    */
-  getPermissionsCatalog(): PermissionCatalogEntry[] {
+  async getPermissionsCatalog(
+    chapterId: string,
+  ): Promise<PermissionCatalogEntry[]> {
+    // The catalog filters by tenant kind (#5933, `school-layer.md` § 5.1): a
+    // chapter gets chapter keys; a council its own keys, less the
+    // `council-recruitment` ones when its model is `none`, plus the chapter
+    // keys it shares.
+    const chapter = await this.chapterRepo.findById(chapterId);
+    if (!chapter) throw new NotFoundException('Chapter not found');
+    const isCouncil = chapter.kind === 'council';
+    const model = chapter.recruitment_model ?? 'none';
+    const servesTenant = (value: string): boolean =>
+      isCouncil
+        ? COUNCIL_SHARED_PERMISSIONS.has(value) ||
+          (isCouncilPermission(value) &&
+            keysForRecruitmentModel([value], model).length > 0)
+        : !isCouncilPermission(value);
     // With the server's AI switch off, a role editor reads exactly as it did
     // before the AI permissions existed.
     const offered = Object.entries(SystemPermissions).filter(
-      ([, value]) => isAiEnabled() || !AI_PERMISSIONS.has(value),
+      ([, value]) =>
+        servesTenant(value) && (isAiEnabled() || !AI_PERMISSIONS.has(value)),
     );
     return offered.map(([key, value]) => {
       const definition = permissionDefinition(value);

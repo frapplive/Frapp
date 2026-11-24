@@ -102,6 +102,7 @@ import {
   useFrappTheme,
 } from "@/lib/theme";
 import { ScreenReady } from "@/lib/sentry/screen-ready";
+import { useIsCouncil, useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * s13 — Directory (`canvas-screens.dc.html:451`).
@@ -253,7 +254,12 @@ export default function DirectoryScreen() {
   const hasAlumniFilters = countSetFilters(deferredAlumniFilters) > 0;
 
   const membersQuery = useMembers();
-  const classesQuery = usePledgeClasses();
+  // A council has no pledge classes or alumni, and those routes refuse it
+  // (#5933): its directory is its members, filtered by status and role.
+  const council = useIsCouncil();
+  const classesQuery = usePledgeClasses({
+    enabled: useServesChapterFeatures(),
+  });
   const { classTerm, orderTerm } = usePledgeClassTerms();
   const rolesQuery = useRoles();
   const chapterRoles = useMemo(
@@ -296,10 +302,14 @@ export default function DirectoryScreen() {
   // read. Unknown until the chapter has loaded, so nothing is offered and
   // then taken away.
   const chapter = useCurrentChapter().data;
-  const pointsOn = !!chapter && isModuleEnabled(chapter.enabled_modules, "points");
-  const hoursOn = !!chapter && isModuleEnabled(chapter.enabled_modules, "hours");
+  // A council keeps no points or service hours (#5933), so it has none.
+  const pointsOn =
+    !council && !!chapter && isModuleEnabled(chapter.enabled_modules, "points");
+  const hoursOn =
+    !council && !!chapter && isModuleEnabled(chapter.enabled_modules, "hours");
   const viewerUserId = useViewerUserId();
-  const alumniQuery = useAlumni(deferredAlumniFilters);
+  // A council has no alumni (#5933): `/v1/alumni` refuses it.
+  const alumniQuery = useAlumni(deferredAlumniFilters, { enabled: !council });
   const searchQuery = useMemberSearch(deferredQuery);
 
   const isSearching = deferredQuery.length > 0;
@@ -527,10 +537,14 @@ export default function DirectoryScreen() {
           quiet
           selected={tab}
           onSelect={(value) => setTab((value as Tab) ?? "actives")}
-          chips={[
-            { value: "actives", label: "Actives", count: activesCount },
-            { value: "alumni", label: "Alumni", count: alumniCount },
-          ]}
+          chips={
+            council
+              ? []
+              : [
+                  { value: "actives", label: "Actives", count: activesCount },
+                  { value: "alumni", label: "Alumni", count: alumniCount },
+                ]
+          }
           trailing={
             tab === "alumni" ? (
               <Chip

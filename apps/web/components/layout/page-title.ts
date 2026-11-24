@@ -1,3 +1,4 @@
+import type { TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import type { VocabConfig } from "@repo/org-archetypes";
 import {
@@ -7,7 +8,8 @@ import {
 } from "@/components/layout/nav-config";
 
 /**
- * The open route's title, as the top bar shows it.
+ * The open route's title, as its page's header shows it (the top bar's
+ * copy below `lg`).
  *
  * The title is derived from the route here, in one place, rather than passed
  * up by each page. That is what puts it on every path a route can take:
@@ -17,7 +19,8 @@ import {
  * kept dropping.
  *
  * **Where the words come from.** A nav route's title is its row's label, so the
- * row a member clicked and the heading they land on say the same words.
+ * row a member clicked and the heading they land on say the same words (a row
+ * that opens a page with its own name says so with `title`, `nav-config.ts`).
  * Profile, which has no nav row, is named below. Each route
  * also names its browser tab in its own `metadata.title`; the two are kept to
  * the same words, and `page-title.spec.ts` checks them against each other.
@@ -42,16 +45,27 @@ export type PageTitle = {
 };
 
 /**
- * Routes that are not nav rows. Profile and the personal Settings page hang
- * off the account menu; Chapter settings opens from the chapter menu atop the
- * nav, under the words that menu item uses; Frapp Intelligence from the Ask bar.
+ * Routes that are not nav rows. Profile, the personal Settings page, Chapter
+ * settings and What's new open from the member's menu at the sidebar's foot,
+ * under the words that menu uses; Frapp Intelligence from the New row; and
+ * `/chat` is the open conversation, which the channel list opens.
  */
+/**
+ * Settings' name in each tenant kind, as the chapter menu's item and the top
+ * bar both say it: a council's is "Council settings" (#5933).
+ */
+export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
+  chapter: "Chapter settings",
+  council: "Council settings",
+};
+
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
+  "/chat": "Chat",
   "/profile": "Profile",
   "/preferences": "Settings",
-  "/settings": "Chapter settings",
+  "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
-  // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
+  // The sidebar's New row opens it (#5946).
   [ASK_ROUTE]: "Frapp Intelligence",
 };
 
@@ -81,13 +95,19 @@ function matchesRoute(pathname: string, href: string): boolean {
  *   permissions and modules). Omitted, every parent shows.
  * @param vocabulary the chapter's words, for a row named by them
  *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
   vocabulary?: VocabConfig,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
+  if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {
+    return { title: SETTINGS_TITLE.council };
+  }
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
     matchesRoute(pathname, item.href),
@@ -105,13 +125,14 @@ export function resolvePageTitle(
       ? {
           title: subPage[1],
           parent: {
-            label: navItemLabel(navItem, vocabulary),
+            label: navItem.title ?? navItemLabel(navItem, vocabulary),
             href: navItem.href,
           },
         }
       : { title: subPage[1] };
   }
-  if (navItem) return { title: navItemLabel(navItem, vocabulary) };
+  if (navItem)
+    return { title: navItem.title ?? navItemLabel(navItem, vocabulary) };
 
   const offNav = Object.entries(OFF_NAV_TITLES).find(([href]) =>
     matchesRoute(pathname, href),

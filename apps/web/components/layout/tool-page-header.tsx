@@ -6,34 +6,34 @@ import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { PageTitleText } from "@/components/layout/top-bar";
 import type { PageTitle } from "@/components/layout/page-title";
+import { VIEW_LABELS_FLUSH_NARROW } from "@/components/shared/view-labels";
 import { cn } from "@/lib/utils";
 
 /**
- * The tool page's own header, from the side-by-side width up (Paul,
- * 2026-11-11): the page's title on the left and a close button on the right,
- * 48px like chat's channel header beside it, so the two panels read as a pair
- * the way Slack's channel and its right-hand panel do.
+ * The page's own header (Paul, 2026-11-11): the page's title on the left, its
+ * actions, and a close button on the right, 48px like the sidebar's head and
+ * chat's channel header beside it, so the panels read as a set the way
+ * Slack's channel and its right-hand panel do.
  *
- * It is there because the tool page had no way out of its own. Only a tool
- * with a nav row of its own could be closed, by clicking that row again, and
- * the Settings tools (Chat admin, Study zones, Reports, Discord import),
- * Profile and the personal Settings page have none, so a member who opened
- * Chat admin beside chat was stuck with it. The close button is on every tool
- * page, so whether a page can be closed no longer depends on how it was
- * reached. Escape inside the page and dragging the divider to the right edge
- * close it too (`dashboard-shell.tsx`, `split-divider.tsx`).
+ * It is the page's way out. The close button is on every page, so whether a
+ * page can be closed never depends on how it was reached: the Settings
+ * tools, Profile and the personal Settings page have no sidebar row to click
+ * again. Escape inside the page and dragging the divider to the right edge
+ * close it too (`dashboard-shell.tsx`, `split-divider.tsx`). Closing lands
+ * on the open conversation.
  *
- * The title moves here from the top bar at this width, where the top bar's
- * copy sat over chat rather than over the page it named. Below the
- * side-by-side width the shell is a single page, there is nothing to close
- * the page into, and the title stays in the top bar: CSS shows one copy or
- * the other, so the first paint is right before the width is known.
+ * From `lg` up it carries the route's title and `<h1>`: there is no top bar
+ * there (#5946). Below `lg` the shell is a single page under the top bar,
+ * which holds the title; this header then shows only when a page put actions
+ * in it, as one pinned row of them. CSS shows one copy of the title or the
+ * other, so the first paint is right before the width is known.
  */
 export function ToolPageHeader({
   pageTitle,
   titleIsHeading,
   onClose,
   actionSlotRef,
+  viewSlotRef,
 }: {
   pageTitle: PageTitle | null;
   /** Whether this copy is the route's `<h1>` (the shell knows it is wide). */
@@ -44,22 +44,46 @@ export function ToolPageHeader({
    * X (`page-actions.tsx`, Paul 2026-11-19).
    */
   actionSlotRef?: React.Ref<HTMLDivElement>;
+  /**
+   * The box the page's `PageViews` renders into, beside the title
+   * (`page-actions.tsx`, Paul 2026-11-24).
+   */
+  viewSlotRef?: React.Ref<HTMLDivElement>;
 }) {
   return (
-    // A `div`, not a `<header>`: the top bar is the page's one banner.
+    // A `div`, not a `<header>`: a banner is the whole page's, and this
+    // heads one pane of it.
     <div
       data-tool-page-header=""
       // `@container`: a page's actions break on the page's own width, which
       // this header shares, as they did in the row under it.
-      // Below the side-by-side width it shows only when a page put actions
-      // in it (`page-actions.tsx`), as one pinned row of them: the title is
-      // in the top bar there and there is nothing to close into.
-      className="@container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 min-[1056px]:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex"
+      // Below `lg` it shows only when a page put actions
+      // or views in it (`page-actions.tsx`), as one pinned row of them: the
+      // title is in the top bar there and there is nothing to close into.
+      className="group/page-header @container hidden h-12 shrink-0 items-center gap-3 border-b border-border px-4 lg:flex sm:px-6 has-[[data-page-actions]:not(:empty)]:flex has-[[data-tool-page-views]:not(:empty)]:flex"
     >
-      <div className="hidden min-w-0 flex-1 items-center min-[1056px]:flex">
-        {pageTitle ? (
-          <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
-        ) : null}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {/* The title gives way first: it truncates, the views never wrap. */}
+        <div className="hidden min-w-0 items-center lg:flex">
+          {pageTitle ? (
+            <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
+          ) : null}
+        </div>
+        {/*
+          The page's views, as plain words after a hairline. The rule is the
+          slot's own, so it shows only with views and only beside a title:
+          below `lg` the title is in the top bar and the
+          views lead the row, and `VIEW_LABELS_FLUSH_NARROW` lines the first
+          word's text up with the page's gutter.
+        */}
+        <div
+          ref={viewSlotRef}
+          data-tool-page-views=""
+          className={cn(
+            "flex shrink-0 items-center empty:hidden lg:before:mr-1.5 lg:before:h-4 lg:before:w-px lg:before:bg-border lg:before:content-['']",
+            VIEW_LABELS_FLUSH_NARROW,
+          )}
+        />
       </div>
       <div
         ref={actionSlotRef}
@@ -69,7 +93,7 @@ export function ToolPageHeader({
       <PanelCloseButton
         label={pageTitle ? `Close ${pageTitle.title}` : "Close page"}
         onClick={onClose}
-        className="-mr-2 max-[1055px]:hidden"
+        className="-mr-2 max-lg:hidden"
       />
     </div>
   );

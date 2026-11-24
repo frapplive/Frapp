@@ -32,8 +32,8 @@ import {
  * rows, in the same order, in a Filters sheet.
  *
  * A list that splits into two or three named sets people switch between all
- * day (Actives / Alumni, All / Unread) uses a `SegmentedChoice` in the header
- * instead; that is a view, not a filter.
+ * day (Actives / Alumni, All / Unread) is a view, not a filter: plain words
+ * beside the title (`ViewLabels` in `PageViews`, #5947).
  */
 export type FilterMenuFilter = {
   key: string;

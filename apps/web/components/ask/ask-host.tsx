@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   type ReactNode,
@@ -26,37 +25,38 @@ import { ASK_ROUTE, isAskRoute } from "@/components/layout/shell-layout";
 import { useIsRolePreviewActive } from "@/lib/stores/role-preview-store";
 
 /**
- * Frapp Intelligence's front door on web: the Ask bar, the phone's bar on web
- * (`ask-bar.tsx`; #5476, Paul's pick of 2026-11-18), at the sidebar's foot
- * from `lg` up and floating at the bottom of the page below it (#5560).
+ * Frapp Intelligence's host on web: who has it, and its one conversation.
+ *
+ * **The way in is New** (#5946, Paul 2026-11-24): the sidebar's first row
+ * opens the assistant's page, the app's start view. Before that it was a bar
+ * floating at the sidebar's foot and at the bottom of each page below `lg`
+ * (`ask-bar.tsx`, #5476 and #5560, deleted), and before that the top bar's
+ * search field (#4904).
  *
  * **The conversation is a page** (`/ask`, Paul's pick of 2026-11-22: Ask on
  * web was "too small"). It opens in the main area the way the sidebar opens
- * Events, with chat beside it, and no scrim. Before that it was a 640px
- * dialog centered over the page, in Find's place and measures (#4904), a
- * reason gone once the bar replaced the field (#5476). ChatGPT, Claude and
- * Gemini give the conversation a page; Slack's assistant a full-height pane
- * beside the channel. `@Frapp` typed in a channel asks from there
+ * Calendar, with chat beside it, and no scrim. ChatGPT, Claude and Gemini
+ * give the conversation a page; Slack's assistant a full-height pane beside
+ * the channel. `@Frapp` typed in a channel asks from there
  * (`ask-in-channel.tsx`, #4713).
  *
- * `AskHost` wraps the dashboard. It decides whether this member has Ask at
- * all, and it owns the conversation (`AskConversationProvider`), so the
- * thread is the same one on the Ask page and in a channel a member asked
+ * `AskHost` wraps the dashboard. It decides whether this member has the
+ * assistant at all, and it owns the conversation (`AskConversationProvider`),
+ * so the thread is the same one on the page and in a channel a member asked
  * `@Frapp` from, and an answer still being written when the member leaves
- * the page is there when they come back. `useAskEntry` is how the bar
+ * the page is there when they come back. `useAskEntry` is how the page
  * reaches it.
  *
  * **Who gets it** is the server's answer: the server has AI, the president
- * has Ask on, and the member holds `ai:use`. Anyone else gets no bar
- * (#2259), and nor does an officer viewing the chapter as a role (#4072):
- * asking is a POST, which the preview refuses (#4504). Until all of that is
- * known there is no bar. A member who lost Ask on the Ask page (a role
- * preview began, the president turned Ask off) is taken to chat.
+ * has it on, and the member holds `ai:use`. Anyone else gets New without the
+ * field (#2259): the page still opens, with what they can start
+ * (`ask-page.tsx`). So does an officer viewing the chapter as a role
+ * (#4072): asking is a POST, which the preview refuses (#4504).
  */
 export interface AskEntry {
   /** Whether the Ask page is the page on screen. */
   open: boolean;
-  /** Opens the Ask page, or puts focus in its field when it is open. */
+  /** Opens the page, or puts focus in its field when it is open. */
   openAsk: () => void;
   /**
    * What is typed in the Ask page's field, kept here so it is still there
@@ -117,11 +117,6 @@ export function AskHost({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = isAskRoute(pathname);
-  // Only a settled "no": while the reads are out the page waits for them.
-  const lost = access === "no" && open;
-  useEffect(() => {
-    if (lost) router.replace("/chat");
-  }, [lost, router]);
   const openAsk = useCallback(() => {
     if (!open) {
       router.push(ASK_ROUTE);

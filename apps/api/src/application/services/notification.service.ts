@@ -250,6 +250,7 @@ function inAppRow(
   userId: string,
   chapterId: string,
   payload: NotifyPayload,
+  effectivePriority: NonNullable<NotifyPayload['priority']>,
 ): Pick<
   Notification,
   'chapter_id' | 'user_id' | 'title' | 'body' | 'data' | 'chat_message_id'
@@ -259,7 +260,20 @@ function inAppRow(
     user_id: userId,
     title: payload.title,
     body: payload.body,
-    data: payload.data ?? {},
+    // The priority the push went out at, and `quieted` when quiet hours or
+    // Do Not Disturb are what made it `SILENT` rather than its sender. A
+    // client that raises its own banner from the row, as the desktop app
+    // does (#4842), reads both here, so the quiet rules stay in this service:
+    // it holds back a quieted row and shows a sender's `SILENT` one without
+    // a sound, as a phone does.
+    data: {
+      ...(payload.data ?? {}),
+      priority: effectivePriority,
+      ...(effectivePriority === 'SILENT' &&
+      (payload.priority ?? 'NORMAL') !== 'SILENT'
+        ? { quieted: true }
+        : {}),
+    },
     ...(payload.chatMessageId
       ? { chat_message_id: payload.chatMessageId }
       : {}),
@@ -350,7 +364,7 @@ export class NotificationService {
     payload = payloadFor(payload, userId, settings);
 
     const notification = await this.notificationRepo.create(
-      inAppRow(userId, chapterId, payload),
+      inAppRow(userId, chapterId, payload, effectivePriority),
     );
     // The message this row quotes was deleted while it was being sent (#4418):
     // the database dropped the row, and the push would carry the same words.
@@ -572,8 +586,13 @@ export class NotificationService {
     const insertResults = await Promise.allSettled(
       recipientChunks.map((chunk) =>
         this.notificationRepo.createMany(
-          chunk.map(({ userId }) =>
-            inAppRow(userId, chapterId, payloadByUser.get(userId) ?? payload),
+          chunk.map(({ userId, effectivePriority }) =>
+            inAppRow(
+              userId,
+              chapterId,
+              payloadByUser.get(userId) ?? payload,
+              effectivePriority ?? 'NORMAL',
+            ),
           ),
         ),
       ),
@@ -1141,6 +1160,12 @@ export class NotificationService {
    * a user may only read or write notification preferences for a chapter they
    * are an active member of. The chapter here comes from the request query/body
    * rather than the resolved active chapter, so it must be verified explicitly.
+   *
+   * Any tenant kind (#5933, settling #5925's review note): a council's
+   * members get its notifications as a chapter's do, so they keep
+   * preferences there too. Membership is the boundary, as `ChapterGuard`'s
+   * is; there is no chapter-only feature behind a preference to keep from a
+   * council.
    */
   private async assertChapterMembership(
     userId: string,

@@ -44,6 +44,7 @@ import { FilterChip, SortChip } from "@/components/shared/filter-chip";
 import { Badge } from "@/components/ui/badge";
 import { STANDINGS_SORT_PARAM } from "@/components/standing/standing-doors";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
+import { useTenantKind } from "@/lib/hooks/use-tenant-kind";
 import { SectionLabel } from "@/components/shared/section-label";
 import { anyReadUncached } from "@/components/shared/async-states";
 /*
@@ -293,11 +294,19 @@ export function MembersDirectory() {
   // A module that is off shows no figure and offers no standing (P5.8), and
   // its board is never read: both routes are module-guarded. Unknown until
   // the chapter's modules answer, so nothing is drawn and then taken away.
+  // A council keeps no points, service hours or pledge classes (#5933): its
+  // routes refuse those reads, so it is treated as both modules off.
+  const tenantKind = useTenantKind();
+  const isCouncil = tenantKind === "council";
   const moduleGate = useChapterModuleGateState();
   const pointsOn =
-    moduleGate.status === "ready" && moduleGate.isModuleEnabled("points");
+    !isCouncil &&
+    moduleGate.status === "ready" &&
+    moduleGate.isModuleEnabled("points");
   const hoursOn =
-    moduleGate.status === "ready" && moduleGate.isModuleEnabled("hours");
+    !isCouncil &&
+    moduleGate.status === "ready" &&
+    moduleGate.isModuleEnabled("hours");
   const viewerUserId = useViewerUserId();
   const [page, setPage] = useState(1);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -324,7 +333,7 @@ export function MembersDirectory() {
   // directory screen's guard against firing a request per keystroke.
   const deferredQuery = useDeferredValue(trimmedQuery);
   const membersQuery = useMembers();
-  const classesQuery = usePledgeClasses();
+  const classesQuery = usePledgeClasses({ enabled: tenantKind === "chapter" });
   const searchQuery = useMemberSearch(deferredQuery);
   const rolesQuery = useRoles();
   // All-time points, the figure a row carries under any sort but a standing.
@@ -1057,7 +1066,12 @@ export function MembersDirectory() {
           }
         >
           {/* A search spans both tabs (see `members` above), so say so. */}
-          {usingSearch ? "Actives and alumni" : "Actives"}
+          {isCouncil
+            ? // A council has members, not actives and alumni (#5933).
+              "Members"
+            : usingSearch
+              ? "Actives and alumni"
+              : "Actives"}
         </SectionLabel>
         <div className="flex flex-wrap items-center gap-2">
           {/*
