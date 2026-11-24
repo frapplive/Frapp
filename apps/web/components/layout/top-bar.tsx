@@ -98,8 +98,13 @@ export function TopBar({
       <FindField className="min-w-0 flex-1 basis-0 sm:max-w-[520px]" />
 
       <div className="flex shrink-0 items-center justify-end gap-1.5">
-        {/* The find field gives way to it; the bell stays put. */}
-        <ConnectionPill placement="inline" />
+        {/*
+          A 28px slot the bar keeps whether or not there is anything to say,
+          so a state that flaps never resizes the find field or the title.
+        */}
+        <div className="flex w-7 shrink-0 justify-end">
+          <ConnectionPill placement="inline" />
+        </div>
         <NotificationsBell />
       </div>
     </header>

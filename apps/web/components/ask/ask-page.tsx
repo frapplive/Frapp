@@ -449,6 +449,20 @@ export function AskConversation() {
     conversation it is pinned under the thread, as every chat's is.
   */
   const starting = exchanges.length === 0;
+  /*
+    The field moves between the start view and the foot of the thread, which
+    mounts a new one: the first question and New conversation would leave
+    focus on <body>. Focus follows the field when it was in the old one.
+  */
+  const wasStarting = useRef(starting);
+  useEffect(() => {
+    if (wasStarting.current === starting) return;
+    wasStarting.current = starting;
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      field.current?.focus({ preventScroll: true });
+    }
+  }, [starting]);
   const composer = (
     <form
       className={
@@ -456,7 +470,7 @@ export function AskConversation() {
           ? // The start view: in the page's flow, right under the greeting.
             "w-full"
           : // A conversation: pinned under the thread, in its column.
-            "shrink-0 px-4 pb-4 pt-2 sm:px-6"
+            "shrink-0 px-4 pb-2 pt-2 sm:px-6"
       }
       onSubmit={(event) => {
         event.preventDefault();
@@ -627,7 +641,18 @@ export function AskConversation() {
             <JumpToLatestButton hasNew={false} onJump={jumpToLatest} />
           </div>
         ) : null}
-        {starting ? null : composer}
+        {starting ? null : (
+          <>
+            {composer}
+            {/*
+              New's forms stay under the field once there is a conversation,
+              so New is still one press from any of them (#5946).
+            */}
+            <div className="shrink-0 px-4 pb-4 sm:px-6">
+              <NewActions className="mx-auto max-w-[720px] justify-start" />
+            </div>
+          </>
+        )}
       </div>
       {consentDialog}
     </>

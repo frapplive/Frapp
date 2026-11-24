@@ -95,7 +95,7 @@ vi.mock("@/components/chat/chat-page", () => ({
     onClose?: () => void;
     view?: string;
     onViewChange?: (view: "channels" | "direct") => void;
-    onPick?: (view: "channels" | "direct") => void;
+    onPick?: (view: "channels" | "direct", channelId: string) => void;
     shown?: boolean;
   }) => (
     <>
@@ -108,7 +108,7 @@ vi.mock("@/components/chat/chat-page", () => ({
       <button type="button" onClick={() => onViewChange?.("channels")}>
         Open a channel link
       </button>
-      <button type="button" onClick={() => onPick?.("channels")}>
+      <button type="button" onClick={() => onPick?.("channels", "c-general")}>
         Pick a channel
       </button>
       {onClose ? (
@@ -386,6 +386,26 @@ describe("DashboardShell", () => {
       ).toBeInTheDocument();
     });
 
+    it("opens the channel list beside the rail's Channels button", () => {
+      setWindowWidth(1440);
+      shell(undefined, { defaultNavCollapsed: true });
+      fireEvent.click(screen.getByRole("button", { name: /^Channels/ }));
+      const popover = screen.getByRole("dialog", { name: "Channels" });
+      expect(
+        popover.querySelector("[data-channel-list-slot]"),
+      ).not.toBeNull();
+    });
+
+    it("holds a gated row's place while permissions are read, so nothing below it moves (#3854)", () => {
+      setWindowWidth(1440);
+      mockPermissions.value = undefined;
+      shell();
+      expect(
+        within(primary()).queryByRole("link", { name: "Directory" }),
+      ).toBeNull();
+      expect(primary().querySelector("[data-nav-placeholder]")).not.toBeNull();
+    });
+
     it("draws the chapter as a label at the head, with the bell and the collapse control, and no chapter menu", () => {
       setWindowWidth(1440);
       mockChapter.value = { name: "Beta Theta Omega", enabled_modules: {} };
@@ -655,7 +675,7 @@ describe("DashboardShell", () => {
         "out of sight",
       );
       fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
-      expect(routerPush).toHaveBeenCalledWith("/chat");
+      expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
     });
 
     it("is not built beside a page below lg, where the shell is one page", () => {
@@ -699,12 +719,18 @@ describe("DashboardShell", () => {
       expect(routerReplace).toHaveBeenCalledWith("/messages?channel=dm-1");
     });
 
-    it("moves a channel picked from the sidebar off Messages to the conversation alone", () => {
+    it("moves a channel picked from the sidebar off Messages to that conversation, and nothing replaces the push", () => {
       setWindowWidth(1440);
       mockPathname.value = "/messages";
+      mockSearch.value = "channel=dm-1";
       shell();
       fireEvent.click(screen.getByRole("button", { name: "Pick a channel" }));
-      expect(routerPush).toHaveBeenCalledWith("/chat");
+      expect(routerPush).toHaveBeenCalledWith("/chat?channel=c-general");
+      // The panel then reports a channel open on Messages, in the same click.
+      fireEvent.click(
+        screen.getByRole("button", { name: "Open a channel link" }),
+      );
+      expect(routerReplace).not.toHaveBeenCalled();
     });
 
     it("leaves a docked conversation alone beside a page, whichever kind it is", () => {

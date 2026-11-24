@@ -569,7 +569,7 @@ export function ChatShell({
    * makes sure it is on screen (it may be closed beside a page, or hidden
    * behind Chapter settings).
    */
-  onPick?: (kind: ChatView) => void;
+  onPick?: (kind: ChatView, channelId: string) => void;
   /**
    * Whether the conversation is on screen. The shell keeps the panel mounted
    * where it has no room to show (closed beside a page, behind Chapter
@@ -1366,7 +1366,12 @@ export function ChatShell({
   // is doing, folded with the app's own connection state, so the header no
   // longer draws a pill of its own (`spec/ui/resilience/connection-state.md`
   // § One indicator).
-  useReportOpenChatTransport(activeChannelId ? channel.connection : null);
+  // Only a conversation on screen speaks for the connection pill: the panel
+  // stays mounted out of sight for the sidebar's list (#5946), and a chat
+  // nobody can see must not say "Reconnecting…" over Chapter settings.
+  useReportOpenChatTransport(
+    shown && activeChannelId ? channel.connection : null,
+  );
   const { toast } = useToast();
 
   // The member's own arrangement of the rail (#2877): pins, folds, filters.
@@ -3391,8 +3396,33 @@ export function ChatShell({
       onChange={sidebarControls.onSetFilters}
     />
   );
+  // The sidebar holds the chapter's channels (from `lg` up, while a slot is
+  // on screen).
+  const sidebarDrawn = isDesktopShell && sidebarSlot !== null;
   const listBody = (kind: ChatView, place: "sidebar" | "pane") => {
     const direct = kind === "direct";
+    /*
+      What's on right now (#5777, where the phone puts it on Chat home and
+      Discord shows a live voice channel) and the officer setup checklist
+      (where Discord puts its server guide; nothing for anyone with nothing
+      to set up). In a pane they lead the list. In the sidebar they follow
+      it: nothing sits over the channel list there (Paul, 2026-11-24), and
+      the rows it keeps at 1024x768 are the list's (#5946).
+    */
+    const cards =
+      channelsPaneState === "ready" ? (
+        <div
+          className={cn(
+            place === "sidebar" ? "mt-3" : "mb-2",
+            "space-y-2 empty:hidden",
+          )}
+        >
+          {/* Once on screen: from `lg` up the sidebar's channels carry it,
+              so the Messages pane beside them draws no second. */}
+          {!direct || !sidebarDrawn ? <NowCard /> : null}
+          {!direct ? <SetupChecklistSection /> : null}
+        </div>
+      ) : null;
     return (
       <>
         {place === "pane" ? (
@@ -3465,20 +3495,7 @@ export function ChatShell({
               `hasHydrated` for, reached from the other side.
             */}
             {channelsPaneState === "loading" ? <ChannelListSkeleton /> : null}
-            {/*
-            What's on right now, at the top of the list (#5777), where the
-            phone puts it on Chat home and Discord shows a live voice channel.
-          */}
-            {channelsPaneState === "ready" ? (
-              <NowCard className="mb-2" />
-            ) : null}
-            {/*
-          The officer setup checklist, above the channels where Discord puts
-          its server guide. Renders `null` for anyone with nothing to set up.
-        */}
-            {channelsPaneState === "ready" && !direct ? (
-              <SetupChecklistSection />
-            ) : null}
+            {place === "pane" ? cards : null}
             {channelsPaneState === "ready" &&
             (direct || recentSort) &&
             !latestSettled ? (
@@ -3533,11 +3550,12 @@ export function ChatShell({
                   setUnreachableTarget(null);
                   // The shell puts the conversation on screen, and the rail's
                   // Channels popover closes behind the pick.
-                  onPick?.(kind);
+                  onPick?.(kind, ch.id);
                   notifyPicked();
                 }}
               />
             ) : null}
+            {place === "sidebar" ? cards : null}
           </div>
         </div>
       </>
@@ -3552,7 +3570,7 @@ export function ChatShell({
     list twice, and nothing is subscribed twice.
   */
   const sidebarList =
-    isDesktopShell && sidebarSlot
+    sidebarDrawn && sidebarSlot
       ? createPortal(
           <div
             {...{ [CHANNEL_LIST_BODY_ATTRIBUTE]: "" }}

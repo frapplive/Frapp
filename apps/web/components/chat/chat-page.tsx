@@ -39,7 +39,7 @@ function ChatPageContent({
   onClose?: () => void;
   view: ChatView;
   onViewChange?: (view: ChatView) => void;
-  onPick?: (kind: ChatView) => void;
+  onPick?: (kind: ChatView, channelId: string) => void;
   shown: boolean;
 }) {
   const searchParams = useSearchParams();
@@ -116,7 +116,7 @@ export function ChatPage({
   /** The open conversation is the other kind (`ChatShell`'s prop). */
   onViewChange?: (view: ChatView) => void;
   /** A row was picked from a list (`ChatShell`'s prop of the same name). */
-  onPick?: (kind: ChatView) => void;
+  onPick?: (kind: ChatView, channelId: string) => void;
   /** Whether the conversation is on screen (`ChatShell`'s prop). */
   shown?: boolean;
 } = {}) {

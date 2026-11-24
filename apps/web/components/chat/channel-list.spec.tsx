@@ -1761,3 +1761,34 @@ describe("ChannelList threads under their channel (#5300)", () => {
     );
   });
 });
+
+describe("ChannelList in the sidebar: the list's own control on its first heading (#5946)", () => {
+  const execRow: ChatChannel = {
+    id: "c-exec",
+    name: "exec-board",
+    type: "PUBLIC",
+    category_id: "cat-exec",
+  };
+
+  it("draws the control once, on the first heading, and nothing over the list", () => {
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+        headingControl={<button type="button">Sort and filter</button>}
+      />,
+    );
+    const controls = screen.getAllByRole("button", { name: "Sort and filter" });
+    expect(controls).toHaveLength(1);
+    // It rides a heading row, beside that heading's fold button.
+    const heading = controls[0]!.closest(".group\\/head");
+    expect(heading).not.toBeNull();
+    expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
+  });
+});

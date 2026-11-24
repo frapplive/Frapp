@@ -93,8 +93,8 @@ export const MAX_UPLOAD_LABEL = "25 MB";
  * The longest edge, in pixels, a profile photo or chapter logo is downscaled
  * to (#2912). Every client shrinks to it before the PUT, because the stored
  * object is what every 24-112px avatar and crest downloads: the largest render
- * site is web's 112px chapter-home crest, which needs 336px at 3x, so 512 is
- * sharp with room to spare, at tens of KB instead of a phone photo's megabytes.
+ * site was web's 112px chapter-home crest (deleted in #5946), which needs
+ * 336px at 3x, so 512 is sharp with room to spare, at tens of KB instead of a phone photo's megabytes.
  */
 export const AVATAR_MAX_EDGE = 512;
 

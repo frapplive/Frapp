@@ -33,8 +33,8 @@ import { cn } from "@/lib/utils";
  * organization that never displays its letters (FIJI) keeps them out of the
  * crest even when its stored switch was never turned off, as for a chapter
  * created before the profile knew to. The match reads the organization's name
- * inside the chapter's ("Phi Gamma Delta Tau Nu"). One function for the nav's
- * chapter row and the home view (#3779), so the two never disagree.
+ * inside the chapter's ("Phi Gamma Delta Tau Nu"). One function for every crest
+ * web draws (the sidebar's head, the chapter picker), so they never disagree.
  */
 export function chapterMarkFor(chapter: {
   name: string;

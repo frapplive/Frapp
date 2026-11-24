@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * How New's actions open a page's own form (#5946).
@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
  * The form opens once those are known to pass, and the mark is then taken
  * off the address, so a reload or Back does not open the form again.
  *
- * It reads the address once, when the page mounts: New is its own page, so
+ * It reads the address once, after the page mounts: New is its own page, so
  * following one of its links always mounts the page it names. The chat
  * panel is the exception, mounted on every route, so it passes what its own
  * search-params read says (`asked`).
@@ -51,8 +51,10 @@ export function useNewIntent(
   ready: boolean,
   asked?: boolean,
 ): void {
-  const [askedAtMount] = useState(addressAsks);
-  const wanted = asked ?? askedAtMount;
+  // Read once, after the page's first commit: Next writes the new address in
+  // its own commit, so a read during the first render can still see the page
+  // the member came from (New's own).
+  const askedAtMount = useRef<boolean | null>(null);
   // The latest `open`, read when the intent fires: pages pass a fresh
   // closure each render, and the effect must not re-run for that.
   const openRef = useRef(open);
@@ -61,10 +63,12 @@ export function useNewIntent(
   }, [open]);
   const done = useRef(false);
   useEffect(() => {
+    if (askedAtMount.current === null) askedAtMount.current = addressAsks();
+    const wanted = asked ?? askedAtMount.current;
     if (asked !== undefined && !asked) done.current = false;
     if (!wanted || !ready || done.current) return;
     done.current = true;
     clearAddress();
     openRef.current();
-  }, [wanted, ready, asked]);
+  }, [ready, asked]);
 }

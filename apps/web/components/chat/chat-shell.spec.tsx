@@ -1203,23 +1203,6 @@ const channelAskState = vi.hoisted(() => ({
 }));
 // Frapp Intelligence's bar (#5476): who gets it is `ask-bar.tsx`'s question
 // (`ask-entry.spec.tsx`); here only where the shell puts it.
-vi.mock("@/components/ask/ask-bar", () => ({
-  AskBar: ({
-    compact,
-    className,
-  }: {
-    compact?: boolean;
-    className?: string;
-  }) => (
-    <button
-      data-testid="ask-bar"
-      data-compact={compact ? "" : undefined}
-      className={className}
-    >
-      Frapp Intelligence
-    </button>
-  ),
-}));
 vi.mock("@/components/ask/ask-in-channel", () => ({
   useChannelAsk: () => channelAskState.ask,
   useChannelAskAccess: () =>
@@ -5145,16 +5128,10 @@ describe("ChatShell as the shell's chat panel (#3779)", () => {
       fireEvent.click(within(sidebar()).getByTestId("pick-random"));
       expect(push).not.toHaveBeenCalled();
       // The shell puts the conversation on screen (it may be docked shut).
-      expect(onPick).toHaveBeenCalledWith("channels");
+      expect(onPick).toHaveBeenCalledWith("channels", "chan-random");
     } finally {
       push.mockRestore();
     }
-  });
-
-  it("draws no assistant bar anywhere: New is the way in (#5946)", () => {
-    stubWidth(800);
-    render(<ChatShell />);
-    expect(screen.queryByTestId("ask-bar")).toBeNull();
   });
 
   it("lists the member's conversations beside the open one on Messages, from lg up", () => {

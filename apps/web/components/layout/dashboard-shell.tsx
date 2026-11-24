@@ -40,7 +40,7 @@ import { PageHeaderSlotProvider } from "@/components/layout/page-actions";
 import { ChatPanelBoundary } from "@/components/layout/chat-panel-boundary";
 import { ChatPage } from "@/components/chat/chat-page";
 import { ChatRouteSkeleton } from "@/components/chat/chat-route-skeleton";
-import type { ChatView } from "@/lib/chat/chat-links";
+import { chatDeepLink, type ChatView } from "@/lib/chat/chat-links";
 import { TopBar } from "@/components/layout/top-bar";
 import { useNotificationsLive } from "@/components/layout/notifications-popover";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
@@ -239,11 +239,19 @@ function Shell({
     it no room (Chapter settings, or a window too narrow to split) the pick
     goes to `/chat`, because a pick that showed nothing would be a dead click.
   */
+  // A pick that is moving the address: the panel's own kind-following
+  // (`followConversationKind`) stands down until the address has moved, or
+  // its replace would overwrite the pick's push in the same click.
+  const pickNavigating = useRef(false);
+  useEffect(() => {
+    pickNavigating.current = false;
+  }, [pathname]);
   const showPickedConversation = useCallback(
-    (kind: ChatView) => {
+    (kind: ChatView, channelId: string) => {
       if (kind === "direct") return;
       if (onMessages || (hasTool && (fullWidthTool || desktop !== true))) {
-        router.push("/chat");
+        pickNavigating.current = true;
+        router.push(chatDeepLink({ channelId }));
         return;
       }
       if (hasTool && !chatOpen) {
@@ -264,7 +272,7 @@ function Shell({
   */
   const followConversationKind = useCallback(
     (kind: ChatView) => {
-      if (hasTool) return;
+      if (hasTool || pickNavigating.current) return;
       if ((kind === "direct") === onMessages) return;
       const query = searchParams?.toString() ?? "";
       const base = kind === "direct" ? MESSAGES_ROUTE : "/chat";

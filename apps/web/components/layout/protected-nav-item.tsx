@@ -10,9 +10,9 @@ import type { NavItem } from "@/components/layout/nav-config";
 type Props = {
   item: NavItem;
   /**
-   * `"page"` when this row's own route is open; `"true"` when the row stands
-   * for something open in place (the Chat row while the chat panel is open).
-   * Both paint the active fill; only the first claims to be the current page.
+   * `"page"` when this row's own route is open; `"true"` on a page under it
+   * (a meeting's minutes under Meetings). Both paint the active fill; only
+   * the first claims to be the current page.
    */
   current?: "page" | "true";
   permissions: readonly string[] | null | undefined;
@@ -36,9 +36,8 @@ type Props = {
   /** The setup gate, from `useHiddenUnsetFeatures` (see `isNavItemVisible`). */
   hiddenFeatures?: ReadonlySet<UnsetFeatureKey>;
   /**
-   * Act in place instead of navigating (#3779): the desktop shell's Chat row
-   * opens and closes the chat panel, and the open tool's row closes it. It
-   * renders as a toggle button with the same geometry.
+   * Act in place instead of navigating (#3779): the open page's row closes
+   * the page. It renders as a toggle button with the same geometry.
    */
   onSelect?: () => void;
   /** With `onSelect`: whether the panel this row toggles is open. */
@@ -47,7 +46,7 @@ type Props = {
   selectLabel?: string;
   /**
    * Something new behind this row (#3824), named for a screen reader ("unread
-   * messages"). The row draws bright and semibold with a dot, and in the rail
+   * messages"): the drawer's Channels row. The row draws bright and semibold with a dot, and in the rail
    * the dot sits on the glyph.
    */
   highlight?: string;
@@ -77,13 +76,11 @@ function isGranted(
 }
 
 /**
- * The single gate both a nav item and its enclosing section read.
+ * The single gate a nav item and the sidebar read.
  *
  * `ProtectedNavItem` returns `null` for a hidden item, which tells the parent
- * nothing — so a section whose every item was hidden used to render a bare
- * heading over empty space. Exported so `app-nav.tsx` can ask the same
- * question before it draws a section's heading: a heading is a promise that
- * something the viewer can open sits under it.
+ * nothing. Exported so `sidebar.tsx` can ask the same question of the rows
+ * More holds, and draw no More when none of them would open.
  *
  * The permission gate fails CLOSED while `permissions` is `undefined` (the
  * read in flight, or failed online): a row that declares `requirePermission`
@@ -91,9 +88,9 @@ function isGranted(
  * (#3854). It used to fail open, so on
  * every reload a member saw officer doors (Chapter settings, Billing before
  * #3827) appear, take a click, and vanish, which read as broken and as "I can
- * get in there". Gated rows all sit at the foot of the list, above the pinned
- * collapse toggle, so an officer's rows arriving a beat late move nothing
- * already drawn. Rows with no permission rule render at once. `null` is the
+ * get in there". The sidebar holds a gated row's place while the read is out
+ * (`sidebar.tsx`), so its arriving a beat late moves nothing already drawn.
+ * Rows with no permission rule render at once. `null` is the
  * other unknown: the read cannot run because the dashboard is offline with
  * nothing cached (`useNavPermissions`). That is not a denial, so gated rows
  * show and their pages state the outage.

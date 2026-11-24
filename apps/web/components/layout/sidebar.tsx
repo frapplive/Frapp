@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -39,6 +39,7 @@ import {
   ProtectedNavItem,
 } from "@/components/layout/protected-nav-item";
 import { ASK_ROUTE, isAskRoute } from "@/components/layout/shell-layout";
+import { useAskEntry } from "@/components/ask/ask-host";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
 import { LiveMeetingCard } from "@/components/meetings/live-meeting-card";
 import { ConnectionPill } from "@/components/shared/connection-pill";
@@ -252,6 +253,23 @@ export function Sidebar({
         <SearchRow collapsed={rail} onNavigate={onNavigate} />
         {SIDEBAR_ROWS.map((item) => {
           const current = currentFor(item, pathname);
+          // A gated row is hidden until the permission read answers (#3854).
+          // It holds its place meanwhile, so More and the channel list don't
+          // move down a row when it arrives.
+          if (
+            permissions === undefined &&
+            (item.requirePermission !== undefined ||
+              item.requireAnyOf !== undefined)
+          ) {
+            return (
+              <span
+                key={item.id}
+                aria-hidden="true"
+                data-nav-placeholder=""
+                className="block min-h-touch shrink-0 lg:h-[34px] lg:min-h-0"
+              />
+            );
+          }
           return (
             <ProtectedNavItem
               key={item.id}
@@ -372,10 +390,19 @@ function NewRow({
   onNavigate?: () => void;
 }) {
   const open = isAskRoute(pathname);
+  const askEntry = useAskEntry();
   return (
     <Link
       href={ASK_ROUTE}
-      onClick={onNavigate}
+      onClick={(event) => {
+        // Already on New: the press means "start typing", as Claude's New
+        // chat does from its own page (`openAsk` puts focus in the field).
+        if (open && askEntry) {
+          event.preventDefault();
+          askEntry.openAsk();
+        }
+        onNavigate?.();
+      }}
       aria-current={open ? "page" : undefined}
       aria-label={collapsed ? "New" : undefined}
       title={collapsed ? "New" : undefined}
@@ -529,34 +556,27 @@ function ChannelsLink({
   unread: boolean;
   onNavigate?: () => void;
 }) {
-  const here = pathname === "/chat";
   return (
-    <Link
-      href="/chat"
-      onClick={onNavigate}
-      aria-current={here ? "page" : undefined}
-      className={navRowClassName({
-        collapsed: false,
-        active: here,
-        lit: unread,
-        focusClassName: FOCUS_RING_SHELL,
-      })}
-    >
-      <ChatGlyph className={ICON} active={here} />
-      <span className="truncate">Channels</span>
-      {unread ? (
-        <>
-          <span
-            aria-hidden="true"
-            data-nav-highlight=""
-            className="ml-auto mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
-          />
-          <span className="sr-only">, {CHANNELS_UNREAD}</span>
-        </>
-      ) : null}
-    </Link>
+    <ProtectedNavItem
+      item={CHANNELS_ROW}
+      current={pathname === "/chat" ? "page" : undefined}
+      permissions={null}
+      iconClassName={ICON}
+      onNavigate={onNavigate}
+      focusClassName={FOCUS_RING_SHELL}
+      highlight={unread ? CHANNELS_UNREAD : undefined}
+    />
   );
 }
+
+/** The drawer's Channels row, as a row (no gates: every member has chat). */
+const CHANNELS_ROW: NavItem = {
+  id: "channels",
+  label: "Channels",
+  icon: ChatGlyph,
+  href: "/chat",
+  description: "The chapter's channels.",
+};
 
 /**
  * The rail's Channels button: the channel list, in a popover beside it. The
@@ -567,6 +587,24 @@ function ChannelsLink({
 function ChannelsPopover({ unread }: { unread: boolean }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  /*
+    The list is chat's own, portaled in from the chat panel, so in React's
+    tree it is not inside this popover, and Radix would read every focus and
+    press on it (and on the row and filter menus it opens, which portal to the
+    body) as outside, and close. Inside the popover's box, or in a menu, is
+    inside.
+  */
+  const content = useRef<HTMLDivElement>(null);
+  const keepIfInside = useCallback((event: Event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (
+      content.current?.contains(target) ||
+      target.closest("[data-radix-popper-content-wrapper], [role='menu']")
+    ) {
+      event.preventDefault();
+    }
+  }, []);
   const label = unread ? `Channels, ${CHANNELS_UNREAD}` : "Channels";
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -597,6 +635,9 @@ function ChannelsPopover({ unread }: { unread: boolean }) {
         </button>
       </PopoverTrigger>
       <PopoverContent
+        ref={content}
+        onPointerDownOutside={keepIfInside}
+        onFocusOutside={keepIfInside}
         side="right"
         align="start"
         sideOffset={12}

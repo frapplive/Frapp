@@ -378,7 +378,7 @@ The arrangement belongs to the member and the chapter together: it follows the m
 The categories themselves stay the chapter's (§ Channels).
 
 - **Sections, top to bottom:** Pinned, the default Channels group, one section per category in the chapter's order, then Direct messages. Web drew a System section after them for `#chapter-audit` until the channel was removed on 2026-11-21.
-  On web since [#3774](https://github.com/pdcarlson/Frapp/issues/3774) (Shawn, 2026-11-12) the Direct messages section is its own list behind the nav's Direct messages row: Pinned (its pinned DMs), its rows, then Hidden conversations;
+  On web since [#3774](https://github.com/pdcarlson/Frapp/issues/3774) (Shawn, 2026-11-12) the Direct messages section is its own list behind the nav's Direct messages row (the Messages row and page since #5946): Pinned (its pinned DMs), its rows, then Hidden conversations;
   the channel list is Pinned (pinned channels), then the channel groups.
   Hidden conversations stays at the end, as § Direct Messages describes.
   An empty section is not drawn.

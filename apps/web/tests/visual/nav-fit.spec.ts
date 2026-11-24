@@ -35,7 +35,8 @@ const test = base.extend({
  * It measures the room the list is given rather than counting drawn rows:
  * the list needs a signed-in chat, which this sessionless harness has none
  * of. A row is 32px (`channel-list.tsx`) and a category heading about 28px,
- * so eight rows under one heading need 284px.
+ * and the list keeps 12px of gutter above its first heading (the column's
+ * `pt-1` and the list's `p-2`), so eight rows under one heading need 296px.
  *
  * Deliberately NOT a screenshot: it compares two integers, so it cannot drift
  * with a Chromium revision.
@@ -46,6 +47,8 @@ const HEIGHT = 768;
 const CHANNEL_ROW = 32;
 const CATEGORY_HEADING = 28;
 const MIN_ROWS = 8;
+/** The column's `pt-1` and the list's own `p-2` above its first heading. */
+const LIST_GUTTER = 12;
 
 test("the sidebar keeps eight channel rows in view at 1024×768 with every row showing", async ({
   page,
@@ -83,7 +86,7 @@ test("the sidebar keeps eight channel rows in view at 1024×768 with every row s
   const room = await page
     .locator("[data-sidebar-channels]")
     .evaluate((el) => el.getBoundingClientRect().height);
-  const need = MIN_ROWS * CHANNEL_ROW + CATEGORY_HEADING;
+  const need = MIN_ROWS * CHANNEL_ROW + CATEGORY_HEADING + LIST_GUTTER;
 
   expect(
     room,
