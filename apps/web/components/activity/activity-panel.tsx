@@ -46,6 +46,10 @@ const PANEL_TITLES: Record<ActivityRow["kind"], string> = {
   link: "Link",
   card: "Sign-up",
   reminder: "Reminder",
+  // Minutes rows open their own page (#5949), never this panel.
+  "minutes-to-write": "Minutes",
+  "minutes-draft": "Minutes",
+  "minutes-notes": "Minutes",
 };
 
 /**

@@ -51,6 +51,12 @@ import {
   type ActivityReminderActions,
 } from "./activity-reminder-row";
 import { ActivityRowActionButton } from "./activity-row-action";
+import {
+  useActivityMinutesActions,
+  type ActivityMinutesActions,
+  type MinutesToWriteRow,
+} from "./activity-minutes-actions";
+import { meetingHref } from "@/components/meetings/meeting-copy";
 import { activityRowActionGate } from "./activity-row-action-gate";
 import {
   ActivityAsk,
@@ -397,10 +403,87 @@ function TaskGroupRow({
   );
 }
 
+/**
+ * A meeting to write minutes for (#5949), where the Meetings list page's
+ * Write minutes row was: the row opens the event, Write minutes on it starts
+ * the minutes and opens them, and its menu offers No minutes for this
+ * meeting (`useActivityMinutesActions`).
+ */
+function MinutesToWriteListRow({
+  row,
+  className,
+  actions,
+}: {
+  row: MinutesToWriteRow;
+  className: string;
+  actions: ActivityMinutesActions;
+}) {
+  const starting = actions.startingId === row.meeting.event_id;
+  return (
+    <RowMenu entries={actions.entriesFor(row)} label={`More for ${row.title}`}>
+      {(menuButton) => (
+        <li className="group flex items-center gap-1">
+          <div className="relative min-w-0 flex-1">
+            <Link
+              href={`/events?event=${row.meeting.event_id}`}
+              className={className}
+            >
+              <RowContent row={row} askOnRow />
+            </Link>
+            {/* Laid over the place the row keeps for its ask, as a Confirm
+                is (`PanelRowBody`). */}
+            <span className="pointer-events-none absolute right-9 top-1/2 z-10 -translate-y-1/2">
+              <Button
+                type="button"
+                variant="tinted"
+                size="sm"
+                className="pointer-events-auto h-7 shrink-0 px-2.5 text-caption"
+                disabled={actions.startingId !== null}
+                aria-busy={starting || undefined}
+                aria-label={`${row.badge?.label ?? ""}: ${row.title}`}
+                onClick={() => actions.write(row)}
+              >
+                {row.badge?.label}
+              </Button>
+            </span>
+          </div>
+          {menuButton}
+        </li>
+      )}
+    </RowMenu>
+  );
+}
+
+/**
+ * The member's own minutes, or the notes they take on another officer's
+ * (#5949): the row opens them, as the Meetings list page's rows did. Nothing
+ * to act on beside opening, so no menu.
+ */
+function MinutesLinkRow({
+  row,
+  className,
+}: {
+  row: Extract<ActivityRow, { kind: "minutes-draft" | "minutes-notes" }>;
+  className: string;
+}) {
+  const href =
+    row.kind === "minutes-draft"
+      ? meetingHref(row.draft.meeting_id)
+      : `${meetingHref(row.notes.meeting_id)}/notes`;
+  return (
+    <li>
+      <Link href={href} className={className}>
+        <RowContent row={row} />
+      </Link>
+    </li>
+  );
+}
+
 /** What every list on the page needs to draw one of its rows. */
 interface RowKit {
   snooze: ActivitySnoozeActions;
   reminderActions: ActivityReminderActions;
+  minutes: ActivityMinutesActions;
   rowActions: RowActions;
   onOpen: (row: ActivityRow) => void;
 }
@@ -436,6 +519,14 @@ function Row({
     />
   ) : row.kind === "task-group" ? (
     <TaskGroupRow row={row} className={className} />
+  ) : row.kind === "minutes-to-write" ? (
+    <MinutesToWriteListRow
+      row={row}
+      className={className}
+      actions={kit.minutes}
+    />
+  ) : row.kind === "minutes-draft" || row.kind === "minutes-notes" ? (
+    <MinutesLinkRow row={row} className={className} />
   ) : (
     <PanelRow
       row={row}
@@ -983,13 +1074,17 @@ export function ActivityPage() {
     // A reminder row has no read to record (`readRef` is null) and is never
     // unread.
     if (row.unread && row.readRef) markRead([row.readRef]);
-    // A link opens in a new tab, a sign-up, form or reminder in chat, and a
-    // task for everyone on the Tasks board: no panel.
+    // A link opens in a new tab, a sign-up, form or reminder in chat, a
+    // task for everyone on the Tasks board, and minutes on their own page
+    // (#5949): no panel.
     if (
       row.kind !== "link" &&
       row.kind !== "card" &&
       row.kind !== "reminder" &&
-      row.kind !== "task-group"
+      row.kind !== "task-group" &&
+      row.kind !== "minutes-to-write" &&
+      row.kind !== "minutes-draft" &&
+      row.kind !== "minutes-notes"
     )
       setOpened(row);
   };
@@ -1048,6 +1143,16 @@ export function ActivityPage() {
     });
   };
   const reminderActions = useActivityReminderActions();
+  // Write minutes and No minutes on To do's minutes rows (#5949): each
+  // write takes the read again, so the row leaves.
+  const minutesActions = useActivityMinutesActions(() =>
+    chapterId
+      ? queryClient.invalidateQueries({
+          queryKey: activityKeys.chapter(chapterId),
+          exact: true,
+        })
+      : Promise.resolve(),
+  );
   const actionGate = activityRowActionGate(useSubscriptionGate());
   // Faces on the rows (#4402, item 4), from the roster chat already reads.
   const faceFor = useActivityFaces();
@@ -1168,6 +1273,7 @@ export function ActivityPage() {
   const kit: RowKit = {
     snooze: snoozeActions,
     reminderActions,
+    minutes: minutesActions,
     rowActions: { gate: actionGate, onActed: actedOnRow },
     onOpen: openFromList,
   };
