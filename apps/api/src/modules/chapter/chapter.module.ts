@@ -33,9 +33,12 @@ import { ActivationModule } from '../activation/activation.module';
 // chapter-profile saves (#486). Safe to import: `ChapterConfigModule` imports
 // only `ActivationModule`, so this introduces no cycle.
 import { ChapterConfigModule } from '../chapter-config/chapter-config.module';
+// Exports `SchoolService`: onboarding's Find step proposes the chapter's
+// school link (#5929).
+import { SchoolModule } from '../school/school.module';
 
 @Module({
-  imports: [AuthModule, ActivationModule, ChapterConfigModule],
+  imports: [AuthModule, ActivationModule, ChapterConfigModule, SchoolModule],
   controllers: [ChapterController],
   providers: [
     AuthSyncInterceptor,

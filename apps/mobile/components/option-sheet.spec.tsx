@@ -202,8 +202,127 @@ describe("OptionSheet sections (#5473)", () => {
       label: `Row ${i}`,
     }));
     expect(fitsContent(rows)).toBe(true);
-    expect(fitsContent([{ ...rows[0]!, heading: "Tiers" }, ...rows.slice(1)])).toBe(
-      false,
+    expect(
+      fitsContent([{ ...rows[0]!, heading: "Tiers" }, ...rows.slice(1)]),
+    ).toBe(false);
+  });
+});
+
+describe("OptionSheet with several picks (#5924)", () => {
+  it("checks every value listed and toggles a tapped row without closing", () => {
+    const onSelect = vi.fn();
+    const dismiss = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <OptionSheet
+            ref={React.createRef<never>()}
+            title="Tags"
+            options={SORTS}
+            selected={null}
+            checked={["name", "oldest"]}
+            onSelect={onSelect}
+          />
+        </FrappThemeProvider>,
+        {
+          createNodeMock: (element) =>
+            (element.type as unknown) === "BottomSheetModal"
+              ? { present: vi.fn(), dismiss }
+              : null,
+        },
+      );
+    });
+    trees.push(tree);
+    const boxes = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityRole === "checkbox" &&
+        typeof node.props.onPress === "function",
     );
+    expect(
+      boxes.map((box) => [
+        box.props.accessibilityLabel,
+        box.props.accessibilityState.checked,
+      ]),
+    ).toEqual([
+      ["Name A–Z", true],
+      ["Newest first", false],
+      ["Oldest first", true],
+    ]);
+    act(() => boxes[1]!.props.onPress());
+    expect(onSelect).toHaveBeenCalledWith("newest");
+    expect(dismiss).not.toHaveBeenCalled();
+  });
+});
+
+describe("OptionSheet search past eight rows (#5934)", () => {
+  const MEMBERS: SheetOption[] = [
+    { value: null, label: "No owner" },
+    ...[
+      "Amy Bell",
+      "Ben Ortiz",
+      "Chris Diaz",
+      "Dana Lee",
+      "Eli Park",
+      "Fay Chen",
+      "Gus Hill",
+      "Hal Stone",
+      "Ivy Kim",
+    ].map((name) => ({ value: name.toLowerCase(), label: name })),
+  ];
+
+  function renderSearchable(options: readonly SheetOption[]) {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <OptionSheet
+            title="Owner"
+            options={options}
+            selected={null}
+            onSelect={vi.fn()}
+            searchPlaceholder="Search members"
+          />
+        </FrappThemeProvider>,
+      );
+    });
+    trees.push(tree);
+    const field = () =>
+      tree.root.findAll(
+        (node) =>
+          (node.type as unknown) === "BottomSheetTextInput" &&
+          node.props.accessibilityLabel === "Search members",
+      );
+    const labels = () =>
+      tree.root
+        .findAll(
+          (node) =>
+            node.props.accessibilityRole === "radio" &&
+            typeof node.props.onPress === "function",
+        )
+        .map((node) => node.props.accessibilityLabel);
+    return { tree, field, labels };
+  }
+
+  it("filters the rows by name, keeping the none row", () => {
+    const { field, labels } = renderSearchable(MEMBERS);
+    expect(field()).toHaveLength(1);
+    act(() => field()[0]!.props.onChangeText("chr"));
+    expect(labels()).toEqual(["No owner", "Chris Diaz"]);
+  });
+
+  it("says one line when nothing matches", () => {
+    const { tree, field } = renderSearchable(MEMBERS);
+    act(() => field()[0]!.props.onChangeText("zed"));
+    const text = tree.root
+      .findAllByType(Text)
+      .map((node) => node.props.children)
+      .join("\n");
+    expect(text).toContain('No matches for "zed".');
+  });
+
+  it("draws no search on a list short enough to see whole", () => {
+    const { field } = renderSearchable(MEMBERS.slice(0, 4));
+    expect(field()).toHaveLength(0);
   });
 });

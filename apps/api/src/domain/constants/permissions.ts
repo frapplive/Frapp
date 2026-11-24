@@ -73,13 +73,15 @@ export const SystemPermissions = {
   MEETINGS_EDIT: 'meetings:edit',
   MEETINGS_DELETE: 'meetings:delete',
 
-  // Recruitment (#4070). `RUSH_VIEW_RESULTS` gates no route: it decides
-  // whether a candidate read carries `vote_count` (`RushController`).
-  // `RUSH_NOTES` and `RUSH_MANAGE` gate nothing until the IFC recruitment
-  // work builds notes, delete and export (#5833, `ifc-recruitment.md`).
+  // Recruitment (#4070; the pipeline, #5924). `RUSH_VIEW_RESULTS` gates no
+  // route: it decides whether a candidate read carries `vote_count` and the
+  // rating average. `RUSH_READ_NOTES` reads notes, kept apart from
+  // `RUSH_NOTES` (write and tag) because #4070's backfill gave `rush:notes`
+  // to every member (`spec/behavior/rush.md` § Notes).
   RUSH_VIEW: 'rush:view',
   RUSH_ADD: 'rush:add',
   RUSH_NOTES: 'rush:notes',
+  RUSH_READ_NOTES: 'rush:read_notes',
   RUSH_VOTE: 'rush:vote',
   RUSH_VIEW_RESULTS: 'rush:view_results',
   RUSH_BID: 'rush:bid',
@@ -186,6 +188,9 @@ const OFFICER_DEFAULT_PERMISSIONS = [
   // Groups (#4076); migration `20261113040007_chapter_groups.sql` gives it
   // to every existing tier and role that manages roles or channels.
   SystemPermissions.GROUPS_MANAGE,
+  // Reading recruitment notes (#5924). New chapters only: an existing
+  // chapter opts in from its Recruitment settings page (#4068 decision 9).
+  SystemPermissions.RUSH_READ_NOTES,
 ] as const;
 
 /**

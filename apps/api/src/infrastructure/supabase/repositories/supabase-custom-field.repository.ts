@@ -169,4 +169,14 @@ export class SupabaseCustomFieldRepository implements ICustomFieldRepository {
     if (error) throw new SupabaseQueryError(error);
     return data ?? [];
   }
+
+  async upsertValues(
+    rows: TablesInsert<'member_custom_field_values'>[],
+  ): Promise<void> {
+    if (!rows.length) return;
+    const { error } = await this.supabase
+      .from('member_custom_field_values')
+      .upsert(rows, { onConflict: 'member_id,field_id' });
+    if (error) throw new SupabaseQueryError(error);
+  }
 }

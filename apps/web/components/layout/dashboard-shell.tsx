@@ -52,6 +52,7 @@ import { NotificationsPopover } from "@/components/layout/notifications-popover"
 import { AccountMenu } from "@/components/layout/account-menu";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
 import { resolvePageTitle } from "@/components/layout/page-title";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
 import { useChapterTheme } from "@/lib/hooks/use-chapter-theme";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -66,6 +67,7 @@ import { useAskEntry } from "@/components/ask/ask-host";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
 import { useNavHighlights } from "@/components/layout/use-chat-has-unread";
+import { DesktopRuntime } from "@/components/layout/desktop-runtime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -405,6 +407,8 @@ export function DashboardShell({
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
   const isModuleEnabled = useChapterModuleGate();
+  // A title named in the chapter's own word (Recruitment's Rush / Intake).
+  const chapterVocabulary = useChapterVocabulary();
   // The crumb's parent link follows its nav row's gates, so the top bar never
   // offers a member the Settings door the nav hides from them.
   // `/chat` is titled for the list on screen: the Direct messages row's
@@ -413,10 +417,19 @@ export function DashboardShell({
     () =>
       onChatRoute && chatView === "direct"
         ? { title: DIRECT_MESSAGES_TITLE }
-        : resolvePageTitle(pathname, (item) =>
-            isNavItemVisible(item, permissions, isModuleEnabled),
+        : resolvePageTitle(
+            pathname,
+            (item) => isNavItemVisible(item, permissions, isModuleEnabled),
+            chapterVocabulary,
           ),
-    [onChatRoute, chatView, pathname, permissions, isModuleEnabled],
+    [
+      onChatRoute,
+      chatView,
+      pathname,
+      permissions,
+      isModuleEnabled,
+      chapterVocabulary,
+    ],
   );
 
   const { data: notificationsData } = useNotifications();
@@ -509,6 +522,8 @@ export function DashboardShell({
       <WelcomeGate />
       {/* What's new, by itself once after an update (#3943). */}
       <WhatsNewHost />
+      {/* Inside the desktop app only: the icon's count and system notifications (#4842). */}
+      <DesktopRuntime />
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*

@@ -415,6 +415,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/schools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search schools
+         * @description Schools by name, short name or another name, best match first, at most 20. Each says whether a student can verify there today.
+         */
+        get: operations["SchoolController_search_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your schools
+         * @description The schools where the caller proved a school address, newest first. Empty for someone who hasn't verified, or skipped.
+         */
+        get: operations["SchoolController_listMine_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/{schoolId}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a code to your school email
+         * @description Emails a six-digit code to an address on one of the school's verified domains. 404 `school.not_found`; 409 `school.verification_unavailable` when the school can't verify students yet; 400 `school.email.invalid` for anything but a plain `local@domain` address, or `school.email.wrong_domain`; 429 `school.code.cooldown` within a minute of the last code, or `school.code.rate_limited` past the hourly ceilings per address, IP or account; 503 `school.code.send_failed`.
+         */
+        post: operations["SchoolController_startVerification_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/schools/{schoolId}/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm your school email with its code
+         * @description Checks the code and makes the caller a member of the school. 400 `school.code.missing`, `school.code.expired` or `school.code.wrong`; 429 `school.code.too_many_attempts`; 409 `school.email.taken` when another account verified that address, or `school.verification_unavailable`.
+         */
+        post: operations["SchoolController_confirmVerification_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/school": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The school a campus page names
+         * @description The school in `x-school-id` and the caller's membership there. 403 `school.context.invalid` for a school the caller isn't verified at (or that doesn't exist); 400 `school.context.required` without the header.
+         */
+        get: operations["SchoolPageController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roles": {
         parameters: {
             query?: never;
@@ -722,6 +822,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/members/me/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your own custom-field values */
+        get: operations["MemberController_getOwnCustomFields_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set your own custom-field values
+         * @description Each value is checked against its field's type and required flag; one refused value refuses the whole save (400). Fields not in the body keep their values. Recorded in the chapter audit log as member_custom_fields_updated, naming the fields changed but never their values. Answers with all your fields, as GET does.
+         */
+        patch: operations["MemberController_updateOwnCustomFields_v1"];
         trace?: never;
     };
     "/v1/members/by-user/{userId}": {
@@ -4327,6 +4448,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rush/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's stages, tags and candidates, for the pipeline */
+        get: operations["RushPipelineController_pipeline_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's stages, in board order (written on first read) */
+        get: operations["RushPipelineController_stages_v1"];
+        /** Save the stage list: rename, reorder, hide and add stages */
+        put: operations["RushPipelineController_saveStages_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Move a candidate to a stage (a Closed stage needs a reason) */
+        patch: operations["RushPipelineController_moveStage_v1"];
+        trace?: never;
+    };
+    "/v1/rush/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a tag to the chapter’s list */
+        post: operations["RushPipelineController_createTag_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a tag, taking it off every candidate */
+        delete: operations["RushPipelineController_deleteTag_v1"];
+        options?: never;
+        head?: never;
+        /** Rename a tag */
+        patch: operations["RushPipelineController_renameTag_v1"];
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a candidate's tags */
+        put: operations["RushPipelineController_setTags_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the caller's 1-to-5 rating of a candidate (replaces it) */
+        put: operations["RushPipelineController_rate_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's notes, newest first (empty for a candidate linked to the caller) */
+        get: operations["RushPipelineController_notes_v1"];
+        put?: never;
+        /** Write a note on a candidate */
+        post: operations["RushPipelineController_addNote_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/notes/{noteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a note: your own, or any with `rush:manage` */
+        delete: operations["RushPipelineController_deleteNote_v1"];
+        options?: never;
+        head?: never;
+        /** Edit your own note */
+        patch: operations["RushPipelineController_editNote_v1"];
+        trace?: never;
+    };
+    "/v1/rush/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chapter's recruitment settings */
+        get: operations["RushPipelineController_settings_v1"];
+        /** Save the chapter's recruitment settings */
+        put: operations["RushPipelineController_saveSettings_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's logged contacts, newest first (notes only with `rush:read_notes`) */
+        get: operations["RushPipelineController_contacts_v1"];
+        put?: never;
+        /** Log a contact: clears the follow-up, and a first contact moves a New candidate to Contacted */
+        post: operations["RushPipelineController_logContact_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set or clear the owner: claim or let go with `rush:add`, assign anyone with `rush:manage` */
+        put: operations["RushPipelineController_setOwner_v1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the candidate's follow-up: a day, what to do, and who it's for (the owner by default) */
+        put: operations["RushPipelineController_setFollowUp_v1"];
+        post?: never;
+        /** Clear the candidate's follow-up */
+        delete: operations["RushPipelineController_clearFollowUp_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geofences": {
         parameters: {
             query?: never;
@@ -7448,6 +7797,65 @@ export interface components {
             member_visible: boolean;
             created_at: string;
         };
+        SchoolSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Rensselaer Polytechnic Institute */
+            name: string;
+            /** @example RPI */
+            short_name: string;
+            /**
+             * @description The school's current URL slug (`/s/<slug>`, ADR-27).
+             * @example rpi
+             */
+            slug: string | null;
+            /** @description Whether a student can verify at this school today: the school is verified and has at least one verified email domain. */
+            verifiable: boolean;
+            /**
+             * @description The school's verified email domains, for the address field's placeholder. Empty when it can't verify students.
+             * @example [
+             *       "rpi.edu"
+             *     ]
+             */
+            email_domains: string[];
+        };
+        MySchoolDto: {
+            school: components["schemas"]["SchoolSummaryDto"];
+            /** @enum {string} */
+            status: "pnm" | "member" | "alum";
+            /** @description The school address the code went to. */
+            verified_email: string | null;
+            /** Format: date-time */
+            verified_at: string;
+        };
+        StartSchoolVerificationDto: {
+            /**
+             * @description The caller's school address. Only an address on one of the school's verified domains is sent a code.
+             * @example student@rpi.edu
+             */
+            email: string;
+        };
+        SentSchoolCodeDto: {
+            /** @description The address the code went to, in lower case. */
+            email: string;
+            /**
+             * Format: date-time
+             * @description When the code stops working.
+             */
+            expires_at: string;
+            /**
+             * @description Seconds before another code can be asked for.
+             * @example 60
+             */
+            resend_after_seconds?: number;
+        };
+        ConfirmSchoolVerificationDto: {
+            /**
+             * @description The six-digit code from the email.
+             * @example 123456
+             */
+            code: string;
+        };
         PermissionCatalogEntryDto: {
             /** @description The API constant's name, e.g. `EVENTS_CREATE`. */
             key: string;
@@ -7659,6 +8067,30 @@ export interface components {
              */
             scope: "chapter" | "self";
             members: components["schemas"]["MemberPhoneReachDto"][];
+        };
+        OwnCustomFieldDto: {
+            field_id: string;
+            key: string;
+            label: string;
+            /** @enum {string} */
+            type: "text" | "number" | "decimal" | "phone" | "select" | "boolean";
+            /** @enum {string} */
+            visibility: "self" | "chapter" | "exec" | "president";
+            required: boolean;
+            /** @description A select field's choices; null for every other type */
+            choices: string[] | null;
+            /** @description A text field's own length cap, when it sets one */
+            max_length: number | null;
+            value: string | null;
+        };
+        OwnCustomFieldValueDto: {
+            /** Format: uuid */
+            field_id: string;
+            /** @description The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field's choices, or "true"/"false". null or an empty string clears it; a required field with a value cannot be cleared. */
+            value: string | null;
+        };
+        UpdateOwnCustomFieldsDto: {
+            values: components["schemas"]["OwnCustomFieldValueDto"][];
         };
         UpdateMemberRolesDto: {
             role_ids: string[];
@@ -11087,6 +11519,11 @@ export interface components {
             /** Format: uuid */
             user_id: string | null;
             stage: string;
+            /**
+             * @description Why the candidate is in a Closed stage; null in any other.
+             * @enum {string|null}
+             */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
             /** Format: uuid */
@@ -11117,6 +11554,11 @@ export interface components {
             /** Format: uuid */
             user_id: string | null;
             stage: string;
+            /**
+             * @description Why the candidate is in a Closed stage; null in any other.
+             * @enum {string|null}
+             */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
             /** Format: uuid */
@@ -11125,6 +11567,232 @@ export interface components {
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the candidate row committed and the card did not. Absent means no card was attempted. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
             card_posted?: boolean;
+        };
+        RushStageDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            /** @description What a candidate's `stage` holds. Fixed once made; a rename changes `label` only. */
+            key: string;
+            label: string;
+            /** @enum {string} */
+            category: "new" | "contacted" | "met" | "engaged" | "bid_ready" | "closed";
+            /** @description Order within its category. */
+            position: number;
+            hidden: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RushTagDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            chapter_id: string;
+            label: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        RushPipelineCandidateDto: {
+            /** Format: uuid */
+            id: string;
+            display_name: string;
+            /** Format: uuid */
+            user_id: string | null;
+            /** @description The key of one of the chapter's stages. */
+            stage: string;
+            /** @enum {string|null} */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
+            /** @enum {string} */
+            bid_status: "none" | "extended";
+            /** Format: uuid */
+            created_by: string;
+            /** @description Who added the candidate, by current name. */
+            created_by_name: string;
+            /** Format: date-time */
+            created_at: string;
+            tag_ids: string[];
+            /** @description Average 1-to-5 rating; null when nobody has rated. Absent without `rush:view_results`. */
+            rating_average?: number | null;
+            /** @description How many members rated. Absent without `rush:view_results`. */
+            rating_count?: number;
+            /** @description The caller's own rating, or null. */
+            viewer_rating: number | null;
+            /** @description Ballot count. Absent without `rush:view_results`. */
+            vote_count?: number;
+            viewer_has_voted: boolean;
+            /**
+             * Format: uuid
+             * @description The member who is the prospect's main point of contact.
+             */
+            owner_id: string | null;
+            owner_name: string | null;
+            /**
+             * Format: date
+             * @description The day of the newest logged contact.
+             */
+            last_contact_on: string | null;
+            /** Format: uuid */
+            last_contact_by: string | null;
+            last_contact_by_name: string | null;
+            /**
+             * Format: date
+             * @description The day the open follow-up comes due.
+             */
+            follow_up_on: string | null;
+            /** @description What to do, such as "invite to house dinner". */
+            follow_up_note: string | null;
+            /**
+             * Format: uuid
+             * @description Who the follow-up is for; they get the push.
+             */
+            follow_up_user_id: string | null;
+            follow_up_user_name: string | null;
+        };
+        RushPipelineDto: {
+            /** @description In board order: by category, then position. */
+            stages: components["schemas"]["RushStageDto"][];
+            tags: components["schemas"]["RushTagDto"][];
+            /** @description Newest first. */
+            candidates: components["schemas"]["RushPipelineCandidateDto"][];
+            /** @description Days without a logged contact before an open prospect needs a follow-up. */
+            stale_days: number;
+        };
+        RushStageInputDto: {
+            /**
+             * Format: uuid
+             * @description An existing stage. Omit to add a new one.
+             */
+            id?: string;
+            label: string;
+            /**
+             * @description An existing stage's category can't change.
+             * @enum {string}
+             */
+            category: "new" | "contacted" | "met" | "engaged" | "bid_ready" | "closed";
+            hidden: boolean;
+        };
+        SaveRushStagesDto: {
+            /** @description Every stage, in order. Each existing stage must be included: stages are hidden, never removed. New and Closed each keep a visible stage. */
+            stages: components["schemas"]["RushStageInputDto"][];
+        };
+        MoveRushCandidateStageDto: {
+            /** @description The key of one of the chapter's visible stages. */
+            stage: string;
+            /**
+             * @description Required for a Closed stage, refused for any other.
+             * @enum {string}
+             */
+            closed_reason?: "not_interested" | "not_eligible" | "chapter_passed" | "no_response";
+        };
+        RushCandidateStageDto: {
+            /** Format: uuid */
+            id: string;
+            stage: string;
+            /** @enum {string|null} */
+            closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
+        };
+        RushTagInputDto: {
+            label: string;
+        };
+        SetRushCandidateTagsDto: {
+            /** @description The candidate's tags after the call, replacing what it had. */
+            tag_ids: string[];
+        };
+        RushCandidateTagsDto: {
+            tag_ids: string[];
+        };
+        RateRushCandidateDto: {
+            rating: number;
+        };
+        RushNoteDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            candidate_id: string;
+            /** Format: uuid */
+            author_id: string;
+            author_name: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RushNoteInputDto: {
+            body: string;
+        };
+        RushSettingsDto: {
+            /** @description Days without a logged contact before an open prospect needs a follow-up. */
+            stale_days: number;
+        };
+        RushContactDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            candidate_id: string;
+            /** Format: uuid */
+            logged_by: string;
+            logged_by_name: string;
+            /** @enum {string} */
+            kind: "text" | "call" | "in_person" | "social_dm" | "email" | "event";
+            /** Format: date */
+            contacted_on: string;
+            /** @description Absent without `rush:read_notes`, and on a prospect linked to the reader. */
+            note?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LogRushContactDto: {
+            /** @enum {string} */
+            kind: "text" | "call" | "in_person" | "social_dm" | "email" | "event";
+            /**
+             * Format: date
+             * @description The day of the contact: today or earlier.
+             */
+            contacted_on: string;
+            /** @description Read only by roles that can read recruitment notes. */
+            note?: string | null;
+        };
+        SetRushOwnerDto: {
+            /**
+             * Format: uuid
+             * @description The new owner, or null to leave the prospect unowned. Claiming an unowned prospect or letting go of your own needs `rush:add`; anything else needs `rush:manage`.
+             */
+            owner_id: string | null;
+        };
+        RushOwnerDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            owner_id: string | null;
+            owner_name: string | null;
+        };
+        SetRushFollowUpDto: {
+            /**
+             * Format: date
+             * @description Today or later.
+             */
+            due_on: string;
+            /** @description What to do, such as "invite to house dinner". */
+            note?: string | null;
+            /**
+             * Format: uuid
+             * @description Who it is for. Defaults to the owner, else the caller.
+             */
+            for_user_id?: string;
+        };
+        RushFollowUpDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            follow_up_on: string | null;
+            follow_up_note: string | null;
+            /** Format: uuid */
+            follow_up_user_id: string | null;
+            follow_up_user_name: string | null;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -14720,6 +15388,164 @@ export interface operations {
             };
         };
     };
+    SchoolController_search_v1: {
+        parameters: {
+            query: {
+                /** @description Part of the school's name, short name or another name for it ("rens", "RPI"). Under 2 characters answers an empty list. */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolSummaryDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_listMine_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_startVerification_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartSchoolVerificationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentSchoolCodeDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolController_confirmVerification_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                schoolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSchoolVerificationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    SchoolPageController_get_v1: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The school a campus page (`/s/<slug>`) acts in. */
+                "x-school-id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySchoolDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     RbacController_list_v1: {
         parameters: {
             query?: never;
@@ -15292,6 +16118,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberPhoneReachListDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemberController_getOwnCustomFields_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnCustomFieldDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MemberController_updateOwnCustomFields_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOwnCustomFieldsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnCustomFieldDto"][];
                 };
             };
             /** @description Error */
@@ -23521,6 +24407,638 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RushCandidateViewDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_pipeline_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushPipelineDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_stages_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushStageDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_saveStages_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRushStagesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushStageDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_moveStage_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRushCandidateStageDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushCandidateStageDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_createTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushTagInputDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushTagDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_deleteTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_renameTag_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushTagInputDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushTagDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setTags_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushCandidateTagsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushCandidateTagsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_rate_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateRushCandidateDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_notes_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_addNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushNoteInputDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_deleteNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_editNote_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushNoteInputDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNoteDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_settings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_saveSettings_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_contacts_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushContactDto"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_logContact_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogRushContactDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushContactDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setOwner_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushOwnerDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushOwnerDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_setFollowUp_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRushFollowUpDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushFollowUpDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushPipelineController_clearFollowUp_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushFollowUpDto"];
                 };
             };
             /** @description Error */

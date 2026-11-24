@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -29,8 +30,11 @@ vi.mock("@/lib/stores/chapter-store", async () =>
   (await import("@/tests/settings-harness")).chapterStore(),
 );
 
+// The address bar, so leaving the Chapter tab drops `?page=` as it does live.
 vi.mock("next/navigation", async () =>
-  (await import("@/tests/settings-harness")).navigation(),
+  (await import("@/tests/settings-harness")).navigation(
+    () => new URLSearchParams(window.location.search),
+  ),
 );
 
 vi.mock("@/components/shared/can", async () =>
@@ -42,6 +46,14 @@ vi.mock("@/lib/hooks/use-toast", async () =>
 );
 
 const { SettingsPage } = await import("./settings-page");
+const { followLink } = await import("@/tests/settings-harness");
+
+/** Opens the Accent color page from its row on the Chapter tab. */
+function openAccentPage(rerender: (ui: ReactElement) => void) {
+  followLink(screen.getByRole("link", { name: /^accent color/i }), () =>
+    rerender(<SettingsPage />),
+  );
+}
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
@@ -49,13 +61,15 @@ describe("the Settings page keeps unsaved drafts across tab switches", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chapter.active();
+    window.history.replaceState(null, "", "/settings");
   });
 
   it("keeps a typed accent draft", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    openAccentPage(rerender);
     const hex = screen.getByLabelText(/accent color hex value/i);
     await user.clear(hex);
     await user.type(hex, "#5AA9E6");
@@ -63,6 +77,9 @@ describe("the Settings page keeps unsaved drafts across tab switches", () => {
     await user.click(screen.getByRole("tab", { name: /^privacy$/i }));
     expect(screen.queryByLabelText(/accent color hex value/i)).toBeNull();
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    // Back on the Chapter tab's own page, so the draft's page is a row away.
+    expect(screen.queryByLabelText(/accent color hex value/i)).toBeNull();
+    openAccentPage(rerender);
 
     expect(screen.getByLabelText(/accent color hex value/i)).toHaveValue(
       "#5AA9E6",
@@ -84,9 +101,10 @@ describe("the Settings page keeps unsaved drafts across tab switches", () => {
       isError: false,
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    openAccentPage(rerender);
     const org = screen.getByRole("group", {
       name: "Your organization's colors",
     });
@@ -101,6 +119,7 @@ describe("the Settings page keeps unsaved drafts across tab switches", () => {
 
     await user.click(screen.getByRole("tab", { name: /^privacy$/i }));
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    openAccentPage(rerender);
     expect(screen.getByLabelText(/accent color hex value/i)).toHaveValue(
       "#4F2683",
     );
