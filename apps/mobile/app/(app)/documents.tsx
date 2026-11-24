@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   useActiveChapterId,
   useDeleteDocument,
@@ -28,8 +29,10 @@ import {
   DELETE_DOCUMENT_LABEL,
   SORT_OPTIONS,
   deleteDocumentTitle,
+  documentFolderHues,
   isActiveDateFilter,
   isDriveCopy,
+  isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
   NO_MARK_FILTER,
@@ -47,7 +50,7 @@ import {
 } from "@repo/hooks/document-folder-tree";
 import { describeLoadFailure, errorCopy } from "@repo/hooks/error-copy";
 import { SignetTokens } from "@repo/theme/signet";
-import { can } from "@repo/validation";
+import { can, SECTION_NAMES } from "@repo/validation";
 import { ScreenShell } from "@/components/screen-shell";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import { BACK_TO_YOU } from "@/components/back-row";
@@ -92,11 +95,25 @@ import {
 import { InlineNote } from "@/components/inline-note";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import {
+  LEAD_TILE_GLYPH,
+  LeadTile,
+  LeadTileSkeleton,
+} from "@/components/lead-tile";
+import { DocumentsGlyph, MinutesGlyph } from "@/components/more/more-glyphs";
+import {
+  DOCUMENTS_TYPE_PARAM,
+  MINUTES_TYPE_PARAM_VALUE,
+} from "@/lib/more/document-links";
+import {
+  MINUTES_SPOKEN_KIND,
   documentMeta,
+  documentOpenHint,
   selectDocumentFolders,
   selectDocuments,
+  type MobileDocument,
 } from "@/lib/more/documents";
 import { shareDocumentFile } from "@/lib/more/document-file";
+import { firstParam } from "@/lib/route-params";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -197,10 +214,33 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * spellings and is the only place either appears *for a document download*.
  * Chat attachments are a different endpoint whose key genuinely is
  * `download_url` — do not converge them.
+ *
+ * ## Minutes, filed here (#5949)
+ *
+ * A meeting's posted minutes are filed in the library as a row with no file
+ * (`spec/behavior/chapter-docs.md`), under "Minutes" or "Minutes / <series>",
+ * so this screen is where a member finds them: the Minutes list it replaced
+ * now forwards here on the Minutes file type (`/documents?type=minutes`,
+ * read once into the Type filter, as web's `/documents?type=minutes`). A
+ * minutes row wears the minutes glyph, reads the day the meeting met, its
+ * folder and what the minutes hold (web's `documentFacts`, same words and
+ * order), and a tap opens the minutes screen, never the share sheet. Its
+ * long press offers Star and Pin; no Delete, since minutes are deleted as
+ * minutes, from their own screen. The screen is titled Resources, as web's
+ * page and the You row are (`SECTION_NAMES.resources`).
  */
 export default function DocumentsScreen() {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
+  const router = useRouter();
+  // `type=minutes` opens on the Minutes file type (#5949): where `/minutes`
+  // and a meeting's minutes' way back land. Read once; the filter is the
+  // member's after.
+  const params = useLocalSearchParams<{
+    [DOCUMENTS_TYPE_PARAM]?: string | string[];
+  }>();
+  const openOnMinutes =
+    firstParam(params[DOCUMENTS_TYPE_PARAM]) === MINUTES_TYPE_PARAM_VALUE;
 
   const [folder, setFolder] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -245,7 +285,9 @@ export default function DocumentsScreen() {
   const [sort, setSort] = useState<DocumentSort>("name");
   const [pickedUploader, setPickedUploader] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState<"semester" | "30d" | null>(null);
-  const [kind, setKind] = useState<FileKind | null>(null);
+  const [kind, setKind] = useState<FileKind | null>(() =>
+    openOnMinutes ? "minutes" : null,
+  );
   // Pinned and Starred (#4290), each on or off; both on shows either.
   const [markFilter, setMarkFilter] =
     useState<DocumentMarkFilter>(NO_MARK_FILTER);
@@ -306,6 +348,12 @@ export default function DocumentsScreen() {
   const folders = useMemo(
     () => selectDocumentFolders(foldersQuery.data),
     [foldersQuery.data],
+  );
+  // Each row's tile wears its folder's hue, as web's rows do (#5576,
+  // `documentFolderHues`): a hue names a folder, never a state.
+  const folderHue = useMemo(
+    () => documentFolderHues(folders.map((entry) => entry.name)),
+    [folders],
   );
   // A lock on a file not everyone can see (#5216), by web's rule.
   const isLimited = useMemo(
@@ -519,12 +567,7 @@ export default function DocumentsScreen() {
     };
   }
 
-  function documentTarget(doc: {
-    id: string;
-    title: string;
-    pinned_at: string | null;
-    drive_file_id?: string | null;
-  }) {
+  function documentTarget(doc: MobileDocument) {
     return {
       kind: "document" as const,
       id: doc.id,
@@ -532,6 +575,7 @@ export default function DocumentsScreen() {
       pinned: !!doc.pinned_at,
       starred: starredDocuments.has(doc.id),
       fromDrive: isDriveCopy(doc),
+      minutes: isMinutesDocument(doc),
     };
   }
 
@@ -625,7 +669,21 @@ export default function DocumentsScreen() {
     [],
   );
 
-  async function open(id: string) {
+  async function open(doc: MobileDocument) {
+    // A meeting's minutes have no file (#5949): the row opens the minutes,
+    // and never reaches the download or the share sheet.
+    if (isMinutesDocument(doc)) {
+      // It supersedes a file still downloading, whose sheet would otherwise
+      // come up over the minutes.
+      latestOpen.current += 1;
+      setOpeningId(null);
+      router.push({
+        pathname: "/minutes-details",
+        params: { id: doc.meeting_id },
+      });
+      return;
+    }
+    const id = doc.id;
     // One sheet at a time: iOS rejects a second presentation while one is
     // showing, which is a rejection worth not provoking rather than reporting.
     if (presenting.current) return;
@@ -718,6 +776,15 @@ export default function DocumentsScreen() {
   const pendingRow = pendingUpload ? (
     <ListRow
       key="pending-upload"
+      // The file's tile, neutral until it is filed into its folder.
+      leading={
+        <LeadTile on="card">
+          <DocumentsGlyph
+            color={tokens.color.text.mutedForeground}
+            size={LEAD_TILE_GLYPH}
+          />
+        </LeadTile>
+      }
       label={pendingUpload.title}
       description={
         pendingUpload.failed ? "Didn't upload. Tap to try again." : "Uploading…"
@@ -734,12 +801,18 @@ export default function DocumentsScreen() {
 
   function renderList() {
     if (documentsQuery.isPending) {
-      // Document rows in the list's own section: a title and its meta line.
+      // Document rows in the list's own section: a tile, a title and its
+      // meta line.
       return (
         <SkeletonRegion label="Loading chapter documents">
           <ListSection>
             {Array.from({ length: 4 }, (_, index) => (
-              <ListRowSkeleton key={index} index={index} description />
+              <ListRowSkeleton
+                key={index}
+                index={index}
+                description
+                leading={<LeadTileSkeleton size="row" />}
+              />
             ))}
           </ListSection>
         </SkeletonRegion>
@@ -816,7 +889,7 @@ export default function DocumentsScreen() {
             }
             deletingIds={deletingIds}
             actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
-            onOpen={(doc) => void open(doc.id)}
+            onOpen={(doc) => void open(doc)}
             onActions={(doc) => openActions(documentTarget(doc))}
           />
         </>
@@ -828,14 +901,17 @@ export default function DocumentsScreen() {
         {rows.map((row) => (
           <ListRow
             key={row.doc.id}
+            leading={
+              <DocumentTile doc={row.doc} hue={folderHue(row.doc.folder)} />
+            }
             label={row.doc.title}
             description={documentMeta(row)}
-            accessibilityHint="Opens the share sheet to save it or open it in another app."
+            accessibilityHint={documentOpenHint(row.doc)}
             // Only the row being opened, or deleted, shows it. The others
             // stay as they are and take a tap, which moves the spinner to
             // them (`open`).
             busy={row.doc.id === openingId || deletingIds.has(row.doc.id)}
-            onPress={() => void open(row.doc.id)}
+            onPress={() => void open(row.doc)}
             // Star for everyone; Pin and Delete for `chapter_docs:manage`
             // (#3934). The row's pin or star shows in its label's tail.
             onLongPress={() => openActions(documentTarget(row.doc))}
@@ -861,6 +937,7 @@ export default function DocumentsScreen() {
             }
             accessibilityValue={
               [
+                isMinutesDocument(row.doc) ? MINUTES_SPOKEN_KIND : null,
                 isLimited(row.doc) ? LIMITED_LABEL : null,
                 row.doc.pinned_at ? "Pinned for the chapter" : null,
                 starredDocuments.has(row.doc.id) ? "Starred" : null,
@@ -974,7 +1051,7 @@ export default function DocumentsScreen() {
             }
           : undefined
       }
-      title="Documents"
+      title={SECTION_NAMES.resources}
       headerAction={<ListLayoutToggle screen="documents" />}
     >
       <SearchField
@@ -1041,7 +1118,7 @@ export default function DocumentsScreen() {
           deletingIds={deletingIds}
           actionsLabel={canManage ? "Star, pin or delete" : "Star or unstar"}
           onOpenFolder={setFolder}
-          onOpenDocument={(id) => void open(id)}
+          onOpenDocument={(doc) => void open(doc)}
           onActions={(item) =>
             openActions(
               item.kind === "folder"
@@ -1136,6 +1213,21 @@ export default function DocumentsScreen() {
         />
       ) : null}
     </ScreenShell>
+  );
+}
+
+/**
+ * A row's tile in its folder's hue, as web's rows lead (#5576): the file
+ * glyph on a file, the minutes glyph on a meeting's minutes (#5949), so a row
+ * that opens a record reads apart from one that opens a file before its line
+ * is read. Decoration to a screen reader, which hears the row's value.
+ */
+function DocumentTile({ doc, hue }: { doc: MobileDocument; hue: string }) {
+  const Glyph = isMinutesDocument(doc) ? MinutesGlyph : DocumentsGlyph;
+  return (
+    <LeadTile on="card" hue={hue}>
+      <Glyph color={hue} size={LEAD_TILE_GLYPH} />
+    </LeadTile>
   );
 }
 

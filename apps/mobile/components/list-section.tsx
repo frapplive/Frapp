@@ -135,11 +135,14 @@ export function ListRowSkeleton({
   index = 0,
   description = false,
   variant = "default",
+  leading = null,
 }: {
   /** The row's place in its list, which picks its label width. */
   index?: number;
   /** Draw the caption line a row with a `description` carries. */
   description?: boolean;
+  /** The stand-in for the row's `leading` tile, for a row that leads with one. */
+  leading?: ReactNode;
   /** `detail`: a short label on the left and the value on the right. */
   variant?: "default" | "detail";
 }) {
@@ -161,6 +164,7 @@ export function ListRowSkeleton({
 
   return (
     <View style={styles.row}>
+      {leading}
       <View style={styles.rowText}>
         <SkeletonText role={label} width={width} />
         {description ? <SkeletonText role={caption} width="30%" /> : null}
