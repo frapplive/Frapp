@@ -16,6 +16,7 @@ import {
 } from '#domain/entities';
 import { PG_UNIQUE_VIOLATION } from '#domain/constants/postgres-error-codes';
 import { SupabaseQueryError } from '../supabase-query-error';
+import { chunkIds } from '#domain/utils/chunk-ids';
 import { eventRequiresAnyone } from '@repo/validation';
 import type { Task, TaskSeries } from '#domain/entities';
 import type {
@@ -25,6 +26,8 @@ import type {
   SweepEventRow,
   SweepInvoiceRow,
   SweepPollRow,
+  SweepRushFollowUpRow,
+  SweepRushOwnedRow,
   SweepTaskRow,
   SweepUpcomingEventRow,
 } from '#domain/repositories/scheduled-jobs.repository.interface';
@@ -52,7 +55,9 @@ type SweepName =
   | 'invoice'
   | 'task'
   | 'poll-expiry'
-  | 'palette';
+  | 'palette'
+  | 'rush-follow-up'
+  | 'rush-stale';
 
 interface EventCandidateRow {
   id: string;
@@ -219,6 +224,98 @@ export class SupabaseScheduledJobsRepository implements IScheduledJobsRepository
           .order('id', { ascending: true })
           .range(from, to),
     );
+  }
+
+  async findRushFollowUpsDueBetween(
+    dueOnOrAfter: string,
+    dueOnOrBefore: string,
+  ): Promise<SweepRushFollowUpRow[]> {
+    const rows = await this.fetchAllPages<
+      Omit<SweepRushFollowUpRow, 'follow_up_on' | 'follow_up_user_id'> & {
+        follow_up_on: string | null;
+        follow_up_user_id: string | null;
+      }
+    >('rush-follow-up', 'rush follow-up sweep: lookup failed', (from, to) =>
+      this.supabase
+        .from('rush_candidates')
+        .select(
+          'id, chapter_id, display_name, follow_up_on, follow_up_note, follow_up_user_id',
+        )
+        .is('closed_reason', null)
+        .not('follow_up_user_id', 'is', null)
+        .gte('follow_up_on', dueOnOrAfter)
+        .lte('follow_up_on', dueOnOrBefore)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.flatMap((row) =>
+      row.follow_up_on && row.follow_up_user_id
+        ? [
+            {
+              ...row,
+              follow_up_on: row.follow_up_on,
+              follow_up_user_id: row.follow_up_user_id,
+            },
+          ]
+        : [],
+    );
+  }
+
+  async findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]> {
+    const rows = await this.fetchAllPages<
+      Omit<SweepRushOwnedRow, 'owner_id'> & { owner_id: string | null }
+    >('rush-stale', 'rush stale sweep: lookup failed', (from, to) =>
+      this.supabase
+        .from('rush_candidates')
+        .select(
+          'id, chapter_id, display_name, owner_id, closed_reason, last_contact_on, created_at',
+        )
+        .is('closed_reason', null)
+        .not('owner_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.flatMap((row) =>
+      row.owner_id ? [{ ...row, owner_id: row.owner_id }] : [],
+    );
+  }
+
+  async findRushChapters(chapterIds: readonly string[]): Promise<{
+    enabledModules: Map<string, Record<string, boolean> | null>;
+    staleDays: Map<string, number>;
+  }> {
+    const ids = [...new Set(chapterIds)];
+    if (ids.length === 0) {
+      return { enabledModules: new Map(), staleDays: new Map() };
+    }
+    // Chunked: a sweep's chapters come from a cross-chapter read, so the
+    // list grows with the product, and one long `in (...)` is a 414.
+    const enabledModules = new Map<string, Record<string, boolean> | null>();
+    const staleDays = new Map<string, number>();
+    for (const chunk of chunkIds(ids)) {
+      const [chapters, settings] = await Promise.all([
+        this.supabase
+          .from('chapters')
+          .select('id, enabled_modules')
+          .in('id', chunk),
+        this.supabase
+          .from('rush_settings')
+          .select('chapter_id, stale_days')
+          .in('chapter_id', chunk),
+      ]);
+      if (chapters.error) throw new SupabaseQueryError(chapters.error);
+      if (settings.error) throw new SupabaseQueryError(settings.error);
+      for (const row of chapters.data ?? []) {
+        enabledModules.set(
+          row.id,
+          (row.enabled_modules as Record<string, boolean> | null) ?? null,
+        );
+      }
+      for (const row of settings.data ?? []) {
+        staleDays.set(row.chapter_id, row.stale_days);
+      }
+    }
+    return { enabledModules, staleDays };
   }
 
   async findDueTaskSeries(now: Date, limit: number): Promise<TaskSeries[]> {

@@ -819,6 +819,20 @@ describe("deepLinkFor: task notifications", () => {
   });
 });
 
+describe("deepLinkFor: recruitment (#5934)", () => {
+  const rush = (target: Record<string, string>) => ({
+    ...notification("n-rush", "rush", "2026-11-24T15:00:00Z"),
+    data: { target: { screen: "rush", ...target } },
+  });
+
+  it("opens the prospect's panel over the pipeline", () => {
+    expect(deepLinkFor(rush({ candidateId: "c 1" }))).toBe(
+      "/rush?prospect=c%201",
+    );
+    expect(deepLinkFor(rush({}))).toBe("/rush");
+  });
+});
+
 describe("deepLinkFor: opening at a message (#4957, #4977)", () => {
   const chat = (
     target: Record<string, string>,

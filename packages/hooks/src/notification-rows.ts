@@ -392,6 +392,27 @@ export function notificationSourceKey(data: unknown): string | null {
 }
 
 /**
+ * Count of unread rows whose target is not chat: the notification half of the
+ * number on an app icon (the phone's, and the desktop app's dock or taskbar
+ * icon), `spec/behavior/notifications.md` § Badge Count.
+ *
+ * The chat push worker writes a row (`target.screen: "chat"`) for every chat
+ * push it sends, on top of the read-receipt count `useChannelUnreadCounts`
+ * returns for the same channel, so adding every unread row to the channel
+ * counts would count those messages twice. "Mark all read" still clears chat
+ * rows; only the icon's sum leaves them out.
+ */
+export function unreadNonChatNotificationCount(data: unknown): number {
+  if (!Array.isArray(data)) return 0;
+  return data.filter((row) => {
+    if (!isRecord(row) || stringAt(row, "read_at") !== null) return false;
+    const target =
+      isRecord(row.data) && isRecord(row.data.target) ? row.data.target : null;
+    return !target || stringAt(target, "screen") !== "chat";
+  }).length;
+}
+
+/**
  * The conversation a row's entry stands for, as a clear names it to the
  * server (#3948), or `null` for a row that stands on its own: the same rows
  * `notificationSourceKey` groups.

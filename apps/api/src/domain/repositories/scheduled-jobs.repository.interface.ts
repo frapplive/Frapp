@@ -60,6 +60,28 @@ export interface SweepTaskRow {
   group_id?: string | null;
 }
 
+/** A recruitment candidate whose follow-up comes due (#5934). */
+export interface SweepRushFollowUpRow {
+  id: string;
+  chapter_id: string;
+  display_name: string;
+  /** `YYYY-MM-DD`. */
+  follow_up_on: string;
+  follow_up_note: string | null;
+  follow_up_user_id: string;
+}
+
+/** An open, owned recruitment candidate, for the stale alert (#5934). */
+export interface SweepRushOwnedRow {
+  id: string;
+  chapter_id: string;
+  display_name: string;
+  owner_id: string;
+  closed_reason: string | null;
+  last_contact_on: string | null;
+  created_at: string;
+}
+
 export interface SweepPollRow {
   id: string;
   chapter_id: string;
@@ -186,6 +208,21 @@ export interface IScheduledJobsRepository {
       theme_palette_engine_version: number;
     },
   ): Promise<boolean>;
+  /** Open candidates with a follow-up for someone due in `[from, to]`. */
+  findRushFollowUpsDueBetween(
+    dueOnOrAfter: string,
+    dueOnOrBefore: string,
+  ): Promise<SweepRushFollowUpRow[]>;
+  /** Every open candidate with an owner, across chapters. */
+  findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]>;
+  /**
+   * Per chapter: whether the `rush` module is on, and its stale days (no
+   * entry for a chapter with no settings row). Throws on a database error.
+   */
+  findRushChapters(chapterIds: readonly string[]): Promise<{
+    enabledModules: Map<string, Record<string, boolean> | null>;
+    staleDays: Map<string, number>;
+  }>;
   /** `true` only for the caller that inserted the claim row. Never throws. */
   claimDispatch(
     chapterId: string,

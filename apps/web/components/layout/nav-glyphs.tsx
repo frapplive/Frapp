@@ -121,6 +121,11 @@ export function BackworkGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.backwork} {...props} />;
 }
 
+/** Recruitment (#5931): the pipeline's funnel. */
+export function RecruitmentGlyph(props: NavGlyphProps) {
+  return <NavGlyph paths={NAV_GLYPHS.recruitment} {...props} />;
+}
+
 export function DirectoryGlyph(props: NavGlyphProps) {
   return <NavGlyph paths={NAV_GLYPHS.directory} {...props} />;
 }

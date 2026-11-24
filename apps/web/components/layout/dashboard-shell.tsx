@@ -45,6 +45,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { useNotificationsLive } from "@/components/layout/notifications-popover";
 import { persistNavCollapsed } from "@/components/layout/nav-collapse";
 import { resolvePageTitle } from "@/components/layout/page-title";
+import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { isNavItemVisible } from "@/components/layout/protected-nav-item";
 import { useChapterTheme } from "@/lib/hooks/use-chapter-theme";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
@@ -57,6 +58,7 @@ import { GetTheAppCard } from "@/components/layout/get-the-app-card";
 import { RolePreviewBanner } from "@/components/roles/role-preview-banner";
 import { useAskEntry, useAskPending } from "@/components/ask/ask-host";
 import { useChatRealtimeBinding } from "@/lib/chat/use-chat-realtime-binding";
+import { DesktopRuntime } from "@/components/layout/desktop-runtime";
 import { cn } from "@/lib/utils";
 
 /**
@@ -214,6 +216,10 @@ function Shell({
     the page rather than dropping to `<body>`, and Escape there still closes
     the page.
   */
+  // Its view slot, beside the title (`PageViews`).
+  const [headerViewSlot, setHeaderViewSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const closeChatPanel = useCallback(() => {
     if (!chatOpen) return;
     setLeaving(true);
@@ -343,6 +349,8 @@ function Shell({
   // out during the initial load. Read from the member-readable current chapter,
   // never the officer-only config read (#1982; the hook says why).
   const isModuleEnabled = useChapterModuleGate();
+  // A title named in the chapter's own word (Recruitment's Rush / Intake).
+  const chapterVocabulary = useChapterVocabulary();
   // The crumb's parent link follows its nav row's gates, so a title never
   // offers a member a door the sidebar hides from them.
   // New's page is named for the assistant only for a member who has it; for
@@ -355,10 +363,18 @@ function Shell({
     () =>
       newWithoutAssistant
         ? { title: "New" }
-        : resolvePageTitle(pathname, (item) =>
-            isNavItemVisible(item, permissions, isModuleEnabled),
+        : resolvePageTitle(
+            pathname,
+            (item) => isNavItemVisible(item, permissions, isModuleEnabled),
+            chapterVocabulary,
           ),
-    [newWithoutAssistant, pathname, permissions, isModuleEnabled],
+    [
+      newWithoutAssistant,
+      pathname,
+      permissions,
+      isModuleEnabled,
+      chapterVocabulary,
+    ],
   );
 
   const toggleNavCollapsed = useCallback(() => {
@@ -445,6 +461,8 @@ function Shell({
       <WelcomeGate />
       {/* What's new, by itself once after an update (#3943). */}
       <WhatsNewHost />
+      {/* Inside the desktop app only: the icon's count and system notifications (#4842). */}
+      <DesktopRuntime />
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         {/*
@@ -568,12 +586,16 @@ function Shell({
                 titleIsHeading={desktop === true}
                 onClose={closeTool}
                 actionSlotRef={setHeaderActionSlot}
+                viewSlotRef={setHeaderViewSlot}
               />
               <div
                 data-tool-page=""
                 className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-6"
               >
-                <PageHeaderSlotProvider slot={headerActionSlot}>
+                <PageHeaderSlotProvider
+                  slot={headerActionSlot}
+                  viewSlot={headerViewSlot}
+                >
                   {children}
                 </PageHeaderSlotProvider>
               </div>

@@ -35,7 +35,7 @@ import {
 } from "@repo/validation";
 import { CheckGlyph, DisclosureGlyph } from "@/components/control-glyphs";
 import { eyebrowStyle } from "@/components/eyebrow";
-import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -516,9 +516,10 @@ function ActionChecklist({
       {mineCount > 0 || done > 0 ? (
         <View style={styles.checklistBar}>
           {mineCount > 0 ? (
-            <Segmented
-              dense
-              accessibilityLabel={MINUTES_READ_COPY.mine}
+            <ViewLabels
+              compact
+              flush
+              accessibilityLabel={MINUTES_READ_COPY.whoseActionItems}
               value={filter}
               onChange={setFilter}
               options={[

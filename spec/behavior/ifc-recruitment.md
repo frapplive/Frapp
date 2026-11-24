@@ -1,18 +1,12 @@
 # IFC recruitment: master list, interest forms, chapter pipeline, eligibility
 
-> **Status: Proposed. Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul). Nothing here is built, and no build date is set.**
+> **Status: Approved; being built.** Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul), and approved the build on 2026-11-23, due 2027-01-11. The plan and record are [#5833](https://github.com/frapplive/Frapp/issues/5833), one sub-issue per slice of [§ Phasing](#phasing).
 >
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
 > GitHub hides that account's issues and PRs (#4192, epic #4226 and its sub-issues) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 >
-> **Not scheduled.** Recruitment is behind the beta (Paul, 2026-11-05: rush is not a beta priority; 2026-11-10: baseline first). No build issues are filed from this file until Paul sets a date. Until then:
-> - [`rush.md`](rush.md) and the code own what recruitment does today, and nothing here overrides them.
-> - Nothing here is drift to file or a rule to build against.
->
-> [§ Phasing](#phasing) and [§ Decisions for Paul](#decisions-for-paul) are here so Paul can review one page. Once he sets a date:
-> - they move to issues;
-> - each approved rule moves into `rush.md` (chapter side) or a council spec;
-> - this file shrinks to what is still proposed.
+> **What's built moves out.** As each slice ships, its rules move into [`rush.md`](rush.md) (chapter side) or a council spec, and this file shrinks to what is still proposed. Until a rule has moved, [`rush.md`](rush.md) and the code own what recruitment does, and nothing here overrides them.
+> - **Built (#5924):** stage categories with default stages, tags, ratings and notes, with `rush:read_notes`: [`rush.md` § Pipeline](rush.md#pipeline).
 
 This is the **behavior** part of the #4192 design. Three sibling designs own the rest, and this file names what it needs from each:
 
@@ -333,40 +327,24 @@ Chat keeps working, and the card links to the candidate's page.
 
 ### Stages
 
+**Built in #5924:** the six categories, their default stages, renaming, adding, reordering and hiding, and closing by hand with a reason. The rules are in [`rush.md` § Stages](rush.md#stages). What follows is the reasoning, and the parts later slices build.
+
 **ChapterBuilder's approach.** The research says it uses one letter scale, D to A+, that mixes interest with progress; A+ means a signed bid. Frapp keeps three things apart, because a chapter acts on each differently:
 
 - **Stage:** where the relationship is. The chapter moves it.
 - **Fit rating:** what members think. Each member rates, and the result is an average.
 - **Bid state:** the formal offer. Only bid actions move it.
 
-**Stage categories.** [`rush.md` § Funnel](rush.md#funnel) says stage keys come from chapter config. This extends that rule:
-- Each chapter stage belongs to one of six fixed **categories**.
-- A chapter can rename, add, reorder and hide stages within a category.
-- Automatic moves and the stale alert work by category, never by name:
-  - an automatic move goes to the first visible stage in its category;
-  - if every stage in that category is hidden, the move is skipped.
-- **New** and **Closed** must each keep at least one visible stage.
+**Automatic moves still to build** (each lands in the first visible stage of its category, and is skipped when every stage there is hidden):
 
-| Category | Default stage | Means | Moves here |
-| --- | --- | --- | --- |
-| `new` | New | Just arrived from a form, an import or an add | Automatically, on creation |
-| `contacted` | Contacted | Someone has reached out | Automatically, on the first logged contact; or by hand |
-| `met` | Met | Has met members in person | Automatically, when marked present at a chapter event; or by hand |
-| `engaged` | Engaged | Keeps showing up; being seriously considered | By hand |
-| `bid_ready` | Bid ready | The chapter wants to bid | By hand |
-| `closed` | Closed | Out of the pipeline | By hand, or automatically (see below) |
+| Category | Moves here automatically | Slice |
+| --- | --- | --- |
+| `new` | On creation from a form or an import (an add already lands here) | Interest forms, the master list |
+| `contacted` | On the first logged contact | **Built in #5934** |
+| `met` | When marked present at a chapter event | Step 2, PNM attendance |
+| `closed` | With the reasons below | Bids; the PNM's own view |
 
-**A Closed stage needs a reason:**
-
-| Reason | How it's set |
-| --- | --- |
-| Not interested | By hand |
-| Not eligible | By hand |
-| Chapter passed | By hand |
-| No response | By hand |
-| Accepted elsewhere | Automatically |
-| Withdrew | Automatically |
-| Deleted their information | Automatically |
+**Closed reasons set automatically:** Accepted elsewhere, Withdrew, Deleted their information. The four a member picks by hand are built.
 
 **Bid state** is separate from stage:
 - Its values are `none`, `extended`, `accepted`, `declined`, `expired` and `rescinded` ([§ Bids](#bids)).
@@ -374,29 +352,11 @@ Chat keeps working, and the card links to the candidate's page.
 
 ### Notes, tags, ratings
 
-**Notes**
-- **Reading needs a new key, `rush:read_notes`.**
-  - [#4070's backfill](rush.md#permissions) gave `rush:notes` to every role that held `members:view`, including New Member, Alumni and custom roles. So "take `rush:notes` off Member" can't keep notes to a committee in existing chapters.
-  - A new key starts on nobody's backfilled role. Tiers are each chapter's own ([#4068 decisions 5 and 10](https://github.com/pdcarlson/Frapp/issues/4068)), so there is no fixed "officer tier" to seed. Instead:
-    - **New chapters:** it's on in the top two starting tiers (Exec board, Officers and chairs), as decision 9 does for other officer defaults.
-    - **Existing chapters:** nobody holds it until an officer turns it on, because decision 9 keeps every new grant on an existing chapter opt-in. When the Rush pipeline ships, the Recruitment settings page shows "Nobody can read recruitment notes yet" with a button that turns it on for the top two tiers. Paul's own chapter needs this step too.
-  - No one can read notes today, because notes aren't built. So this doesn't change [decision 12](rush.md#permissions)'s "today's behaviour".
-- **Writing stays on `rush:notes`.**
-- **Nobody reads notes about themselves.** A member never sees notes on a candidate linked to their own account or PNM record, whatever keys they hold. That covers a PNM who accepts a bid and joins as a New Member.
-- **Editing and deleting:** an author can edit or delete their own note; `rush:manage` can delete any note.
-- **Notes never appear on the chat card or in a push.**
-
-**Tags**
-- The chapter defines its own, such as "legacy", "athlete" or "met at tabling".
-- Seeing tags needs `rush:view`. Tagging needs `rush:notes`. Managing the list needs `rush:manage`.
-- Tags are private to the chapter, with no push-up.
-
-**Ratings**
-- A member with `rush:vote` rates a candidate 1 to 5, and can change it.
-- Ratings are never shown by name: only the average and the number of raters.
-- Seeing the average needs `rush:view_results`.
+**Built in #5924:** [`rush.md` § Tags](rush.md#tags), [§ Ratings](rush.md#ratings) and [§ Notes](rush.md#notes), including `rush:read_notes` and its opt-in for existing chapters. The reasoning for the separate read key is kept there. Still to build here: deleting notes and ratings 30 days after the season closes ([§ Retention](#retention-and-deletion)), once seasons exist.
 
 ### Contact tracking and follow-ups
+
+**Built in #5934:** the rules are in [`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups). What follows is the design they came from; phone and email below wait for interest forms.
 
 - **Log a contact.** Pick the kind (text, call, in person, social DM, email, event) and the date; a note is optional. Who logged it is recorded.
   - This needs `rush:add`, which this design widens to "add and work prospects", so it also covers moving stages.
@@ -504,7 +464,7 @@ Every chapter-side setting in this design goes on the **Recruitment module page*
 - stages and their categories, tags, and the stale-days setting;
 - the recruitment contacts Group and the card channel;
 - the new-member role an accepted PNM's invite carries;
-- turning on `rush:read_notes` for existing chapters ([§ Notes](#notes-tags-ratings));
+- turning on `rush:read_notes` for existing chapters (built in #5924, [`rush.md` § Notes](rush.md#notes));
 - its "Who can" list, which shows the `rush:*` keys in plain words like every other module page.
 
 Holders of `rush:manage` can edit them; the page is read-only to everyone else who can open Chapter settings.
@@ -518,7 +478,7 @@ This is what each key gates in this design. Today's meaning of each key is in [`
 | `rush:view` | The pipeline, the candidate page, the dashboard, tags, contact details the PNM supplied, the eligibility verdict, the event PNM roster, form answers |
 | `rush:add` | Add a candidate; move stages; log contacts; claim an unowned candidate; mark PNM attendance; set follow-ups; confirm a candidate↔PNM link or a referrer match. **New label: "Add and work prospects"** |
 | `rush:notes` | Write notes; tag candidates |
-| `rush:read_notes` (**new**) | Read notes. On for the top two starting tiers in new chapters; opt-in for existing ones ([above](#notes-tags-ratings)) |
+| `rush:read_notes` (**new**) | Read notes. On for the top two starting tiers in new chapters; opt-in for existing ones ([`rush.md` § Notes](rush.md#notes)) |
 | `rush:vote` | Vote; rate; cast a formal bid-vote ballot |
 | `rush:view_results` | Vote counts, rating averages, bid-vote results |
 | `rush:bid` | Extend a bid; record a decline; record an acceptance (which waits for confirmation) |
@@ -775,8 +735,8 @@ Notes about a PNM who became a brother shouldn't follow them into membership. Th
 This builds on the URL and data-model phases 1 and 2 of the concept.
 
 1. **The chapter pipeline.**
-   - Stage categories with default stages; notes, tags and ratings.
-   - Contacts, owner, follow-ups and the stale alert.
+   - Stage categories with default stages; notes, tags and ratings. **Built in #5924** ([`rush.md` § Pipeline](rush.md#pipeline)).
+   - Contacts, owner, follow-ups and the stale alert. **Built in #5934** ([`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups)).
    - Bid extend, accept, decline, record and expire, with the shipped-client compatibility above. A recorded acceptance waits for confirmation.
    - The Recruitment module settings page, including the `rush:read_notes` opt-in for existing chapters and the new-member role.
    - The [phone-first actions](#a-recruitment-week-at-real-scale) on mobile.
@@ -858,9 +818,9 @@ Each of these is on the [AGENTS.md raise-first list](../../AGENTS.md#adr-discipl
 6. **Revisiting [#4068 decision 12](rush.md#permissions). Decided: no further tightening.**
    - Every member keeps today's vote and bid by default; chapters tighten it themselves.
    - The one change is that a recorded acceptance waits for the PNM or a holder of `rush:manage` to confirm it ([§ Bids](#bids)), because its effects reach other chapters.
-   - `rush:read_notes` follows decision 9's defaults ([§ Notes](#notes-tags-ratings)).
+   - `rush:read_notes` follows decision 9's defaults ([`rush.md` § Notes](rush.md#notes)).
 7. **The retention defaults. Decided as proposed:** 30 days after season close for chapter notes and other private pipeline data, and 180 days for PNMs who don't join. Raw grades don't arise in the MVP.
 8. **The default master-list option. Decided: A** (interested only) for MVP, B next, never C by default.
 9. **Council officers and contact details. Decided: the council sees phone numbers,** gated on `council:recruitment_manage`, with every view logged ([§ Officers in a chapter](#council-officers-are-also-chapter-members)). Paul first picked hiding them, then reversed it the same day.
 
-**Still open:** when to build. Recruitment is behind the beta, and no build issues are filed until Paul sets a date ([status](#ifc-recruitment-master-list-interest-forms-chapter-pipeline-eligibility)). The real-scale numbers in [§ A recruitment week](#a-recruitment-week-at-real-scale) are to be confirmed with our IFC before then.
+**When to build** was the open call here (recruitment was behind the beta). **Decided 2026-11-23:** Paul approved the build, due 2027-01-11, tracked in [#5833](https://github.com/frapplive/Frapp/issues/5833). The real-scale numbers in [§ A recruitment week](#a-recruitment-week-at-real-scale) are still to be confirmed with our IFC.

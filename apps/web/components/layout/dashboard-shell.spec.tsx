@@ -8,7 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { NewButton } from "@/components/ui/new-button";
 
 /*
@@ -118,6 +119,11 @@ vi.mock("@/components/chat/chat-page", () => ({
       ) : null}
     </>
   ),
+}));
+
+// Desktop-only, with its own spec; here only that the shell mounts it.
+vi.mock("@/components/layout/desktop-runtime", () => ({
+  DesktopRuntime: () => <span data-testid="desktop-runtime" />,
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => {
@@ -293,6 +299,11 @@ const chatPanel = (container: HTMLElement) =>
   container.querySelector("[data-chat-panel]") as HTMLElement | null;
 
 describe("DashboardShell", () => {
+  it("mounts the desktop app's runtime, which decides for itself where it runs (#4842)", () => {
+    shell();
+    expect(screen.getByTestId("desktop-runtime")).toBeInTheDocument();
+  });
+
   it("renders the route inside one main landmark that never scrolls its header away", () => {
     // The floor gate measures `main`, so its presence is a contract. A
     // `hidden` box is a scroll container: a jump deep in long minutes
@@ -324,6 +335,54 @@ describe("DashboardShell", () => {
     } finally {
       device.phone = null;
       window.localStorage.removeItem("frapp.web.get-the-app-dismissed");
+    }
+  });
+
+  it("seats a page's views beside its title in the header, never in the body (Paul, 2026-11-24)", () => {
+    mockPathname.value = "/events";
+    for (const width of [1440, 800]) {
+      setWindowWidth(width);
+      const { container, unmount } = render(
+        <DashboardShell>
+          <PageViews>
+            <ViewLabels
+              label="Whose events"
+              options={[
+                { value: "mine", label: "Mine" },
+                { value: "all", label: "Everyone's" },
+              ]}
+              value="mine"
+              onChange={() => {}}
+            />
+          </PageViews>
+          <p>list</p>
+        </DashboardShell>,
+      );
+      const header = container.querySelector(
+        "[data-tool-page-header]",
+      ) as HTMLElement;
+      const views = header.querySelector(
+        "[data-tool-page-views]",
+      ) as HTMLElement;
+      const page = container.querySelector("[data-tool-page]") as HTMLElement;
+      expect(
+        within(views).getByRole("tablist", { name: "Whose events" }),
+      ).toBeInTheDocument();
+      expect(within(page).queryByRole("tablist")).toBeNull();
+      // Before the actions slot, so the words sit beside the title.
+      const actions = header.querySelector("[data-tool-page-actions]")!;
+      expect(
+        views.compareDocumentPosition(actions) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Below the side-by-side width the header shows while it holds views,
+      // even with no actions.
+      expect(header.className).toContain(
+        "has-[[data-tool-page-views]:not(:empty)]:flex",
+      );
+      // The group NewButton reads to give way sooner beside views.
+      expect(header.className).toContain("group/page-header");
+      unmount();
     }
   });
 
@@ -391,9 +450,7 @@ describe("DashboardShell", () => {
       shell(undefined, { defaultNavCollapsed: true });
       fireEvent.click(screen.getByRole("button", { name: /^Channels/ }));
       const popover = screen.getByRole("dialog", { name: "Channels" });
-      expect(
-        popover.querySelector("[data-channel-list-slot]"),
-      ).not.toBeNull();
+      expect(popover.querySelector("[data-channel-list-slot]")).not.toBeNull();
     });
 
     it("holds a gated row's place while permissions are read, so nothing below it moves (#3854)", () => {

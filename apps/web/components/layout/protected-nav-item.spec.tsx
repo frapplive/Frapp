@@ -258,3 +258,29 @@ describe("the sidebar's rows (#5946)", () => {
     expect(hrefs).not.toContain("/alumni");
   });
 });
+
+// The recruitment row (#5924) needs both keys its routes check.
+describe("isNavItemVisible with requireAllOf", () => {
+  const rush: NavItem = {
+    id: "rush",
+    label: "Rush",
+    icon: PointsGlyph,
+    href: "/rush",
+    module: "rush",
+    requireAllOf: ["members:view", "rush:view"],
+  };
+
+  it("shows only when every key is held", async () => {
+    const { isNavItemVisible } = await import("./protected-nav-item");
+    expect(isNavItemVisible(rush, ["members:view", "rush:view"])).toBe(true);
+    expect(isNavItemVisible(rush, ["rush:view"])).toBe(false);
+    expect(isNavItemVisible(rush, ["members:view"])).toBe(false);
+    expect(isNavItemVisible(rush, ["*"])).toBe(true);
+  });
+
+  it("stays hidden while permissions load, and with the module off", async () => {
+    const { isNavItemVisible } = await import("./protected-nav-item");
+    expect(isNavItemVisible(rush, undefined)).toBe(false);
+    expect(isNavItemVisible(rush, ["*"], (key) => key !== "rush")).toBe(false);
+  });
+});

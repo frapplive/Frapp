@@ -798,7 +798,10 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     // "stopped repeating" notice, both titled with the task as task pushes are.
     // +1 for a group task's following group (#5473): its overdue line, once
     // for the group, titled with the task.
-    calls: 19,
+    // +2 for recruitment (#5934): a follow-up's morning push and the stale
+    // alert, each to one member who can work prospects, naming the prospect
+    // and the follow-up's own words as a member set them.
+    calls: 21,
     entries: [MEMBER_TEXT],
   },
   'application/workers/discord-import-worker.service.ts': {

@@ -467,9 +467,18 @@ describe("a dead link (#5625)", () => {
 describe("the invite card funnel (#5663)", () => {
   it("records the card once, then the way in", async () => {
     render(<JoinWithInvite token="tok-1" />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Continue with Google" }),
+    // The card is recorded from an effect once the visit's state is known;
+    // a slow runner can draw the button first, so wait for the record
+    // before pressing, or the two steps land in the other order.
+    const button = await screen.findByRole("button", {
+      name: "Continue with Google",
+    });
+    await waitFor(() =>
+      expect(steps()).toEqual([
+        { step: "card-viewed", state: "live", signed_in: false },
+      ]),
     );
+    fireEvent.click(button);
 
     await waitFor(() => expect(h.auth.signInWithOAuth).toHaveBeenCalled());
     expect(steps()).toEqual([

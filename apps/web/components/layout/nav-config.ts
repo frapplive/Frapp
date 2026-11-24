@@ -7,12 +7,14 @@ import {
   EventsGlyph,
   MeetingsGlyph,
   PointsGlyph,
+  RecruitmentGlyph,
   ServiceGlyph,
   StudyGlyph,
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
+import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
 import { SECTION_NAMES } from "@repo/validation";
 import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
 
@@ -39,7 +41,8 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  * **`MORE_ROWS` is temporary.** Tasks, Points, Study hours, Service hours,
  * Meetings and Backwork each fold into one of the rows above in a later step
  * of #5943 (Tasks into Activity; Points and the hours onto the person;
- * Meetings and Backwork into Resources). Until its step lands a page stays
+ * Meetings and Backwork into Resources). Recruitment (#5924) landed after
+ * the series was planned and has no home in it yet. Until its step lands a page stays
  * reachable from the More row, a dropdown under its button, so no page is
  * orphaned mid-series. A step deletes its rows here and nothing else; when
  * the list is empty the More row and this export go.
@@ -62,7 +65,8 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  * Permission semantics:
  * - `requirePermission` — a single permission string; hide when absent.
  * - `requireAnyOf` — shown when the caller holds at least one listed.
- * - Omitting both renders the item unconditionally.
+ * - `requireAllOf` — shown only when the caller holds every one listed.
+ * - Omitting all three renders the item unconditionally.
  *
  * Every row links to a built route. There are no roadmap rows: a row drawn
  * disabled with nothing behind it is a dead-end control (#3089).
@@ -88,9 +92,26 @@ import { MESSAGES_ROUTE } from "@/components/layout/shell-layout";
  */
 
 type NavPermissionRule =
-  | { requirePermission?: undefined; requireAnyOf?: undefined }
-  | { requirePermission: string; requireAnyOf?: undefined }
-  | { requirePermission?: undefined; requireAnyOf: readonly string[] };
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission: string;
+      requireAnyOf?: undefined;
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf: readonly string[];
+      requireAllOf?: undefined;
+    }
+  | {
+      requirePermission?: undefined;
+      requireAnyOf?: undefined;
+      requireAllOf: readonly string[];
+    };
 
 export type NavItem = {
   id: string;
@@ -111,7 +132,33 @@ export type NavItem = {
    * gating" above). Omit for a feature that works with nothing in it.
    */
   hiddenUntilSetUp?: UnsetFeatureKey;
+  /**
+   * Named in the chapter's own word (`vocab()` in `@repo/org-archetypes`):
+   * the recruitment row reads Rush, Recruitment or Intake as the chapter
+   * calls it, never a hardcoded "Rush" (`spec/behavior/rush.md` §
+   * Vocabulary). `label` is then the IFC default, what shows before the
+   * chapter read answers. Resolve it with {@link navItemLabel}.
+   */
+  vocabLabel?: VocabKey;
 } & NavPermissionRule;
+
+/** A row's label in the chapter's words (see `vocabLabel`). */
+export function navItemLabel(
+  item: Pick<NavItem, "label" | "vocabLabel">,
+  vocabulary?: VocabConfig,
+): string {
+  return item.vocabLabel ? vocab(item.vocabLabel, vocabulary) : item.label;
+}
+
+/** The row with its label in the chapter's words. */
+export function withChapterWords(
+  item: NavItem,
+  vocabulary?: VocabConfig,
+): NavItem {
+  return item.vocabLabel
+    ? { ...item, label: navItemLabel(item, vocabulary) }
+    : item;
+}
 
 /** The rows between Search and the channel list, in order. */
 export const SIDEBAR_ROWS: NavItem[] = [
@@ -200,6 +247,19 @@ export const MORE_ROWS: NavItem[] = [
     href: "/service",
     description: "Log service hours and approve entries for points.",
     module: "hours",
+  },
+  {
+    // The recruitment pipeline (#5924): a board and a list of prospects.
+    // Its routes need `members:view` and `rush:view` with the module on
+    // (`rush-pipeline.controller.ts`), so the row asks for both.
+    id: "rush",
+    label: vocab("recruitment"),
+    vocabLabel: "recruitment",
+    icon: RecruitmentGlyph,
+    href: "/rush",
+    description: "Prospects by stage, with tags, ratings and notes.",
+    module: "rush",
+    requireAllOf: ["members:view", "rush:view"],
   },
   {
     // A meeting's minutes, read by the members its event invites

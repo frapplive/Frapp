@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   IEmailProvider,
   SendInviteEmailParams,
+  SendSchoolCodeEmailParams,
 } from '#domain/adapters/email.interface';
 import { logThrowable } from '../observability/log-throwable';
 
@@ -84,6 +85,39 @@ function inviteEmailText(params: SendInviteEmailParams): string {
   return `${chapter}\n\n${inviteLine(params)}\n\nOpen the invite: ${params.joinUrl}\n\n${inviteFootnote(params)}`;
 }
 
+/** "123456 is your Frapp code for Rensselaer Polytechnic Institute". */
+function schoolCodeSubject(params: SendSchoolCodeEmailParams): string {
+  return `${params.code} is your Frapp code for ${clipName(params.schoolName) ?? 'your school'}`;
+}
+
+/** "It works for 10 minutes. If you didn't ask for it, …" */
+function schoolCodeFootnote(params: SendSchoolCodeEmailParams): string {
+  return `It works for ${params.validMinutes} minutes. If you didn't ask for it, you can ignore this email; nothing changes until the code is typed in Frapp.`;
+}
+
+/**
+ * The school name, the code large enough to read off a phone, and one line on
+ * what it's for. No link: the code is typed into the screen that asked for
+ * it, as sign-in's code is.
+ */
+function schoolCodeEmailHtml(params: SendSchoolCodeEmailParams): string {
+  const school = clipName(params.schoolName) ?? 'Your school';
+  return (
+    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5">` +
+    `<p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>` +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">${escapeHtml(school)}</h1>` +
+    `<p style="margin:0 0 16px;font-size:16px">Your code to verify this school email on Frapp:</p>` +
+    `<p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px">${escapeHtml(params.code)}</p>` +
+    `<p style="margin:0;font-size:13px;color:#5d5a6b">${escapeHtml(schoolCodeFootnote(params))}</p>` +
+    `</div>`
+  );
+}
+
+function schoolCodeEmailText(params: SendSchoolCodeEmailParams): string {
+  const school = clipName(params.schoolName) ?? 'Your school';
+  return `${school}\n\nYour code to verify this school email on Frapp: ${params.code}\n\n${schoolCodeFootnote(params)}`;
+}
+
 /**
  * Resend's own words for a refused send (`{ name, message }`), for the log:
  * a bare 403 doesn't say whether the key, the domain or the recipient was
@@ -137,28 +171,49 @@ export class ResendEmailProvider implements IEmailProvider {
     this.fromAddress = options.fromAddress;
   }
 
-  async sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
+  sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
+    return this.send('invite', () => ({
+      to: params.to,
+      subject: inviteSubject(params),
+      html: inviteEmailHtml(params),
+      text: inviteEmailText(params),
+    }));
+  }
+
+  sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean> {
+    return this.send('school code', () => ({
+      to: params.to,
+      subject: schoolCodeSubject(params),
+      html: schoolCodeEmailHtml(params),
+      text: schoolCodeEmailText(params),
+    }));
+  }
+
+  /**
+   * One POST to Resend. The message is built inside the `try`, so a throw
+   * while building it is a `false` like any other failure, never an escape
+   * from the provider's never-throw contract.
+   */
+  private async send(
+    kind: string,
+    build: () => { to: string; subject: string; html: string; text: string },
+  ): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
+      const message = build();
       const response = await fetch(RESEND_API_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from: this.fromAddress,
-          to: params.to,
-          subject: inviteSubject(params),
-          html: inviteEmailHtml(params),
-          text: inviteEmailText(params),
-        }),
+        body: JSON.stringify({ from: this.fromAddress, ...message }),
         signal: controller.signal,
       });
       if (!response.ok) {
         this.logger.warn(
-          `Resend invite email send returned ${response.status} ${response.statusText}${await refusalReason(response)}`,
+          `Resend ${kind} email send returned ${response.status} ${response.statusText}${await refusalReason(response)}`,
         );
         return false;
       }
@@ -167,7 +222,7 @@ export class ResendEmailProvider implements IEmailProvider {
       logThrowable(
         this.logger,
         'warn',
-        'Resend invite email send failed',
+        `Resend ${kind} email send failed`,
         error,
       );
       return false;

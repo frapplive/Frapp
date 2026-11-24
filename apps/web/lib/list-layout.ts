@@ -19,17 +19,20 @@ import { useViewerUserId } from "@repo/hooks";
 export type ListLayout = "list" | "grid";
 
 /** The screens that offer the toggle. A new one joins here. */
-export type ListLayoutScreen = "directory" | "tasks";
+export type ListLayoutScreen = "directory" | "tasks" | "rush";
 
 /**
  * The layout a screen opens in before this person picks one: List
  * everywhere. Tasks opened on its Grid of status columns until 2026-11-18,
  * when Paul found its tall tiles showed six tasks a screen; its List is now
- * the compact rows an exec's 20 to 40 tasks fit in.
+ * the compact rows an exec's 20 to 40 tasks fit in. Recruitment (#5924) opens
+ * on its Grid, the board of stage columns, because where each prospect stands
+ * is what the page is for, as a Pipedrive or HubSpot deal board opens.
  */
 const DEFAULT_LIST_LAYOUT: Record<ListLayoutScreen, ListLayout> = {
   directory: "list",
   tasks: "list",
+  rush: "grid",
 };
 
 export function listLayoutStorageKey(

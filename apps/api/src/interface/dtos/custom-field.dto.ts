@@ -1,15 +1,23 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
+  MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import {
+  CUSTOM_FIELD_TEXT_MAX_LENGTH,
+  CUSTOM_FIELD_VALUES_PER_SAVE_MAX,
+} from '@repo/validation';
 import { POSITION_MAX } from '#domain/constants/field-limits';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 import { Type } from 'class-transformer';
@@ -211,4 +219,79 @@ export class MemberCustomFieldValueDto {
 
   @ApiProperty({ type: String, nullable: true })
   value: string | null;
+}
+
+/**
+ * One of the chapter's fields as its own member reads it on their profile
+ * (#581): every tier, with the member's own value. `visibility` is who else
+ * sees it, which the form says beside the field.
+ */
+export class OwnCustomFieldDto {
+  @ApiProperty()
+  field_id: string;
+
+  @ApiProperty()
+  key: string;
+
+  @ApiProperty()
+  label: string;
+
+  @ApiProperty({ enum: FIELD_TYPES })
+  type: (typeof FIELD_TYPES)[number];
+
+  @ApiProperty({ enum: FIELD_VISIBILITIES })
+  visibility: (typeof FIELD_VISIBILITIES)[number];
+
+  @ApiProperty()
+  required: boolean;
+
+  @ApiProperty({
+    type: [String],
+    nullable: true,
+    description: "A select field's choices; null for every other type",
+  })
+  choices: string[] | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: "A text field's own length cap, when it sets one",
+  })
+  max_length: number | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  value: string | null;
+}
+
+/** One value in `PATCH /members/me/custom-fields`. */
+export class OwnCustomFieldValueDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  field_id: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    maxLength: CUSTOM_FIELD_TEXT_MAX_LENGTH,
+    description:
+      'The value as text: a whole number, a decimal like 3.4, a phone number, one of a select field\'s choices, or "true"/"false". null or an empty string clears it; a required field with a value cannot be cleared.',
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(CUSTOM_FIELD_TEXT_MAX_LENGTH)
+  value: string | null;
+}
+
+/** Body for `PATCH /members/me/custom-fields` (#581). */
+export class UpdateOwnCustomFieldsDto {
+  @ApiProperty({
+    type: () => OwnCustomFieldValueDto,
+    isArray: true,
+    maxItems: CUSTOM_FIELD_VALUES_PER_SAVE_MAX,
+  })
+  @IsArray()
+  @ArrayMaxSize(CUSTOM_FIELD_VALUES_PER_SAVE_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => OwnCustomFieldValueDto)
+  values: OwnCustomFieldValueDto[];
 }

@@ -40,12 +40,21 @@ export function DueDateField({
   label = "Due",
   format = formatDueFieldLabel,
   onClear,
+  earliest = today,
+  latest,
   platform = Platform.OS,
 }: {
   /** `YYYY-MM-DD`, device-local, or `null` for no due date (#5761). */
   value: string | null;
-  /** `YYYY-MM-DD`, device-local: the earliest day it offers. */
+  /** `YYYY-MM-DD`, device-local: the day an empty field takes on iOS. */
   today: string;
+  /**
+   * `YYYY-MM-DD`: the earliest day it offers, `today` unless set. A logged
+   * recruitment contact reaches back (#5934); a due date never does.
+   */
+  earliest?: string;
+  /** `YYYY-MM-DD`: the latest day it offers, none unless set. */
+  latest?: string;
   disabled: boolean;
   onChange: (next: string) => void;
   /**
@@ -71,7 +80,10 @@ export function DueDateField({
     (value ? parseBareDateLocalNoon(value) : null) ??
     parseBareDateLocalNoon(today) ??
     new Date();
-  const minimumDate = parseBareDateLocalNoon(today) ?? undefined;
+  const minimumDate = parseBareDateLocalNoon(earliest) ?? undefined;
+  const maximumDate = latest
+    ? (parseBareDateLocalNoon(latest) ?? undefined)
+    : undefined;
   const shown = value ? format(value) : TASK_NO_DUE_DATE_LABEL;
   const pick = (picked: Date | undefined) => {
     if (picked) onChange(localIsoDate(picked));
@@ -82,6 +94,7 @@ export function DueDateField({
       value: date,
       mode: "date",
       minimumDate,
+      maximumDate,
       onValueChange: (_event, picked) => pick(picked),
     });
   };
@@ -144,6 +157,7 @@ export function DueDateField({
             themeVariant="dark"
             accentColor={brand.accent}
             minimumDate={minimumDate}
+            maximumDate={maximumDate}
             disabled={disabled}
             accessibilityLabel={`${label} ${shown}`}
             onValueChange={(_event, picked) => pick(picked)}
