@@ -70,18 +70,8 @@ export const COUNCIL_NOTIFICATION_CATEGORIES: ReadonlySet<string> = new Set([
   "members",
 ]);
 
-/**
- * A row of `GET /v1/chapters` as the server sends it: `@repo/hooks`'
- * hand-written `ChapterMembershipSummary` predates the tenant kind, so the
- * two fields a council row carries are declared here (the SDK's
- * `ChapterMembershipSummaryDto` has them).
- */
-export type TenantMembership = ChapterMembershipSummary & {
-  kind?: "chapter" | "council";
-  chapter: ChapterMembershipSummary["chapter"] & {
-    council_type?: string | null;
-  };
-};
+/** A row of `GET /v1/chapters`, which carries the tenant's kind and type. */
+export type TenantMembership = ChapterMembershipSummary;
 
 /**
  * A row's second line: a chapter's school, or a council's type before its

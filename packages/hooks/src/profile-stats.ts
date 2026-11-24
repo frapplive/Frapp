@@ -11,6 +11,7 @@
  * events a member owed. Two true numbers beat three with one invented.
  */
 import { can } from "@repo/validation";
+import { useCurrentChapter } from "./use-chapters";
 import { useActiveChapterId } from "./use-frapp-client";
 import { useMyPoints } from "./use-points";
 import { useServiceEntries } from "./use-service-entries";
@@ -154,7 +155,10 @@ export function useMyProfileStats(): ProfileStats {
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
   const permissionsKnown = Array.isArray(permissions);
-  const canView = permissionsKnown && can("members:view", permissions);
+  // A council has no points or service hours (#5933): those routes refuse it.
+  const isCouncil = useCurrentChapter().data?.kind === "council";
+  const canView =
+    permissionsKnown && can("members:view", permissions) && !isCouncil;
   const pointsQuery = useMyPoints(undefined, undefined, { enabled: canView });
   const serviceQuery = useServiceEntries(viewerUserId ?? undefined, undefined, {
     enabled: canView && !!viewerUserId,

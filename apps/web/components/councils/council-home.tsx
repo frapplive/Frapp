@@ -41,10 +41,7 @@ export function CouncilHome() {
   );
 
   const name = council?.name ?? chapter?.name;
-  const type = councilTypeLabel(
-    council?.council_type ??
-      (chapter as { council_type?: unknown } | undefined)?.council_type,
-  );
+  const type = councilTypeLabel(council?.council_type ?? chapter?.council_type);
   const school = council?.school?.name ?? chapter?.university ?? null;
   const subtitle = [type, school].filter(Boolean).join(" · ");
   const canInvite = can("members:invite", permissions);

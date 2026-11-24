@@ -71,7 +71,11 @@ describe("tenantRowBody", () => {
   it("falls back to the school for a type it doesn't know", () => {
     expect(
       tenantRowBody(
-        membership({ kind: "council", chapter: { council_type: "pta" } }),
+        membership({
+          kind: "council",
+          // A type from a newer API than this build knows.
+          chapter: { council_type: "pta" as never },
+        }),
       ),
     ).toBe("Rensselaer Polytechnic Institute");
   });

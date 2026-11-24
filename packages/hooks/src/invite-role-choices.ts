@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { EVERYONE_ROLE_NAME } from "@repo/validation";
 import { parseChapterRoles, toRoleOptions } from "./chapter-roles";
 import { useInvitableRoleIds, type ChapterLinkView } from "./use-invites";
+import { useCurrentChapter } from "./use-chapters";
 import { useOrgConfig } from "./use-org-config";
 import { useRoles } from "./use-roles";
 
@@ -49,7 +50,12 @@ export function useInviteRoleChoices(): {
 } {
   const rolesQuery = useRoles();
   const invitableQuery = useInvitableRoleIds();
-  const configQuery = useOrgConfig();
+  // A council has no chapter config to read (`/chapters/:id/config` serves
+  // chapters only, #5933), so its default is Everyone, as the API's is.
+  const kind = useCurrentChapter().data?.kind;
+  const configQuery = useOrgConfig({
+    enabled: kind !== undefined && kind !== "council",
+  });
   const configuredId = configQuery.data?.default_invite_role_id;
 
   const value = useMemo(() => {

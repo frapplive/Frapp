@@ -12,8 +12,16 @@ import { useMyPoints } from "./use-points";
 import { useServiceEntries } from "./use-service-entries";
 import { useMyPermissions, useViewerUserId } from "./use-user";
 import { useActiveChapterId } from "./use-frapp-client";
+import { useCurrentChapter } from "./use-chapters";
+
+function tenant(kind: "chapter" | "council") {
+  vi.mocked(useCurrentChapter).mockReturnValue({
+    data: { kind },
+  } as unknown as ReturnType<typeof useCurrentChapter>);
+}
 
 vi.mock("./use-frapp-client", () => ({ useActiveChapterId: vi.fn() }));
+vi.mock("./use-chapters", () => ({ useCurrentChapter: vi.fn() }));
 vi.mock("./use-points", () => ({ useMyPoints: vi.fn() }));
 vi.mock("./use-service-entries", () => ({ useServiceEntries: vi.fn() }));
 vi.mock("./use-user", () => ({
@@ -30,6 +38,7 @@ function grant(permissions: string[] | undefined) {
 describe("useMyProfileStats (#4137)", () => {
   beforeEach(() => {
     grant(["members:view"]);
+    tenant("chapter");
     vi.mocked(useActiveChapterId).mockReturnValue("chapter-1");
     vi.mocked(useMyPoints).mockReturnValue({
       data: { balance: 1240, transactions: [] },
@@ -121,5 +130,19 @@ describe("useMyProfileStats (#4137)", () => {
       expect(options?.enabled).toBe(false);
     }
     expect(result.current.visible).toBe(true);
+  });
+
+  // #5933: a council has no points or service hours; both routes refuse it.
+  test("sends neither read, and hides the cards, in a council", () => {
+    tenant("council");
+    vi.mocked(useViewerUserId).mockReturnValue("user-1");
+    const { result } = renderHook(() => useMyProfileStats());
+    for (const [, , options] of vi.mocked(useMyPoints).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+    for (const [, , options] of vi.mocked(useServiceEntries).mock.calls) {
+      expect(options?.enabled).toBe(false);
+    }
+    expect(result.current.visible).toBe(false);
   });
 });

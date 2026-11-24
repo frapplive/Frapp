@@ -249,7 +249,8 @@ export default function DirectoryScreen() {
     [pledgeClasses],
   );
   const [sortByOrder, setSortByOrder] = useState(false);
-  const alumniQuery = useAlumni(deferredAlumniFilters);
+  // A council has no alumni (#5933): `/v1/alumni` refuses it.
+  const alumniQuery = useAlumni(deferredAlumniFilters, { enabled: !council });
   const searchQuery = useMemberSearch(deferredQuery);
 
   const isSearching = deferredQuery.length > 0;

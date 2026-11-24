@@ -65,7 +65,12 @@ export async function putSignedUpload({
 }: PutSignedUploadInput): Promise<void> {
   const headers: Record<string, string> = { "content-type": contentType };
   if (upsert) headers["x-upsert"] = "true";
-  const response = await fetch(signedUrl, { method: "PUT", body, headers, signal });
+  const response = await fetch(signedUrl, {
+    method: "PUT",
+    body,
+    headers,
+    signal,
+  });
   if (!response.ok) {
     throw new SignedUploadError(
       response.status,

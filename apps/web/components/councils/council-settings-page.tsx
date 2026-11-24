@@ -183,10 +183,7 @@ function CouncilProfileTab() {
 
   const mark = chapterMarkFor(chapter);
   const logoUrl = (chapter as { logo_url?: string | null }).logo_url ?? null;
-  const type = councilTypeLabel(
-    council?.council_type ??
-      (chapter as { council_type?: unknown }).council_type,
-  );
+  const type = councilTypeLabel(council?.council_type ?? chapter.council_type);
   const school = council?.school?.name ?? chapter.university ?? null;
 
   async function saveLogo(upload: ChapterLogoUpload) {

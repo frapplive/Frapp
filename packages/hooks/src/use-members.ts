@@ -366,11 +366,14 @@ export function useMemberSearch(query: string) {
   });
 }
 
-export function useAlumni(filters?: {
-  graduation_year?: string;
-  city?: string;
-  company?: string;
-}) {
+export function useAlumni(
+  filters?: {
+    graduation_year?: string;
+    city?: string;
+    company?: string;
+  },
+  options?: { enabled?: boolean },
+) {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
@@ -384,7 +387,8 @@ export function useAlumni(filters?: {
       return data;
     },
     staleTime: 60_000,
-    enabled: !!chapterId,
+    // A council has no alumni (#5933); its Directory passes `false`.
+    enabled: (options?.enabled ?? true) && !!chapterId,
     // Filters change the query key on every keystroke; keeping the previous
     // page's rows on screen until the new ones land avoids a full-list flash
     // to the loading skeleton for what's really a live-narrowing search.

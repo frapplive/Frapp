@@ -69,12 +69,8 @@ import { councilTypeLabel, useTenantKind } from "@/lib/hooks/use-tenant-kind";
 export function membershipSubtitle(
   membership: ChapterMembershipSummary,
 ): string | null {
-  const row = membership as ChapterMembershipSummary & { kind?: unknown };
-  if (row.kind === "council") {
-    return councilTypeLabel(
-      (membership.chapter as { council_type?: unknown } | undefined)
-        ?.council_type,
-    );
+  if (membership.kind === "council") {
+    return councilTypeLabel(membership.chapter?.council_type);
   }
   return membership.chapter?.university || null;
 }

@@ -72,10 +72,9 @@ export function useLiveMeetingRecordings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...meetingsKey(chapterId), "live-recordings"] as const,
     queryFn: async ({ signal }) => {
-      const { data, error } = await client.GET(
-        "/v1/meetings/live-recordings",
-        { signal },
-      );
+      const { data, error } = await client.GET("/v1/meetings/live-recordings", {
+        signal,
+      });
       if (error) throw error;
       return data;
     },

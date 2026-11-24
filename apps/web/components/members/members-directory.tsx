@@ -282,7 +282,9 @@ export function MembersDirectory() {
   const classesQuery = usePledgeClasses({ enabled: tenantKind === "chapter" });
   const searchQuery = useMemberSearch(deferredQuery);
   const rolesQuery = useRoles();
-  const leaderboardQuery = useLeaderboard();
+  const leaderboardQuery = useLeaderboard(undefined, undefined, {
+    enabled: pointsOn && tenantKind !== "council",
+  });
   const updateRolesMutation = useUpdateMemberRoles();
   // Presence is chapter-wide and ephemeral (ADR-02) — it rides the Realtime
   // socket and touches no table, so this adds no query and no write. The
