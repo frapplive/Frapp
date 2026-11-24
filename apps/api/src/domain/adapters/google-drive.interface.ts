@@ -41,6 +41,15 @@ export interface GoogleDriveItem {
    * service account reads is never its to edit.
    */
   canEdit?: boolean;
+  /**
+   * Whether whoever read it may share it, which an editor can't always do: a
+   * My Drive owner can turn off sharing for editors, and in a shared drive
+   * only Managers (and Content managers, where the drive allows it) share a
+   * folder. Only `getItemAs` asks; absent when Google doesn't say.
+   */
+  canShare?: boolean;
+  /** The shared drive that holds it, or null in someone's My Drive. Only `getItemAs` asks. */
+  driveId?: string | null;
   /** In the owner's trash. Only `getItem` asks; a listing leaves trash out. */
   trashed?: boolean;
   /**
