@@ -2,6 +2,11 @@ import { Module } from '@nestjs/common';
 import { ChapterService } from '../../application/services/chapter.service';
 import { ChapterOnboardingService } from '../../application/services/chapter-onboarding.service';
 import { ChapterController } from '../../interface/controllers/chapter.controller';
+import {
+  CouncilController,
+  CouncilsController,
+} from '../../interface/controllers/council.controller';
+import { CouncilService } from '../../application/services/council.service';
 import { AuthSyncInterceptor } from '../../interface/interceptors/auth-sync.interceptor';
 import { SupabaseChapterRepository } from '../../infrastructure/supabase/repositories/supabase-chapter.repository';
 import { SupabaseRoleRepository } from '../../infrastructure/supabase/repositories/supabase-role.repository';
@@ -34,16 +39,19 @@ import { ActivationModule } from '../activation/activation.module';
 // only `ActivationModule`, so this introduces no cycle.
 import { ChapterConfigModule } from '../chapter-config/chapter-config.module';
 // Exports `SchoolService`: onboarding's Find step proposes the chapter's
-// school link (#5929).
+// school link (#5929). And `SCHOOL_REPOSITORY`: a council's founder must be
+// verified at its school (#5933).
 import { SchoolModule } from '../school/school.module';
 
 @Module({
   imports: [AuthModule, ActivationModule, ChapterConfigModule, SchoolModule],
-  controllers: [ChapterController],
+  // Councils (#5933) are chapters rows seeded through `ChapterService`.
+  controllers: [ChapterController, CouncilsController, CouncilController],
   providers: [
     AuthSyncInterceptor,
     ChapterService,
     ChapterOnboardingService,
+    CouncilService,
     { provide: CHAPTER_REPOSITORY, useClass: SupabaseChapterRepository },
     { provide: ROLE_REPOSITORY, useClass: SupabaseRoleRepository },
     { provide: ROLE_TIER_REPOSITORY, useClass: SupabaseRoleTierRepository },

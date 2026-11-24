@@ -50,6 +50,8 @@ const hiddenFeatureCalls: unknown[][] = [];
 let chapterModules: Record<string, boolean> = {};
 /** More of the chapter's member view: its archetype and words (#5924). */
 let chapterExtra: Record<string, unknown> = {};
+/** The open tenant's kind (#5933): a council's You is the member's own. */
+let tenantKind: "chapter" | "council" = "chapter";
 /** False while `useCurrentChapter` hasn't answered (#5281's slow-read case). */
 let chapterLoaded = true;
 /** What `useMyProfileStats` answers (#5281); its reads are its own spec's. */
@@ -165,6 +167,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       : {
           name: "FIJI Tau Nu",
           ...chapterExtra,
+          kind: tenantKind,
           enabled_modules: chapterModules,
           theme_palette: {
             "--signet-accent-text": "#7FB2FF",
@@ -410,6 +413,29 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(order[2]).toBe("Study hours");
     expect(order.at(-1)).toBe("ProfileDetails");
     expect(screenText(tree)).toMatch(/^You/);
+  });
+
+  it("draws a council's You with the member's own rows only (#5933)", () => {
+    tenantKind = "council";
+    permissions = ["*"];
+    try {
+      const tree = render();
+      const rows = tree.root
+        .findAllByType(ListRow)
+        .map((node) => node.props.label as string);
+      expect(rows).toEqual([
+        "Status",
+        "Directory",
+        "Settings",
+        "Invite members",
+      ]);
+      // A council reads no chapter route: no points in the title's corner.
+      expect(
+        tree.root.findAll((n) => (n.type as unknown) === "PointsLabel"),
+      ).toHaveLength(0);
+    } finally {
+      tenantKind = "chapter";
+    }
   });
 
   it("draws the skeleton head and no Details while the profile loads, and keeps every row", () => {

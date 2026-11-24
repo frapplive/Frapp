@@ -98,6 +98,11 @@ vi.mock("@repo/hooks/use-roles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks/use-roles")>()),
   useRoles: () => ({ refetch: mockRefetchRoles, ...mockRoles() }),
 }));
+// And the tenant kind (#5933): a council reads no chapter config.
+vi.mock("@repo/hooks/use-chapters", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@repo/hooks/use-chapters")>()),
+  useCurrentChapter: () => mockCurrentChapter(),
+}));
 vi.mock("@repo/hooks/use-org-config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks/use-org-config")>()),
   useOrgConfig: () => mockOrgConfig(),

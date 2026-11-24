@@ -168,7 +168,52 @@ describe("ChapterNavHeader", () => {
     // Chapter settings leads: this menu is its only door (2026-11-19).
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent),
-    ).toEqual(["Chapter settings", "Join another chapter"]);
+    ).toEqual(["Chapter settings", "Join another chapter", "Start a council"]);
+    // Start a council sits beside joining one (#5933).
+    expect(
+      screen
+        .getByRole("menuitem", { name: "Start a council" })
+        .getAttribute("href"),
+    ).toBe("/start-council");
+  });
+
+  it("in a council, names Council settings and reads each council by its type (#5933)", async () => {
+    chaptersQuery.current = {
+      data: [
+        membership("chap-1", "RPI IFC"),
+        {
+          chapter_id: "chap-2",
+          kind: "chapter",
+          chapter: { id: "chap-2", name: "Alpha Chapter", university: "RPI" },
+        },
+      ].map((row, index) =>
+        index === 0
+          ? {
+              ...row,
+              kind: "council",
+              chapter: { ...row.chapter, council_type: "ifc" },
+            }
+          : row,
+      ),
+      isSuccess: true,
+    };
+    currentChapterQuery.current = {
+      data: {
+        ...chapterPayload("RPI IFC"),
+        kind: "council",
+        council_type: "ifc",
+      },
+      isError: false,
+    };
+    render(<ChapterNavHeader collapsed={false} />);
+
+    openMenu();
+    expect(
+      await screen.findByRole("menuitem", { name: "Council settings" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Your chapters and councils")).toBeInTheDocument();
+    expect(screen.getByText("Interfraternity Council")).toBeInTheDocument();
+    expect(screen.getByText("RPI")).toBeInTheDocument();
   });
 
   it("offers chapter settings only to a viewer Settings has something for", async () => {

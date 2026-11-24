@@ -203,7 +203,7 @@ them at all. The API reaches them with the **service-role key, which bypasses RL
 
 Table counts are not kept in this section: they move with every migration, and the numbers it
 used to give had drifted by eight tables. The query below lists the API-only tables (all but the
-three `*`-marked ones in § "Enforcing layer per table"); the policy count
+four `*`-marked ones in § "Enforcing layer per table"); the policy count
 and its counting convention belong to § "The policies that do exist", which is reconciled against
 `pg_policies`. Do not substitute a grep over `supabase/migrations/` for either: it counts
 _history_, so a `drop policy` / `create policy` pair reads as two live policies.
@@ -227,8 +227,8 @@ select c.relname
  order by c.relname;
 ```
 
-Its rows are the "API only" tables in § "Enforcing layer per table" below, minus the three
-`*`-marked tables (`members`, `users`, `member_custom_field_values`), which carry non-widening
+Its rows are the "API only" tables in § "Enforcing layer per table" below, minus the four
+`*`-marked tables (`members`, `users`, `member_custom_field_values`, and since #5933 `chapters`), which carry non-widening
 policies and so drop out of the query, but are API only all the same.
 
 This doc deliberately keeps no count or list of these tables. It used to, and every migration that
@@ -256,7 +256,7 @@ that PR also grants the client role the privilege and adds it to the tier's `CLI
 
 | Enforcing layer                                                        | Tables                                                                                                                                                                                      | Count          |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **API only** (RLS on, no policy → default-deny; service-role bypasses) | Every table the query above returns, plus `members`\*, `users`\* and `member_custom_field_values`\*. Of those, `events`†, `event_attendance`† and `notifications`† also emit a change ping. | Query rows + 3 |
+| **API only** (RLS on, no policy → default-deny; service-role bypasses) | Every table the query above returns, plus `members`\*, `users`\*, `chapters`\* and `member_custom_field_values`\*. Of those, `events`†, `event_attendance`† and `notifications`† also emit a change ping. | Query rows + 4 |
 | **RLS enforces** (read directly by a user-JWT client)                  | `chat_message_actions`, `chat_messages`                                                                                                                                                     | 2              |
 | **RLS enforces** (policy present, defense-in-depth)                    | `chapter_audit_log`‡                                                                                                                                                                   | 1              |
 
@@ -272,9 +272,9 @@ does, so publishing these three would have opened them to direct browser reads a
 enforcing layer out of the API. Topics are authorised by `realtime_messages_scoped_select` on
 `realtime.messages` (§ "The policies that do exist").
 
-### The policies that do exist (10 statements)
+### The policies that do exist (11 statements)
 
-**Counting convention.** `10` counts individual policy _statements_ — rows in `pg_policies` — not
+**Counting convention.** `11` counts individual policy _statements_ — rows in `pg_policies` — not
 rows in the table below, several of which name two policies each. That ambiguity is what let the
 number drift unnoticed before, so it is now stated rather than derived.
 
@@ -283,22 +283,23 @@ Reconciled against hosted `frapp-staging` on 2026-08-27
 **10 in `public` + 1 in `realtime` = 11** at that read. Migration `20260906203000` (#1552)
 adds a second `realtime` policy, so the expected hosted figure was **10 + 2 = 12**. Migration
 `20261112280000` (#724, #4513) drops `chat_message_actions_insert`, making it **9 + 2 = 11**, and
-`20261117174649` (#4839) drops `chat_notification_preferences_select_own`, so it is now **8 + 2 = 10**,
-the count the heading and the PGlite check carry. The promotion log records that migration as
-applied; the hosted catalog has not been re-read since 2026-08-27 (unverified).
+`20261117174649` (#4839) drops `chat_notification_preferences_select_own`, so it was **8 + 2 = 10**.
+The promotion log records that migration as applied; the hosted catalog has not been re-read since
+2026-08-27 (unverified). `20261124203152` (#5933, not yet promoted) adds `auth_admin_can_read_chapters`,
+making it **9 + 2 = 11**, the count the heading and the PGlite check carry now.
 
-The PGlite CI substrate sees **8**, every `public` one. The two absences are schema-gated rather
+The PGlite CI substrate sees **9**, every `public` one. The two absences are schema-gated rather
 than drift: `realtime.messages` needs a `realtime` schema PGlite does not have.
-`auth_admin_can_read_users` and `auth_admin_can_read_members`, created only inside
+`auth_admin_can_read_users`, `auth_admin_can_read_members` and (since #5933) `auth_admin_can_read_chapters`, created only inside
 `if exists (select 1 from pg_roles where rolname = 'supabase_auth_admin')`
 (`20260802120000_active_chapter_jwt_claim.sql:137`), are present since the harness creates that
 role before applying migrations (#1557). `scripts/pglite/tiers/policy-inventory.mjs` pins the `public`
-set **by name, command and roles**, so each of these fails CI: adding or dropping one of those 8,
+set **by name, command and roles**, so each of these fails CI: adding or dropping one of those 9,
 flipping one from `SELECT` to `ALL`, or changing its `TO` clause. The last case is dropping
 `to authenticated` from `chat_messages_select`, which would bind it to `anon` on hosted. Because
 that set still cannot see a policy _rewritten in place_, the check also rejects any permissive
 policy a client can reach whose qualifier is a bare tautology, checking **both `qual` and
-`with_check`**. The two `auth_admin_can_read_*` policies are `using (true)` by design. They are
+`with_check`**. The three `auth_admin_can_read_*` policies are `using (true)` by design. They are
 exempt because they bind `supabase_auth_admin` alone, which no client request can assume. Reading only `qual` would
 miss the write path entirely: a `FOR INSERT` policy has a NULL
 `qual` and carries its whole predicate in `with_check`, and on a `FOR ALL` policy it is `with_check`
@@ -312,7 +313,7 @@ This is a tripwire for the obvious rewrite, not a proof: it catches the literal 
 
 Note the limit of the guard: this inventory does **not** cover the two policies it cannot see.
 Dropping `realtime_messages_scoped_select` or `realtime_messages_scoped_insert` would leave it
-printing its clean `(8 here, 10 hosted)`. The `10` is derived from the pinned list plus those
+printing its clean `(9 here, 11 hosted)`. The `11` is derived from the pinned list plus those
 two, so it would then be reporting a hosted figure that is itself wrong. Both are exercised
 instead by `apps/web/lib/realtime/change-topics.spec.ts`, which replays the migrations on its own
 PGlite with a stand-in `realtime` schema ([§ 5.2](#52-the-realtime-carrier-was-never-connected--resolved-2026-08-16-867)).
@@ -325,7 +326,7 @@ PGlite with a stand-in `realtime` schema ([§ 5.2](#52-the-realtime-carrier-was-
 | `chat_message_actions`          | `_delete`                                                            | `to authenticated`, `starts_with(action_type, 'reaction:') AND chat_action_is_callers(user_id)`: a member takes back their own reaction, the one direct write both apps make (ADR-05). Since `20261112280000` (#724, #4513). Before it, this policy and an `_insert` policy found the caller through a plain `users` subselect, which sees no rows under `users`' default-deny, so neither ever matched and removing a reaction silently did nothing. `chat_action_is_callers` is `SECURITY DEFINER` and answers only whether the id is the caller's own. There is no `_insert` or `_update` policy, and INSERT and UPDATE are revoked from `anon` and `authenticated`: reactions, votes and sign-up claims are written by the API as `service_role` after its channel, poll and slot checks. Proven by execution in the client-writes tier of `chat-black-box.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `chapter_audit_log`             | `_no_update`, `_no_delete`                                           | `using (false)` — append-only, tightens rather than widens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `member_custom_field_values`    | `_service_role`                                                      | `auth.role() = 'service_role'` — explicit rather than implicit; no non-service access                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `users`, `members`              | `auth_admin_can_read_*`                                              | `to supabase_auth_admin` only — lets the custom-access-token hook read the `active_chapter_id` claim. Not reachable by `anon`/`authenticated`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `users`, `members`, `chapters`  | `auth_admin_can_read_*`                                              | `to supabase_auth_admin` only — lets the custom-access-token hook read the `active_chapter_id` claim, and since #5933 each membership's tenant kind, so it defaults to a chapter only. Not reachable by `anon`/`authenticated`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 #### `SECURITY DEFINER` predicates must pin `pg_temp` last
 

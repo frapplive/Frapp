@@ -71,6 +71,7 @@ describe("apps/web/proxy.ts", () => {
       "/join",
       "/no-access",
       "/welcome",
+      "/start-council",
       "/dashboard",
     ];
     for (const path of staticRoutes) {

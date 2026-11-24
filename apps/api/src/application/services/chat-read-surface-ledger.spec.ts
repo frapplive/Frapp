@@ -545,6 +545,11 @@ const DIRECT_READ_LEDGER: Record<string, Entry & { creates: number }> = {
     status: 'no-foreign-content',
     why: '`to supabase_auth_admin` only, as `auth_admin_can_read_users`.',
   },
+  'public.chapters auth_admin_can_read_chapters': {
+    creates: 1,
+    status: 'no-foreign-content',
+    why: "`to supabase_auth_admin` only, as `auth_admin_can_read_users`: the token hook reads each membership's tenant kind (#5933).",
+  },
   'public.member_custom_field_values member_custom_field_values_service_role': {
     creates: 1,
     status: 'no-foreign-content',

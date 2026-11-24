@@ -44,6 +44,7 @@ import {
 } from "@/components/onboarding/signed-in-as";
 import { confirmDeleteAccount } from "@/lib/account/delete-account-prompt";
 import { useAuthSession } from "@/lib/auth-session";
+import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
 import {
   consumeRememberedInviteToken,
   extractInviteToken,
@@ -607,6 +608,21 @@ export default function JoinChapter() {
                       setAccountOpen(false);
                       paste.clear();
                       router.push("/create-chapter");
+                    }}
+                  />
+                  {/* A council's officer starts it the same way (#5933). */}
+                  <PromptLine
+                    prompt={COUNCIL_FORM_COPY.startingPrompt}
+                    action={COUNCIL_FORM_COPY.start}
+                    hint={COUNCIL_FORM_COPY.startHint}
+                    disabled={submitting}
+                    onPress={() => {
+                      setAccountOpen(false);
+                      paste.clear();
+                      router.push({
+                        pathname: "/create-chapter",
+                        params: { kind: "council" },
+                      });
                     }}
                   />
                 </View>

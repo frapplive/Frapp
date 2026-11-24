@@ -22,6 +22,8 @@ import { SkeletonRegion } from "@/components/state-block";
 import { BackRow } from "@/components/back-row";
 import { OnboardingPressable } from "@/components/onboarding/onboarding-pressable";
 import { useSelectChapter } from "@/lib/select-chapter";
+import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
+import { tenantRowBody } from "@/lib/tenant-kind";
 import { tintedControlStyles } from "@/components/tinted-control";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
@@ -322,7 +324,7 @@ export default function ChapterPicker() {
                   <ChoiceRow
                     key={membership.chapter_id}
                     title={membership.chapter.name}
-                    body={membership.chapter.university}
+                    body={tenantRowBody(membership)}
                     accessibilityHint={`Open ${membership.chapter.name}.`}
                     disabled={pendingId !== null}
                     dimmed={pendingId !== null && !isPendingRow}
@@ -348,6 +350,28 @@ export default function ChapterPicker() {
             empty state says what to do. */}
           {selectError && !listEmpty ? (
             <Text style={styles.errorText}>{selectError}</Text>
+          ) : null}
+
+          {/* A council's officer starts it from here (#5933), as Slack's
+            workspace list ends in "Add a workspace" and Discord's server
+            list in "Add a server". Not under the empty state, whose Join or
+            start a chapter opens s02, which offers it too. */}
+          {!listEmpty && data ? (
+            <OnboardingPressable
+              accessibilityRole="button"
+              accessibilityHint={COUNCIL_FORM_COPY.startHint}
+              disabled={pendingId !== null}
+              onPress={() => {
+                router.push({
+                  pathname: "/create-chapter",
+                  params: { kind: "council" },
+                });
+              }}
+              quiet
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.startText}>{COUNCIL_FORM_COPY.start}</Text>
+            </OnboardingPressable>
           ) : null}
 
           {/* Never disabled, and it navigates rather than trusting the gate to
@@ -439,6 +463,10 @@ function createStyles(tokens: SignetTokens) {
       minHeight: tokens.touch.button,
       alignItems: "center",
       justifyContent: "center",
+    },
+    startText: {
+      ...typeRole(tokens.typography.role.label),
+      color: tokens.color.gold.house,
     },
     secondaryButtonText: {
       ...typeRole(tokens.typography.role.label),

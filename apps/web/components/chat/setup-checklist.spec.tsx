@@ -17,6 +17,11 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   }),
 }));
 
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/hooks/use-tenant-kind", () => ({
+  useIsCouncil: () => tenant.council,
+}));
+
 const { SetupChecklistSection } = await import("./setup-checklist");
 const { HIDE_SETUP_CHECKLIST_LABEL } = await import("@repo/hooks");
 
@@ -32,11 +37,21 @@ const TWO_OF_FIVE: SetupChecklist = {
 };
 
 beforeEach(() => {
+  tenant.council = false;
   state.checklist = null;
   state.hide = vi.fn();
 });
 
 describe("SetupChecklistSection", () => {
+  it("names a council's list as the council's (#5933)", () => {
+    tenant.council = true;
+    state.checklist = TWO_OF_FIVE;
+    render(<SetupChecklistSection />);
+    expect(
+      screen.getByRole("heading", { name: "Set up your council" }),
+    ).toBeInTheDocument();
+  });
+
   it("draws nothing when there is nothing to set up", () => {
     const { container } = render(<SetupChecklistSection />);
     expect(container).toBeEmptyDOMElement();

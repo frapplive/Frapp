@@ -29,6 +29,7 @@ import {
   USER_COMPANY_MAX_LENGTH,
 } from "@repo/validation";
 import { StandingCards } from "@/components/activity/standing-cards";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,9 @@ export function ProfilePanel() {
   // Points and approved service hours, read and summed as the phone's Profile
   // does them (`@repo/hooks` `profile-stats.ts`, #4137).
   const stats = useMyProfileStats();
+  // A council keeps no points, service hours or standing (#5933): its routes
+  // refuse those reads, so its Profile shows none of them.
+  const isCouncil = useIsCouncil();
   const statsNote = profileStatsErrorNote(
     stats.pointsFailed,
     stats.serviceFailed,
@@ -335,7 +339,7 @@ export function ProfilePanel() {
           can read an attendance rate (`profile-stats.ts`).
         */}
         <section aria-label="Your numbers" className="space-y-2">
-          {stats.visible ? (
+          {stats.visible && !isCouncil ? (
             <>
               <dl className="flex gap-10">
                 <div className="space-y-0.5">
@@ -391,7 +395,7 @@ export function ProfilePanel() {
           hours are this semester's, beside a goal; the figures above are all
           time, so both stay.
         */}
-        {stats.hasChapter ? <StandingCards /> : null}
+        {stats.hasChapter && !isCouncil ? <StandingCards /> : null}
 
         {/* Non-chapter business roles you pick yourself (#4958). */}
         {canViewMembers ? <PickRolesSection /> : null}
