@@ -1595,8 +1595,8 @@ export class TaskService {
   /**
    * Add members to a group task after it's made (#5905), the mirror of
    * {@link removeFromGroup}: each gets a copy at To do, made from the
-   * group's current title, notes, due, points, proof, checklist and
-   * follower. A cabinet member who sent a task to four brothers hands it
+   * group's current title, notes, due, points, proof, checklist,
+   * attachments and follower. A cabinet member who sent a task to four brothers hands it
    * to a fifth (Winston, 2026-11-23).
    *
    * The copy it's made from is {@link groupTemplate}'s: the one asked on

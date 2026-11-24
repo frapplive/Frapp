@@ -45,13 +45,13 @@ begin
     insert into public.tasks (
       chapter_id, title, description, assignee_id, created_by, due_date,
       due_at, status, point_reward, points_awarded, proof_kind, group_id,
-      followed_by, meeting_id
+      followed_by, meeting_id, attachments
     )
     select p_chapter_id, v_template.title, v_template.description,
            a.assignee_id, v_template.created_by, v_template.due_date,
            v_template.due_at, 'TODO', v_template.point_reward, false,
            v_template.proof_kind, p_group_id, v_template.followed_by,
-           v_template.meeting_id
+           v_template.meeting_id, v_template.attachments
       from (select distinct unnest(coalesce(p_assignee_ids, '{}')) as assignee_id) a
      where not exists (
        select 1 from public.tasks c

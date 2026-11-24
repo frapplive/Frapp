@@ -331,7 +331,7 @@ export interface Database {
         Returns: ChatChannel[];
       };
       /**
-       * `20261123185005` (#5905) — new members' copies of an existing group
+       * `20261124035159` (#5905) — new members' copies of an existing group
        * task, made from one of its copies with its checklist; a member who
        * already has a copy is skipped. Returns the copies made.
        */
