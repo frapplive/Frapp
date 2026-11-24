@@ -40,21 +40,23 @@ export interface RushCandidateWork {
 
 /**
  * The school layer's columns (#5974, `school-layer.md` § 2.5): the PNM a
- * candidate is, and who made it. Kept off {@link RushCandidate} so the rush
- * DTOs' drift guards don't change the rush contract; the pipeline's
- * candidate DTO documents `origin` (#5977).
+ * prospect is, and who made it. Kept off {@link RushCandidate} so the rush
+ * DTOs' drift guards don't change the rush contract. The interest form
+ * (#5977) creates `pnm` rows; the pipeline's candidate DTO documents
+ * `origin`.
  */
-export interface RushCandidateSchool {
+export interface RushCandidatePnmLink {
   /** The school-level PNM this prospect is, or null for a hand-added one. */
   pnm_id: string | null;
   /** `manual` (a member added them) or `pnm` (their interest form); never changes. */
   origin: 'manual' | 'pnm';
 }
 
-/** A whole `rush_candidates` row. */
-export type RushCandidateRow = RushCandidate &
-  RushCandidateWork &
-  RushCandidateSchool;
+/** A `rush_candidates` row as the pipeline works it. */
+export type RushCandidateRow = RushCandidate & RushCandidateWork;
+
+/** A whole `rush_candidates` row, as the table holds it (`database.types.ts`). */
+export type RushCandidateTableRow = RushCandidateRow & RushCandidatePnmLink;
 
 export interface RushCandidateVote {
   id: string;

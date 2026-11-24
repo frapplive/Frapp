@@ -1,5 +1,7 @@
 # Vault
 
+> **Status: parked. Nothing here is built, and it is not on the roadmap for the beta** (Paul, 2026-11-24, [#5951](https://github.com/frapplive/Frapp/issues/5951); baseline first, 2026-11-10). There is no `vault` module key, table, bucket, key management or screen in the code. This file is a design kept for later: nothing in it is drift to file or a rule to build against, and no build issue is filed from it until Paul puts it back on the roadmap. Other specs that say vault content is excluded (search, AI) are true today because there is no vault content.
+
 The vault is **encrypted private storage** for high-sensitivity chapter content — risk management discussions, standards board records, legal correspondence, anything where loss-of-confidentiality is itself the harm. Vault content lives outside the regular chapter-docs and chat surfaces.
 
 ## Scope

@@ -52,7 +52,6 @@ import { PredictionModule } from './modules/prediction/prediction.module';
 import { SemesterRolloverModule } from './modules/semester-rollover/semester-rollover.module';
 import { ReportModule } from './modules/report/report.module';
 import { SearchModule } from './modules/search/search.module';
-import { ActivityFeedModule } from './modules/activity-feed/activity-feed.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { BirthdayModule } from './modules/birthday/birthday.module';
 import { GoalsModule } from './modules/goals/goals.module';
@@ -140,7 +139,6 @@ import { validateEnv } from './config/env.validation';
     SemesterRolloverModule,
     ReportModule,
     SearchModule,
-    ActivityFeedModule,
     ActivityModule,
     BirthdayModule,
     GoalsModule,

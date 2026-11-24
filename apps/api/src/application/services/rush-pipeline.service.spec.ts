@@ -19,7 +19,7 @@ import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface'
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type {
   RushCandidate,
-  RushCandidateRow,
+  RushCandidateTableRow,
 } from '#domain/entities/rush-candidate.entity';
 import { RbacService } from './rbac.service';
 import type {
@@ -104,7 +104,7 @@ describe('RushPipelineService', () => {
   };
 
   /** The same candidate as the pipeline's own reads return it. */
-  const baseRow: RushCandidateRow = {
+  const baseRow: RushCandidateTableRow = {
     ...baseCandidate,
     owner_id: null,
     last_contact_on: null,

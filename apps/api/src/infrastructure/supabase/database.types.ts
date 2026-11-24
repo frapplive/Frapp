@@ -163,7 +163,7 @@ import type {
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
-import type { RushCandidateRow } from '#domain/entities/rush-candidate.entity';
+import type { RushCandidateTableRow } from '#domain/entities/rush-candidate.entity';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -336,7 +336,7 @@ export interface Database {
       rush_candidate_ratings: TableDefinition<RushCandidateRating>;
       rush_candidate_tags: TableDefinition<RushCandidateTag>;
       rush_candidate_votes: TableDefinition<RushCandidateVote>;
-      rush_candidates: TableDefinition<RushCandidateRow>;
+      rush_candidates: TableDefinition<RushCandidateTableRow>;
       rush_settings: TableDefinition<RushSettingsRow>;
       rush_stages: TableDefinition<RushStage>;
       rush_tags: TableDefinition<RushTag>;

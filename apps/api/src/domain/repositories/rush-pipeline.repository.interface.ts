@@ -15,6 +15,7 @@ import type {
 import type {
   RushCandidate,
   RushCandidateRow,
+  RushCandidateTableRow,
 } from '../entities/rush-candidate.entity';
 
 export const RUSH_PIPELINE_REPOSITORY = 'RUSH_PIPELINE_REPOSITORY';
@@ -46,7 +47,8 @@ export interface IRushPipelineRepository {
     stages: readonly RushStageWrite[],
   ): Promise<RushStage[]>;
 
-  listCandidates(chapterId: string): Promise<RushCandidateRow[]>;
+  /** With the PNM link, for the board's `origin`. */
+  listCandidates(chapterId: string): Promise<RushCandidateTableRow[]>;
   /** One candidate with the pipeline's columns, or null. */
   findCandidate(
     candidateId: string,
