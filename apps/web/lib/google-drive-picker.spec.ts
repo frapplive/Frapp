@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { captureMessage } = vi.hoisted(() => ({ captureMessage: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureMessage }));
+
 /**
  * Google's two browser libraries, faked: the sign-in's token client and the
  * picker, so each branch of `google-drive-picker.ts` runs without Google.
@@ -25,6 +28,8 @@ let gapiLoad: (config: {
   ontimeout: () => void;
 }) => void;
 const requestAccessToken = vi.fn();
+const dispose = vi.fn();
+const setVisible = vi.fn();
 const builder = {
   addView: vi.fn(),
   setOAuthToken: vi.fn(),
@@ -51,7 +56,11 @@ function installGoogle() {
     return builder;
   });
   builder.build.mockImplementation(() => ({
-    setVisible: () => pickerReply(callback),
+    setVisible: (visible: boolean) => {
+      setVisible(visible);
+      if (visible) pickerReply(callback);
+    },
+    dispose,
   }));
   Object.assign(window, {
     google: {
@@ -114,7 +123,18 @@ describe("pickDriveFolder", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const node of document.querySelectorAll(".picker-dialog")) {
+      node.remove();
+    }
   });
+
+  /** Google adds its picker's window to the page a moment after it shows. */
+  function addPickerWindow(position: "absolute" | "static") {
+    const node = document.createElement("div");
+    node.className = "picker picker-dialog";
+    node.style.position = position;
+    document.body.append(node);
+  }
 
   it("signs in for drive.file, then returns the picked folder with the token", async () => {
     const { pickDriveFolder } = await load();
@@ -173,5 +193,43 @@ describe("pickDriveFolder", () => {
     await expect(pickDriveFolder(CONFIG)).resolves.toMatchObject({
       id: "folder-9",
     });
+  });
+
+  it("closes a picker whose window lands in the page instead of over it, and says so", async () => {
+    // Without Google's stylesheet the window sits in the page's flow: the
+    // page grows screens tall and scrolls to a blank bottom (2026-11-24).
+    pickerReply = () => {
+      queueMicrotask(() => addPickerWindow("static"));
+    };
+    const { pickDriveFolder } = await load();
+    await expect(pickDriveFolder(CONFIG)).rejects.toThrow(
+      /didn't display properly/,
+    );
+    expect(setVisible).toHaveBeenLastCalledWith(false);
+    expect(dispose).toHaveBeenCalled();
+    expect(captureMessage).toHaveBeenCalledWith(
+      "Google Drive picker shown without its styles",
+      expect.objectContaining({ level: "warning" }),
+    );
+  });
+
+  it("leaves a picker that floats over the page open, and ignores an earlier picker's window", async () => {
+    addPickerWindow("static");
+    let pick: PickerCallback = () => undefined;
+    pickerReply = (callback) => {
+      pick = callback;
+      queueMicrotask(() => addPickerWindow("absolute"));
+    };
+    const { pickDriveFolder } = await load();
+    const picked = pickDriveFolder(CONFIG);
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".picker-dialog")).toHaveLength(2),
+    );
+    pick({
+      action: "picked",
+      docs: [{ id: "folder-9", name: "Chapter Drive" }],
+    });
+    await expect(picked).resolves.toMatchObject({ id: "folder-9" });
+    expect(dispose).not.toHaveBeenCalled();
   });
 });

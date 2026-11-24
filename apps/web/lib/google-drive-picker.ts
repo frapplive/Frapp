@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs";
+
 /**
  * Google's own folder picker for connecting a chapter's Drive folder (#5583;
  * `spec/behavior/chapter-docs.md` § Google Drive folder). The officer signs
@@ -19,6 +21,8 @@ const TOKEN_MARGIN_MS = 60_000;
 const LOAD_TIMEOUT_MS = 15_000;
 const LOAD_FAILED =
   "Couldn't load Google's folder picker. Check your connection and try again.";
+const SHOWN_WRONG =
+  "Google's folder picker didn't display properly. Reload the page and try again, or use a folder link instead.";
 
 export interface DrivePickerConfig {
   client_id: string;
@@ -73,7 +77,11 @@ interface PickerBuilder {
   setAppId(id: string): PickerBuilder;
   setTitle(title: string): PickerBuilder;
   setCallback(callback: (data: PickerResponse) => void): PickerBuilder;
-  build(): { setVisible(visible: boolean): void };
+  build(): ShownPicker;
+}
+interface ShownPicker {
+  setVisible(visible: boolean): void;
+  dispose(): void;
 }
 interface PickerResponse {
   action?: string;
@@ -249,8 +257,16 @@ export async function pickDriveFolder(
       .setIncludeFolders(true)
       .setSelectFolderEnabled(true)
       .setMimeTypes(FOLDER_MIME);
-  return new Promise((resolve) => {
-    new picker.PickerBuilder()
+  const earlier = new Set(document.querySelectorAll(PICKER_WINDOW));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let stopWatching: () => void = () => undefined;
+    const done = (folder: PickedFolder | null) => {
+      settled = true;
+      stopWatching();
+      resolve(folder);
+    };
+    const shown = new picker.PickerBuilder()
       .addView(folders())
       .addView(folders().setEnableDrives(true))
       .setOAuthToken(accessToken)
@@ -259,18 +275,78 @@ export async function pickDriveFolder(
       .setTitle("Pick your chapter's folder")
       .setCallback((data) => {
         if (data.action === picker.Action.CANCEL) {
-          resolve(null);
+          done(null);
           return;
         }
         if (data.action !== picker.Action.PICKED) return;
         const doc = data.docs?.[0];
         if (!doc?.id) {
-          resolve(null);
+          done(null);
           return;
         }
-        resolve({ id: doc.id, name: doc.name ?? "", accessToken });
+        done({ id: doc.id, name: doc.name ?? "", accessToken });
       })
-      .build()
-      .setVisible(true);
+      .build();
+    shown.setVisible(true);
+    if (settled) return;
+    stopWatching = watchPlacement(earlier, () => {
+      settled = true;
+      stopWatching();
+      shown.setVisible(false);
+      shown.dispose();
+      reject(new DrivePickerError(SHOWN_WRONG));
+    });
   });
+}
+
+/** The picker's window, which Google adds to the page once it is shown. */
+const PICKER_WINDOW = ".picker-dialog";
+
+/**
+ * Calls `onWrong` if the picker's window lands in the page's flow instead of
+ * floating over it. Google styles that window with a stylesheet its picker
+ * module adds; when that stylesheet is missing, the window and its backdrop
+ * stack under the app, the page grows several screens tall and the browser
+ * scrolls to the bottom, leaving the officer on a blank page (staging,
+ * 2026-11-24). Closing it and saying so leaves the page as it was.
+ * `earlier` holds the windows of pickers shown before, which Google keeps
+ * hidden on the page. Returns a function that stops watching.
+ */
+function watchPlacement(
+  earlier: ReadonlySet<Element>,
+  onWrong: () => void,
+): () => void {
+  const check = (): boolean => {
+    const shownWindow = Array.from(
+      document.querySelectorAll(PICKER_WINDOW),
+    ).find((element) => !earlier.has(element));
+    if (!shownWindow) return false;
+    if (getComputedStyle(shownWindow).position === "static") {
+      Sentry.captureMessage("Google Drive picker shown without its styles", {
+        level: "warning",
+        tags: { feature: "google-drive-picker" },
+        extra: {
+          pickerStyles: Array.from(document.querySelectorAll("style")).filter(
+            (style) => style.textContent?.includes(".picker-dialog"),
+          ).length,
+        },
+      });
+      onWrong();
+    }
+    return true;
+  };
+  if (check()) return () => undefined;
+  // Google adds the window to the page as it shows the picker and names it
+  // a moment later, so the page's children are watched for their class too.
+  // The first sight of the window settles it, so this stops at once.
+  const observer = new MutationObserver(() => {
+    if (check()) observer.disconnect();
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  return () => observer.disconnect();
 }
