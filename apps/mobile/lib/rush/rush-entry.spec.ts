@@ -6,7 +6,7 @@ import {
   type RushPipelineCandidate,
   type RushStage,
 } from "@repo/hooks";
-import { rushStageTabs } from "./rush-entry";
+import { RUSH_FOLLOW_UP_TAB, rushListTabs, rushStageTabs } from "./rush-entry";
 
 /**
  * The recruitment list's chips (#5924): the board's columns, one stage at a
@@ -46,6 +46,15 @@ function candidate(id: string, stageKey: string, day: number) {
     tag_ids: [],
     viewer_rating: null,
     viewer_has_voted: false,
+    owner_id: null,
+    owner_name: null,
+    last_contact_on: null,
+    last_contact_by: null,
+    last_contact_by_name: null,
+    follow_up_on: null,
+    follow_up_note: null,
+    follow_up_user_id: null,
+    follow_up_user_name: null,
   } as RushPipelineCandidate;
 }
 
@@ -123,5 +132,55 @@ describe("a row's tags", () => {
       shown: ["a", "b"],
       more: 2,
     });
+  });
+});
+
+describe("rushListTabs (#5934)", () => {
+  const work = (canWork: boolean, viewerId: string | null = "me") => ({
+    canWork,
+    viewerId,
+    staleDays: 7,
+    today: "2026-11-24",
+  });
+
+  it("puts Follow up first for a role that works prospects, with the viewer's work in it", () => {
+    const due = {
+      ...candidate("due", "met", 20),
+      follow_up_on: "2026-11-24",
+      follow_up_user_id: "me",
+    };
+    const someoneElses = {
+      ...candidate("theirs", "met", 20),
+      follow_up_on: "2026-11-23",
+      follow_up_user_id: "other",
+    };
+    const staleOwned = {
+      ...candidate("stale", "new", 1),
+      owner_id: "me",
+    };
+    const tabs = rushListTabs(
+      STAGES,
+      [due, someoneElses, staleOwned],
+      work(true),
+    );
+    expect(tabs[0]).toMatchObject({
+      id: RUSH_FOLLOW_UP_TAB,
+      label: "Follow up",
+      followUp: true,
+    });
+    // Due follow-ups first, then stale prospects the viewer owns.
+    expect(tabs[0]!.candidates.map((c) => c.id)).toEqual(["due", "stale"]);
+    expect(tabs.slice(1).map((t) => t.id)).toEqual(["new", "met", "closed"]);
+  });
+
+  it("draws no Follow up chip for a role that can't work prospects", () => {
+    const tabs = rushListTabs(STAGES, [], work(false));
+    expect(tabs.map((t) => t.id)).toEqual(["new", "met", "closed"]);
+  });
+
+  it("holds nobody under Follow up while the viewer's id is unknown", () => {
+    const owned = { ...candidate("a", "new", 1), owner_id: "me" };
+    const tabs = rushListTabs(STAGES, [owned], work(true, null));
+    expect(tabs[0]!.candidates).toEqual([]);
   });
 });

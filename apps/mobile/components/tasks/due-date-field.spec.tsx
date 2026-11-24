@@ -73,3 +73,61 @@ describe("the New task due date", () => {
     act(() => tree.unmount());
   });
 });
+
+describe("a bounded day (#5934)", () => {
+  it("offers only the days between earliest and latest, on both platforms", () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <DueDateField
+            value="2026-11-20"
+            today="2026-11-24"
+            earliest="2026-07-27"
+            latest="2026-11-24"
+            label="Day"
+            disabled={false}
+            onChange={vi.fn()}
+            platform="ios"
+          />
+        </FrappThemeProvider>,
+      );
+    });
+    const picker = tree.root.find(
+      (node) => node.type === ("DateTimePicker" as never),
+    );
+    expect(picker.props.minimumDate.getMonth()).toBe(6);
+    expect(picker.props.minimumDate.getDate()).toBe(27);
+    expect(picker.props.maximumDate.getDate()).toBe(24);
+    act(() => tree.unmount());
+
+    const open = vi.mocked(DateTimePickerAndroid.open);
+    open.mockClear();
+    act(() => {
+      tree = create(
+        <FrappThemeProvider>
+          <DueDateField
+            value="2026-11-20"
+            today="2026-11-24"
+            earliest="2026-07-27"
+            latest="2026-11-24"
+            label="Day"
+            disabled={false}
+            onChange={vi.fn()}
+            platform="android"
+          />
+        </FrappThemeProvider>,
+      );
+    });
+    const button = tree.root.find(
+      (node) =>
+        (node.type as unknown) === "Pressable" &&
+        node.props.accessibilityHint === "Opens the date picker.",
+    );
+    act(() => button.props.onPress());
+    const args = open.mock.calls[0]![0];
+    expect(args.minimumDate?.getDate()).toBe(27);
+    expect(args.maximumDate?.getDate()).toBe(24);
+    act(() => tree.unmount());
+  });
+});

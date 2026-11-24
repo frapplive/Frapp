@@ -24,6 +24,9 @@ const SCREENS_BY_PATHNAME: Record<string, readonly string[]> = {
   "/service-hours": ["service"],
   "/directory": ["members"],
   "/suggested-tasks": ["ai_suggestions"],
+  // Recruitment follow-ups and stale alerts (#5934), as `targets.ts` opens them.
+  "/rush": ["rush"],
+  "/rush-prospect": ["rush"],
 };
 
 const NONE: readonly string[] = [];

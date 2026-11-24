@@ -10,6 +10,11 @@ import {
   type RushPipelineAccess,
   type RushPipelineCandidate,
 } from "@repo/hooks";
+import {
+  readKeptDraft,
+  useKeptDraftKeys,
+  useKeptFormDraft,
+} from "@repo/hooks/kept-drafts";
 import { formatRelativeDayTime } from "@repo/formatting";
 import { RUSH_NOTE_MAX } from "@repo/validation";
 import { Button } from "@/components/ui/button";
@@ -44,15 +49,34 @@ export function RushNotes({
   const headingId = useId();
   const notes = useRushNotes(candidate.id, { enabled: access.readNotes });
   const add = useAddRushNote();
-  const [draft, setDraft] = useState("");
+  // A half-written note is kept per prospect (#5931, rulebook § 4: keep the
+  // draft), so opening another prospect and coming back finds it, as the
+  // phone's notes box does. The panel mounts this per prospect.
+  const keys = useKeptDraftKeys();
+  const draftForm = `rush-note:${candidate.id}`;
+  const [opening] = useState(() =>
+    readKeptDraft<string>(keys.draft(draftForm)),
+  );
+  const [draft, setDraft] = useState(opening ?? "");
+  const kept = useKeptFormDraft(
+    access.writeNotes ? draftForm : null,
+    true,
+    draft,
+    { restoredAtMount: opening !== undefined },
+  );
   const body = draft.trim();
 
   async function submit() {
     if (!body || add.isPending) return;
+    kept.hold();
     try {
       await add.mutateAsync({ candidateId: candidate.id, body });
+      kept.drop();
       setDraft("");
+      // The empty box it is left showing is not a draft.
+      kept.rebase();
     } catch (error) {
+      kept.release();
       toastFailure({
         title: "Couldn't add the note",
         error,

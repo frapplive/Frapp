@@ -1,9 +1,13 @@
-import { Fragment, forwardRef, type ReactNode } from "react";
+import { Fragment, forwardRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import {
+  BottomSheetModal,
+  BottomSheetTextInput,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SignetTokens } from "@repo/theme/signet";
-import { typeRole, useFrappTheme } from "@/lib/theme";
+import { fieldTypeRole, typeRole, useFrappTheme } from "@/lib/theme";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { CheckGlyph } from "@/components/control-glyphs";
 import {
@@ -110,9 +114,17 @@ export const OptionSheet = forwardRef<
     checked?: readonly string[];
     /** The sheet closed, however it closed. */
     onDismiss?: () => void;
+    /**
+     * A search field under the title once the list runs past
+     * {@link MAX_ROWS_SIZED_TO_CONTENT} rows (rulebook § 9: "search appears
+     * past 8 options"), named by this placeholder: a prospect's owner picked
+     * from the whole roster (#5934). It matches the rows' labels, ignoring
+     * case, and keeps any row whose value is `null` (the "none" choice).
+     */
+    searchPlaceholder?: string;
   }
 >(function OptionSheet(
-  { title, options, selected, onSelect, onDismiss, checked },
+  { title, options, selected, onSelect, onDismiss, checked, searchPlaceholder },
   ref,
 ) {
   const closeSheet = useSheetClose(ref);
@@ -123,9 +135,18 @@ export const OptionSheet = forwardRef<
   const backgroundStyle = useSheetBackgroundStyle();
   const fits = fitsContent(options);
   const bottomPad = { paddingBottom: insets.bottom + tokens.spacing.md };
+  const [query, setQuery] = useState("");
+  const searchable = searchPlaceholder !== undefined && !fits;
+  const needle = searchable ? query.trim().toLowerCase() : "";
+  const shown = needle
+    ? options.filter(
+        (option) =>
+          option.value === null || option.label.toLowerCase().includes(needle),
+      )
+    : options;
 
   const many = checked !== undefined;
-  const rows = options.map((option, index) => {
+  const rows = shown.map((option, index) => {
     const on = many
       ? option.value !== null && checked.includes(option.value)
       : option.value === selected;
@@ -142,7 +163,7 @@ export const OptionSheet = forwardRef<
         }}
         style={({ pressed }) => [
           styles.row,
-          index === options.length - 1 ? styles.rowLast : null,
+          index === shown.length - 1 ? styles.rowLast : null,
           pressed ? styles.rowPressed : null,
         ]}
       >
@@ -185,7 +206,11 @@ export const OptionSheet = forwardRef<
       backgroundStyle={backgroundStyle}
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
-      onDismiss={onDismiss}
+      keyboardBehavior={searchable ? "interactive" : undefined}
+      onDismiss={() => {
+        setQuery("");
+        onDismiss?.();
+      }}
     >
       <SheetBackToClose onClose={closeSheet} />
       {fits ? (
@@ -202,9 +227,29 @@ export const OptionSheet = forwardRef<
           accessibilityRole={many ? undefined : "radiogroup"}
           onAccessibilityEscape={closeSheet}
           contentContainerStyle={[styles.body, bottomPad]}
+          keyboardShouldPersistTaps="handled"
         >
           <SheetHeader title={title} />
+          {searchable ? (
+            <BottomSheetTextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={tokens.color.text.muted}
+              accessibilityLabel={searchPlaceholder}
+              autoCorrect={false}
+              returnKeyType="search"
+              style={styles.search}
+            />
+          ) : null}
           {rows}
+          {needle && !shown.some((option) => option.value !== null) ? (
+            // A search that matched nothing is one line where the rows were
+            // (P1.3).
+            <Text
+              style={styles.miss}
+            >{`No matches for "${query.trim()}".`}</Text>
+          ) : null}
         </BottomSheetScrollView>
       )}
     </BottomSheetModal>
@@ -224,6 +269,23 @@ function createStyles(tokens: SignetTokens) {
       paddingVertical: tokens.spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: tokens.color.border.hairline,
+    },
+    search: {
+      borderRadius: tokens.radius.control,
+      borderWidth: 1,
+      borderColor: tokens.color.border.control,
+      backgroundColor: tokens.color.surface.surface1,
+      paddingHorizontal: tokens.spacing.md,
+      minHeight: tokens.touch.minimum,
+      marginBottom: tokens.spacing.sm,
+      // Single-line: no lineHeight, or iOS sits the text low.
+      ...fieldTypeRole(tokens.typography.role.body),
+      color: tokens.color.text.foreground,
+    },
+    miss: {
+      ...typeRole(tokens.typography.role.body),
+      color: tokens.color.text.mutedForeground,
+      paddingVertical: tokens.spacing.sm,
     },
     heading: {
       ...typeRole(tokens.typography.role.label),

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useTierPermissionToggle } from "@/components/roles/use-role-permission-toggle";
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { RushStageEditor } from "./rush-stage-editor";
+import { RushStaleDays } from "./rush-stale-days";
 import { RushTagList } from "./rush-tag-list";
 
 /** The key that lets a role read recruitment notes. */
@@ -21,7 +22,8 @@ export const RUSH_READ_NOTES = "rush:read_notes";
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
  * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live):
- * its stages, its tags, and turning notes on for a chapter where nobody can
+ * its stages, its tags, how many days without a contact a prospect needs a
+ * follow-up after (#5934), and turning notes on for a chapter where nobody can
  * read them yet. One page, no second recruitment settings screen. The
  * stages and tags read through the pipeline's routes, so they show only to a
  * viewer who can open the pipeline while the module is on; `rush:manage`
@@ -52,6 +54,10 @@ export function RushModuleSettings({
               canEdit={access.manage}
             />
             <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />
+            <RushStaleDays
+              staleDays={pipeline.data.stale_days}
+              canEdit={access.manage}
+            />
           </>
         ) : pipeline.isError ? (
           <InlineNote>Couldn&apos;t load the stages and tags.</InlineNote>

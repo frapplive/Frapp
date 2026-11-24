@@ -8,12 +8,12 @@ import {
   EventsGlyph,
   MeetingsGlyph,
   PointsGlyph,
+  RecruitmentGlyph,
   ServiceGlyph,
   StudyGlyph,
   TasksGlyph,
   type NavGlyphComponent,
 } from "@/components/layout/nav-glyphs";
-import { RushGlyph } from "@/components/chat/chat-glyphs";
 import type { UnsetFeatureKey } from "@repo/hooks";
 import { vocab, type VocabConfig, type VocabKey } from "@repo/org-archetypes";
 import { SECTION_NAMES } from "@repo/validation";
@@ -252,7 +252,7 @@ export const DASHBOARD_NAV: NavSection[] = [
         id: "rush",
         label: vocab("recruitment"),
         vocabLabel: "recruitment",
-        icon: RushGlyph,
+        icon: RecruitmentGlyph,
         href: "/rush",
         description: "Prospects by stage, with tags, ratings and notes.",
         module: "rush",

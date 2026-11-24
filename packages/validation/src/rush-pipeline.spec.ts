@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RUSH_STAGES,
+  RUSH_CONTACT_KINDS,
   RUSH_STAGE_LABEL_MAX,
   RUSH_STAGES_MAX,
   firstVisibleRushStage,
+  formatRushDay,
   formatRushRatingAverage,
+  isRushCandidateStale,
+  isRushContactKind,
+  isRushFollowUpDue,
+  isRushFollowUpForViewer,
   isRushManualClosedReason,
+  rushDaysBetween,
+  rushFollowUpsDueCount,
+  rushStaleOn,
+  shiftRushDayKey,
   rushStagesProblem,
   sortRushStages,
   type RushStageCategory,
@@ -175,5 +185,101 @@ describe("isRushManualClosedReason", () => {
     3,
   ])("refuses %s", (reason) => {
     expect(isRushManualClosedReason(reason)).toBe(false);
+  });
+});
+
+describe("contacts, follow-ups and the stale alert (#5934)", () => {
+  const open = {
+    closed_reason: null,
+    created_at: "2026-11-10T22:00:00Z",
+    last_contact_on: null as string | null,
+    follow_up_on: null as string | null,
+    owner_id: null as string | null,
+    follow_up_user_id: null as string | null,
+  };
+
+  it("goes stale N days after the last contact, or after being added", () => {
+    expect(rushStaleOn(open, 7)).toBe("2026-11-17");
+    expect(rushStaleOn({ ...open, last_contact_on: "2026-11-20" }, 7)).toBe(
+      "2026-11-27",
+    );
+    expect(isRushCandidateStale(open, 7, "2026-11-16")).toBe(false);
+    expect(isRushCandidateStale(open, 7, "2026-11-17")).toBe(true);
+    expect(
+      isRushCandidateStale(
+        { ...open, closed_reason: "no_response" },
+        7,
+        "2027-01-01",
+      ),
+    ).toBe(false);
+  });
+
+  it("counts a follow-up due today or past, on an open prospect", () => {
+    const due = { ...open, follow_up_on: "2026-11-24" };
+    expect(isRushFollowUpDue(due, "2026-11-23")).toBe(false);
+    expect(isRushFollowUpDue(due, "2026-11-24")).toBe(true);
+    expect(isRushFollowUpDue(due, "2026-11-30")).toBe(true);
+    expect(
+      isRushFollowUpDue({ ...due, closed_reason: "withdrew" }, "2026-11-30"),
+    ).toBe(false);
+  });
+
+  it("puts the viewer's due follow-ups and stale prospects they own under Follow up", () => {
+    const today = "2026-11-24";
+    const mine = { ...open, follow_up_on: today, follow_up_user_id: "me" };
+    expect(isRushFollowUpForViewer(mine, "me", 7, today)).toBe(true);
+    expect(isRushFollowUpForViewer(mine, "you", 7, today)).toBe(false);
+    const owned = { ...open, owner_id: "me", last_contact_on: "2026-11-10" };
+    expect(isRushFollowUpForViewer(owned, "me", 7, today)).toBe(true);
+    expect(
+      isRushFollowUpForViewer(
+        { ...owned, last_contact_on: "2026-11-20" },
+        "me",
+        7,
+        today,
+      ),
+    ).toBe(false);
+  });
+
+  it("says a day relative to today, written out", () => {
+    const today = "2026-11-24"; // a Tuesday
+    expect(formatRushDay("2026-11-24", today)).toBe("Today");
+    expect(formatRushDay("2026-11-23", today)).toBe("Yesterday");
+    expect(formatRushDay("2026-11-25", today)).toBe("Tomorrow");
+    expect(formatRushDay("2026-11-26", today)).toBe("Thursday");
+    expect(formatRushDay("2026-11-19", today)).toBe("November 19");
+    expect(formatRushDay("2026-11-03", today)).toBe("November 3");
+    expect(formatRushDay("2027-01-04", today)).toBe("January 4, 2027");
+    expect(shiftRushDayKey("2026-12-31", 1)).toBe("2027-01-01");
+    expect(rushDaysBetween("2026-11-24", "2026-12-01")).toBe(7);
+  });
+
+  it("counts the viewer's follow-ups due today or earlier", () => {
+    const today = "2026-11-24";
+    const row = (on: string | null, who: string | null, closed = false) => ({
+      closed_reason: closed ? ("withdrew" as const) : null,
+      follow_up_on: on,
+      follow_up_user_id: who,
+    });
+    expect(
+      rushFollowUpsDueCount(
+        [
+          row("2026-11-24", "me"),
+          row("2026-11-20", "me"),
+          row("2026-11-25", "me"),
+          row("2026-11-24", "you"),
+          row("2026-11-24", "me", true),
+          row(null, "me"),
+        ],
+        "me",
+        today,
+      ),
+    ).toBe(2);
+  });
+
+  it("knows the contact kinds", () => {
+    expect(RUSH_CONTACT_KINDS).toHaveLength(6);
+    expect(isRushContactKind("social_dm")).toBe(true);
+    expect(isRushContactKind("pigeon")).toBe(false);
   });
 });

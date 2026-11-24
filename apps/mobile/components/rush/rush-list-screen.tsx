@@ -1,10 +1,11 @@
+import { localIsoDate } from "@repo/formatting";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import {
-  rushProspectCount,
   rushRatingSummary,
   useRushPipeline,
+  useViewerUserId,
   type RushPipelineCandidate,
   type RushTag,
   rushAppliedTags,
@@ -12,6 +13,7 @@ import {
   rushTagOverflow,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
+import { rushFollowUpsDueCount } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_YOU } from "@/components/back-row";
@@ -22,15 +24,32 @@ import {
   PressableRow,
 } from "@/components/list-section";
 import { ForwardGlyph } from "@/components/control-glyphs";
-import { HairlineChip } from "@/components/status-chip";
+import { HairlineChip, StatusChip } from "@/components/status-chip";
 import { InlineNote } from "@/components/inline-note";
+import {
+  itemMenuAccessibility,
+  longPressOf,
+  useItemMenu,
+  type ItemMenuHandle,
+} from "@/components/item-actions-menu";
+import { RushAddProspectSheet } from "@/components/rush/rush-add-prospect-sheet";
+import {
+  RUSH_LOG_CONTACT,
+  RushLogContactSheet,
+} from "@/components/rush/rush-log-contact-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { useRefetchAll } from "@/components/pull-to-refresh";
 import {
-  rushStageTabs,
+  rushListTabs,
   useRushEntry,
   type RushStageTab,
 } from "@/lib/rush/rush-entry";
+import {
+  RUSH_ADD_PROSPECT,
+  rushListSubtitle,
+  rushOwnerWords,
+  rushRowMark,
+} from "@repo/hooks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -43,42 +62,87 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * tabs over one stage's deals, and as this app's Directory and Documents put
  * their sets in a chip row. The chips are the board's columns in its order
  * (`rushBoardColumns`): every visible stage, then one Closed chip that holds
- * every Closed stage. It opens on the first stage, where a new prospect
- * lands. Each chip carries its count, so a stage with nobody in it reads as
- * such before it is opened.
+ * every Closed stage. Each chip carries its count, so a stage with nobody in
+ * it reads as such before it is opened.
+ *
+ * For a role that works prospects (`rush:add`) the row starts with **Follow
+ * up** (#5934, Winston's UI design v8 § 3b), and the list opens on it: the
+ * viewer's follow-ups due today or earlier, then the prospects they own that
+ * have gone the chapter's stale days without a contact, oldest first. It is
+ * the recruiter's day, as ChapterBuilder's follow-up alerts and HubSpot's and
+ * Pipedrive's "due today" task lists open on what's owed rather than on the
+ * whole pipeline. Any other role opens on the first stage, where a new
+ * prospect lands.
  *
  * The subtitle counts the prospects still in play (everyone not Closed),
- * the number a recruitment chair checks first. A row says who the prospect
- * is, who added them, and (for a role that may see results) their rating, as
- * ChapterBuilder's names list carries a name, its recruiter and a score; then
- * the first two tags.
+ * the number a recruitment chair checks first, then the viewer's follow-ups
+ * due today ("48 prospects · 3 follow-ups due today"). A row says who the
+ * prospect is, who owns them and (for a role that may see results) their
+ * rating, as ChapterBuilder's names list carries a name, its recruiter and a
+ * score; then a follow-up mark ("Follow-up Thursday", or "Needs follow-up" for a
+ * stale prospect, never on a closed one) and the first two tags. A row's
+ * long press offers Log contact to a role that works prospects.
  *
  * A search over the open chip finds a name on event night, when 40 people
  * walk in and the list is long (`ifc-recruitment.md` § A recruitment week).
  *
- * Adding is in chat for now (`/rush add Name`, under the chapter's word), so
- * an empty chip where adds land says how; this screen has no create button
- * yet (`@repo/hooks` has no add hook outside chat).
+ * **New prospect** is the floating "+" for `rush:add` (#5931), a one-name
+ * sheet; once one is added the list shows the stage it landed in.
  */
 export function RushListScreen() {
   const router = useRouter();
   const entry = useRushEntry();
   const pipeline = useRushPipeline({ enabled: entry.show });
+  const viewerId = useViewerUserId();
   const refresh = useRefetchAll([pipeline]);
+  const menu = useItemMenu();
   const [picked, setPicked] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [logging, setLogging] = useState<string | null>(null);
+  const canWork = entry.access.add;
+  const today = localIsoDate(new Date());
 
   const data = pipeline.data;
   const tabs = useMemo(
-    () => (data ? rushStageTabs(data.stages, data.candidates) : []),
-    [data],
+    () =>
+      data
+        ? rushListTabs(data.stages, data.candidates, {
+            canWork,
+            viewerId,
+            staleDays: data.stale_days,
+            today,
+          })
+        : [],
+    [data, canWork, viewerId, today],
   );
-  // The first stage until the member picks another, and the first again if
-  // the picked one leaves (an officer hid it while it was open).
+  // Follow up (or the first stage) until the member picks another, and the
+  // first again if the picked one leaves (an officer hid it while it was open).
   const tab = tabs.find((t) => t.id === picked) ?? tabs[0] ?? null;
   const openCount = data
     ? rushOpenProspectCount(data.stages, data.candidates)
     : null;
+  const dueCount =
+    data && viewerId !== null && canWork
+      ? rushFollowUpsDueCount(data.candidates, viewerId, today)
+      : 0;
+
+  /** A row's long-press menu: Log contact, for a role that works prospects. */
+  const menuFor = (candidate: RushPipelineCandidate) =>
+    menu.handleFor(
+      canWork && (candidate.user_id === null || candidate.user_id !== viewerId)
+        ? {
+            title: candidate.display_name,
+            actions: [
+              {
+                key: "log-contact",
+                label: RUSH_LOG_CONTACT,
+                run: () => setLogging(candidate.id),
+              },
+            ],
+          }
+        : null,
+    );
 
   if (entry.settled && !entry.show) return <Redirect href="/you" />;
 
@@ -123,8 +187,9 @@ export function RushListScreen() {
           tab={tab}
           tags={data.tags}
           search={search}
-          canAdd={entry.access.add}
-          command={entry.command}
+          staleDays={data.stale_days}
+          today={today}
+          menuFor={menuFor}
           onOpen={(candidate) =>
             router.push({
               pathname: "/rush-prospect",
@@ -140,9 +205,19 @@ export function RushListScreen() {
     <ScreenShell
       back={BACK_TO_YOU}
       title={entry.term}
-      subtitle={openCount === null ? undefined : rushProspectCount(openCount)}
+      subtitle={
+        openCount === null ? undefined : rushListSubtitle(openCount, dueCount)
+      }
       refresh={refresh}
       keyboardShouldPersistTaps="handled"
+      createAction={
+        canWork
+          ? {
+              label: RUSH_ADD_PROSPECT.title,
+              onPress: () => setAdding(true),
+            }
+          : undefined
+      }
     >
       {data && data.candidates.length > 0 ? (
         <SearchField
@@ -155,6 +230,25 @@ export function RushListScreen() {
         />
       ) : null}
       {renderBody()}
+      {menu.element}
+      {adding ? (
+        <RushAddProspectSheet
+          // The new prospect is in the stage adds land in: show it.
+          onAdded={() => {
+            const landing = tabs.find((t) => t.receivesAdds);
+            if (landing) setPicked(landing.id);
+            setSearch("");
+          }}
+          onClosed={() => setAdding(false)}
+        />
+      ) : null}
+      {logging ? (
+        <RushLogContactSheet
+          key={logging}
+          candidateId={logging}
+          onClosed={() => setLogging(null)}
+        />
+      ) : null}
     </ScreenShell>
   );
 }
@@ -164,15 +258,17 @@ function StageList({
   tab,
   tags,
   search,
-  canAdd,
-  command,
+  staleDays,
+  today,
+  menuFor,
   onOpen,
 }: {
   tab: RushStageTab;
   tags: readonly RushTag[];
   search: string;
-  canAdd: boolean;
-  command: string;
+  staleDays: number;
+  today: string;
+  menuFor: (candidate: RushPipelineCandidate) => ItemMenuHandle | null;
   onOpen: (candidate: RushPipelineCandidate) => void;
 }) {
   const needle = search.trim().toLowerCase();
@@ -183,7 +279,7 @@ function StageList({
     : tab.candidates;
 
   if (tab.candidates.length === 0) {
-    return <InlineNote>{emptyStageLine(tab, canAdd, command)}</InlineNote>;
+    return <InlineNote>{emptyStageLine(tab, staleDays)}</InlineNote>;
   }
   if (rows.length === 0) {
     return (
@@ -197,6 +293,9 @@ function StageList({
           key={candidate.id}
           candidate={candidate}
           tags={tags}
+          staleDays={staleDays}
+          today={today}
+          menu={menuFor(candidate)}
           onPress={() => onOpen(candidate)}
         />
       ))}
@@ -205,41 +304,47 @@ function StageList({
 }
 
 /**
- * What an empty chip says. Where adds land (the New stage, whatever the
- * chapter calls it) it says how to add one, for a role that may; the rest
- * only say they're empty, since nobody is added straight into them.
+ * What an empty chip says. Follow up says what lands there; a stage only that
+ * it's empty, since a role that adds has the "+" for its first prospect.
  */
 export function emptyStageLine(
-  tab: Pick<RushStageTab, "label" | "closed" | "receivesAdds">,
-  canAdd: boolean,
-  command: string,
+  tab: Pick<RushStageTab, "label" | "closed" | "followUp">,
+  staleDays: number,
 ): string {
-  if (tab.closed) return "No closed prospects.";
-  if (tab.receivesAdds && canAdd) {
-    return `No prospects in ${tab.label}. Add one in chat with ${command} add and their name.`;
+  if (tab.followUp) {
+    return `Nothing to follow up on. Your follow-ups show here when they're due, and prospects you own after ${staleDays} ${
+      staleDays === 1 ? "day" : "days"
+    } without a contact.`;
   }
+  if (tab.closed) return "No closed prospects.";
   return `No prospects in ${tab.label}.`;
 }
 
 /**
- * A prospect's row: their name, "Added by …" and their rating summary on
- * one muted line, then up to two tags and a count of the rest.
+ * A prospect's row: their name, their owner and rating summary on one muted
+ * line, then the follow-up mark (a due one and a stale prospect in the
+ * warning hue, a later one quiet), up to two tags and a count of the rest.
  */
 export function ProspectRow({
   candidate,
   tags,
+  staleDays,
+  today,
+  menu,
   onPress,
 }: {
   candidate: RushPipelineCandidate;
   tags: readonly RushTag[];
+  staleDays: number;
+  today: string;
+  menu?: ItemMenuHandle | null;
   onPress: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const rating = rushRatingSummary(candidate);
-  const meta = [`Added by ${candidate.created_by_name}`, rating]
-    .filter(Boolean)
-    .join(" · ");
+  const meta = [rushOwnerWords(candidate), rating].filter(Boolean).join(" · ");
+  const mark = rushRowMark(candidate, staleDays, today);
   const labels = rushAppliedTags(candidate.tag_ids, tags).map((t) => t.label);
   const cut = rushTagOverflow(labels);
   return (
@@ -247,10 +352,16 @@ export function ProspectRow({
       onCard
       accessibilityRole="button"
       accessibilityLabel={candidate.display_name}
-      accessibilityHint={[meta, labels.length ? labels.join(", ") : null]
+      accessibilityHint={[
+        meta,
+        mark?.label ?? null,
+        labels.length ? labels.join(", ") : null,
+      ]
         .filter(Boolean)
         .join(". ")}
       onPress={onPress}
+      onLongPress={longPressOf(menu)}
+      {...itemMenuAccessibility(menu)}
       style={styles.row}
     >
       <View style={styles.rowText}>
@@ -260,8 +371,18 @@ export function ProspectRow({
         <Text numberOfLines={1} style={styles.meta}>
           {meta}
         </Text>
-        {cut.shown.length > 0 ? (
+        {mark || cut.shown.length > 0 ? (
           <View style={styles.tags}>
+            {mark ? (
+              mark.tone === "planned" ? (
+                <HairlineChip label={mark.label} />
+              ) : (
+                <StatusChip
+                  label={mark.label}
+                  hue={tokens.color.semantic.warning}
+                />
+              )
+            ) : null}
             {cut.shown.map((label) => (
               <HairlineChip key={label} label={label} />
             ))}
