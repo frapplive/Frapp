@@ -49,6 +49,9 @@ import { memberFixture, userFixture } from '#test/helpers/entity-fixtures';
 import { frappLinkRepoMocks } from '#test/helpers/frapp-link-repos.fixture';
 import { FrappLinkChecker } from './frapp-link/frapp-link-checker.service';
 
+/** A send-back's caller: an officer who isn't the assignee (#5917). */
+const ADMIN = { actorUserId: 'admin-1' };
+
 describe('TaskService', () => {
   let service: TaskService;
   let linkRepos: ReturnType<typeof frappLinkRepoMocks>;
@@ -175,6 +178,7 @@ describe('TaskService', () => {
       ),
       deleteGroup: jest.fn().mockResolvedValue(undefined),
       deleteGroupCopies: jest.fn().mockResolvedValue([]),
+      addGroupCopies: jest.fn().mockResolvedValue([]),
       setGroupFollower: jest.fn().mockResolvedValue(undefined),
     };
     mockRbac = {
@@ -1789,6 +1793,180 @@ describe('TaskService', () => {
     });
   });
 
+  describe('addToGroup (#5905)', () => {
+    const member = (userId: string, roleIds: string[] = ['role-1']) =>
+      memberFixture({ ...baseMember, user_id: userId, role_ids: roleIds });
+    const copyOf = (assigneeId: string, over: Partial<Task> = {}): Task => ({
+      ...baseTask,
+      id: `copy-${assigneeId}`,
+      assignee_id: assigneeId,
+      group_id: 'group-1',
+      ...over,
+    });
+    const group = {
+      id: 'group-1',
+      chapter_id: 'ch-1',
+      created_by: 'admin-1',
+      audience: 'people' as const,
+      target_id: null,
+      target_name: null,
+      created_at: '2026-11-17T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockMemberRepo.findByChapter.mockResolvedValue([
+        member('admin-1'),
+        member('user-1'),
+        member('user-2'),
+        member('user-3'),
+        member('alum-1', ['role-alumni']),
+      ]);
+      mockRbac.getAlumniRoleId.mockResolvedValue('role-alumni');
+      mockTaskRepo.findById.mockResolvedValue(copyOf('user-1'));
+      mockTaskRepo.findGroups.mockResolvedValue([group]);
+    });
+
+    it('gives each new member a copy made from the one asked on, pushes them, and counts them in the group', async () => {
+      mockTaskRepo.findGroupCopies
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+        ])
+        .mockResolvedValueOnce([
+          copyOf('user-1', { status: TaskStatus.COMPLETED }),
+          copyOf('user-2'),
+          copyOf('user-3'),
+        ]);
+      mockTaskRepo.addGroupCopies.mockResolvedValue([
+        copyOf('user-2'),
+        copyOf('user-3'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2', 'user-3', 'user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-1',
+        ['user-2', 'user-3'],
+      );
+      const pushed = mockNotificationService.notifyUser.mock.calls.map(
+        ([id]) => id,
+      );
+      expect(pushed).toEqual(expect.arrayContaining(['user-2', 'user-3']));
+      // The group is counted after the copies are written, so the answer
+      // includes them.
+      expect(
+        mockTaskRepo.findGroupCopyStates.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        mockTaskRepo.addGroupCopies.mock.invocationCallOrder[0],
+      );
+      expect(result).toEqual({
+        added: ['user-2', 'user-3'],
+        group: {
+          id: 'group-1',
+          audience: 'people',
+          target_id: null,
+          target_name: null,
+          total: 3,
+          done: 1,
+          confirmed: 0,
+        },
+      });
+    });
+
+    it('skips a member who already has a copy, writing nothing when that is everyone asked', async () => {
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1'),
+        copyOf('user-2'),
+      ]);
+
+      const result = await service.addToGroup(
+        'copy-user-1',
+        'ch-1',
+        'admin-1',
+        ['user-2'],
+      );
+
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+      expect(result.added).toEqual([]);
+      expect(result.group.total).toBe(2);
+    });
+
+    it('makes the copies from an open copy when the one asked on is confirmed', async () => {
+      mockTaskRepo.findById.mockResolvedValue(
+        copyOf('user-1', { points_awarded: true }),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1', { points_awarded: true }),
+        copyOf('user-2'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it('makes them from the copy confirmed last when every copy is confirmed', async () => {
+      const paid = (id: string, at: string) =>
+        copyOf(id, { points_awarded: true, confirmed_at: at });
+      mockTaskRepo.findById.mockResolvedValue(
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+      );
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        paid('user-1', '2026-11-20T00:00:00.000Z'),
+        paid('user-2', '2026-11-22T00:00:00.000Z'),
+      ]);
+
+      await service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ['user-3']);
+
+      expect(mockTaskRepo.addGroupCopies).toHaveBeenCalledWith(
+        'ch-1',
+        'group-1',
+        'copy-user-2',
+        ['user-3'],
+      );
+    });
+
+    it.each([
+      ['an alum', ['user-3', 'alum-1']],
+      ['someone outside the chapter', ['stranger']],
+    ])('refuses a list with %s, writing nothing', async (_label, ids) => {
+      await expect(
+        service.addToGroup('copy-user-1', 'ch-1', 'admin-1', ids),
+      ).rejects.toThrow(
+        'Everyone you pick must be an active member of the chapter',
+      );
+      expect(mockTaskRepo.addGroupCopies).not.toHaveBeenCalled();
+    });
+
+    it("refuses a task that isn't for a group", async () => {
+      mockTaskRepo.findById.mockResolvedValue({ ...baseTask, group_id: null });
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
+      ).rejects.toThrow("This task isn't for a group");
+    });
+
+    it('is a 404 for a task not in the chapter', async () => {
+      mockTaskRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.addToGroup('task-1', 'ch-1', 'admin-1', ['user-2']),
+      ).rejects.toThrow('Task not found');
+    });
+  });
+
   describe('repeating tasks (#5119)', () => {
     const RULE = 'FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;TZID=America/New_York';
     const create = (extra: Partial<CreateTaskInput> = {}) =>
@@ -2932,6 +3110,7 @@ describe('TaskService', () => {
         'task-1',
         'ch-1',
         'Needs more work',
+        ADMIN,
       );
 
       // Stamped with when it was sent back, which Activity reads as the
@@ -2994,15 +3173,32 @@ describe('TaskService', () => {
       'refuses a send-back with no reason (%p)',
       async (comment) => {
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', comment),
+          service.rejectCompletion('task-1', 'ch-1', comment, ADMIN),
         ).rejects.toThrow('Say what needs to change to send it back');
         expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
       },
     );
 
+    it("refuses an officer's send-back of their own task with a 403, writing nothing (#5917)", async () => {
+      mockTaskRepo.findById.mockResolvedValue({
+        ...baseTask,
+        assignee_id: 'admin-1',
+        status: TaskStatus.COMPLETED,
+      });
+
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
+      ).rejects.toThrow('Admins cannot send back their own task completions');
+      expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
+      expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
     it('refuses a reason over 200 characters', async () => {
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201)),
+        service.rejectCompletion('task-1', 'ch-1', 'x'.repeat(201), ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
     });
@@ -3020,6 +3216,7 @@ describe('TaskService', () => {
       });
 
       await service.rejectCompletion('task-1', 'ch-1', '  Blurry  ', {
+        ...ADMIN,
         requirePhoto: true,
       });
 
@@ -3049,7 +3246,7 @@ describe('TaskService', () => {
         status: TaskStatus.IN_PROGRESS,
       });
 
-      await service.rejectCompletion('task-1', 'ch-1', 'Not finished');
+      await service.rejectCompletion('task-1', 'ch-1', 'Not finished', ADMIN);
 
       expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
         'task-1',
@@ -3067,7 +3264,7 @@ describe('TaskService', () => {
       mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       expect(mockNotificationService.notifyUser).not.toHaveBeenCalled();
     });
@@ -3083,10 +3280,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(confirmed);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(
         'Cannot reject a task that has already been confirmed and points awarded',
       );
@@ -3098,10 +3295,10 @@ describe('TaskService', () => {
       mockTaskRepo.findById.mockResolvedValue(baseTask);
 
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+        service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
       ).rejects.toThrow('Only completed tasks can be rejected');
 
       expect(mockTaskRepo.update).not.toHaveBeenCalled();
@@ -4717,7 +4914,7 @@ describe('TaskService', () => {
         mockTaskRepo.deletePhotos.mockResolvedValue([proofRow]);
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.deletePhotos).toHaveBeenCalledWith(
           'ch-1',
@@ -4735,7 +4932,7 @@ describe('TaskService', () => {
         mockTaskRepo.reopenCompletion.mockResolvedValue(null);
 
         await expect(
-          service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+          service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
         ).rejects.toThrow(BadRequestException);
         expect(mockTaskRepo.deletePhotos).not.toHaveBeenCalled();
         expect(mockStorage.deleteFiles).not.toHaveBeenCalled();
@@ -4765,7 +4962,7 @@ describe('TaskService', () => {
         it('send-back refuses it', async () => {
           mockTaskRepo.findById.mockResolvedValue(officerConfirmed);
           await expect(
-            service.rejectCompletion('task-1', 'ch-1', 'Redo it'),
+            service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN),
           ).rejects.toThrow('already been confirmed');
           expect(mockTaskRepo.reopenCompletion).not.toHaveBeenCalled();
         });
@@ -4782,7 +4979,7 @@ describe('TaskService', () => {
         );
         mockTaskRepo.reopenCompletion.mockResolvedValue(inProgress());
 
-        await service.rejectCompletion('task-1', 'ch-1', 'Redo it');
+        await service.rejectCompletion('task-1', 'ch-1', 'Redo it', ADMIN);
 
         expect(mockTaskRepo.reopenCompletion).toHaveBeenCalledWith(
           'task-1',

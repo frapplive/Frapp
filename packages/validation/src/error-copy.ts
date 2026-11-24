@@ -364,6 +364,8 @@ export const SERVER_MESSAGE_COPY: Readonly<Record<string, string>> = {
     "Points were already given for this task.",
   "Admins cannot confirm their own task completions":
     "You can't confirm your own task. Ask another officer.",
+  "Admins cannot send back their own task completions":
+    "You can't send back your own task. Use Mark not done.",
   "Only the assignee or an admin can update task status":
     "Only the person it's assigned to can change this task.",
   "Coordinates must form a polygon with at least 3 points":
