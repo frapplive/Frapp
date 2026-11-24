@@ -4,9 +4,11 @@ import { Frame, paint } from "@/components/glyph-recipe";
 /**
  * The glyphs at the start of a settings row that opens a page or a sheet of
  * its own, as Discord's channel settings and iOS Settings draw them (Paul,
- * 2026-11-20). Web draws the same Lucide icons on its `SettingsRow`
- * (`apps/web/components/shared/settings-row.tsx`): `Palette`, `Wallpaper`,
- * `MapPin` and `ScrollText`. A switch row goes without, as it does on web.
+ * 2026-11-20). They are Lucide's `Palette`, `Wallpaper` and `ScrollText`,
+ * the icon set web's `SettingsRow` draws from
+ * (`apps/web/components/shared/settings-row.tsx`); where a row is on both,
+ * both draw the same one (Accent color is `Palette` on each). A switch row,
+ * or one that opens nothing, goes without, as on web.
  *
  * Detail strokes only, from `glyph-recipe.tsx`, at 20px. Decorative: the row
  * carries the label.
@@ -50,22 +52,6 @@ export function WallpaperGlyph({
       <Path d="m9 17 6.1-6.1a2 2 0 0 1 2.81.01L22 15" {...detail} />
       <Circle cx={8} cy={9} r={2} {...detail} />
       <Rect x={2} y={3} width={20} height={14} rx={2} {...detail} />
-    </Frame>
-  );
-}
-
-export function MapPinGlyph({
-  color,
-  size = DEFAULT_SIZE,
-}: SettingsGlyphProps) {
-  const { detail } = paint({ color });
-  return (
-    <Frame size={size}>
-      <Path
-        d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
-        {...detail}
-      />
-      <Circle cx={12} cy={10} r={3} {...detail} />
     </Frame>
   );
 }

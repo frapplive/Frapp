@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { SectionTitledByPage } from "@/components/profile/profile-section";
 import { FOCUS_RING } from "@/components/ui/focus";
@@ -42,17 +44,37 @@ export function SettingsSubpage({
   backLabel,
   title,
   children,
+  shown = true,
 }: {
   backHref: string;
   backLabel: string;
   title: string;
   children: ReactNode;
+  /** False while the page stays mounted but hidden, keeping its drafts. */
+  shown?: boolean;
 }) {
+  // The row that opened this page is gone with the page it sat on, so focus
+  // starts at this page's heading, which a screen reader then reads, rather
+  // than falling back to the top of the document.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!shown) return;
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      headingRef.current?.focus({ preventScroll: true });
+    }
+  }, [shown]);
   return (
     <div className="space-y-8">
       <header className="space-y-1 border-b border-border pb-6">
         <SettingsBackLink href={backHref} label={backLabel} />
-        <h2 className="text-title text-foreground">{title}</h2>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-title text-foreground outline-none"
+        >
+          {title}
+        </h2>
       </header>
       <SectionTitledByPage.Provider value={true}>
         {children}

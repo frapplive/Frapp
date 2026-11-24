@@ -34,7 +34,6 @@ import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import {
-  MapPinGlyph,
   PaletteGlyph,
   ScrollTextGlyph,
   WallpaperGlyph,
@@ -231,64 +230,71 @@ export default function ChapterSettingsScreen() {
                     />
                   </SettingAnchor>
                 </ListSection>
-                <SectionHeader>Chapter</SectionHeader>
-                <ListSection>
-                  {orgConfig.data ? (
-                    <SettingAnchor id="member-names">
-                      <ListRow
-                        label={NAME_LOCK_COPY.settingLabel}
-                        description={
-                          namesSaveFailed
-                            ? NAME_LOCK_COPY.saveFailed
-                            : canManageConfig
-                              ? NAME_LOCK_COPY.settingLine
-                              : readOnlyLine
-                        }
-                        descriptionTone={
-                          namesSaveFailed ? "destructive" : "default"
-                        }
-                        trailing={
-                          <Toggle
-                            value={membersCanRename}
-                            disabled={!canManageConfig || patchConfig.isPending}
-                            onValueChange={(next) => {
-                              setNamesSaveFailed(false);
-                              patchConfig.mutate(
-                                { members_can_change_name: next },
-                                { onError: () => setNamesSaveFailed(true) },
-                              );
-                            }}
-                            accessibilityLabel={NAME_LOCK_COPY.settingLabel}
+                {/* Every row below is conditional, so the group draws only
+                    when one of them does, never as an empty card. */}
+                {orgConfig.data || geofencesEnabled || access.logs ? (
+                  <>
+                    <SectionHeader>Chapter</SectionHeader>
+                    <ListSection>
+                      {orgConfig.data ? (
+                        <SettingAnchor id="member-names">
+                          <ListRow
+                            label={NAME_LOCK_COPY.settingLabel}
+                            description={
+                              namesSaveFailed
+                                ? NAME_LOCK_COPY.saveFailed
+                                : canManageConfig
+                                  ? NAME_LOCK_COPY.settingLine
+                                  : readOnlyLine
+                            }
+                            descriptionTone={
+                              namesSaveFailed ? "destructive" : "default"
+                            }
+                            trailing={
+                              <Toggle
+                                value={membersCanRename}
+                                disabled={
+                                  !canManageConfig || patchConfig.isPending
+                                }
+                                onValueChange={(next) => {
+                                  setNamesSaveFailed(false);
+                                  patchConfig.mutate(
+                                    { members_can_change_name: next },
+                                    { onError: () => setNamesSaveFailed(true) },
+                                  );
+                                }}
+                                accessibilityLabel={NAME_LOCK_COPY.settingLabel}
+                              />
+                            }
                           />
-                        }
-                      />
-                    </SettingAnchor>
-                  ) : null}
-                  {geofencesEnabled ? (
-                    // Read-only here (the phone has no zone editor), so it says
-                    // where zones are changed: the dashboard's Study zones tool.
-                    <ListRow
-                      leading={<MapPinGlyph color={glyphColor} />}
-                      label="Study zones"
-                      description="Managed on the web dashboard."
-                      value={
-                        zoneCount === null
-                          ? "—"
-                          : `${zoneCount} ${zoneCount === 1 ? "zone" : "zones"}`
-                      }
-                    />
-                  ) : null}
-                  {access.logs ? (
-                    // Last in Chapter, as web's Logs row is (Paul,
-                    // 2026-11-21): read when something needs looking into.
-                    <ListRow
-                      leading={<ScrollTextGlyph color={glyphColor} />}
-                      label={CHAPTER_LOGS_TITLE}
-                      accessibilityHint="Opens who changed what in the chapter, and when."
-                      onPress={() => router.push("/chapter-logs")}
-                    />
-                  ) : null}
-                </ListSection>
+                        </SettingAnchor>
+                      ) : null}
+                      {geofencesEnabled ? (
+                        // Read-only here (the phone has no zone editor), so it says
+                        // where zones are changed: the dashboard's Study zones tool.
+                        <ListRow
+                          label="Study zones"
+                          description="Managed on the web dashboard."
+                          value={
+                            zoneCount === null
+                              ? "—"
+                              : `${zoneCount} ${zoneCount === 1 ? "zone" : "zones"}`
+                          }
+                        />
+                      ) : null}
+                      {access.logs ? (
+                        // Last in Chapter, as web's Logs row is (Paul,
+                        // 2026-11-21): read when something needs looking into.
+                        <ListRow
+                          leading={<ScrollTextGlyph color={glyphColor} />}
+                          label={CHAPTER_LOGS_TITLE}
+                          accessibilityHint="Opens who changed what in the chapter, and when."
+                          onPress={() => router.push("/chapter-logs")}
+                        />
+                      ) : null}
+                    </ListSection>
+                  </>
+                ) : null}
               </>
             ) : null}
 

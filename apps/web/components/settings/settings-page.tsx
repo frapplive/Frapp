@@ -72,6 +72,7 @@ import {
   settingsSubpageFor,
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
+import { settingEntryById } from "@repo/hooks/settings-search";
 import { MeetingSectionsRules } from "@/components/meetings/meeting-sections-rules";
 import {
   DuesGraceRule,
@@ -125,6 +126,12 @@ const DEFAULT_DUES: OrgDues = {
   grace_days: 7,
   scholarship_pool_cents: 0,
 };
+
+/** The Chapter tab page a settings-search result lives on, if any. */
+function chapterPageOfSetting(settingId: string | null): string | undefined {
+  const web = settingEntryById(settingId)?.web;
+  return web?.page === "org" ? web.params?.page : undefined;
+}
 
 function SettingsPageContent() {
   const { toast } = useToast();
@@ -201,8 +208,24 @@ function SettingsPageContent() {
   */
   const channelParam = searchParams.get("channel");
   const toolParam = searchParams.get("tool");
-  const pageParam = searchParams.get("page");
+  // A search result (`?setting=`) on one of the Chapter tab's pages opens that
+  // page even from a link made before the pages existed, and the old Accent
+  // tab (`?tab=theme`) opens Accent color.
+  const pageParam =
+    searchParams.get("page") ??
+    chapterPageOfSetting(searchParams.get("setting")) ??
+    (rawTabParam === "theme" ? "accent" : null);
   const chapterPage = isChapterSettingsPage(pageParam) ? pageParam : null;
+  // Write a page the address only implied into it, so it stays open once the
+  // setting jump drops `?setting=`, and a refresh lands on it.
+  useEffect(() => {
+    if (!chapterPage) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("page") === chapterPage) return;
+    url.searchParams.set("tab", "org");
+    url.searchParams.set("page", chapterPage);
+    window.history.replaceState(null, "", url.toString());
+  }, [chapterPage]);
   // Switching rows starts the panel at its top, not wherever the last one
   // was scrolled to: the panel scrolls inside the shell's tool pane. The
   // address follows the row, without the params that opened a page inside

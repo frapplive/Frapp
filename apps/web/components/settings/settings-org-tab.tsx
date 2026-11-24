@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Building2,
   Image as ImageIcon,
@@ -18,7 +18,9 @@ import {
   type ArchetypeKey,
 } from "@repo/org-archetypes";
 import {
+  CHAPTER_ABOUT_FOOTNOTE,
   CHAPTER_LOOK_FOOTNOTE,
+  resolveChapterMark,
   CHAPTER_NAME_MAX_LENGTH,
   CHAPTER_UNIVERSITY_MAX_LENGTH,
   type PatchChapterConfig,
@@ -97,7 +99,7 @@ type Props = {
   savingProfile?: boolean;
   savingConfig?: boolean;
   /**
-   * The chapter's accent, drawn under the chapter mark. Accent was its own
+   * The chapter's accent, opened from the Accent color row. Accent was its own
    * rail row until #3827 folded it into the chapter's profile, beside the
    * other thing that decides how the chapter looks.
    */
@@ -315,18 +317,34 @@ export function SettingsOrgTab({
   const vocabularyCustom = VOCABULARY_KEYS.some(
     (key) => !!vocabulary[key] && vocabulary[key] !== vocabularyDefaults[key],
   );
+  // The first of the page's facts the chapter has filled in.
   const identityValue =
     branding.designation?.trim() ||
     (branding.founded_at != null
       ? `Founded ${branding.founded_at}`
-      : "Not set");
-  // What the mark draws: the logo, else the short name, else initials.
-  const markValue = mark.logoUrl
+      : undefined) ||
+    branding.school_short?.trim() ||
+    (lettersHidden ? undefined : branding.greek_letters?.trim()) ||
+    "Not set";
+  // What the mark draws, read the way every surface reads it.
+  const shownMark = resolveChapterMark({
+    logoUrl: mark.logoUrl,
+    branding: {
+      ...branding,
+      show_greek_letters:
+        branding.show_greek_letters !== false && !lettersHidden,
+    },
+    name: storedName,
+  });
+  const markValue = shownMark.logoUrl
     ? "Logo"
-    : branding.short_name?.trim() || "Initials";
+    : shownMark.source === "initials"
+      ? "Initials"
+      : shownMark.text;
 
-  const subpage = (title: string, children: ReactNode) => (
+  const subpage = (title: string, children: ReactNode, shown = true) => (
     <SettingsSubpage
+      shown={shown}
       backHref={pageHref(null)}
       backLabel="Chapter"
       title={title}
@@ -334,6 +352,18 @@ export function SettingsOrgTab({
       {children}
     </SettingsSubpage>
   );
+
+  // Back on the tab from one of its pages, focus returns to the row that
+  // opened it, as it would on a page that never went away.
+  const lastPage = useRef(page);
+  useEffect(() => {
+    const left = lastPage.current;
+    lastPage.current = page;
+    if (page || !left) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    document.getElementById(`chapter-row-${left}`)?.focus();
+  }, [page]);
 
   let content: ReactNode;
   // The mark page stays mounted while hidden, so a short name typed there
@@ -357,6 +387,7 @@ export function SettingsOrgTab({
           manageHint={manageHint}
           profileHint={profileHint}
         />,
+        page === "mark",
       )}
     </div>
   );
@@ -689,6 +720,7 @@ export function SettingsOrgTab({
             icon={ImageIcon}
             label="Chapter mark"
             value={markValue}
+            id={`chapter-row-mark`}
             href={pageHref("mark")}
           />
           <SettingsRow
@@ -700,30 +732,34 @@ export function SettingsOrgTab({
                 className="inline-block h-3.5 w-3.5 rounded-full bg-primary align-middle"
               />
             }
+            id={`chapter-row-accent`}
             href={pageHref("accent")}
           />
         </SettingsGroup>
 
         <SettingsGroup
           heading="About the chapter"
-          footnote="Every change here is recorded in Logs."
+          footnote={CHAPTER_ABOUT_FOOTNOTE}
         >
           <SettingsRow
             icon={Landmark}
             label="Identity & founding"
             value={identityValue}
+            id={`chapter-row-identity`}
             href={pageHref("identity")}
           />
           <SettingsRow
             icon={Building2}
             label="Organization type"
             value={current.short}
+            id={`chapter-row-type`}
             href={pageHref("type")}
           />
           <SettingsRow
             icon={Type}
             label="Vocabulary"
             value={vocabularyCustom ? "Custom" : "Defaults"}
+            id={`chapter-row-vocabulary`}
             href={pageHref("vocabulary")}
           />
         </SettingsGroup>

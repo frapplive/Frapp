@@ -128,6 +128,8 @@ export function SettingsRow(
      * (Discord's channel settings, iOS Settings). A switch row goes without.
      */
     icon?: LucideIcon;
+    /** The id of the row's link or button, for focus to come back to. */
+    id?: string;
   } & Trailing,
 ) {
   const { label, description, nested = false, muted = false } = props;
@@ -170,6 +172,7 @@ export function SettingsRow(
     return (
       <li className="group">
         <Link
+          id={props.id}
           href={props.href}
           className={cn(row, "transition hover:bg-card-hover", FOCUS_RING)}
         >
@@ -191,6 +194,7 @@ export function SettingsRow(
     return (
       <li className="group">
         <button
+          id={props.id}
           type="button"
           onClick={props.onClick}
           disabled={props.disabled}
