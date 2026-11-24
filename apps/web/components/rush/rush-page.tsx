@@ -12,7 +12,7 @@ import {
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { vocab } from "@repo/org-archetypes";
-import { PageActions } from "@/components/layout/page-actions";
+import { PageActions, PageViews } from "@/components/layout/page-actions";
 import { InlineNote } from "@/components/shared/inline-note";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
 import { anyReadUncached } from "@/components/shared/async-states";
@@ -21,7 +21,7 @@ import {
   useSubscriptionGate,
 } from "@/components/shared/subscription-gate";
 import { NewButton } from "@/components/ui/new-button";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { useChapterVocabulary } from "@/lib/hooks/use-chapter-vocabulary";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
@@ -146,19 +146,20 @@ export function RushPage() {
 
   return (
     <div className="@container space-y-6">
+      {/* Board and List as plain words beside the title (#5947), none
+          until there is a prospect to lay out. */}
+      <PageViews>
+        <ViewLabels
+          label="Layout"
+          options={candidates.length > 0 ? LAYOUT_OPTIONS : []}
+          value={layout}
+          onChange={setLayout}
+        />
+      </PageViews>
       <PageActions>
         <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
           {rushProspectCount(open)}
         </span>
-        {candidates.length > 0 ? (
-          <SegmentedChoice
-            label="Layout"
-            dense
-            options={LAYOUT_OPTIONS}
-            value={layout}
-            onChange={setLayout}
-          />
-        ) : null}
         {access.add ? (
           <NewButton
             type="button"
