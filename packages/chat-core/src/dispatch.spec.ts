@@ -1471,14 +1471,26 @@ describe("dispatchRush — vote and bid", () => {
     expect(result.choices).toEqual({
       title: 'Several prospects match "Jake Smith"',
       options: [
-        { label: "Jake Smith", detail: "New · added Nov 2", args: `vote ${first}` },
-        { label: "Jake Smith", detail: "Met · added Nov 20", args: `vote ${second}` },
+        {
+          label: "Jake Smith",
+          detail: "New · added Nov 2",
+          args: `vote ${first}`,
+        },
+        {
+          label: "Jake Smith",
+          detail: "Met · added Nov 20",
+          args: `vote ${second}`,
+        },
       ],
     });
     expect(post).not.toHaveBeenCalled();
 
     // The pick runs the same command by id, with no second lookup.
-    post.mockResolvedValue({ data: {}, error: null, response: { status: 200 } });
+    post.mockResolvedValue({
+      data: {},
+      error: null,
+      response: { status: 200 },
+    });
     await expect(
       dispatchRushVoteCmd(ctx, result.choices!.options[1]!.args),
     ).resolves.toEqual({ ok: true });

@@ -64,10 +64,12 @@ describe('RushService', () => {
 
     mockPipeline = {
       stageForNewCandidate: jest.fn().mockResolvedValue('new'),
-      listStages: jest.fn().mockResolvedValue([
-        { key: 'new', label: 'New' } as RushStage,
-        { key: 'met', label: 'Met' } as RushStage,
-      ]),
+      listStages: jest
+        .fn()
+        .mockResolvedValue([
+          { key: 'new', label: 'New' } as RushStage,
+          { key: 'met', label: 'Met' } as RushStage,
+        ]),
     };
 
     const module: TestingModule = await Test.createTestingModule({

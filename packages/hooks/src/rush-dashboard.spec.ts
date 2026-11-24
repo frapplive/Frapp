@@ -149,10 +149,13 @@ describe("rushDashboard (#5973)", () => {
       rushDashboard(STAGES, CANDIDATES, { ...options, viewResults: false })
         .results,
     ).toBeNull();
-    const blind = CANDIDATES.map(
-      ({ rating_average, rating_count, vote_count, ...rest }) =>
-        rest as RushPipelineCandidate,
-    );
+    const blind = CANDIDATES.map((candidate) => {
+      const rest: Partial<RushPipelineCandidate> = { ...candidate };
+      delete rest.rating_average;
+      delete rest.rating_count;
+      delete rest.vote_count;
+      return rest as RushPipelineCandidate;
+    });
     expect(rushDashboard(STAGES, blind, options).results).toBeNull();
   });
 

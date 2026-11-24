@@ -105,15 +105,13 @@ export class RushService {
       throw new ConflictException({
         code: RUSH_SEVERAL_MATCH_CODE,
         message: 'Several prospects match',
-        candidates: matches.map(
-          (match): RushNameMatch => ({
-            id: match.id,
-            display_name: match.display_name,
-            stage: match.stage,
-            stage_label: labelOf.get(match.stage) ?? match.stage,
-            created_at: match.created_at,
-          }),
-        ),
+        candidates: matches.map((match): RushNameMatch => ({
+          id: match.id,
+          display_name: match.display_name,
+          stage: match.stage,
+          stage_label: labelOf.get(match.stage) ?? match.stage,
+          created_at: match.created_at,
+        })),
       });
     }
     return this.toView(matches[0], viewer);
