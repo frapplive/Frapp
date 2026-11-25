@@ -426,7 +426,7 @@ It is drawn only for `points:view_all`, so it has no denied or permission-check 
 | Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage roles.` |
 | Offline | `Roles unavailable offline` | `Reconnect to load the chapter's roles and edit their permissions.` |
 | Delete role confirmation | `Delete <name>?` | `Members assigned this role lose its permissions immediately. This cannot be undone.` · confirm `Delete role` |
-| Transfer presidency confirmation | `Transfer presidency?` | `The President role moves to the selected member immediately and is removed from you. Only the current president can undo it.` · confirm `Transfer presidency` |
+| Transfer presidency confirmation | `Transfer presidency to Jordan Reyes?` | `You lose the President role when they get it.` · confirm `Transfer presidency` (#6029: it names who gets it, on web and the phone, `transferPresidencyConfirm`) |
 
 The confirmation rows below and under Roles & Permissions are what is left of the five `window.confirm` strings the Settings & Roles slice converted (the custom-role delete went with #4075) to [`confirm-dialog.tsx`](../../../apps/web/components/shared/confirm-dialog.tsx).
 A browser dialog's text was never in this table because it was never the product's; an in-product one is, and `writing.md` §2's verb-plus-object CTA rule governs the button.

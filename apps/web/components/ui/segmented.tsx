@@ -42,18 +42,14 @@ export function SegmentedChoice<T extends string>({
 }: {
   label: string;
   /**
-   * `disabled` on one option greys out that answer alone (a Roles override a
-   * caller may not grant), and `title` gives it a hover hint saying why.
-   * `quiet` draws the answer, when held, with the edge alone and no fill:
-   * the default a row starts on, so the rows set apart from it are the ones
-   * that stand out down a long list.
+   * `disabled` on one option greys out that answer alone, and `title` gives
+   * it a hover hint saying why.
    */
   options: readonly {
     value: T;
     label: string;
     disabled?: boolean;
     title?: string;
-    quiet?: boolean;
   }[];
   value: T;
   onChange: (next: T) => void;
@@ -99,7 +95,7 @@ export function SegmentedChoice<T extends string>({
               dense ? "px-2 text-caption" : "px-3 text-sm",
               fill && "flex-1",
               held
-                ? option.quiet || quiet
+                ? quiet
                   ? "border-border text-foreground"
                   : "border-border bg-card text-foreground"
                 : "text-muted hover:bg-card-hover hover:text-foreground",

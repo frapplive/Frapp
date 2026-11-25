@@ -20,6 +20,10 @@ export function permissionsOnLabel(count: number): string {
   return count === 0 ? "None on" : `${count} on`;
 }
 
+export function addTierLabel(tier: string): string {
+  return `Add ${tier}`;
+}
+
 export const PEOPLE_SETTINGS_COPY = {
   pageTitle: "Roles and groups",
   search: "Find a role or group",
@@ -104,11 +108,11 @@ export function overrideChoiceLabels(
 
 /** Under an automatic group's page: its name and members follow a member detail. */
 export const AUTO_GROUP_FOOTNOTE: Record<
-  "pledge_class" | "graduation_year" | "major",
+  "pledge_class" | "class_year" | "major",
   string
 > = {
   pledge_class: "Follows the pledge class: rename the class to rename it.",
-  graduation_year: "Follows each member's graduation year.",
+  class_year: "Follows each member's graduation year.",
   major: "Follows each member's major.",
 };
 

@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronRight, Crown, Loader2 } from "lucide-react";
 import {
   useClaimPresidency,
   useCurrentChapter,
   useMembers,
   usePresidencyClaimStatus,
   useTransferPresidency,
+  useViewerDisplayName,
+  useViewerUserId,
+  type MemberProfile,
 } from "@repo/hooks";
+import {
+  PEOPLE_SETTINGS_COPY,
+  transferPresidencyConfirm,
+} from "@repo/validation";
 import { memberLabel } from "@repo/hooks/display-names";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,18 +24,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RolesGlyph } from "@/components/layout/nav-glyphs";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { FOCUS_RING } from "@/components/ui/focus";
+import { SearchablePicker } from "@/components/shared/searchable-picker";
+import { SettingsRow } from "@/components/shared/settings-row";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
-import { getErrorMessage } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 /**
  * "This chapter needs a new President" recovery prompt
@@ -130,36 +131,47 @@ export function PresidencyClaimBanner() {
 }
 
 /**
- * Hand the President role to another member. Only the current president can
- * do this (the API refuses anyone else), so it is shown only to a caller who
- * holds everything. Its own section rather than part of a role's page: it
- * moves a person, not a permission.
+ * Transfer presidency, a row of Invites and presidency (#6029; a section of
+ * its own until then): the current President's name, opening a searchable
+ * list of members, since a plain list of 150 names can't be searched. Picking
+ * someone asks to confirm, naming them. Only the current president can do this
+ * (the API refuses anyone else), so it is shown only to a caller who holds
+ * everything. It moves a person, not a permission, so it isn't on a role's
+ * page.
  */
-export function TransferPresidencySection() {
+export function TransferPresidencyRow() {
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
   const membersQuery = useMembers();
+  const viewerUserId = useViewerUserId();
+  const viewerName = useViewerDisplayName();
   const transferPresidency = useTransferPresidency();
-  const [target, setTarget] = useState("");
-  const members = membersQuery.data ?? [];
+  const others = (membersQuery.data ?? [])
+    .filter((member) => member.user_id !== viewerUserId && member.id)
+    .sort((a, b) =>
+      memberLabel(a.display_name, a.user_id).localeCompare(
+        memberLabel(b.display_name, b.user_id),
+      ),
+    );
 
-  async function handleTransfer() {
-    if (!target) return;
+  async function handleTransfer(member: MemberProfile) {
+    const name = memberLabel(member.display_name, member.user_id);
+    const words = transferPresidencyConfirm(name);
     const confirmed = await confirm({
-      title: "Transfer presidency?",
-      description:
-        "The President role moves to the selected member immediately and is removed from you. Only the new president can move it again.",
-      confirmLabel: "Transfer presidency",
+      title: words.title,
+      description: words.body,
+      confirmLabel: words.action,
       tone: "destructive",
     });
     if (!confirmed) return;
     try {
-      await transferPresidency.mutateAsync({ target_member_id: target });
+      await transferPresidency.mutateAsync({
+        target_member_id: String(member.id),
+      });
       toast({
         title: "Presidency transferred",
-        description: "The President role moved successfully.",
+        description: `${name} is now President.`,
       });
-      setTarget("");
     } catch (error) {
       toast({
         title: "Couldn't transfer presidency",
@@ -173,42 +185,53 @@ export function TransferPresidencySection() {
   }
 
   return (
-    <ProfileSection
-      id="settings-transfer-presidency"
-      title="Transfer presidency"
-      hint="Hand the President role to another member. You lose it when they get it."
-    >
+    <>
       {confirmDialog}
-      <div className="flex max-w-xl flex-wrap gap-2">
-        <Select value={target} onValueChange={setTarget}>
-          <SelectTrigger
-            aria-label="Select the new president"
-            className="min-w-0 flex-1"
-          >
-            <SelectValue placeholder="Select a member" />
-          </SelectTrigger>
-          <SelectContent>
-            {members.map((member) => (
-              <SelectItem
-                key={member.id ?? member.user_id ?? "unknown"}
-                value={String(member.id ?? member.user_id ?? "")}
+      <SettingsRow
+        icon={Crown}
+        label={PEOPLE_SETTINGS_COPY.transferPresidency}
+        control={
+          <SearchablePicker<MemberProfile>
+            align="end"
+            label="Pick the new President"
+            placeholder="Find a member"
+            items={others}
+            nameOf={(member) =>
+              memberLabel(member.display_name, member.user_id)
+            }
+            keyOf={(member) => String(member.id)}
+            itemClassName="px-2 py-1.5 text-sm"
+            renderItem={(member) =>
+              memberLabel(member.display_name, member.user_id)
+            }
+            onPick={(member) => void handleTransfer(member)}
+            status={
+              membersQuery.isPending
+                ? "Loading members…"
+                : membersQuery.isError
+                  ? "Couldn't load members"
+                  : undefined
+            }
+            emptyText="Nobody else is in the chapter yet."
+            trigger={
+              <button
+                type="button"
+                disabled={transferPresidency.isPending}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition hover:bg-card-hover disabled:opacity-50",
+                  FOCUS_RING,
+                )}
               >
-                {memberLabel(member.display_name, member.user_id)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="destructive"
-          onClick={() => void handleTransfer()}
-          disabled={!target || transferPresidency.isPending}
-        >
-          {transferPresidency.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : null}
-          Transfer presidency
-        </Button>
-      </div>
-    </ProfileSection>
+                {transferPresidency.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : null}
+                {viewerName ?? "You"}
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            }
+          />
+        }
+      />
+    </>
   );
 }

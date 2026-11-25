@@ -1141,11 +1141,13 @@ What needs stating is where the board describes a product this codebase does not
   The board's rail is a simplified chapter's, not an inventory: this product's live tabs it does not draw are kept.
   Two board tabs are **not built**: Join code (`apps/web` has no join-code surface; invites are single-use tokens), and Subscription as `4d` draws it.
   _Changed in #3827, 2026-11-11:_ the subscription is the Plan and billing row now, shown to `billing:view`; a member pays their own invoices from My invoices in personal Settings, so `4d`'s "Members never see this page" holds.
-- **Roles is the chapter's tiers, in order, each with its roles** (#3990, 2026-11-12; the `4e` matrix it replaced is deleted, which made #2173 and #2836 moot).
-  The tab is three pages addressed by the URL so Back and a shared link work: `?tab=roles` lists the tiers highest first with their roles and member counts, then the roles outside the tiers ([`roles-overview.tsx`](../../../apps/web/components/roles/roles-overview.tsx));
-  `&tier=<id>` is a tier's permissions, one switch per permission grouped by module, saved on click ([`tier-permissions-page.tsx`](../../../apps/web/components/roles/tier-permissions-page.tsx));
-  `&role=<id>` is one role's details, then its permissions ([`role-page.tsx`](../../../apps/web/components/roles/role-page.tsx)).
-  A role in a tier shows two columns (#4072): the tier's answer, read-only, and the role's own, picked from Off, Same as tier or On, each pick saved as one key of `permission_overrides` ([`role-override-list.tsx`](../../../apps/web/components/roles/role-override-list.tsx));
+- **Roles and groups is the chapter's tiers, in order, each with its roles** (#3990, 2026-11-12; the `4e` matrix it replaced is deleted, which made #2173 and #2836 moot; in the settings shape since #6029, 2026-11-25).
+  Every page is addressed by the URL so Back and a shared link work, and each page opened from a row draws `SettingsSubpage`'s back line to Roles and groups ([`settings-roles-tab.tsx`](../../../apps/web/components/settings/settings-roles-tab.tsx)):
+  `?tab=roles` is one `SettingsGroup` per tier, highest first (its Permissions row, its roles with member counts and a ⋯, Add role), Add tier, the roles outside the tiers, Non-chapter business, Groups and Invites and presidency ([`roles-overview.tsx`](../../../apps/web/components/roles/roles-overview.tsx), [`groups-section.tsx`](../../../apps/web/components/roles/groups-section.tsx));
+  `&tier=<id>` is a tier's name, ⋯ (Move up, Move down, Delete), @mention switch, roles, then one switch per permission grouped by module, saved on click ([`tier-permissions-page.tsx`](../../../apps/web/components/roles/tier-permissions-page.tsx));
+  `&role=<id>` is one role's name, its Role group and Save role, then its permissions ([`role-page.tsx`](../../../apps/web/components/roles/role-page.tsx));
+  `&group=<id>` is one group's page and `&groups=automatic` the groups kept from member details.
+  A role in a tier lists each permission once, with what the role ends up with as a value that opens Same as the tier, On and Off, each pick saved as one key of `permission_overrides` ([`role-override-list.tsx`](../../../apps/web/components/roles/role-override-list.tsx)); until #6029 it drew the tier's answer in a read-only column beside a three-way segmented switch on every row;
   a role outside the tiers keeps one column of live switches.
   Rows read in the registry's words ([`permission-registry.ts`](../../../packages/validation/src/permission-registry.ts)), never the raw string, and the wildcard is never a switch.
   The word "tier" is the chapter's own (`tier` vocabulary, set in Chapter settings → Vocabulary).

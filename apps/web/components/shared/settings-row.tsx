@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
+import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { SectionLabel } from "@/components/shared/section-label";
+import { compactControlClassName } from "@/components/shared/table-controls";
 import { Switch } from "@/components/ui/switch";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,10 @@ import { cn } from "@/lib/utils";
  * - a current value that opens a picker (`value` + `onClick`, or wrap a
  *   `Select`/picker trigger in `control`);
  * - a chevron to another page (`href`).
+ *
+ * A row that opens a page can also carry actions (`menu`): right-click and
+ * the ⋯ that shows on hover, the same entries (`RowMenu`), as Discord's role
+ * list does. Every row with actions has one (rulebook § 3).
  *
  * The group is the bordered, divided list (iOS Settings, Slack preferences),
  * so settings never sit in a card each.
@@ -128,8 +134,19 @@ export function SettingsRow(
      * (Discord's channel settings, iOS Settings). A switch row goes without.
      */
     icon?: LucideIcon;
+    /**
+     * In place of `icon`, for a row naming something with a colour of its
+     * own: a role's or group's dot (Discord's role list).
+     */
+    leading?: ReactNode;
     /** The id of the row's link or button, for focus to come back to. */
     id?: string;
+    /**
+     * Actions on the row (a page or picker row only): right-click and ⋯.
+     * Empty `entries` keeps the ⋯'s room without one, so a row with no
+     * actions lines up with its neighbours that have them.
+     */
+    menu?: { entries: readonly RowMenuEntry[]; label: string };
   } & Trailing,
 ) {
   const { label, description, nested = false, muted = false } = props;
@@ -142,7 +159,11 @@ export function SettingsRow(
   // A switch row's label is a real <label>, so clicking the words flips it.
   const LabelTag = isSwitch ? "label" : "span";
 
-  const glyph = Icon ? (
+  const glyph = props.leading ? (
+    <span className="flex w-[18px] shrink-0 justify-center" aria-hidden>
+      {props.leading}
+    </span>
+  ) : Icon ? (
     <Icon
       className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
       aria-hidden
@@ -168,51 +189,76 @@ export function SettingsRow(
     </span>
   );
 
-  if ("href" in props && props.href) {
-    return (
-      <li className="group">
-        <Link
-          id={props.id}
-          href={props.href}
-          className={cn(row, "transition hover:bg-card-hover", FOCUS_RING)}
-        >
-          {glyph}
-          {text}
-          {props.value ? (
-            <span className="text-sm text-muted-foreground">{props.value}</span>
-          ) : null}
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-        </Link>
+  // A row with actions: the ⋯ sits after the link or button, inside the row,
+  // and right-click anywhere on the row opens the same entries.
+  const withMenu = (body: ReactNode) =>
+    props.menu && props.menu.entries.length === 0 ? (
+      // No actions on this row, in a group whose other rows have them: the
+      // ⋯'s room is kept, so every chevron lines up.
+      <li className="group flex items-center pr-2">
+        {body}
+        <span aria-hidden className={cn(compactControlClassName, "shrink-0")} />
       </li>
+    ) : props.menu ? (
+      <RowMenu entries={props.menu.entries} label={props.menu.label}>
+        {(menuButton) => (
+          <li className="group flex items-center pr-2">
+            {body}
+            {menuButton}
+          </li>
+        )}
+      </RowMenu>
+    ) : (
+      <li className="group">{body}</li>
+    );
+
+  if ("href" in props && props.href) {
+    return withMenu(
+      <Link
+        id={props.id}
+        href={props.href}
+        className={cn(
+          row,
+          props.menu && "min-w-0 flex-1",
+          "transition hover:bg-card-hover",
+          FOCUS_RING,
+        )}
+      >
+        {glyph}
+        {text}
+        {props.value ? (
+          <span className="text-sm text-muted-foreground">{props.value}</span>
+        ) : null}
+        <ChevronRight
+          className="h-4 w-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      </Link>,
     );
   }
 
   if ("onClick" in props && props.onClick) {
-    return (
-      <li className="group">
-        <button
-          id={props.id}
-          type="button"
-          onClick={props.onClick}
-          disabled={props.disabled}
-          className={cn(
-            row,
-            "w-full text-left transition hover:bg-card-hover disabled:opacity-50",
-            FOCUS_RING,
-          )}
-        >
-          {glyph}
-          {text}
-          <span className="text-sm text-muted-foreground">{props.value}</span>
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-        </button>
-      </li>
+    return withMenu(
+      <button
+        id={props.id}
+        type="button"
+        onClick={props.onClick}
+        disabled={props.disabled}
+        className={cn(
+          row,
+          props.menu ? "min-w-0 flex-1" : "w-full",
+          "text-left transition hover:bg-card-hover disabled:opacity-50",
+          FOCUS_RING,
+        )}
+      >
+        {glyph}
+        {text}
+        <span className="text-sm text-muted-foreground">{props.value}</span>
+        <ChevronRight
+          className="h-4 w-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      </button>,
     );
   }
 
