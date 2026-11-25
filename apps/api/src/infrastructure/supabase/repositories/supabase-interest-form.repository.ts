@@ -29,7 +29,7 @@ const PREFILL_COLUMNS =
 /**
  * Interest forms (#5977). Officer reads and writes are keyed by the chapter;
  * the public page's by the form its slug named. Codes, the submission and the
- * push-up are the database functions' (`20261124210747`), each one
+ * push-up are the database functions' (`20261125005308`), each one
  * transaction.
  */
 @Injectable()
@@ -151,6 +151,16 @@ export class SupabaseInterestFormRepository implements IInterestFormRepository {
       .select('id');
     if (error) throw new SupabaseQueryError(error);
     return (data ?? []).length > 0;
+  }
+
+  async findContactsGroupId(chapterId: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from('rush_settings')
+      .select('contacts_group_id')
+      .eq('chapter_id', chapterId)
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data?.contacts_group_id ?? null;
   }
 
   async findPlace(chapterId: string): Promise<InterestFormPlace> {

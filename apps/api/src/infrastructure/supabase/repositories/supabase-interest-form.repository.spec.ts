@@ -25,7 +25,6 @@ const form = (chapterId: string) => ({
   blurb: null,
   questions: [],
   ask_referrer: true,
-  contacts_group_id: null,
   replaced_at: null,
   created_by: null,
   created_at: STAMP,

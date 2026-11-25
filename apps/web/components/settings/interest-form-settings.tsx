@@ -6,7 +6,6 @@ import { Check, Copy, Download, Plus } from "lucide-react";
 import {
   interestFormErrorCopy,
   useAddInterestFormLabel,
-  useGroups,
   useInterestFormSettings,
   useRemoveInterestFormLabel,
   useReplaceInterestForm,
@@ -28,20 +27,12 @@ import { ActionMenuButton } from "@/components/shared/row-menu";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/hooks/use-toast";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { InterestFormQuestionsEditor } from "./interest-form-questions";
 
 /** The contacts picker's "nobody else" value. */
-const NO_CONTACTS = "none";
 
 /** Where the public page lives: this app's own origin. */
 function formUrl(path: string): string {
@@ -150,7 +141,6 @@ function FormSettings({
   const form = settings.form!;
   const update = useUpdateInterestForm();
   const replace = useReplaceInterestForm();
-  const groups = useGroups({ enabled: canManage });
   const { confirm, confirmDialog } = useConfirmDialog();
 
   function save(body: Parameters<typeof update.mutate>[0]) {
@@ -179,10 +169,6 @@ function FormSettings({
         }),
     });
   }
-
-  const manualGroups = (groups.data ?? []).filter(
-    (group) => group.kind === "manual",
-  );
 
   return (
     <ProfileSection
@@ -216,53 +202,7 @@ function FormSettings({
             disabled={!canManage || update.isPending}
             onCheckedChange={(next) => save({ ask_referrer: next })}
           />
-          <SettingsRow
-            label={COPY.contacts}
-            control={
-              <Select
-                value={form.contacts_group_id ?? NO_CONTACTS}
-                disabled={!canManage}
-                onValueChange={(next) =>
-                  save({
-                    contacts_group_id: next === NO_CONTACTS ? null : next,
-                  })
-                }
-              >
-                <SelectTrigger
-                  aria-label={COPY.contacts}
-                  className="h-8 w-56 max-w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CONTACTS}>
-                    {COPY.contactsNone}
-                  </SelectItem>
-                  {manualGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                  {form.contacts_group_id &&
-                  !manualGroups.some(
-                    (group) => group.id === form.contacts_group_id,
-                  ) ? (
-                    <SelectItem value={form.contacts_group_id}>
-                      {COPY.contacts}
-                    </SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
-            }
-          />
         </SettingsGroup>
-        {settings.contacts_skipped.length > 0 ? (
-          <p className="text-caption text-muted-foreground">
-            {COPY.contactsSkipped(
-              settings.contacts_skipped.map((member) => member.display_name),
-            )}
-          </p>
-        ) : null}
 
         <BlurbField
           key={form.id}

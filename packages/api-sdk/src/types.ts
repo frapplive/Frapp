@@ -12760,8 +12760,6 @@ export interface components {
             blurb: string | null;
             questions: components["schemas"]["InterestFormQuestionDto"][];
             ask_referrer: boolean;
-            /** Format: uuid */
-            contacts_group_id: string | null;
             /** Format: date-time */
             updated_at: string;
         };
@@ -12776,18 +12774,11 @@ export interface components {
              */
             path: string;
         };
-        InterestFormSkippedContactDto: {
-            /** Format: uuid */
-            user_id: string;
-            display_name: string;
-        };
         InterestFormSettingsDto: {
             /** @description False for an NPHC chapter, which never gets an interest form. */
             offered: boolean;
             form: components["schemas"]["InterestFormDto"] | null;
             labels: components["schemas"]["InterestFormLabelDto"][];
-            /** @description Members of the contacts Group without `rush:view`, who aren't told. */
-            contacts_skipped: components["schemas"]["InterestFormSkippedContactDto"][];
         };
         UpdateInterestFormDto: {
             /** @description Open or close the public page. */
@@ -12798,11 +12789,6 @@ export interface components {
             questions?: components["schemas"]["InterestFormQuestionDto"][];
             /** @description Ask "Who referred you?". */
             ask_referrer?: boolean;
-            /**
-             * Format: uuid
-             * @description The recruitment contacts Group told of each submission; null for none.
-             */
-            contacts_group_id?: string | null;
         };
         AddInterestFormLabelDto: {
             /** @description A QR source label, such as `tabling-quad`. Spaces and capitals are folded to dashes and lowercase. */

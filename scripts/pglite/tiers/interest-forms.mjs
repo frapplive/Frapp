@@ -1,6 +1,6 @@
 import { db, miss } from "../harness.mjs";
 
-// ─── Functional: chapter interest forms (20261124210747, #5977) ─────────────
+// ─── Functional: chapter interest forms (20261125005308, #5977) ─────────────
 //
 // `spec/behavior/ifc-recruitment.md` § Chapter interest forms, proven on the
 // database functions the API calls:
@@ -26,7 +26,7 @@ import { db, miss } from "../harness.mjs";
 //     by `anon` or `authenticated`.
 //
 // The rows are deleted at the end.
-console.log("\n=== Functional: chapter interest forms (20261124210747) ===");
+console.log("\n=== Functional: chapter interest forms (20261125005308) ===");
 try {
   const P = "c5977000-0000-4000-8000-0000000000";
   const SCHOOL = `${P}a1`;

@@ -39559,11 +39559,6 @@
           "ask_referrer": {
             "type": "boolean"
           },
-          "contacts_group_id": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
           "updated_at": {
             "type": "string",
             "format": "date-time"
@@ -39577,7 +39572,6 @@
           "blurb",
           "questions",
           "ask_referrer",
-          "contacts_group_id",
           "updated_at"
         ]
       },
@@ -39604,22 +39598,6 @@
           "path"
         ]
       },
-      "InterestFormSkippedContactDto": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "display_name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "display_name"
-        ]
-      },
       "InterestFormSettingsDto": {
         "type": "object",
         "properties": {
@@ -39641,20 +39619,12 @@
             "items": {
               "$ref": "#/components/schemas/InterestFormLabelDto"
             }
-          },
-          "contacts_skipped": {
-            "description": "Members of the contacts Group without `rush:view`, who aren't told.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InterestFormSkippedContactDto"
-            }
           }
         },
         "required": [
           "offered",
           "form",
-          "labels",
-          "contacts_skipped"
+          "labels"
         ]
       },
       "UpdateInterestFormDto": {
@@ -39681,12 +39651,6 @@
           "ask_referrer": {
             "type": "boolean",
             "description": "Ask \"Who referred you?\"."
-          },
-          "contacts_group_id": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true,
-            "description": "The recruitment contacts Group told of each submission; null for none."
           }
         }
       },

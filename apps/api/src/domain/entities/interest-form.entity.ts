@@ -1,6 +1,6 @@
 /**
  * A chapter's interest form (#5977, `ifc-recruitment.md` § Chapter interest
- * forms; `20261124210747_chapter_interest_forms.sql`). Every table is RLS on
+ * forms; `20261125005308_chapter_interest_forms.sql`). Every table is RLS on
  * with no policies, reached only through the service-role client.
  */
 import type { FormQuestion } from '../utils/form-card-rules';
@@ -16,8 +16,6 @@ export interface ChapterInterestForm {
   /** The chapter's own questions, the chat form card's shape (#3926). */
   questions: FormQuestion[];
   ask_referrer: boolean;
-  /** The recruitment contacts Group, told of each submission. */
-  contacts_group_id: string | null;
   /** Set when the chapter replaced the form; its slug stops answering. */
   replaced_at: string | null;
   created_by: string | null;

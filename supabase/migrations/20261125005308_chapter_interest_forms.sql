@@ -70,7 +70,6 @@ create table if not exists public.chapter_interest_forms (
                     constraint chapter_interest_forms_questions_shape
                     check (jsonb_typeof(questions) = 'array' and jsonb_array_length(questions) <= 10),
   ask_referrer      boolean not null default true,
-  contacts_group_id uuid references public.chapter_groups(id) on delete set null,
   replaced_at       timestamptz,
   created_by        uuid references public.users(id) on delete set null,
   created_at        timestamptz not null default now(),
@@ -82,15 +81,13 @@ create unique index if not exists chapter_interest_forms_slug_key
   on public.chapter_interest_forms (slug);
 create unique index if not exists chapter_interest_forms_one_live
   on public.chapter_interest_forms (chapter_id) where replaced_at is null;
-create index if not exists idx_chapter_interest_forms_contacts_group_id
-  on public.chapter_interest_forms (contacts_group_id) where contacts_group_id is not null;
 create index if not exists idx_chapter_interest_forms_created_by
   on public.chapter_interest_forms (created_by) where created_by is not null;
 
 alter table public.chapter_interest_forms enable row level security;
 
 comment on table public.chapter_interest_forms is
-  'A chapter''s interest form at /f/<slug> (ifc-recruitment.md § Chapter interest forms, ADR-27). One live row per chapter; replacing it stamps replaced_at and issues a new slug. Created closed; rush:manage opens it. contacts_group_id is the recruitment contacts Group told of each submission beside rush:manage.';
+  'A chapter''s interest form at /f/<slug> (ifc-recruitment.md § Chapter interest forms, ADR-27). One live row per chapter; replacing it stamps replaced_at and issues a new slug. Created closed; rush:manage opens it. Who hears of a submission is rush_settings.contacts_group_id (#5973), beside rush:manage.';
 
 -- 3. chapter_interest_form_labels -------------------------------------------------
 
@@ -862,10 +859,10 @@ begin
      set replaced_at = now(), is_open = false, updated_at = now()
    where id = v_old.id;
   insert into public.chapter_interest_forms (
-    chapter_id, slug, is_open, blurb, questions, ask_referrer, contacts_group_id, created_by
+    chapter_id, slug, is_open, blurb, questions, ask_referrer, created_by
   ) values (
     p_chapter_id, p_slug, v_old.is_open, v_old.blurb, v_old.questions,
-    v_old.ask_referrer, v_old.contacts_group_id, p_actor
+    v_old.ask_referrer, p_actor
   )
   returning * into v_new;
   insert into public.chapter_interest_form_labels (form_id, label)

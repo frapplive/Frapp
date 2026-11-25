@@ -67,18 +67,6 @@ export class UpdateInterestFormDto {
   @IsOptional()
   @IsStrictBoolean()
   ask_referrer?: boolean;
-
-  @ApiPropertyOptional({
-    type: String,
-    format: 'uuid',
-    nullable: true,
-    description:
-      'The recruitment contacts Group told of each submission; null for none.',
-  })
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  contacts_group_id?: string | null;
 }
 
 export class AddInterestFormLabelDto {
@@ -293,9 +281,6 @@ export class InterestFormDto {
   @ApiProperty()
   ask_referrer: boolean;
 
-  @ApiProperty({ type: String, format: 'uuid', nullable: true })
-  contacts_group_id: string | null;
-
   @ApiProperty({ format: 'date-time' })
   updated_at: string;
 }
@@ -314,14 +299,6 @@ export class InterestFormLabelDto {
   path: string;
 }
 
-export class InterestFormSkippedContactDto {
-  @ApiProperty({ format: 'uuid' })
-  user_id: string;
-
-  @ApiProperty()
-  display_name: string;
-}
-
 export class InterestFormSettingsDto {
   @ApiProperty({
     description:
@@ -334,13 +311,6 @@ export class InterestFormSettingsDto {
 
   @ApiProperty({ type: [InterestFormLabelDto] })
   labels: InterestFormLabelDto[];
-
-  @ApiProperty({
-    type: [InterestFormSkippedContactDto],
-    description:
-      "Members of the contacts Group without `rush:view`, who aren't told.",
-  })
-  contacts_skipped: InterestFormSkippedContactDto[];
 }
 
 export class PublicInterestFormChapterDto {

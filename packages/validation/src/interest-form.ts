@@ -222,7 +222,6 @@ export const INTEREST_FORM_REFUSAL = {
   tooManyLabels: "interest_form.label.too_many",
   notOffered: "interest_form.not_offered",
   withdrawInvalid: "interest_form.withdraw.invalid",
-  groupNotFound: "interest_form.group.not_found",
 } as const;
 
 export type InterestFormRefusalCode =
@@ -339,12 +338,6 @@ export const INTEREST_FORM_SETTINGS_COPY = {
   labelPlaceholder: "tabling-quad",
   downloadQr: "Download QR",
   defaultQr: "Main link",
-  contacts: "Recruitment contacts",
-  contactsHint:
-    "A group told about each new submission, beside everyone who manages recruitment.",
-  contactsNone: "Only those who manage recruitment",
-  contactsSkipped: (names: readonly string[]) =>
-    `${names.join(", ")} can't see recruitment, so ${names.length === 1 ? "isn't" : "aren't"} told.`,
   replace: "Replace form",
   replaceConfirm:
     "Replace the form? Its link and every QR code stop working, and a new link takes their place. Your questions and codes carry over.",

@@ -100,12 +100,9 @@ export interface InterestFormSettingsView {
     blurb: string | null;
     questions: FormQuestion[];
     ask_referrer: boolean;
-    contacts_group_id: string | null;
     updated_at: string;
   } | null;
   labels: { id: string; label: string; path: string }[];
-  /** Members of the contacts Group who lack `rush:view`, so aren't told. */
-  contacts_skipped: { user_id: string; display_name: string }[];
 }
 
 /** What the public page reads: the form's public fields only. */
@@ -293,7 +290,7 @@ export class InterestFormService {
   ): Promise<InterestFormSettingsView> {
     const chapter = await this.chapters.findById(chapterId);
     if (!chapterTakesInterest(chapter)) {
-      return { offered: false, form: null, labels: [], contacts_skipped: [] };
+      return { offered: false, form: null, labels: [] };
     }
     const form = await this.liveForm(chapterId, actor);
     return this.settingsView(chapterId, form);
@@ -307,7 +304,6 @@ export class InterestFormService {
       blurb?: string | null;
       questions?: unknown[];
       ask_referrer?: boolean;
-      contacts_group_id?: string | null;
     },
   ): Promise<InterestFormSettingsView> {
     const form = await this.offeredForm(chapterId, actor);
@@ -327,21 +323,6 @@ export class InterestFormService {
     }
     if (input.questions !== undefined) {
       patch.questions = this.checkQuestions(input.questions);
-    }
-    if (input.contacts_group_id !== undefined) {
-      if (input.contacts_group_id) {
-        const group = await this.groups.findById(
-          input.contacts_group_id,
-          chapterId,
-        );
-        if (!group) {
-          throw new NotFoundException({
-            code: INTEREST_FORM_REFUSAL.groupNotFound,
-            message: 'That group isn’t in this chapter.',
-          });
-        }
-      }
-      patch.contacts_group_id = input.contacts_group_id ?? null;
     }
     const updated = Object.keys(patch).length
       ? await this.forms.updateForm(form.id, chapterId, patch)
@@ -824,7 +805,7 @@ export class InterestFormService {
     candidate: { candidateId: string; displayName: string; created: boolean },
   ): Promise<void> {
     try {
-      const receivers = await this.receivers(chapter.id, form);
+      const receivers = await this.receivers(chapter.id);
       if (receivers.length === 0) return;
       await this.notifications.notifyMembers(chapter.id, receivers, {
         title: candidate.created
@@ -849,10 +830,12 @@ export class InterestFormService {
     }
   }
 
-  private async receivers(
-    chapterId: string,
-    form: ChapterInterestForm,
-  ): Promise<string[]> {
+  /**
+   * `rush:manage` holders, and the Recruitment settings' contacts Group
+   * (#5973) members who hold `rush:view`.
+   */
+  private async receivers(chapterId: string): Promise<string[]> {
+    const groupId = await this.forms.findContactsGroupId(chapterId);
     const [managers, viewers, contacts] = await Promise.all([
       this.rbac.findUserIdsWithPermissions(chapterId, [
         SystemPermissions.RUSH_MANAGE,
@@ -860,8 +843,8 @@ export class InterestFormService {
       this.rbac.findUserIdsWithPermissions(chapterId, [
         SystemPermissions.RUSH_VIEW,
       ]),
-      form.contacts_group_id
-        ? this.groups.findMemberIds(chapterId, form.contacts_group_id)
+      groupId
+        ? this.groups.findMemberIds(chapterId, groupId)
         : Promise.resolve([] as string[]),
     ]);
     const canView = new Set(viewers);
@@ -874,10 +857,7 @@ export class InterestFormService {
     chapterId: string,
     form: ChapterInterestForm,
   ): Promise<InterestFormSettingsView> {
-    const [labels, skipped] = await Promise.all([
-      this.forms.findLabels(form.id),
-      this.skippedContacts(chapterId, form),
-    ]);
+    const labels = await this.forms.findLabels(form.id);
     return {
       offered: true,
       form: {
@@ -888,7 +868,6 @@ export class InterestFormService {
         blurb: form.blurb,
         questions: form.questions,
         ask_referrer: form.ask_referrer,
-        contacts_group_id: form.contacts_group_id,
         updated_at: form.updated_at,
       },
       labels: labels.map((row: ChapterInterestFormLabel) => ({
@@ -896,28 +875,7 @@ export class InterestFormService {
         label: row.label,
         path: interestFormPath(form.slug, row.label),
       })),
-      contacts_skipped: skipped,
     };
-  }
-
-  private async skippedContacts(
-    chapterId: string,
-    form: ChapterInterestForm,
-  ): Promise<{ user_id: string; display_name: string }[]> {
-    if (!form.contacts_group_id) return [];
-    const [members, viewers] = await Promise.all([
-      this.groups.findMemberIds(chapterId, form.contacts_group_id),
-      this.rbac.findUserIdsWithPermissions(chapterId, [
-        SystemPermissions.RUSH_VIEW,
-      ]),
-    ]);
-    const canView = new Set(viewers);
-    const ids = members.filter((id) => !canView.has(id));
-    if (!ids.length) return [];
-    const users = await this.users.findByIds(ids);
-    return users
-      .map((user) => ({ user_id: user.id, display_name: user.display_name }))
-      .sort((a, b) => a.display_name.localeCompare(b.display_name));
   }
 
   private checkQuestions(raw: unknown[]): FormQuestion[] {

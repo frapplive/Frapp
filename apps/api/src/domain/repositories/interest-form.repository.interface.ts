@@ -21,7 +21,6 @@ export type InterestFormPatch = Partial<{
   blurb: string | null;
   questions: FormQuestion[];
   ask_referrer: boolean;
-  contacts_group_id: string | null;
 }>;
 
 /** The chapter's place, for the public page and the consent text. */
@@ -84,6 +83,12 @@ export interface IInterestFormRepository {
   ): Promise<ChapterInterestFormLabel | null>;
   /** Whether a label of this form was removed. */
   removeLabel(formId: string, labelId: string): Promise<boolean>;
+
+  /**
+   * The recruitment contacts Group from the Recruitment settings
+   * (`rush_settings.contacts_group_id`, #5973), or null for none.
+   */
+  findContactsGroupId(chapterId: string): Promise<string | null>;
 
   findPlace(chapterId: string): Promise<InterestFormPlace>;
 

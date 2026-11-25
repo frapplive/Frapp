@@ -53,7 +53,6 @@ function form(
       { id: 'q1', type: 'short_answer', title: 'Your major?', required: true },
     ],
     ask_referrer: true,
-    contacts_group_id: null,
     replaced_at: null,
     created_by: ACTOR,
     created_at: '2026-11-24T00:00:00.000Z',
@@ -86,6 +85,7 @@ function setup() {
       created_at: '',
     }),
     removeLabel: jest.fn().mockResolvedValue(true),
+    findContactsGroupId: jest.fn().mockResolvedValue(null),
     findPlace: jest.fn().mockResolvedValue(AT_SCHOOL),
     startCode: jest.fn().mockResolvedValue({
       ok: true,
@@ -287,18 +287,6 @@ describe('InterestFormService — settings', () => {
     });
   });
 
-  it('refuses a contacts group from another chapter', async () => {
-    const { service, groups } = setup();
-    groups.findById.mockResolvedValue(null);
-    await expect(
-      service.updateSettings(CHAPTER, ACTOR, {
-        contacts_group_id: '44444444-4444-4444-8444-444444444444',
-      }),
-    ).rejects.toMatchObject({
-      response: { code: 'interest_form.group.not_found' },
-    });
-  });
-
   it('folds a typed label to its stored shape and refuses a duplicate', async () => {
     const { service, forms } = setup();
     await service.addLabel(CHAPTER, ACTOR, ' Tabling Quad ');
@@ -310,22 +298,6 @@ describe('InterestFormService — settings', () => {
     ).rejects.toMatchObject({
       response: { code: 'interest_form.label.exists' },
     });
-  });
-
-  it('names the contacts who lack rush:view, since they are not told', async () => {
-    const { service, forms, groups, users } = setup();
-    forms.findLiveForm.mockResolvedValue(
-      form({ contacts_group_id: 'group-1' }),
-    );
-    groups.findMemberIds.mockResolvedValue(['viewer', 'pledge']);
-    users.findByIds.mockResolvedValue([
-      { id: 'pledge', display_name: 'Pat Pledge' },
-    ]);
-    const view = await service.getSettings(CHAPTER, ACTOR);
-    expect(users.findByIds).toHaveBeenCalledWith(['pledge']);
-    expect(view.contacts_skipped).toEqual([
-      { user_id: 'pledge', display_name: 'Pat Pledge' },
-    ]);
   });
 });
 
@@ -538,11 +510,15 @@ describe('InterestFormService — a submission', () => {
     expect(forms.submit.mock.calls[0][0].referrerText).toBeNull();
   });
 
-  it('tells rush:manage and the contacts who can see recruitment, then emails a receipt', async () => {
+  it("tells rush:manage and the Recruitment settings' contacts who can see recruitment, then emails a receipt", async () => {
     const { service, forms, groups, notifications, email } = setup();
-    forms.findBySlug.mockResolvedValue(form({ contacts_group_id: 'group-1' }));
+    // The contacts Group lives in the Recruitment settings (#5973).
+    forms.findContactsGroupId.mockResolvedValue('group-1');
     groups.findMemberIds.mockResolvedValue(['viewer', 'pledge']);
     const done = await service.submit(SLUG, SUBMISSION);
+
+    expect(forms.findContactsGroupId).toHaveBeenCalledWith(CHAPTER);
+    expect(groups.findMemberIds).toHaveBeenCalledWith(CHAPTER, 'group-1');
 
     expect(done).toEqual({ chapter_name: 'Phi Gamma Delta' });
     expect(notifications.notifyMembers).toHaveBeenCalledWith(
