@@ -26,6 +26,8 @@ import {
   wordsArg,
 } from './chapter-tool-kit';
 import {
+  aboutPart,
+  assignedByPart,
   awaitsConfirm,
   dueDay,
   dueFirst,
@@ -137,12 +139,6 @@ export class ChapterTasksAgentTool implements AgentReadTool<Args> {
       return nothing(context, ['No task fits that.', ...notes].join(' '));
     }
 
-    // Who gave each task, as `my_tasks` says it: not for a task its owner
-    // gave themselves (#5180).
-    const assignedBy = (task: TaskView) =>
-      task.created_by && task.created_by !== task.assignee_id
-        ? `Assigned by ${people.name(task.created_by)}`
-        : null;
     const sourceId = listSourceId(
       this.name,
       args.status,
@@ -154,7 +150,7 @@ export class ChapterTasksAgentTool implements AgentReadTool<Args> {
       const rows = [...kept].sort(latestFinishFirst).map((task) => {
         const parts = [
           `${quoted(task.title)}: done by ${people.name(task.assignee_id)}${task.confirmed_at ? `, finished on ${longDay(task.confirmed_at, timeZone)}` : ''}`,
-          assignedBy(task),
+          assignedByPart(task, people),
           task.point_reward ? `Worth ${task.point_reward} points` : null,
         ];
         return `${parts.filter(Boolean).join('. ')}.`;
@@ -218,9 +214,9 @@ export class ChapterTasksAgentTool implements AgentReadTool<Args> {
                 ? 'Started'
                 : 'Not started',
           !awaitsConfirm(task) && task.sent_back_at ? 'Sent back once' : null,
-          assignedBy(task),
+          assignedByPart(task, people),
           task.point_reward ? `Worth ${task.point_reward} points` : null,
-          task.description ? `About: ${quoted(task.description)}` : null,
+          aboutPart(task),
         ];
         return `${parts.filter(Boolean).join('. ')}.`;
       });

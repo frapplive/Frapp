@@ -11,14 +11,10 @@ import {
   type IMeetingRepository,
 } from '#domain/repositories/meeting.repository.interface';
 import type { CorpusSection } from '#domain/utils/corpus-chunker';
-import {
-  MEMBER_REPOSITORY,
-  type IMemberRepository,
-} from '#domain/repositories/member.repository.interface';
 import { MeetingService } from '../meeting.service';
 import type {
   CorpusSourceAdapter,
-  CorpusSourceFacts,
+  CorpusSourceDescription,
   CorpusSourceRead,
 } from './corpus-source';
 
@@ -140,7 +136,6 @@ export class MeetingMinutesCorpusSource implements CorpusSourceAdapter {
   constructor(
     @Inject(MEETING_REPOSITORY) private readonly meetings: IMeetingRepository,
     private readonly meetingService: MeetingService,
-    @Inject(MEMBER_REPOSITORY) private readonly members: IMemberRepository,
   ) {}
 
   async read(chapterId: string, sourceId: string): Promise<CorpusSourceRead> {
@@ -166,29 +161,22 @@ export class MeetingMinutesCorpusSource implements CorpusSourceAdapter {
 
   /**
    * Who posted each meeting's minutes (#5180); the meeting's type is in its
-   * title already. A poster who has left the chapter is not named.
+   * title already.
    */
   async describe(
     chapterId: string,
     sourceIds: readonly string[],
-  ): Promise<Map<string, CorpusSourceFacts>> {
-    const facts = new Map<string, CorpusSourceFacts>();
+  ): Promise<Map<string, CorpusSourceDescription>> {
+    const facts = new Map<string, CorpusSourceDescription>();
     const ids = [...new Set(sourceIds)];
     if (ids.length === 0) return facts;
-    const [meetings, people] = await Promise.all([
-      Promise.all(ids.map((id) => this.meetings.findById(chapterId, id))),
-      this.members.findChapterMemberIdentities(chapterId),
-    ]);
-    const nameOf = new Map(
-      people.map((person) => [person.user_id, person.display_name]),
-    );
-    for (const meeting of meetings) {
-      if (!meeting) continue;
-      const name = meeting.posted_by ? nameOf.get(meeting.posted_by) : null;
+    for (const meeting of await this.meetings.findByIds(chapterId, ids)) {
       facts.set(meeting.id, {
         type: null,
         folder: null,
-        by: name ? { verb: 'posted', name } : null,
+        by: meeting.posted_by
+          ? { verb: 'posted', userId: meeting.posted_by }
+          : null,
         fromDrive: false,
       });
     }

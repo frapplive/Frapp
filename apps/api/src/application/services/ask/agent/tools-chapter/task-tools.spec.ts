@@ -385,6 +385,18 @@ describe('chapter_tasks', () => {
     );
   });
 
+  it('says who assigned a finished task, as my_tasks does (#5180)', async () => {
+    const list = jest.fn(async () => [
+      task({
+        assignee_id: 'user-1',
+        created_by: 'user-2',
+        confirmed_at: '2026-11-08T15:00:00.000Z',
+      }),
+    ]);
+    const result = await tool(list).run({ ...all, status: 'done' }, manager);
+    expect(linesOf(result).at(-1)).toMatch(/\. Assigned by Avery Lin\.$/);
+  });
+
   it('says so when nothing fits', async () => {
     const result = await tool(jest.fn(async () => [])).run(all, manager);
     expect(result).toEqual({

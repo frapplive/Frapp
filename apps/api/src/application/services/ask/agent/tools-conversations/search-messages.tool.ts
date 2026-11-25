@@ -118,7 +118,7 @@ type Args = z.infer<typeof input>;
 export class SearchMessagesTool implements AgentReadTool<Args> {
   readonly name = 'search_messages';
   readonly description =
-    'Searches messages in the chapter channels the member can open, by words and by meaning. Can be narrowed to one channel, to what one member wrote ("me" for the asker), and to a stretch of days. Returns single messages, thread replies among them (a reply says whose thread it is in); read_channel shows the conversation or the thread around one.';
+    'Searches messages in the chapter channels the member can open, by words and by meaning. Can be narrowed to one channel, to what one member wrote ("me" for the asker), and to a stretch of days. Returns single messages: words are matched on the channels\' timelines, and the search by meaning also finds thread replies, each naming the message whose thread it is in. read_channel shows the conversation or the thread around one.';
   readonly reading = 'Searching messages';
   readonly permission = SystemPermissions.MEMBERS_VIEW;
   readonly module = null;
@@ -260,10 +260,13 @@ export class SearchMessagesTool implements AgentReadTool<Args> {
       WORD_HITS,
     );
     // The search was held to the chapter channels this member can open, but
-    // returns every kind of row. Only a member's words go further, on a
-    // channel's timeline or in a thread (#5180), and never a row the search
-    // masked as blocked. A reply under a recruitment candidate's card is
-    // dropped by `readableAmong`, as every chat read drops it.
+    // returns every kind of row. Only a member's words go further, and never
+    // a row the search masked as blocked. The app's word search reads channel
+    // timelines only for now (thread results are #6108, part of #3785), so no
+    // reply arrives here yet; the search by meaning below finds them. A reply
+    // keeps its thread when one does arrive, and `readableAmong` then drops
+    // one under a recruitment candidate's card, as every chat read does
+    // (#5180).
     const rows: (CatchUpMessageRow & { channel_id: string })[] = messages
       .filter(
         (message) =>

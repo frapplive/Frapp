@@ -6,6 +6,7 @@ import {
 } from '@repo/validation';
 import { z } from 'zod';
 import { SystemPermissions } from '#domain/constants/permissions';
+import { CorpusRetrievalService } from '../../../corpus/corpus-retrieval.service';
 import { minutesTitle } from '../../../corpus/meeting-minutes-corpus-source';
 import { MeetingService, type MeetingView } from '../../../meeting.service';
 import { MemberService } from '../../../member.service';
@@ -26,6 +27,7 @@ import {
   nothing,
   recordId,
 } from './conversation-lines';
+import { MINUTES_SOURCE_TYPE } from './search-records.tool';
 
 /** A decision or an action item is at most 1,000 characters as stored. */
 const ITEM_TEXT_MAX = 1000;
@@ -82,6 +84,7 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
   constructor(
     private readonly meetings: MeetingService,
     private readonly members: MemberService,
+    private readonly retrieval: CorpusRetrievalService,
   ) {}
 
   async run(args: Args, context: AgentToolContext): Promise<AgentToolResult> {
@@ -114,27 +117,19 @@ export class ReadMinutesTool implements AgentReadTool<Args> {
       ),
     );
     const nameOf = new Map<string, string>();
-    // Who posted them, as the minutes page says (#5180): not named once
-    // they have left the chapter.
-    let poster: string | null = null;
-    if (owners.size > 0 || meeting.posted_by) {
-      for (const entry of await this.members.findRosterByChapter(chapterId)) {
-        if (owners.has(entry.user_id)) {
-          nameOf.set(entry.user_id, label(entry.display_name, 'A member'));
-        }
-        if (entry.user_id === meeting.posted_by) poster = entry.display_name;
+    // Who posted them, by the rule a search's passages use
+    // (`MeetingMinutesCorpusSource.describe`, #5180): read beside the
+    // roster, and a failed read costs only those words.
+    const [roster, facts] = await Promise.all([
+      owners.size > 0 ? this.members.findRosterByChapter(chapterId) : [],
+      this.retrieval.describe(chapterId, MINUTES_SOURCE_TYPE, [meeting.id]),
+    ]);
+    for (const entry of roster) {
+      if (owners.has(entry.user_id)) {
+        nameOf.set(entry.user_id, label(entry.display_name, 'A member'));
       }
     }
-    const about = recordFactsLine(
-      poster
-        ? {
-            type: null,
-            folder: null,
-            by: { verb: 'posted', name: poster },
-            fromDrive: false,
-          }
-        : null,
-    );
+    const about = recordFactsLine(facts.get(meeting.id) ?? null);
 
     const title = minutesTitle(meeting);
     const entities: AgentEntity[] = [];

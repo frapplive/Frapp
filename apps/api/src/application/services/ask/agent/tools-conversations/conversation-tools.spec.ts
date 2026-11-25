@@ -249,6 +249,7 @@ describe('conversation and record tools', () => {
       'members.findByUserAndChapter',
       'members.findRosterByChapter',
       'rbac.findByChapter',
+      'retrieval.describe',
       'retrieval.readSource',
       'retrieval.retrieve',
       'scope.authorRoles',
@@ -1503,6 +1504,29 @@ describe('conversation and record tools', () => {
       expect(result.note).toBe('Part 2 of 3. Pass part 3 for what follows.');
     });
 
+    it('says what the document is on every part it reads (#5180)', async () => {
+      const { tool } = build({
+        title: 'Bylaws',
+        source_at: '2026-01-01T00:00:00.000Z',
+        total: 2,
+        chunks: [chunk(0), chunk(1)],
+        facts: {
+          type: 'Governing document',
+          folder: null,
+          by: { verb: 'uploaded', name: 'Dana Reyes' },
+          fromDrive: true,
+        },
+      });
+      const result = await tool.run(
+        { document: `document:${DOCUMENT}:chunk-0`, part: 1 },
+        context,
+      );
+      expect(result.sources.map((source) => source.about)).toEqual([
+        'Governing document, copied from Google Drive, uploaded by Dana Reyes',
+        'Governing document, copied from Google Drive, uploaded by Dana Reyes',
+      ]);
+    });
+
     it('reads nothing for a document the asker cannot open or another chapter’s, and never passes a malformed id on', async () => {
       const refused = build(null);
       const result = await refused.tool.run(
@@ -1601,10 +1625,18 @@ describe('conversation and record tools', () => {
         }),
       };
       const { members } = scopeWith();
+      const retrieval = {
+        describe: jest.fn(async () => new Map()),
+      };
       return {
         meetings,
         members,
-        tool: new ReadMinutesTool(meetings as never, members as never),
+        retrieval,
+        tool: new ReadMinutesTool(
+          meetings as never,
+          members as never,
+          retrieval as never,
+        ),
       };
     };
 
@@ -1659,11 +1691,37 @@ describe('conversation and record tools', () => {
       ]);
     });
 
-    it('says who posted the minutes, on every section (#5180)', async () => {
-      const { tool } = build(
-        view({ meeting: meeting({ posted_by: SAM }), content: content() }),
+    it("says who posted the minutes on every section, by the search's own rule (#5180)", async () => {
+      // No action item has an owner, so the roster is never read for one.
+      const { tool, retrieval, members } = build(
+        view({
+          content: content({
+            action_items: [
+              { text: 'Book the bus', owner_user_id: null, due_date: null },
+            ],
+          }),
+        }),
+      );
+      retrieval.describe.mockResolvedValueOnce(
+        new Map([
+          [
+            MEETING,
+            {
+              type: null,
+              folder: null,
+              by: { verb: 'posted', name: 'Sam Ortiz' },
+              fromDrive: false,
+            },
+          ],
+        ]) as never,
       );
       const result = await tool.run({ meeting: MEETING }, context);
+      expect(retrieval.describe).toHaveBeenCalledWith(
+        CHAPTER,
+        'meeting_minutes',
+        [MEETING],
+      );
+      expect(members.findRosterByChapter).not.toHaveBeenCalled();
       expect(new Set(result.sources.map((source) => source.about))).toEqual(
         new Set(['posted by Sam Ortiz']),
       );

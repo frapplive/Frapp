@@ -100,37 +100,34 @@ describe('MeetingMinutesCorpusSource', () => {
   function setup(row: Meeting | null = meeting()) {
     const meetings = {
       findById: jest.fn().mockResolvedValue(row),
+      findByIds: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<IMeetingRepository>;
-    const members = {
-      findChapterMemberIdentities: jest
-        .fn()
-        .mockResolvedValue([
-          { user_id: 'user-poster', display_name: 'Jordan Lee', role_ids: [] },
-        ]),
-    } as unknown as jest.Mocked<IMemberRepository>;
     const readableAmong = jest
       .fn()
       .mockImplementation((_c: string, _u: string, ids: string[]) =>
         Promise.resolve(new Set(ids)),
       );
-    const source = new MeetingMinutesCorpusSource(
-      meetings,
-      { readableAmong } as unknown as MeetingService,
-      members,
-    );
-    return { source, meetings, readableAmong, members };
+    const source = new MeetingMinutesCorpusSource(meetings, {
+      readableAmong,
+    } as unknown as MeetingService);
+    return { source, meetings, readableAmong };
   }
 
-  it('says who posted the minutes, and names nobody who has left (#5180)', async () => {
+  it('says who posted the minutes, by user id, in one read (#5180)', async () => {
     const { source, meetings } = setup();
-    meetings.findById
-      .mockResolvedValueOnce(meeting({ posted_by: 'user-poster' }))
-      .mockResolvedValueOnce(meeting({ id: 'meeting-2', posted_by: 'gone' }));
+    meetings.findByIds.mockResolvedValueOnce([
+      meeting({ posted_by: 'user-poster' }),
+      meeting({ id: 'meeting-2', posted_by: null }),
+    ]);
     const facts = await source.describe(CHAPTER, ['meeting-1', 'meeting-2']);
+    expect(meetings.findByIds).toHaveBeenCalledWith(CHAPTER, [
+      'meeting-1',
+      'meeting-2',
+    ]);
     expect(facts.get('meeting-1')).toEqual({
       type: null,
       folder: null,
-      by: { verb: 'posted', name: 'Jordan Lee' },
+      by: { verb: 'posted', userId: 'user-poster' },
       fromDrive: false,
     });
     expect(facts.get('meeting-2')?.by).toBeNull();
@@ -245,11 +242,6 @@ describe('ChapterDocumentCorpusSource', () => {
     } as unknown as jest.Mocked<IChapterDocumentFolderRepository>;
     const members = {
       findByUserAndChapter: jest.fn().mockResolvedValue(null),
-      findChapterMemberIdentities: jest
-        .fn()
-        .mockResolvedValue([
-          { user_id: 'uploader', display_name: 'Dana Reyes', role_ids: [] },
-        ]),
     } as unknown as jest.Mocked<IMemberRepository>;
     const getChannelAccessHolder = jest.fn().mockResolvedValue({
       entries: new Set<string>(),
@@ -303,8 +295,8 @@ describe('ChapterDocumentCorpusSource', () => {
         id: 'doc-2',
         document_type: null,
         folder: null,
-        // No longer a member: not named.
-        uploaded_by: 'gone',
+        // A meeting's minutes filed as a document have no uploader.
+        uploaded_by: null,
         drive_file_id: null,
       },
     ] as never);
@@ -312,7 +304,7 @@ describe('ChapterDocumentCorpusSource', () => {
     expect(facts.get('doc-1')).toEqual({
       type: 'Policy',
       folder: 'Governance',
-      by: { verb: 'uploaded', name: 'Dana Reyes' },
+      by: { verb: 'uploaded', userId: 'uploader' },
       fromDrive: true,
     });
     expect(facts.get('doc-2')).toEqual({

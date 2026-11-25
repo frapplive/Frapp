@@ -123,15 +123,32 @@ export async function findEvent(
   const [first, second] =
     prefer === 'upcoming' ? [ahead, behind] : [behind, ahead];
   const nearestFirst = [...first, ...second];
-  const oneName =
-    new Set(fits.map((event) => plainName(event.name))).size === 1;
-  return oneName
+  return isOneEventRepeating(fits)
     ? {
         event: nearestFirst[0],
         candidates: fits.length,
         others: nearestFirst.slice(1),
       }
     : { event: null, candidates: fits.length, others: nearestFirst };
+}
+
+/**
+ * Whether these events are one event repeating: one series
+ * (`parent_event_id`), or names that differ only in their numbers, as a
+ * chapter that writes the date into each meeting's name ("Chapter meeting
+ * 11/13", "Chapter meeting 11/20") does.
+ */
+function isOneEventRepeating(events: readonly Event[]): boolean {
+  const series = new Set(
+    events.map((event) => event.parent_event_id ?? event.id),
+  );
+  if (series.size === 1) return true;
+  const names = new Set(
+    events.map((event) =>
+      plainName(event.name).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim(),
+    ),
+  );
+  return names.size === 1;
 }
 
 /** `"Formal dinner" on Friday, November 20, 2026 (event:<id>)`. */
@@ -141,7 +158,21 @@ function candidateLine(event: Event, timeZone: string): string {
 
 /** The candidates a note names, and how many more it leaves out. */
 function candidateList(events: readonly Event[], timeZone: string): string {
-  const named = events
+  // Each different event once, nearest first, before more days of any one:
+  // a weekly dinner's next six dates must not push a one-off dinner out of
+  // the list.
+  const seen = new Set<string>();
+  const firstOfEach: Event[] = [];
+  const later: Event[] = [];
+  for (const event of events) {
+    const key = event.parent_event_id ?? plainName(event.name);
+    if (seen.has(key)) later.push(event);
+    else {
+      seen.add(key);
+      firstOfEach.push(event);
+    }
+  }
+  const named = [...firstOfEach, ...later]
     .slice(0, NAMED_CANDIDATES)
     .map((event) => candidateLine(event, timeZone));
   const more = events.length - named.length;
