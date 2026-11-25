@@ -17,7 +17,7 @@ role and a committee chair's role; the empty capture is a fresh chapter from the
 the phone, where View as doesn't exist yet, read the member and chair layout from the screen's code and
 the role gates it uses, and say so in the PR (seeded per-role logins are #5687):
 
-| | Web (1440 wide, and beside chat from 1024) | Phone (iPhone size) |
+| | Web (1440 wide, and beside chat at 576 and at the 375 floor) | Phone (iPhone size) |
 | --- | --- | --- |
 | Average member | required | required |
 | Committee chair | required | required |
