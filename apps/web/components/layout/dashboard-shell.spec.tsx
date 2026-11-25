@@ -517,7 +517,9 @@ describe("DashboardShell", () => {
 
     it("lights More on a page it still holds (#5943 folds them later)", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
+      // Recruitment's row needs both of its grants (`nav-config.ts`).
+      mockPermissions.value = ["members:view", "rush:view"];
+      mockPathname.value = "/rush";
       shell();
       expect(
         within(primary()).getByRole("button", { name: /More/ }),
@@ -758,7 +760,7 @@ describe("DashboardShell", () => {
 
     it("docks on the right of a page with the divider, at the member's width", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
+      mockPathname.value = "/rush";
       const { container } = shell(<p>tasks</p>, { defaultChatWidth: 420 });
       const main = screen.getByRole("main");
       const tool = container.querySelector("[data-tool-column]")!;
@@ -773,7 +775,7 @@ describe("DashboardShell", () => {
 
     it("closes with its X, and stays mounted out of sight for the sidebar's list", async () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
+      mockPathname.value = "/rush";
       const { container } = shell();
       fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
       // Once its exit has played.
@@ -788,7 +790,7 @@ describe("DashboardShell", () => {
 
     it("comes back when the member picks a channel from the sidebar", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
+      mockPathname.value = "/rush";
       shell(undefined, { defaultChatOpen: false });
       expect(screen.getByTestId("chat-shown")).toHaveTextContent(
         "out of sight",
@@ -811,7 +813,7 @@ describe("DashboardShell", () => {
 
     it("is not built beside a page below lg, where the shell is one page", () => {
       setWindowWidth(800);
-      mockPathname.value = "/tasks";
+      mockPathname.value = "/rush";
       const { container } = shell();
       expect(chatPanel(container)).toBeNull();
     });
@@ -866,7 +868,7 @@ describe("DashboardShell", () => {
 
     it("leaves a docked conversation alone beside a page, whichever kind it is", () => {
       setWindowWidth(1440);
-      mockPathname.value = "/tasks";
+      mockPathname.value = "/rush";
       shell();
       fireEvent.click(screen.getByRole("button", { name: "Open a DM link" }));
       expect(routerReplace).not.toHaveBeenCalled();

@@ -53,9 +53,10 @@ describe("the task card", () => {
     expect(screen.getByText("Jo Park")).toBeInTheDocument();
     expect(screen.getByText("Waiting on an officer")).toBeInTheDocument();
     expect(screen.getAllByText("To do")).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Open Tasks" })).toHaveAttribute(
+    // The first copy's link, which opens the task for everyone it is in.
+    expect(screen.getByRole("link", { name: "Open task" })).toHaveAttribute(
       "href",
-      "/tasks",
+      expect.stringMatching(/^\/activity\?task=/),
     );
   });
 

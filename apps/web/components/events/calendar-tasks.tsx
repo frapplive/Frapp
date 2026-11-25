@@ -23,6 +23,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { tasksTaskLink } from "@/lib/tasks/task-links";
 import { cn } from "@/lib/utils";
 
 /**
@@ -188,8 +189,18 @@ function CalendarTaskPopover({
             )}
           </div>
         )}
+        {/* The task in its panel on Activity (#5948); a copy of a task for
+            everyone opens its group. */}
         <Button asChild variant="secondary" size="toolbar">
-          <Link href="/tasks">Open Tasks</Link>
+          <Link
+            href={tasksTaskLink(
+              item.kind === "mine"
+                ? item.taskId
+                : (item.assignees[0]?.taskId ?? ""),
+            )}
+          >
+            Open task
+          </Link>
         </Button>
       </PopoverContent>
     </Popover>
