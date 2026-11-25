@@ -49,8 +49,8 @@ const ALLOWED: Record<string, string> = {
     "the mobile wizard's input for the field",
   "apps/mobile/lib/chapter-branding.ts":
     "turns show_greek_letters off for an organization that hides its letters (FIJI) before Chat home's mark goes through chapterTextMark",
-  "apps/api/src/application/services/invite.service.ts":
-    "turns show_greek_letters off for an organization that hides its letters (FIJI) before the invite preview's mark_text goes through chapterTextMark",
+  "apps/api/src/domain/utils/chapter-card-mark.ts":
+    "turns show_greek_letters off for an organization that hides its letters (FIJI) before the invite card's and the interest form's mark_text goes through chapterTextMark",
 };
 
 /**

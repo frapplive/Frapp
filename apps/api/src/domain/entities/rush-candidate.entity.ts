@@ -20,7 +20,11 @@ export interface RushCandidate {
   bid_status: RushBidStatus;
   /** The bid's full state (#5973); `bid_status` is its shipped-client view. */
   bid_state: RushBidState;
-  created_by: string;
+  /**
+   * The member who added the prospect by hand. Null only for a candidate a
+   * PNM's own interest form created (`origin` `pnm`, #5977).
+   */
+  created_by: string | null;
   created_at: string;
 }
 
@@ -59,17 +63,15 @@ export interface RushCandidateWork {
 
 /**
  * The school layer's columns (#5974, `school-layer.md` § 2.5): the PNM a
- * prospect is. Kept off {@link RushCandidate} so the rush DTOs' drift
- * guards don't make that slice change the rush contract. The rush
- * repository reads `*`, so its rows carry them undocumented; every row is
- * `pnm_id` null and `origin` `manual` until the form slice links
- * candidates, and that slice documents them on the rush routes or stops
- * sending them.
+ * prospect is, and who made it. Kept off {@link RushCandidate} so the rush
+ * DTOs' drift guards don't change the rush contract. The interest form
+ * (#5977) creates `pnm` rows; the pipeline's candidate DTO documents
+ * `origin`.
  */
 export interface RushCandidatePnmLink {
   /** The school-level PNM this prospect is, or null for a hand-added one. */
   pnm_id: string | null;
-  /** `manual` (a member added them) or `pnm`; never changes. */
+  /** `manual` (a member added them) or `pnm` (their interest form); never changes. */
   origin: 'manual' | 'pnm';
 }
 

@@ -103,6 +103,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       ok(options?.enabled === false ? undefined : h.config),
     usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
     useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
       mutateAsync: h.createChannel,

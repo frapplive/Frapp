@@ -42,6 +42,7 @@ function candidate(id: string, stageKey: string, day: number) {
     bid_status: "none",
     created_by: "u",
     created_by_name: "U",
+    origin: "manual" as const,
     created_at: `2026-11-${String(day).padStart(2, "0")}T00:00:00.000Z`,
     tag_ids: [],
     viewer_rating: null,

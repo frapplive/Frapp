@@ -64,6 +64,7 @@ const candidate = (
   bid_status: "none",
   created_by: "u-1",
   created_by_name: "Moiz Steenhuis",
+  origin: "manual" as const,
   created_at: `${TODAY}T12:00:00Z`,
   tag_ids: [],
   viewer_rating: null,
@@ -107,6 +108,7 @@ const bidMutate = vi.hoisted(() => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCandidateForm: () => ({ data: undefined }),
   useMyPermissions: () => ({
     data: { permissions: permissions.current },
     isPending: false,

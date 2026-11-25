@@ -19,6 +19,7 @@ import {
   rushAppliedTags,
   rushNotesMode,
   rushMemberOptions,
+  rushAddedByLine,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { formatDayHeading, localIsoDate } from "@repo/formatting";
@@ -55,6 +56,7 @@ import {
 } from "@/components/rush/rush-log-contact-sheet";
 import { RushNotes } from "@/components/rush/rush-notes";
 import { RushStars } from "@/components/rush/rush-stars";
+import { RushProspectForm } from "@/components/rush/rush-prospect-form";
 import { alertFailure } from "@/lib/failure-alert";
 import { firstParam } from "@/lib/route-params";
 import { useRushEntry } from "@/lib/rush/rush-entry";
@@ -72,15 +74,20 @@ export const RUSH_OWNER = "Owner";
 /** The reason sheet's title, asked before a prospect moves into a Closed stage. */
 export const CLOSED_REASON_TITLE = "Why are they closed?";
 
-/** "Added by Jake Miller · November 14": who brought them in, and when. */
+/**
+ * "Added by Jake Miller · November 14", or "From the interest form ·
+ * November 14" for a prospect their own form brought in (#5977).
+ */
 export function addedLine(
-  candidate: Pick<RushPipelineCandidate, "created_by_name" | "created_at">,
+  candidate: Pick<
+    RushPipelineCandidate,
+    "created_by_name" | "created_at" | "origin"
+  >,
   now: Date = new Date(),
 ): string {
   const when = formatDayHeading(candidate.created_at, now);
-  return when
-    ? `Added by ${candidate.created_by_name} · ${when}`
-    : `Added by ${candidate.created_by_name}`;
+  const who = rushAddedByLine(candidate);
+  return when ? `${who} · ${when}` : who;
 }
 
 /**
@@ -361,6 +368,11 @@ export function RushProspectScreen() {
         access={access}
         viewerId={viewerId}
         today={today}
+      />
+
+      <RushProspectForm
+        candidateId={candidate.id}
+        fromForm={candidate.origin === "pnm"}
       />
 
       {access.vote || rating !== null ? (
