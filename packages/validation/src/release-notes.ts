@@ -143,12 +143,15 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "Recruitment now tracks bids: extend one, record an acceptance or a decline, and see a recorded acceptance wait until the prospect confirms it from an email or an officer does. A new Summary view beside the list shows the whole pipeline at a glance.",
       "Role and group colors have a much bigger picker: thirty readable colors, the colors your chapter already uses, and any custom color by hex, now on your phone too.",
       "A council can invite its school's chapters and answer their requests to join, and sees its member chapters in its own Chapters list.",
+      "Your points, service hours and study hours now open from your own profile, and the Directory sorts the chapter by points or service hours for this semester, this month or all time.",
     ],
     web: [
       "Chapter settings is shorter: the chapter's name and school sit on top, and each section is one tap away.",
       "Tasks, the notifications list, the service leaderboard, event attendance and chat reports show their views as plain words beside the title instead of a switch or tabs.",
       "Your channels now stay in the sidebar on every page, with New, Search, Activity, Messages, Calendar, Resources and Directory above them, and your own menu at the bottom.",
       "A chapter's officers can confirm their school and ask to join its council, or answer the council's invitation, from School and council in the chapter menu.",
+      "When chat is narrow, such as beside a page, the channel's name keeps its room in the header and Threads moves into the channel menu.",
+      "Officers adjust a member's points from that member's card, and the chapter's points ledger and reviewed service hours now live in Chapter settings.",
     ],
     phone: [
       "You can link your Discord account from Settings, so the messages you wrote in your chapter's old server show under your name.",
