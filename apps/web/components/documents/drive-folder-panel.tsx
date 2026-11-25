@@ -4,6 +4,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useRef,
   useState,
   type RefObject,
 } from "react";
@@ -25,6 +26,7 @@ import {
   type GoogleDriveStatus,
 } from "@repo/hooks";
 import { isEmptyChannelAccessChoice } from "@repo/hooks/channel-access";
+import { codeOf } from "@repo/api-sdk";
 import { formatRelativeDayTime } from "@repo/formatting";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +157,7 @@ export function DriveFolderPanel({
           ) : data.picker && !byLink ? (
             <PickerConnectView
               picker={data.picker}
+              email={data.service_account_email}
               gate={gate}
               open={dialog.open}
               onCancel={() => dialog.setOpen(false)}
@@ -361,19 +364,31 @@ function usePickFolder(picker: DrivePickerConfig, active: boolean) {
   return { pick, picking };
 }
 
+/** The API's answer for a picked folder the officer must share themselves. */
+export const SHARE_BY_HAND = "google_drive.share_by_hand";
+/** How often the panel asks again while it waits for that share. */
+export const SHARE_CHECK_MS = 5_000;
+/** How long it waits: the picker's sign-in lasts an hour, the wait less. */
+export const SHARE_WAIT_MS = 10 * 60_000;
+
 /**
  * Connect by picking (#5583): the officer signs in with Google and picks the
- * folder in Google's own picker, and Frapp shares it with itself using that
- * sign-in. No address to copy, no link to paste, no code to add.
+ * folder in Google's own picker. Frapp shares an empty folder with itself
+ * using that sign-in. Google lets that sign-in share only the folder, not the
+ * files in it (staging, 2026-11-25), so for any other folder the panel shows
+ * Frapp's address to share it with in Drive, and connects by itself once the
+ * share lands (Paul's pick, 2026-11-25). No link to paste, no code to add.
  */
 function PickerConnectView({
   picker,
+  email,
   gate,
   open,
   onCancel,
   onUseLink,
 }: {
   picker: DrivePickerConfig;
+  email: string | null;
   gate: SubscriptionGate;
   open: boolean;
   onCancel: () => void;
@@ -386,6 +401,9 @@ function PickerConnectView({
   const [folder, setFolder] = useState<PickedFolder | null>(null);
   const [whoCanSee, setWhoCanSee] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set while the officer shares the folder in Drive: when the wait began.
+  const [waitingSince, setWaitingSince] = useState<number | null>(null);
+  const checking = useRef(false);
   const accessId = useId();
   const errorId = useId();
   const hideAccess = access.optionsState === "ready" && !access.canLimit;
@@ -398,31 +416,43 @@ function PickerConnectView({
 
   async function choose() {
     setError(null);
+    setWaitingSince(null);
     const result = await pick();
     if (!result) return;
     if ("error" in result) setError(result.error);
     else setFolder(result.folder);
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (blocked || !folder) return;
-    setError(null);
+  /**
+   * One connect attempt. `quiet` is a check while waiting for the share:
+   * the button doesn't spin, and "not shared yet" just keeps waiting.
+   */
+  async function attempt(picked: PickedFolder, quiet: boolean) {
+    if (checking.current) return;
+    checking.current = true;
     try {
       await connect.mutateAsync({
-        folderId: folder.id,
-        accessToken: folder.accessToken,
+        folderId: picked.id,
+        accessToken: picked.accessToken,
         whoCanSee,
       });
+      setWaitingSince(null);
       toast({
-        title: `${folder.name || "Google Drive"} connected`,
+        title: `${picked.name || "Google Drive"} connected`,
         description: "Its files show up in Documents in a minute or two.",
       });
     } catch (caught) {
+      if (codeOf(caught) === SHARE_BY_HAND) {
+        // Keep the folder and the sign-in: once the officer has shared it,
+        // the same request connects it.
+        if (!quiet) setWaitingSince(Date.now());
+        return;
+      }
       // The API words each refusal for the officer: a folder they can only
       // view, a school account that blocks sharing out, a folder another
       // chapter has, or a sign-in that expired (pick again). The next pick
       // asks Google afresh, with the account chooser, from no folder.
+      setWaitingSince(null);
       forgetDrivePickerSignIn();
       setFolder(null);
       setError(
@@ -430,8 +460,46 @@ function PickerConnectView({
           serverWritesForMembers: true,
         }),
       );
+    } finally {
+      checking.current = false;
     }
   }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (blocked || !folder) return;
+    setError(null);
+    setWaitingSince(null);
+    await attempt(folder, false);
+  }
+
+  // While the officer shares the folder in Drive: check every few seconds,
+  // and at once when they come back to this tab.
+  const waiting = waitingSince !== null && folder !== null;
+  const attemptRef = useRef(attempt);
+  useEffect(() => {
+    attemptRef.current = attempt;
+  });
+  useEffect(() => {
+    if (!waiting || !folder || waitingSince === null) return;
+    const check = () => {
+      if (Date.now() - waitingSince > SHARE_WAIT_MS) {
+        setWaitingSince(null);
+        setError(
+          "Frapp still can't see the folder. Share it as a Viewer, then press Connect.",
+        );
+        return;
+      }
+      void attemptRef.current(folder, true);
+    };
+    const timer = window.setInterval(check, SHARE_CHECK_MS);
+    const onFocus = () => check();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [waiting, folder, waitingSince]);
 
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
@@ -447,7 +515,7 @@ function PickerConnectView({
           <button
             type="button"
             onClick={() => void choose()}
-            disabled={picking || connect.isPending}
+            disabled={picking || (connect.isPending && !waiting)}
             aria-busy={picking}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : undefined}
@@ -489,6 +557,9 @@ function PickerConnectView({
               {error}
             </p>
           ) : null}
+          {waiting && folder ? (
+            <ShareByHand folderId={folder.id} email={email} />
+          ) : null}
         </div>
         {/*
           Left out only once the choices have loaded and say this member may
@@ -525,13 +596,56 @@ function PickerConnectView({
         </Button>
         <Button
           type="submit"
-          disabled={blocked || !gate.allowed}
-          aria-busy={connect.isPending}
+          disabled={blocked || waiting || !gate.allowed}
+          aria-busy={connect.isPending && !waiting}
         >
-          {connect.isPending ? "Connecting…" : "Connect"}
+          {connect.isPending && !waiting ? "Connecting…" : "Connect"}
         </Button>
       </PanelFooter>
     </form>
+  );
+}
+
+/**
+ * The one step Google leaves to the officer: share the picked folder with
+ * Frapp's address in Drive. The panel connects by itself once they have.
+ */
+function ShareByHand({
+  folderId,
+  email,
+}: {
+  folderId: string;
+  email: string | null;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-card p-3">
+      <div className="space-y-1">
+        <p className="text-body font-medium">Share it with Frapp as a Viewer</p>
+        <p className="text-caption text-muted-foreground">
+          Google lets only you add Frapp to a folder that has files in it.
+        </p>
+      </div>
+      {email ? <CopyAddress email={email} /> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button asChild variant="secondary" size="sm" className="gap-1.5">
+          <a
+            href={`https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in Google Drive
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        </Button>
+        <p
+          role="status"
+          className="flex items-center gap-1.5 text-caption text-muted-foreground"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          Waiting for the share
+        </p>
+      </div>
+    </div>
   );
 }
 

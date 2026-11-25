@@ -539,6 +539,25 @@ describe('GoogleDriveService', () => {
       expect(repo.create).toHaveBeenCalled();
     });
 
+    // Proved on staging 2026-11-25: Google won't let a picker sign-in share
+    // a folder with files in it.
+    it('asks the officer to share a folder with files in it, with a code the panel waits on', async () => {
+      jest.mocked(reportSwallowed).mockClear();
+      drive.shareWithServiceAccount.mockRejectedValueOnce(
+        new GoogleDriveApiError('forbidden', 403, 'appNotAuthorizedToChild'),
+      );
+      const refusal = service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN);
+      await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+      await expect(refusal).rejects.toMatchObject({
+        response: {
+          code: 'google_drive.share_by_hand',
+          message: expect.stringContaining(EMAIL),
+        },
+      });
+      expect(reportSwallowed).not.toHaveBeenCalled();
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
     it('treats Google refusing the share as a refusal, and an expired sign-in as pick again', async () => {
       drive.shareWithServiceAccount.mockRejectedValueOnce(
         new GoogleDriveApiError('failed', 400, 'invalidSharingRequest'),

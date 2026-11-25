@@ -476,6 +476,98 @@ describe("DriveFolderPanel", () => {
       );
     });
 
+    // Google lets the picker's sign-in share only an empty folder (staging,
+    // 2026-11-25): for any other, the officer shares it, and the panel
+    // connects once Frapp can see it.
+    it("shows the address to share with, then connects once it's shared", async () => {
+      status = pickerStatus();
+      pickDriveFolder.mockResolvedValue({
+        id: "folder-9",
+        name: "Chapter Drive",
+        accessToken: "member-token",
+      });
+      connectPicked.mockRejectedValueOnce({
+        statusCode: 409,
+        code: "google_drive.share_by_hand",
+        message: "Share it.",
+      });
+      const user = userEvent.setup();
+      render(<DriveFolderPanel gate={gate} />);
+      await user.click(
+        screen.getByRole("button", { name: "Connect Google Drive" }),
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: "Choose a folder in Google Drive",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(await screen.findByText(EMAIL)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Open in Google Drive/ }),
+      ).toHaveAttribute(
+        "href",
+        "https://drive.google.com/drive/folders/folder-9",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Waiting for the share",
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      // The folder and its sign-in are kept for the next check.
+      expect(
+        screen.getByRole("button", { name: "Chapter Drive" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+
+      // Back from Drive: checked at once, with the same sign-in.
+      connectPicked.mockResolvedValueOnce(connected());
+      window.dispatchEvent(new Event("focus"));
+      await waitFor(() => expect(connectPicked).toHaveBeenCalledTimes(2));
+      expect(connectPicked).toHaveBeenLastCalledWith({
+        folderId: "folder-9",
+        accessToken: "member-token",
+        whoCanSee: null,
+      });
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Chapter Drive connected" }),
+        ),
+      );
+    });
+
+    it("keeps waiting while the folder still isn't shared", async () => {
+      status = pickerStatus();
+      pickDriveFolder.mockResolvedValue({
+        id: "folder-9",
+        name: "Chapter Drive",
+        accessToken: "member-token",
+      });
+      connectPicked.mockRejectedValue({
+        statusCode: 409,
+        code: "google_drive.share_by_hand",
+        message: "Share it.",
+      });
+      const user = userEvent.setup();
+      render(<DriveFolderPanel gate={gate} />);
+      await user.click(
+        screen.getByRole("button", { name: "Connect Google Drive" }),
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: "Choose a folder in Google Drive",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: "Connect" }));
+      await screen.findByText(EMAIL);
+      window.dispatchEvent(new Event("focus"));
+      await waitFor(() => expect(connectPicked).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Waiting for the share",
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
     it("keeps the link flow one press away", async () => {
       status = pickerStatus();
       const user = userEvent.setup();
