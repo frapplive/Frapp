@@ -130,9 +130,7 @@ export function setAskBarShown(shown: boolean): void {
 export function useAskBarLift(): number {
   const { tabBar } = useFloatingChrome();
   const shown = askBar.use();
-  return tabBar && shown
-    ? FLOATING_ASK_BAR.height + FLOATING_ASK_BAR.gap
-    : 0;
+  return tabBar && shown ? FLOATING_ASK_BAR.height + FLOATING_ASK_BAR.gap : 0;
 }
 
 /**
@@ -237,6 +235,21 @@ export function barFoldAfterScroll(
   return { state: { y, travel, viewport }, folded: null };
 }
 
+/** Where the body of a screen is scrolled: its offset, viewport and content height. */
+export type ScreenScroll = { y: number; viewport: number; content: number };
+
+/**
+ * A screen that reads where its own body is scrolled (Chat home's New unreads
+ * pills, #6045) wraps its `ScreenShell` in this, and the shell's scroll
+ * handlers report every move to it. `ScreenShell` is frozen, and it already
+ * spreads {@link useBarScroll} onto its scroll view, so the report rides
+ * that one handler rather than a second prop.
+ */
+const ScreenScrollWatch = createContext<
+  ((scroll: ScreenScroll) => void) | null
+>(null);
+export const ScreenScrollWatchProvider = ScreenScrollWatch.Provider;
+
 type BarScrollProps = Pick<
   ScrollViewProps,
   "onScroll" | "scrollEventThrottle" | "onContentSizeChange" | "onLayout"
@@ -253,7 +266,9 @@ type BarScrollProps = Pick<
  */
 export function useBarScroll(): BarScrollProps {
   const { tabBar } = useFloatingChrome();
+  const watch = useContext(ScreenScrollWatch);
   const state = useRef<BarScrollState>({ y: 0, travel: 0, viewport: 0 });
+  const content = useRef(0);
   // Gaining or losing focus starts the screen unfolded, with no travel kept.
   useFocusEffect(
     useCallback(() => {
@@ -267,6 +282,20 @@ export function useBarScroll(): BarScrollProps {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } =
         event.nativeEvent;
+      content.current = contentSize.height;
+      watch?.({
+        y: contentOffset.y,
+        viewport: layoutMeasurement.height,
+        content: contentSize.height,
+      });
+      if (!tabBar) {
+        state.current = {
+          ...state.current,
+          y: contentOffset.y,
+          viewport: layoutMeasurement.height,
+        };
+        return;
+      }
       const next = barFoldAfterScroll(
         state.current,
         contentOffset.y,
@@ -276,22 +305,36 @@ export function useBarScroll(): BarScrollProps {
       state.current = next.state;
       if (next.folded !== null) setBarFolded(next.folded);
     },
-    [],
+    [tabBar, watch],
   );
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    state.current = {
-      ...state.current,
-      viewport: event.nativeEvent.layout.height,
-    };
-  }, []);
-  const onContentSizeChange = useCallback((_width: number, height: number) => {
-    const { viewport } = state.current;
-    if (viewport > 0 && height <= viewport) {
-      state.current = { ...state.current, travel: 0 };
-      setBarFolded(false);
-    }
-  }, []);
-  return tabBar
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      state.current = {
+        ...state.current,
+        viewport: event.nativeEvent.layout.height,
+      };
+      watch?.({
+        y: state.current.y,
+        viewport: event.nativeEvent.layout.height,
+        content: content.current,
+      });
+    },
+    [watch],
+  );
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      content.current = height;
+      const { viewport } = state.current;
+      watch?.({ y: state.current.y, viewport, content: height });
+      if (!tabBar) return;
+      if (viewport > 0 && height <= viewport) {
+        state.current = { ...state.current, travel: 0 };
+        setBarFolded(false);
+      }
+    },
+    [tabBar, watch],
+  );
+  return tabBar || watch
     ? { onScroll, scrollEventThrottle: 16, onContentSizeChange, onLayout }
     : {};
 }

@@ -233,6 +233,16 @@ vi.mock("@repo/hooks", async () => {
     lastChannelStorageKey: actual.lastChannelStorageKey,
     useActiveChapterId: () => "chapter-1",
     groupChannelsByCategory: actual.groupChannelsByCategory,
+    // New unreads pills (#6045): the rule and its words run for real.
+    unreadJumpTargets: actual.unreadJumpTargets,
+    unreadJumpRowKey: actual.unreadJumpRowKey,
+    unreadJumpHeadKey: actual.unreadJumpHeadKey,
+    unreadJumpEdgeOf: actual.unreadJumpEdgeOf,
+    unreadJumpState: actual.unreadJumpState,
+    unreadJumpLabel: actual.unreadJumpLabel,
+    NO_UNREAD_JUMP: actual.NO_UNREAD_JUMP,
+    NEW_UNREADS_LABEL: actual.NEW_UNREADS_LABEL,
+    UNREAD_JUMP_HIGHLIGHT_MS: actual.UNREAD_JUMP_HIGHLIGHT_MS,
     otherMemberId: actual.otherMemberId,
     directChannelDisplayName: actual.directChannelDisplayName,
     HIDDEN_CONVERSATIONS_LABEL: actual.HIDDEN_CONVERSATIONS_LABEL,
@@ -801,9 +811,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       ),
     ).toHaveLength(0);
 
-    act(() =>
-      pressableLabelled(tree, "Filter channels").props.onPress(),
-    );
+    act(() => pressableLabelled(tree, "Filter channels").props.onPress());
     const toggle = (label: string) =>
       tree.root
         .findByType(ChannelFilterMenu)

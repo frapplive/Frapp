@@ -71,6 +71,7 @@ export * from "./task-card";
 export * from "./task-link-choices";
 export * from "./task-review";
 export * from "./task-views";
+export * from "./unread-jump";
 export * from "./unset-features";
 export * from "./use-act";
 export * from "./use-activity";

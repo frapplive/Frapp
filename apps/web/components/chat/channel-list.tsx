@@ -43,6 +43,9 @@ import {
   SHOW_ALL_CHANNELS_LABEL,
   sidebarSections,
   UNREAD_ONLY_LABEL,
+  unreadJumpHeadKey,
+  unreadJumpRowKey,
+  unreadJumpTargets,
   withUnreadThreadChannels,
   type DisplayNameMap,
   type MemberAvatarTint,
@@ -80,6 +83,8 @@ import {
   type RailLift,
 } from "./use-rail-reorder";
 import { useRailFlip } from "./use-rail-flip";
+import { UnreadJumpPill } from "./unread-jump-pill";
+import { useUnreadJump } from "./use-unread-jump";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { isSystemChannel } from "./channel-start";
 import { cn, initials } from "@/lib/utils";
@@ -773,6 +778,37 @@ export function ChannelList({
     mutedChannelIds,
   ]);
 
+  // ── New unreads (#6045) ─────────────────────────────────────────────────
+  // A pill over the list's top or bottom edge while an unread channel is
+  // scrolled out of view that way, as Discord and Slack draw theirs. What
+  // counts is the rows' and folded headings' own rule (`unreadJumpTargets`,
+  // the phone's too). The channel list only: the Direct messages panel runs
+  // newest first, so its unread conversations are already at its top.
+  const jumpTargets = useMemo(
+    () =>
+      kind === "channels" && sidebar
+        ? unreadJumpTargets(arranged, {
+            unreadByChannelId,
+            mutedChannelIds,
+            unreadThreadChannelIds: threadsByChannel
+              ? channelsWithUnreadThreads(threadsByChannel)
+              : undefined,
+            activeChannelId,
+          })
+        : [],
+    [
+      kind,
+      sidebar,
+      arranged,
+      unreadByChannelId,
+      mutedChannelIds,
+      threadsByChannel,
+      activeChannelId,
+    ],
+  );
+  const jumpListRef = useRef<HTMLDivElement>(null);
+  const unreadJump = useUnreadJump(jumpListRef, jumpTargets);
+
   // ── Drag to reorder (#4178) ──────────────────────────────────────────────
   // Rows are always drawn in the chapter's order, so a drop saves the order
   // the member sees. An empty category keeps its heading and its +.
@@ -952,9 +988,7 @@ export function ChannelList({
     // A row an officer can drag (#4178): one in the default group or a
     // category, never Pinned, Direct messages, System or Hidden.
     const draggable =
-      !!reorder &&
-      sectionKey !== undefined &&
-      isOrderableSection(sectionKey);
+      !!reorder && sectionKey !== undefined && isOrderableSection(sectionKey);
     const drag: RailDrag | null = draggable
       ? { kind: "channel", id: channel.id, section: sectionKey }
       : null;
@@ -984,6 +1018,10 @@ export function ChannelList({
             "group/row",
             !isActive &&
               "[&[data-state=open]>button]:bg-card [&[data-state=open]>button]:text-foreground",
+            // Lit for a moment where the New unreads pill landed (#6045).
+            !isActive &&
+              unreadJump.litKey === unreadJumpRowKey(channel.id) &&
+              "[&>button]:bg-card",
           )}
           data-flip={`row:${channel.id}`}
           data-reorder-row={draggable ? channel.id : undefined}
@@ -1434,55 +1472,67 @@ export function ChannelList({
   )?.section.key;
 
   return (
-    <div
-      ref={railRef}
-      className="space-y-4"
-      data-reorder-rail={reorder ? "" : undefined}
-    >
-      {/* Where a drag or an Alt+Arrow move is announced (#4178). */}
-      {reorder ? (
-        <p className="sr-only" aria-live="polite">
-          {announcement}
-        </p>
+    // The pills ride zero-height bands pinned to the scroller's edges, outside
+    // the spaced list so they add no gap to it.
+    <div ref={jumpListRef}>
+      {unreadJump.state.above ? (
+        <UnreadJumpPill
+          direction="above"
+          side={unreadJump.state.above}
+          onJump={() => unreadJump.jump("above")}
+        />
       ) : null}
-      {heldCopy}
-      {drawOrder.map((entry) => {
-        if (entry.kind === "slot") return categorySlot;
-        if (entry.kind === "empty") {
-          return renderEmptyCategory(entry.key, entry.label);
-        }
-        const section = entry.section;
-        // Two lists can be on screen at once (the sidebar's channels and
-        // the Messages page's conversations, #5946), and both can have a
-        // Pinned section, so each names its headings for its own kind.
-        const headerId =
-          kind === "direct"
-            ? `conversation-section:${section.key}`
-            : `channel-section:${section.key}`;
-        const orderable = !!reorder && isOrderableSection(section.key);
-        const categoryId = categoryIdOf(section.key);
-        const headerDrag: RailDrag | null =
-          orderable && categoryId ? { kind: "category", id: categoryId } : null;
-        const headerProps = orderable
-          ? {
-              "data-reorder-header": section.key,
-              onPointerDown: headerDrag
-                ? railReorder.pointerDownFor(headerDrag)
-                : undefined,
-              onKeyDown: headerDrag
-                ? railReorder.keyDownFor(headerDrag)
-                : undefined,
-            }
-          : {};
-        // A category drag folds every category to its heading, as Discord
-        // does, so the list being reordered is short enough to see whole.
-        const rows =
-          draggingCategory && categoryId
-            ? []
-            : rowsWithSlot(section.key, section.rows);
-        return (
-          <div key={section.key} {...blockProps(section.key)}>
-            {/*
+      <div
+        ref={railRef}
+        className="space-y-4"
+        data-reorder-rail={reorder ? "" : undefined}
+      >
+        {/* Where a drag or an Alt+Arrow move is announced (#4178). */}
+        {reorder ? (
+          <p className="sr-only" aria-live="polite">
+            {announcement}
+          </p>
+        ) : null}
+        {heldCopy}
+        {drawOrder.map((entry) => {
+          if (entry.kind === "slot") return categorySlot;
+          if (entry.kind === "empty") {
+            return renderEmptyCategory(entry.key, entry.label);
+          }
+          const section = entry.section;
+          // Two lists can be on screen at once (the sidebar's channels and
+          // the Messages page's conversations, #5946), and both can have a
+          // Pinned section, so each names its headings for its own kind.
+          const headerId =
+            kind === "direct"
+              ? `conversation-section:${section.key}`
+              : `channel-section:${section.key}`;
+          const orderable = !!reorder && isOrderableSection(section.key);
+          const categoryId = categoryIdOf(section.key);
+          const headerDrag: RailDrag | null =
+            orderable && categoryId
+              ? { kind: "category", id: categoryId }
+              : null;
+          const headerProps = orderable
+            ? {
+                "data-reorder-header": section.key,
+                onPointerDown: headerDrag
+                  ? railReorder.pointerDownFor(headerDrag)
+                  : undefined,
+                onKeyDown: headerDrag
+                  ? railReorder.keyDownFor(headerDrag)
+                  : undefined,
+              }
+            : {};
+          // A category drag folds every category to its heading, as Discord
+          // does, so the list being reordered is short enough to see whole.
+          const rows =
+            draggingCategory && categoryId
+              ? []
+              : rowsWithSlot(section.key, section.rows);
+          return (
+            <div key={section.key} {...blockProps(section.key)}>
+              {/*
               The header names the list rather than just sitting above it: a
               screen-reader member navigating by list or by button would
               otherwise hear "exec-board, button" with no indication of which
@@ -1493,136 +1543,151 @@ export function ChannelList({
               total, red when anything inside addresses the member, so folding
               never hides a mention.
             */}
-            {kind === "direct" && section.key === "direct" ? null : sidebar ? (
-              <div
-                className={cn(
-                  "group/head flex items-center gap-1 pr-2",
-                  // Pinned to the top of the rail while its rows scroll under
-                  // it, until the next heading pushes it off (owner
-                  // 2026-11-07). The rail's own surface, so no row shows
-                  // through; the 4px pulled up and padded back keeps the
-                  // resting layout and gives the pinned label room. On the
-                  // row, not the fold button, so the heading's + stays with it.
-                  "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
-                )}
-              >
-                <button
-                  type="button"
+              {kind === "direct" &&
+              section.key === "direct" ? null : sidebar ? (
+                <div
+                  className={cn(
+                    "group/head flex items-center gap-1 pr-2",
+                    // Pinned to the top of the rail while its rows scroll under
+                    // it, until the next heading pushes it off (owner
+                    // 2026-11-07). The rail's own surface, so no row shows
+                    // through; the 4px pulled up and padded back keeps the
+                    // resting layout and gives the pinned label room. On the
+                    // row, not the fold button, so the heading's + stays with it.
+                    "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
+                  )}
+                >
+                  <button
+                    type="button"
+                    id={headerId}
+                    data-flip={`head:${section.key}`}
+                    {...headerProps}
+                    aria-expanded={!section.collapsed}
+                    onClick={() =>
+                      sidebar.onSetCollapsed(section.key, !section.collapsed)
+                    }
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
+                      EYEBROW,
+                      // Folded with something unread inside, it reads as an
+                      // unread row does, since only a mention carries a number:
+                      // `--foreground` bold (foundations.md §5), as mobile draws it.
+                      section.collapsed &&
+                        section.unreadCount > 0 &&
+                        "font-bold text-foreground",
+                      // Lit for a moment where the New unreads pill landed.
+                      unreadJump.litKey === unreadJumpHeadKey(section.key) &&
+                        "rounded-xs bg-card",
+                    )}
+                  >
+                    {section.collapsed ? (
+                      <ChevronRight
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ChevronDown
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="truncate">{section.label}</span>
+                    {section.collapsed && section.addressed ? (
+                      <Badge
+                        variant="mention"
+                        className="ml-auto h-6 justify-center px-2 normal-case tracking-normal"
+                        aria-label={foldedSectionAnnouncement(section)}
+                      >
+                        {badgeLabel(
+                          section.addressedCount,
+                          section.mentionCount,
+                        )}
+                      </Badge>
+                    ) : section.collapsed && section.unreadCount > 0 ? (
+                      <span className="sr-only">
+                        {foldedSectionAnnouncement(section)}
+                      </span>
+                    ) : null}
+                  </button>
+                  {headingControl && section.key === firstSectionKey ? (
+                    <span
+                      data-heading-control=""
+                      className={cn(
+                        // On the label's line, as the + beside it is.
+                        "mb-1 flex shrink-0 items-center",
+                        "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
+                        // Open, or saying a filter is on: it stays.
+                        "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                      )}
+                    >
+                      {headingControl}
+                    </span>
+                  ) : null}
+                  {createButtonFor(section.key, section.label)}
+                </div>
+              ) : (
+                <p
                   id={headerId}
                   data-flip={`head:${section.key}`}
                   {...headerProps}
-                  aria-expanded={!section.collapsed}
-                  onClick={() =>
-                    sidebar.onSetCollapsed(section.key, !section.collapsed)
-                  }
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
-                    EYEBROW,
-                    // Folded with something unread inside, it reads as an
-                    // unread row does, since only a mention carries a number:
-                    // `--foreground` bold (foundations.md §5), as mobile draws it.
-                    section.collapsed &&
-                      section.unreadCount > 0 &&
-                      "font-bold text-foreground",
-                  )}
+                  className={cn("px-3 pb-1 text-muted-foreground", EYEBROW)}
                 >
-                  {section.collapsed ? (
-                    <ChevronRight
-                      className="h-3.5 w-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <ChevronDown
-                      className="h-3.5 w-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="truncate">{section.label}</span>
-                  {section.collapsed && section.addressed ? (
-                    <Badge
-                      variant="mention"
-                      className="ml-auto h-6 justify-center px-2 normal-case tracking-normal"
-                      aria-label={foldedSectionAnnouncement(section)}
-                    >
-                      {badgeLabel(section.addressedCount, section.mentionCount)}
-                    </Badge>
-                  ) : section.collapsed && section.unreadCount > 0 ? (
-                    <span className="sr-only">
-                      {foldedSectionAnnouncement(section)}
-                    </span>
-                  ) : null}
-                </button>
-                {headingControl && section.key === firstSectionKey ? (
-                  <span
-                    data-heading-control=""
-                    className={cn(
-                      // On the label's line, as the + beside it is.
-                      "mb-1 flex shrink-0 items-center",
-                      "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
-                      // Open, or saying a filter is on: it stays.
-                      "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
-                    )}
-                  >
-                    {headingControl}
-                  </span>
-                ) : null}
-                {createButtonFor(section.key, section.label)}
-              </div>
-            ) : (
-              <p
-                id={headerId}
-                data-flip={`head:${section.key}`}
-                {...headerProps}
-                className={cn("px-3 pb-1 text-muted-foreground", EYEBROW)}
-              >
-                {section.label}
-              </p>
-            )}
-            {rows.length === 0 ? null : kind === "direct" &&
-              section.key === "direct" ? (
-              <ul aria-label="Direct messages">{rows}</ul>
-            ) : (
-              <ul aria-labelledby={headerId}>{rows}</ul>
-            )}
-          </div>
-        );
-      })}
-      {arranged.emptiedByFilters && sidebar ? (
-        <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center text-caption text-muted-foreground">
-          <p>{NO_MATCHING_CHANNELS}</p>
-          <button
-            type="button"
-            onClick={sidebar.onClearFilters}
-            className="font-semibold text-foreground underline-offset-2 hover:underline"
-          >
-            {SHOW_ALL_CHANNELS_LABEL}
-          </button>
-        </div>
-      ) : null}
-      {hiddenDms.length > 0 ? (
-        <div data-reorder-none={reorder ? "" : undefined}>
-          <button
-            type="button"
-            data-flip="head:hidden"
-            onClick={() => setShowHidden((open) => !open)}
-            aria-expanded={showHidden}
-            aria-controls="channel-section:hidden"
-            className={cn(
-              "w-full px-3 pb-1 text-left text-muted-foreground hover:text-foreground",
-              EYEBROW,
-            )}
-          >
-            {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
-          </button>
-          {showHidden ? (
-            <ul
-              id="channel-section:hidden"
-              aria-label={HIDDEN_CONVERSATIONS_LABEL}
+                  {section.label}
+                </p>
+              )}
+              {rows.length === 0 ? null : kind === "direct" &&
+                section.key === "direct" ? (
+                <ul aria-label="Direct messages">{rows}</ul>
+              ) : (
+                <ul aria-labelledby={headerId}>{rows}</ul>
+              )}
+            </div>
+          );
+        })}
+        {arranged.emptiedByFilters && sidebar ? (
+          <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center text-caption text-muted-foreground">
+            <p>{NO_MATCHING_CHANNELS}</p>
+            <button
+              type="button"
+              onClick={sidebar.onClearFilters}
+              className="font-semibold text-foreground underline-offset-2 hover:underline"
             >
-              {hiddenDms.map((row) => renderRow(row))}
-            </ul>
-          ) : null}
-        </div>
+              {SHOW_ALL_CHANNELS_LABEL}
+            </button>
+          </div>
+        ) : null}
+        {hiddenDms.length > 0 ? (
+          <div data-reorder-none={reorder ? "" : undefined}>
+            <button
+              type="button"
+              data-flip="head:hidden"
+              onClick={() => setShowHidden((open) => !open)}
+              aria-expanded={showHidden}
+              aria-controls="channel-section:hidden"
+              className={cn(
+                "w-full px-3 pb-1 text-left text-muted-foreground hover:text-foreground",
+                EYEBROW,
+              )}
+            >
+              {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
+            </button>
+            {showHidden ? (
+              <ul
+                id="channel-section:hidden"
+                aria-label={HIDDEN_CONVERSATIONS_LABEL}
+              >
+                {hiddenDms.map((row) => renderRow(row))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {unreadJump.state.below ? (
+        <UnreadJumpPill
+          direction="below"
+          side={unreadJump.state.below}
+          onJump={() => unreadJump.jump("below")}
+        />
       ) : null}
     </div>
   );
@@ -1719,9 +1784,7 @@ export function ChannelFilters({
               ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
               : cn(compactControlClassName, "ml-auto"),
           )}
-          aria-label={
-            active ? FILTER_CHANNELS_ON_LABEL : FILTER_CHANNELS_LABEL
-          }
+          aria-label={active ? FILTER_CHANNELS_ON_LABEL : FILTER_CHANNELS_LABEL}
         >
           <ListFilter
             className={heading ? "h-3.5 w-3.5" : "h-4 w-4"}

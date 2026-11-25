@@ -665,6 +665,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
 - **One sidebar, then the page and the open conversation** (#5946, Paul, 2026-11-24, epic [#5943](https://github.com/pdcarlson/Frapp/issues/5943); [`dashboard-shell.tsx`](../../../apps/web/components/layout/dashboard-shell.tsx), the state model in [`shell-layout.ts`](../../../apps/web/components/layout/shell-layout.ts)).
   The chapter's channel list is in the sidebar ([§ Navigation map](#navigation-map)).
   It is chat's own list, drawn there through a portal ([`channel-list-slot.tsx`](../../../apps/web/components/layout/channel-list-slot.tsx)), never a copy, so nothing is read or subscribed twice; its filters open from a control on its first category heading.
+  While an unread channel is scrolled out of sight, a **New unreads** pill floats over that edge of the list, and pressing it scrolls to the nearest one without opening it ([`spec/behavior/chat/README.md`](../../behavior/chat/README.md) § Sidebar arrangement, "New unreads"; [#6045](https://github.com/frapplive/Frapp/issues/6045)).
   So from `lg` up the shell mounts one chat panel on every route, shown or not, and the routes decide what it shows:
   - **`/chat`** is the open conversation alone, with the member column beside it from 1280px (below).
   - **`/messages`** is the Messages page, which the Messages row opens: the member's direct and group conversations in a 240px list pane titled "Messages", with the New message pencil and the people search, beside the open conversation.
