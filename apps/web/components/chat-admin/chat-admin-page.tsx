@@ -258,8 +258,8 @@ export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
           allOf={CHAPTER_PROFILE_PERMISSIONS}
           deniedFallback={
             <p className="text-sm text-muted-foreground">
-              Your role can&apos;t change the chat background. Ask your
-              chapter president for access.
+              Your role can&apos;t change the chat background. Ask your chapter
+              president for access.
             </p>
           }
         >

@@ -343,7 +343,9 @@ describe("ChannelSettingsPage — the page", () => {
 
 describe("ChannelSettingsPage — the name and description", () => {
   it("focuses Description when a channel start's Add a description opened it", () => {
-    search.current = new URLSearchParams("tab=chat&channel=ch-1&focus=description");
+    search.current = new URLSearchParams(
+      "tab=chat&channel=ch-1&focus=description",
+    );
     render(page("ch-1"));
     expect(descriptionField()).toHaveFocus();
   });

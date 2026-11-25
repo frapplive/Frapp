@@ -299,10 +299,7 @@ describe("NotificationsPopover — report queue freshness", () => {
     mockInvalidateReports.mockClear();
 
     const link = screen.getByRole("link", { name: /Message Reported/ });
-    expect(link).toHaveAttribute(
-      "href",
-      "/settings?tab=chat&page=reports",
-    );
+    expect(link).toHaveAttribute("href", "/settings?tab=chat&page=reports");
     await user.click(link);
 
     expect(mockInvalidateReports).toHaveBeenCalledTimes(1);
