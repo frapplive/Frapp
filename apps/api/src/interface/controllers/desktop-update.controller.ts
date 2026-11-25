@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { DesktopUpdateService } from '../../application/services/desktop-update/desktop-update.service';
+import { toReportableError } from '../../infrastructure/observability/reportable-error';
 import { DesktopReleaseStoreError } from '#domain/adapters/desktop-release-store.interface';
 
 /**
@@ -63,7 +64,9 @@ export class DesktopUpdateController {
     } catch (error) {
       if (!(error instanceof DesktopReleaseStoreError)) throw error;
       this.logger.warn(`Desktop update link unavailable: ${error.reason}`);
-      throw new ServiceUnavailableException('Desktop updates are unavailable');
+      throw new ServiceUnavailableException('Desktop updates are unavailable', {
+        cause: toReportableError(error),
+      });
     }
     if (!link) throw new NotFoundException();
     // The link is good for an hour and differs per signing; nothing between
