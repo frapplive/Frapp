@@ -23888,7 +23888,7 @@
             "bearer": []
           }
         ],
-        "summary": "Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, once, then copies its files into Documents and keeps them in sync. Picking the connected folder again after it was unshared shares it again.",
+        "summary": "Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, then copies its files into Documents and keeps them in sync. Google allows that share only for an empty folder: for any other the answer is 409 `google_drive.share_by_hand`, and once the officer has shared it in Drive the same request connects it.",
         "tags": [
           "Documents"
         ]
@@ -45407,7 +45407,7 @@
           },
           "picker": {
             "nullable": true,
-            "description": "Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself. Null, the folder is connected by its link.",
+            "description": "Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself, or (Google allows that only for an empty folder) the officer shares it by hand. Null, the folder is connected by its link.",
             "type": "object",
             "allOf": [
               {
@@ -45464,7 +45464,7 @@
           },
           "access_token": {
             "type": "string",
-            "description": "The access token the officer's Google sign-in gave the picker (drive.file). Used once to share the folder with Frapp, never stored."
+            "description": "The access token the officer's Google sign-in gave the picker (drive.file). Used to share the folder with Frapp, or to connect it once the officer has shared it by hand; never stored."
           },
           "who_can_see": {
             "nullable": true,

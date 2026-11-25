@@ -365,17 +365,26 @@ function usePickFolder(picker: DrivePickerConfig, active: boolean) {
 }
 
 /** The API's answer for a picked folder the officer must share themselves. */
-export const SHARE_BY_HAND = "google_drive.share_by_hand";
+const SHARE_BY_HAND = "google_drive.share_by_hand";
 /** How often the panel asks again while it waits for that share. */
-export const SHARE_CHECK_MS = 5_000;
-/** How long it waits: the picker's sign-in lasts an hour, the wait less. */
-export const SHARE_WAIT_MS = 10 * 60_000;
+const SHARE_CHECK_MS = 10_000;
+/**
+ * How long it waits. A sign-in is only reused with more than this left
+ * (`google-drive-picker.ts`), so the wait never outlives it.
+ */
+const SHARE_WAIT_MS = 10 * 60_000;
+
+/** A failure a later check may not meet: the network, the server, a limit. */
+function passing(caught: unknown): boolean {
+  const status = (caught as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status !== "number" || status >= 500 || status === 429;
+}
 
 /**
  * Connect by picking (#5583): the officer signs in with Google and picks the
- * folder in Google's own picker. Frapp shares an empty folder with itself
- * using that sign-in. Google lets that sign-in share only the folder, not the
- * files in it (staging, 2026-11-25), so for any other folder the panel shows
+ * folder in Google's own picker. Frapp tries to share it with itself using
+ * that sign-in, but Google lets that sign-in share only the folder, not the
+ * files in it (staging, 2026-11-25), so for a folder with files the panel shows
  * Frapp's address to share it with in Drive, and connects by itself once the
  * share lands (Paul's pick, 2026-11-25). No link to paste, no code to add.
  */
@@ -401,9 +410,13 @@ function PickerConnectView({
   const [folder, setFolder] = useState<PickedFolder | null>(null);
   const [whoCanSee, setWhoCanSee] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Set while the officer shares the folder in Drive: when the wait began.
+  // Shown once Google leaves the share to the officer; `waitingSince` is set
+  // while the panel checks by itself, and cleared when it stops waiting.
+  const [shareStep, setShareStep] = useState(false);
   const [waitingSince, setWaitingSince] = useState<number | null>(null);
   const checking = useRef(false);
+  // Bumped on every new pick, so a check for the last folder can't act on it.
+  const pickCount = useRef(0);
   const accessId = useId();
   const errorId = useId();
   const hideAccess = access.optionsState === "ready" && !access.canLimit;
@@ -416,7 +429,10 @@ function PickerConnectView({
 
   async function choose() {
     setError(null);
+    setShareStep(false);
     setWaitingSince(null);
+    pickCount.current += 1;
+    checking.current = false;
     const result = await pick();
     if (!result) return;
     if ("error" in result) setError(result.error);
@@ -425,33 +441,41 @@ function PickerConnectView({
 
   /**
    * One connect attempt. `quiet` is a check while waiting for the share:
-   * the button doesn't spin, and "not shared yet" just keeps waiting.
+   * "not shared yet", or a failure a later check may not meet, keeps waiting.
    */
   async function attempt(picked: PickedFolder, quiet: boolean) {
     if (checking.current) return;
     checking.current = true;
+    const pickNumber = pickCount.current;
+    const current = () => pickCount.current === pickNumber;
     try {
       await connect.mutateAsync({
         folderId: picked.id,
         accessToken: picked.accessToken,
         whoCanSee,
       });
+      if (!current()) return;
+      setShareStep(false);
       setWaitingSince(null);
       toast({
         title: `${picked.name || "Google Drive"} connected`,
         description: "Its files show up in Documents in a minute or two.",
       });
     } catch (caught) {
+      if (!current()) return;
       if (codeOf(caught) === SHARE_BY_HAND) {
         // Keep the folder and the sign-in: once the officer has shared it,
         // the same request connects it.
+        setShareStep(true);
         if (!quiet) setWaitingSince(Date.now());
         return;
       }
+      if (quiet && passing(caught)) return;
       // The API words each refusal for the officer: a folder they can only
       // view, a school account that blocks sharing out, a folder another
       // chapter has, or a sign-in that expired (pick again). The next pick
       // asks Google afresh, with the account chooser, from no folder.
+      setShareStep(false);
       setWaitingSince(null);
       forgetDrivePickerSignIn();
       setFolder(null);
@@ -461,7 +485,7 @@ function PickerConnectView({
         }),
       );
     } finally {
-      checking.current = false;
+      if (current()) checking.current = false;
     }
   }
 
@@ -469,28 +493,28 @@ function PickerConnectView({
     event.preventDefault();
     if (blocked || !folder) return;
     setError(null);
-    setWaitingSince(null);
     await attempt(folder, false);
   }
 
   // While the officer shares the folder in Drive: check every few seconds,
-  // and at once when they come back to this tab.
+  // and at once when they come back to this tab. A check never sends a
+  // "Who sees it" choice the Connect button wouldn't.
   const waiting = waitingSince !== null && folder !== null;
+  const ready = !blocked;
   const attemptRef = useRef(attempt);
+  const readyRef = useRef(ready);
   useEffect(() => {
     attemptRef.current = attempt;
+    readyRef.current = ready;
   });
   useEffect(() => {
     if (!waiting || !folder || waitingSince === null) return;
     const check = () => {
       if (Date.now() - waitingSince > SHARE_WAIT_MS) {
         setWaitingSince(null);
-        setError(
-          "Frapp still can't see the folder. Share it as a Viewer, then press Connect.",
-        );
         return;
       }
-      void attemptRef.current(folder, true);
+      if (readyRef.current) void attemptRef.current(folder, true);
     };
     const timer = window.setInterval(check, SHARE_CHECK_MS);
     const onFocus = () => check();
@@ -557,8 +581,8 @@ function PickerConnectView({
               {error}
             </p>
           ) : null}
-          {waiting && folder ? (
-            <ShareByHand folderId={folder.id} email={email} />
+          {shareStep && folder ? (
+            <ShareByHand folderId={folder.id} email={email} waiting={waiting} />
           ) : null}
         </div>
         {/*
@@ -578,7 +602,7 @@ function PickerConnectView({
               locked={access.locked}
               alwaysLine={FOLDER_ALWAYS_LINE}
               canChoose={access.canLimit}
-              disabled={connect.isPending}
+              disabled={connect.isPending && !waiting}
             />
           </div>
         ) : null}
@@ -608,23 +632,21 @@ function PickerConnectView({
 
 /**
  * The one step Google leaves to the officer: share the picked folder with
- * Frapp's address in Drive. The panel connects by itself once they have.
+ * Frapp's address in Drive. While `waiting`, the panel connects by itself
+ * once they have; after that, Connect checks again.
  */
 function ShareByHand({
   folderId,
   email,
+  waiting,
 }: {
   folderId: string;
   email: string | null;
+  waiting: boolean;
 }) {
   return (
     <div className="space-y-3 rounded-md border border-border bg-card p-3">
-      <div className="space-y-1">
-        <p className="text-body font-medium">Share it with Frapp as a Viewer</p>
-        <p className="text-caption text-muted-foreground">
-          Google lets only you add Frapp to a folder that has files in it.
-        </p>
-      </div>
+      <p className="text-body font-medium">Share it with Frapp as a Viewer</p>
       {email ? <CopyAddress email={email} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="secondary" size="sm" className="gap-1.5">
@@ -637,67 +659,11 @@ function ShareByHand({
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </Button>
-        <p
-          role="status"
-          className="flex items-center gap-1.5 text-caption text-muted-foreground"
-        >
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          Waiting for the share
+        <p role="status" className="text-caption text-muted-foreground">
+          {waiting ? "Waiting for the share" : "Not shared yet"}
         </p>
       </div>
     </div>
-  );
-}
-
-/**
- * The connected folder was unshared (`no_access`): picking it again shares
- * it with Frapp again and syncs it at once (#5583).
- */
-function ShareAgainButton({ picker }: { picker: DrivePickerConfig }) {
-  const connect = useConnectPickedGoogleDrive();
-  const { pick, picking } = usePickFolder(picker, true);
-  const { toast } = useToast();
-  async function shareAgain() {
-    const result = await pick();
-    if (!result) return;
-    if ("error" in result) {
-      toast({
-        variant: "destructive",
-        title: "Couldn't open Google Drive",
-        description: result.error,
-      });
-      return;
-    }
-    try {
-      await connect.mutateAsync({
-        folderId: result.folder.id,
-        accessToken: result.folder.accessToken,
-        whoCanSee: null,
-      });
-      toast({ title: "Syncing again" });
-    } catch (caught) {
-      forgetDrivePickerSignIn();
-      toast({
-        variant: "destructive",
-        title: "Couldn't share it again",
-        description: getErrorMessage(caught, "Try again in a moment.", {
-          serverWritesForMembers: true,
-        }),
-      });
-    }
-  }
-  const busy = picking || connect.isPending;
-  return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={() => void shareAgain()}
-      disabled={busy}
-      aria-busy={busy}
-    >
-      Pick it again
-    </Button>
   );
 }
 
@@ -814,14 +780,9 @@ function ConnectedView({
             </p>
             <p className="text-caption text-muted-foreground">
               It was unshared or deleted. Its files stay in Documents as they
-              were.
-              {status.picker
-                ? null
-                : " Share it with Frapp again to keep syncing, or disconnect it."}
+              were. Share it with Frapp again to keep syncing, or disconnect it.
             </p>
-            {status.picker ? (
-              <ShareAgainButton picker={status.picker} />
-            ) : status.service_account_email ? (
+            {status.service_account_email ? (
               <CopyAddress email={status.service_account_email} />
             ) : null}
           </div>

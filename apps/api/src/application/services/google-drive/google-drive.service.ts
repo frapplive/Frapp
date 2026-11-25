@@ -162,13 +162,16 @@ export class GoogleDriveService {
   /**
    * Connects the folder the officer picked in Google's own picker (#5583),
    * with the access token their Google sign-in gave the picker. The token
-   * is used here, once, and never kept: Frapp reads Drive as its service
-   * account, so the folder is shared with it as a Viewer, as the officer.
+   * is never kept: Frapp reads Drive as its service account, so the folder
+   * is shared with it as a Viewer, as the officer. Google allows that only
+   * for an empty folder; for any other the officer shares it by hand
+   * (`google_drive.share_by_hand`), and the panel sends this again until
+   * Frapp sees it, which then connects with no share.
    *
    * Picking is the proof the link flow's code was (#5185): Google shows the
    * picker only the officer's own Drive, and Frapp refuses a folder they
    * can't edit, as the code did. A folder already connected and now
-   * unshared (`no_access`) is shared again the same way, and syncs at once.
+   * unshared (`no_access`) is restored the same way, and syncs at once.
    */
   async connectPicked(
     chapterId: string,
@@ -316,8 +319,8 @@ export class GoogleDriveService {
         throw new BadRequestException(RESHARE_MESSAGE);
       }
       // A picker sign-in (`drive.file`) reaches the folder but not the files
-      // in it, and sharing a folder shares them too, so Google refuses any
-      // folder that isn't empty (staging, 2026-11-25). The officer shares it
+      // in it, and sharing a folder shares them too, so Google refused a
+      // folder with files in it (staging, 2026-11-25). The officer shares it
       // in Drive instead; once Frapp sees it, this same request connects it.
       if (
         error instanceof GoogleDriveApiError &&

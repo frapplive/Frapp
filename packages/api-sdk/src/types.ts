@@ -7163,7 +7163,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, once, then copies its files into Documents and keeps them in sync. Picking the connected folder again after it was unshared shares it again. */
+        /** Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, then copies its files into Documents and keeps them in sync. Google allows that share only for an empty folder: for any other the answer is 409 `google_drive.share_by_hand`, and once the officer has shared it in Drive the same request connects it. */
         post: operations["GoogleDriveController_connectPicked_v1"];
         delete?: never;
         options?: never;
@@ -14958,7 +14958,7 @@ export interface components {
             available: boolean;
             /** @description The address a chapter shares its folder with */
             service_account_email: string | null;
-            /** @description Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself. Null, the folder is connected by its link. */
+            /** @description Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself, or (Google allows that only for an empty folder) the officer shares it by hand. Null, the folder is connected by its link. */
             picker: components["schemas"]["GoogleDrivePickerDto"] | null;
             connection: components["schemas"]["GoogleDriveConnectionDto"] | null;
         };
@@ -14977,7 +14977,7 @@ export interface components {
              * @example 1AbCdEfGhIjKlMnOp
              */
             folder_id: string;
-            /** @description The access token the officer's Google sign-in gave the picker (drive.file). Used once to share the folder with Frapp, never stored. */
+            /** @description The access token the officer's Google sign-in gave the picker (drive.file). Used to share the folder with Frapp, or to connect it once the officer has shared it by hand; never stored. */
             access_token: string;
             /** @description Who sees what the folder brings in (#5220), as when connecting by link. Ignored when the folder is the one already connected, picked again to share it with Frapp again. */
             who_can_see?: string[] | null;

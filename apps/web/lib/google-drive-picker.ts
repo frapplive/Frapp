@@ -5,7 +5,8 @@ import * as Sentry from "@sentry/nextjs";
  * `spec/behavior/chapter-docs.md` § Google Drive folder). The officer signs
  * in with Google (`drive.file` only, which shows Frapp nothing but what they
  * pick), picks the folder, and the API shares it with Frapp using that
- * sign-in. Google's guide: developers.google.com/workspace/drive/picker/guides/web-picker.
+ * sign-in, which Google allows only for an empty folder: for any other, the
+ * officer shares it in Drive and the panel connects once Frapp sees it. Google's guide: developers.google.com/workspace/drive/picker/guides/web-picker.
  *
  * The client id, API key and app id come from the API (`GET /v1/google-drive`
  * `picker`), so each environment uses its own Google client.
@@ -15,8 +16,12 @@ const GSI_SRC = "https://accounts.google.com/gsi/client";
 const GAPI_SRC = "https://apis.google.com/js/api.js";
 const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-/** A token is asked for again this long before Google says it expires. */
-const TOKEN_MARGIN_MS = 60_000;
+/**
+ * A token is asked for again this long before Google says it expires: long
+ * enough for the Drive panel's wait for a share by hand (10 minutes) to end
+ * before it does.
+ */
+const TOKEN_MARGIN_MS = 15 * 60_000;
 /** How long the picker module may take to load before it counts as failed. */
 const LOAD_TIMEOUT_MS = 15_000;
 const LOAD_FAILED =

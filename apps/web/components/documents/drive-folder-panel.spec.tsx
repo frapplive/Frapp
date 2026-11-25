@@ -568,6 +568,61 @@ describe("DriveFolderPanel", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
+    it("checks by itself every 10 seconds, rides out a failed check, and stops after 10 minutes", async () => {
+      status = pickerStatus();
+      pickDriveFolder.mockResolvedValue({
+        id: "folder-9",
+        name: "Chapter Drive",
+        accessToken: "member-token",
+      });
+      const notShared = {
+        statusCode: 409,
+        code: "google_drive.share_by_hand",
+        message: "Share it.",
+      };
+      connectPicked.mockRejectedValue(notShared);
+      const user = userEvent.setup();
+      render(<DriveFolderPanel gate={gate} />);
+      await user.click(
+        screen.getByRole("button", { name: "Connect Google Drive" }),
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: "Choose a folder in Google Drive",
+        }),
+      );
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        await user.click(screen.getByRole("button", { name: "Connect" }));
+        await screen.findByText(EMAIL);
+        expect(connectPicked).toHaveBeenCalledTimes(1);
+
+        // A check the server couldn't answer doesn't end the wait.
+        connectPicked.mockRejectedValueOnce({ statusCode: 503 });
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(connectPicked).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole("status")).toHaveTextContent(
+          "Waiting for the share",
+        );
+        expect(screen.queryByRole("alert")).toBeNull();
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(connectPicked).toHaveBeenCalledTimes(3);
+
+        // Past 10 minutes it stops; the step stays, and Connect checks again.
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        const calls = connectPicked.mock.calls.length;
+        expect(calls).toBeLessThanOrEqual(63);
+        expect(screen.getByRole("status")).toHaveTextContent("Not shared yet");
+        expect(screen.getByText(EMAIL)).toBeInTheDocument();
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(connectPicked).toHaveBeenCalledTimes(calls);
+        expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("keeps the link flow one press away", async () => {
       status = pickerStatus();
       const user = userEvent.setup();
@@ -616,24 +671,17 @@ describe("DriveFolderPanel", () => {
       expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     });
 
-    it("offers to pick an unshared folder again instead of an address", async () => {
+    // Google won't let a picker sign-in share a folder with files in it, so
+    // a lost folder is shared again by hand, picker or not (2026-11-25).
+    it("names the address to share a lost folder with again", async () => {
       status = { ...connected({ status: "no_access" }), picker: PICKER };
-      pickDriveFolder.mockResolvedValue({
-        id: "folder-1",
-        name: "Chapter files",
-        accessToken: "member-token",
-      });
-      connectPicked.mockResolvedValue(connected());
       const user = userEvent.setup();
       render(<DriveFolderPanel gate={gate} />);
       await user.click(screen.getByRole("button", { name: /Google Drive/ }));
-      expect(screen.queryByText(EMAIL)).toBeNull();
-      await user.click(screen.getByRole("button", { name: "Pick it again" }));
-      expect(connectPicked).toHaveBeenCalledWith({
-        folderId: "folder-1",
-        accessToken: "member-token",
-        whoCanSee: null,
-      });
+      expect(screen.getByText(EMAIL)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Pick it again" }),
+      ).toBeNull();
     });
   });
 });
