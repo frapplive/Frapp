@@ -77,6 +77,7 @@ import {
 } from "@/components/documents/limited-mark";
 import { MarkedCards } from "@/components/documents/marked-cards";
 import { DocumentTiles } from "@/components/documents/document-tiles";
+import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
 import {
   BackGlyph,
@@ -848,7 +849,9 @@ export default function DocumentsScreen() {
         !markFilter.starred
       ) {
         return (
-          <InlineNote>No minutes yet. Posted minutes are filed here.</InlineNote>
+          <InlineNote>
+            No minutes yet. Posted minutes are filed here.
+          </InlineNote>
         );
       }
       if (filtering) {
@@ -1148,6 +1151,12 @@ export default function DocumentsScreen() {
 
       {/* The count and, across from it, the order (#5278), as Files, Drive
           and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
+      {/* A folder Google Drive sync made: its state and menu (officers). */}
+      {canManage && folder ? (
+        <DriveFolderRow
+          folder={folders.find((entry) => entry.name === folder)}
+        />
+      ) : null}
       <View style={styles.listHeader}>
         <SectionHeader>
           {documentsQuery.isSuccess

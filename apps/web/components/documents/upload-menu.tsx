@@ -29,10 +29,6 @@ import {
   driveFolderShown,
   driveNeedsAttention,
 } from "@/components/documents/drive-folder-panel";
-import type {
-  ChapterDocument,
-  FolderRow,
-} from "@/components/documents/document-types";
 
 /**
  * Documents' one way in (#5576): an outlined Upload button, and beside it a
@@ -50,8 +46,7 @@ export function UploadMenu({
   typeOptions,
   typeRows,
   importContext,
-  documents,
-  folderRows,
+  onOpenDriveFolder,
   canUpload,
   canManage,
   canStartMinutes,
@@ -63,8 +58,12 @@ export function UploadMenu({
   typeOptions: readonly string[];
   typeRows: readonly DocumentTypeRow[] | null;
   importContext: ImportContext;
-  documents: readonly ChapterDocument[];
-  folderRows: readonly FolderRow[];
+  /**
+   * Shows the connected Google Drive folder in Documents, where it is
+   * managed (its line and ⋯). The menu's Google Drive item calls it once a
+   * folder is connected; before that the item connects one.
+   */
+  onOpenDriveFolder?: () => void;
   /** `chapter_docs:upload`: Upload and Import a folder. */
   canUpload: boolean;
   /** `chapter_docs:manage`: Google Drive, and renaming and deleting types. */
@@ -178,9 +177,17 @@ export function UploadMenu({
           ) : null}
           {showDrive ? (
             <DropdownMenuItem
-              disabled={!gate.allowed}
+              // Connected, the item opens the folder, which the first pass
+              // makes within a minute or two; until then there is none.
+              disabled={
+                !gate.allowed || (!!driveData?.connection && !onOpenDriveFolder)
+              }
               {...gateReason}
-              onSelect={() => openDrive.current?.()}
+              onSelect={() =>
+                driveData?.connection
+                  ? onOpenDriveFolder?.()
+                  : openDrive.current?.()
+              }
             >
               <FolderSync className="h-4 w-4" aria-hidden="true" />
               {driveData?.connection ? "Google Drive" : "Connect Google Drive"}
@@ -205,12 +212,7 @@ export function UploadMenu({
         />
       ) : null}
       {canManage ? (
-        <DriveFolderPanel
-          gate={gate}
-          documents={documents}
-          folders={folderRows}
-          openerRef={openDrive}
-        />
+        <DriveFolderPanel gate={gate} openerRef={openDrive} />
       ) : null}
     </div>
   );

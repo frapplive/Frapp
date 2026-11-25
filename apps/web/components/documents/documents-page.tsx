@@ -19,6 +19,7 @@ import {
   useMyPermissions,
   useSemesters,
   useDocumentTypes,
+  useGoogleDriveStatus,
   useViewerUserId,
   type DocumentTypeRow,
 } from "@repo/hooks";
@@ -69,6 +70,7 @@ import {
 } from "@/components/documents/document-access";
 import { FolderMenu, FolderRail } from "@/components/documents/folder-rail";
 import { UploadMenu } from "@/components/documents/upload-menu";
+import { DriveFolderLine } from "@/components/documents/drive-folder-line";
 import { ResourcesViews } from "@/components/documents/resources-views";
 import { MarkedStrip } from "@/components/documents/marked-strip";
 import { useDocumentMarks } from "@/components/documents/use-document-marks";
@@ -100,9 +102,7 @@ export function DocumentsPage() {
 function DocumentsPageForLink() {
   const chapterId = useChapterStore((state) => state.activeChapterId);
   const type = useSearchParams()?.get(DOCUMENTS_TYPE_PARAM) ?? null;
-  return (
-    <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />
-  );
+  return <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />;
 }
 
 function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
@@ -348,6 +348,15 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
     "chapter_docs:manage",
     permissionsPayload?.permissions ?? [],
   );
+  // The connected Drive folder, where the Upload menu's Google Drive item
+  // goes once one is connected. `chapter_docs:manage` only, as on the API.
+  const driveStatus = useGoogleDriveStatus({ enabled: canManageTypes });
+  const driveRootId = canManageTypes
+    ? (driveStatus.data?.connection?.folder_id ?? null)
+    : null;
+  const driveRoot = driveRootId
+    ? folders.find((folder) => folder.drive_folder_id === driveRootId)
+    : undefined;
   /*
     Who can see (#3642 piece 1). A file in a limited folder, or with its own
     list, draws a lock; its uploader and whoever manages documents get its
@@ -505,8 +514,9 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
           typeOptions={typeOptions}
           typeRows={typesQuery.isSuccess ? typeRows : null}
           importContext={importContext}
-          documents={documents}
-          folderRows={folders}
+          onOpenDriveFolder={
+            driveRoot ? () => setActiveFolder(driveRoot.name) : undefined
+          }
           canUpload={canUpload}
           canManage={canManageTypes}
           canStartMinutes={canStartMinutes}
@@ -648,6 +658,18 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
             folderHue={folderHue}
             folderPicker={
               <FolderMenu {...railProps} className="@2xl/docs:hidden" />
+            }
+            folderLine={
+              canManageTypes && activeFolder ? (
+                <DriveFolderLine
+                  folder={folders.find(
+                    (folder) => folder.name === activeFolder,
+                  )}
+                  gate={gate}
+                  documents={documents}
+                  folders={folders}
+                />
+              ) : null
             }
           />
         </div>

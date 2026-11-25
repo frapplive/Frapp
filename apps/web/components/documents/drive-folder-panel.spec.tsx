@@ -231,73 +231,12 @@ describe("DriveFolderPanel", () => {
     );
   });
 
-  it("shows a connected folder's counts and syncs on request", async () => {
+  // Once connected, the folder is managed where it shows in Documents
+  // (`drive-folder-line.tsx`).
+  it("renders nothing once a folder is connected", () => {
     status = connected();
-    syncNow.mockResolvedValue(connected({ syncing: true }));
-    const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
-
-    await user.click(screen.getByRole("button", { name: "Google Drive" }));
-    expect(screen.getByText("Chapter files")).toBeInTheDocument();
-    expect(screen.getByText("12 files")).toBeInTheDocument();
-    expect(screen.getByText("2 files")).toBeInTheDocument();
-    expect(screen.getByText("Not yet")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Sync now" }));
-    expect(syncNow).toHaveBeenCalled();
-  });
-
-  it("says plainly when folders were too deep or too many to read (#5331)", async () => {
-    status = connected({ folders_left_out: 3 });
-    const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
-
-    await user.click(screen.getByRole("button", { name: "Google Drive" }));
-    expect(screen.getByText("Not read")).toBeInTheDocument();
-    expect(screen.getByText("3 folders")).toBeInTheDocument();
-    expect(
-      screen.getByText(/and any folders inside them.*aren.t\s+in Documents/s),
-    ).toBeInTheDocument();
-  });
-
-  it("shows no Not read line when every folder was read", async () => {
-    status = connected();
-    const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
-
-    await user.click(screen.getByRole("button", { name: "Google Drive" }));
-    expect(screen.queryByText("Not read")).toBeNull();
-  });
-
-  it("says when Frapp lost access, with the address to share it with again", async () => {
-    status = connected({ status: "no_access" });
-    const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
-
-    await user.click(
-      screen.getByRole("button", { name: "Google Drive: needs attention" }),
-    );
-    expect(
-      screen.getByText("Frapp can't see this folder any more"),
-    ).toBeInTheDocument();
-    expect(screen.getByText(EMAIL)).toBeInTheDocument();
-  });
-
-  it("disconnects only after confirming", async () => {
-    status = connected();
-    disconnect.mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
-
-    await user.click(screen.getByRole("button", { name: "Google Drive" }));
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    expect(disconnect).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText("Disconnect Chapter files?"),
-    ).toBeInTheDocument();
-    const buttons = screen.getAllByRole("button", { name: "Disconnect" });
-    await user.click(buttons[buttons.length - 1]!);
-    await waitFor(() => expect(disconnect).toHaveBeenCalled());
+    const { container } = render(<DriveFolderPanel gate={gate} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   describe("held back (#5220)", () => {
@@ -327,37 +266,6 @@ describe("DriveFolderPanel", () => {
         ).map((copy) => [copy.doc.id, copy.movedTo]),
       ).toEqual([["doc-1", "Chapter files"]]);
     });
-
-    it("opens a held copy up only after confirming where it goes", async () => {
-      status = connected();
-      openUp.mockResolvedValue(undefined);
-      const user = userEvent.setup();
-      render(
-        <DriveFolderPanel
-          gate={gate}
-          documents={[doc({ drive_held_folder_id: "top" })]}
-          folders={folders}
-        />,
-      );
-
-      await user.click(screen.getByRole("button", { name: "Google Drive" }));
-      const section = screen.getByRole("region", { name: "Held back" });
-      expect(
-        within(section).getByText(
-          "In Chapter files / Exec, moved to Chapter files in Drive",
-        ),
-      ).toBeInTheDocument();
-      await user.click(
-        within(section).getByRole("button", { name: "Open it up" }),
-      );
-      expect(openUp).not.toHaveBeenCalled();
-      expect(
-        await screen.findByText("Move Budget to Chapter files?"),
-      ).toBeInTheDocument();
-      const buttons = screen.getAllByRole("button", { name: "Open it up" });
-      await user.click(buttons[buttons.length - 1]!);
-      await waitFor(() => expect(openUp).toHaveBeenCalledWith("doc-1"));
-    });
   });
 
   // #5583: where the server offers Google's picker, the officer signs in and
@@ -370,7 +278,7 @@ describe("DriveFolderPanel", () => {
       connection: null,
     });
 
-    it("picks a folder, then connects it with the sign-in's token", async () => {
+    it("opens Google's picker first, then connects the folder with the sign-in's token", async () => {
       status = pickerStatus();
       pickDriveFolder.mockResolvedValue({
         id: "folder-9",
@@ -384,28 +292,24 @@ describe("DriveFolderPanel", () => {
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
       );
-      // Nothing about sharing by hand.
-      expect(screen.queryByText(EMAIL)).toBeNull();
-      expect(screen.queryByPlaceholderText(/drive\.google\.com/)).toBeNull();
-      const connectButton = screen.getByRole("button", { name: "Connect" });
-      expect(connectButton).toBeDisabled();
-
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
-      );
       expect(pickDriveFolder).toHaveBeenCalledWith(PICKER);
+      const dialog = await screen.findByRole("dialog");
+      // Nothing about sharing by hand.
+      expect(within(dialog).queryByText(EMAIL)).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Chapter Drive" }),
+        within(dialog).queryByPlaceholderText(/drive\.google\.com/),
+      ).toBeNull();
+      expect(
+        within(dialog).getByRole("button", { name: "Chapter Drive" }),
       ).toBeInTheDocument();
 
-      await user.click(connectButton);
+      await user.click(within(dialog).getByRole("button", { name: "Connect" }));
       expect(connectPicked).toHaveBeenCalledWith({
         folderId: "folder-9",
         accessToken: "member-token",
         whoCanSee: null,
       });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
     it("stays put when the officer closes Google's window", async () => {
@@ -416,12 +320,8 @@ describe("DriveFolderPanel", () => {
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
       );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
-      );
-      expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+      // No dialog over the page for a pick that didn't happen.
+      expect(screen.queryByRole("dialog")).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
@@ -436,11 +336,6 @@ describe("DriveFolderPanel", () => {
       render(<DriveFolderPanel gate={gate} />);
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
-      );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
       );
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "Google's folder picker didn't display properly. Reload the page and try again.",
@@ -464,11 +359,6 @@ describe("DriveFolderPanel", () => {
       render(<DriveFolderPanel gate={gate} />);
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
-      );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
       );
       await user.click(screen.getByRole("button", { name: "Connect" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -495,11 +385,6 @@ describe("DriveFolderPanel", () => {
       render(<DriveFolderPanel gate={gate} />);
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
-      );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
       );
       await user.click(screen.getByRole("button", { name: "Connect" }));
 
@@ -553,11 +438,6 @@ describe("DriveFolderPanel", () => {
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
       );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
-      );
       await user.click(screen.getByRole("button", { name: "Connect" }));
       await screen.findByText(EMAIL);
       window.dispatchEvent(new Event("focus"));
@@ -585,11 +465,6 @@ describe("DriveFolderPanel", () => {
       render(<DriveFolderPanel gate={gate} />);
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
-      );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
       );
       vi.useFakeTimers({ shouldAdvanceTime: true });
       try {
@@ -625,6 +500,11 @@ describe("DriveFolderPanel", () => {
 
     it("keeps the link flow one press away", async () => {
       status = pickerStatus();
+      pickDriveFolder.mockResolvedValue({
+        id: "folder-9",
+        name: "Chapter Drive",
+        accessToken: "member-token",
+      });
       const user = userEvent.setup();
       render(<DriveFolderPanel gate={gate} />);
       await user.click(
@@ -656,11 +536,6 @@ describe("DriveFolderPanel", () => {
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
       );
-      await user.click(
-        screen.getByRole("button", {
-          name: "Choose a folder in Google Drive",
-        }),
-      );
       await user.click(screen.getByRole("button", { name: "Connect" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(
         /Pick the folder again/,
@@ -669,19 +544,6 @@ describe("DriveFolderPanel", () => {
         screen.getByRole("button", { name: /Choose a folder in Google Drive/ }),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    });
-
-    // Google won't let a picker sign-in share a folder with files in it, so
-    // a lost folder is shared again by hand, picker or not (2026-11-25).
-    it("names the address to share a lost folder with again", async () => {
-      status = { ...connected({ status: "no_access" }), picker: PICKER };
-      const user = userEvent.setup();
-      render(<DriveFolderPanel gate={gate} />);
-      await user.click(screen.getByRole("button", { name: /Google Drive/ }));
-      expect(screen.getByText(EMAIL)).toBeInTheDocument();
-      expect(
-        screen.queryByRole("button", { name: "Pick it again" }),
-      ).toBeNull();
     });
   });
 });

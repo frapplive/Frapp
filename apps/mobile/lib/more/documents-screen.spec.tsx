@@ -58,6 +58,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDocumentAccessOptions: () => accessQuery,
   // The upload sheet's Type (Paul 2026-11-22).
   useDocumentTypes: () => ({ data: [] }),
+  // No Google Drive folder connected: no Drive row over a folder.
+  useGoogleDriveStatus: () => ({ data: undefined }),
+  useSyncGoogleDrive: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDisconnectGoogleDrive: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),

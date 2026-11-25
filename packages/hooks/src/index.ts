@@ -131,6 +131,7 @@ export * from "./use-frapp-links";
 export * from "./use-gifs";
 export * from "./use-google-calendar";
 export * from "./use-google-drive";
+export * from "./google-drive-line";
 export * from "./use-groups";
 export * from "./use-hidden-permissions";
 export * from "./use-important-messages";
