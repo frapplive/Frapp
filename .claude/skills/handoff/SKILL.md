@@ -2,20 +2,23 @@
 name: handoff
 description: >
   Draft the prompt that hands work to a fresh Claude Code session — queued as a suggested task where
-  the session has that tool, otherwise a copy-pasteable block — for when this session's context is
+  the session has that tool, started as its own cloud session where it has `create_session`,
+  otherwise a copy-pasteable block — for when this session's context is
   filling up, when a task is finishing and the next one should start clean, when a parallel
   workstream should run in its own chat, or when an idea or bug needs researching and defining before
   anyone builds it. Offer this proactively; do not wait to be asked.
 argument-hint: "[continue|next|parallel|walkthrough|research] [<what the new session should pick up>]"
-allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *)
+allowed-tools: Read, Grep, Glob, Bash(git status *), Bash(git log *), Bash(git branch *), Bash(git rev-parse *), Bash(git diff *), mcp__claude-code-remote__create_session
 ---
 
 # Hand this work to a fresh session
 
 A fresh session is often more capable on the same task than a long one whose context is full of
 dead ends and superseded plans; it only needs orientation. This skill produces that orientation as
-a suggested task the user starts with one click, or, where the session lacks that tool, as one fenced
-block the user pastes into a new chat.
+a suggested task the user starts with one click; where the session lacks that tool but has
+`create_session`, as a cloud session this one starts itself once the user says go; otherwise as one
+fenced block the user pastes into a new chat (Paul, 2026-11-25: start those chats yourself rather
+than handing over a block to paste).
 
 ## Write orientation, not instructions
 
@@ -121,7 +124,35 @@ because the user does the work.
 When a card goes stale (the work landed here, or a better-scoped card replaces it), withdraw it with
 `dismiss_task`. A card the user already started or dismissed stays as they left it.
 
-Without the tool, emit the block below.
+## Start it yourself where you can't queue a card
+
+A cloud session without `spawn_task` usually has `create_session` (the `claude-code-remote` MCP
+server), which starts a new Claude Code session at once. Use it in place of the block:
+
+- **Only on the user's go.** A card waits for a click; a session starts working the moment it's
+  created and spends the user's budget. The user choosing a fresh session when you asked (an
+  AskUserQuestion answer, "hand it off") is the go. An unattended run starts none, and never two
+  for one piece of work.
+- `prompt`: the seven items below, in the same order, without the outer fence. It is all the new
+  session gets.
+- `title`: a short imperative phrase, under 60 characters, as a card's.
+- `source_url` (the repository) and `source_revision` (the pushed branch the work builds on; `main`
+  when it starts clean). Work this session hasn't pushed can't reach it, so push first (the pre-push
+  review gate applies).
+- `tags`: the issue it carries, such as `issue:6030`.
+- Leave `model`, `effort` and `permission_mode` unset unless the user named them: the new session
+  inherits this one's.
+
+It starts now, so a handoff that must wait says so in its prompt rather than in its timing. For
+example, a phone PR that builds on a web PR still open builds on that PR's head branch and opens its
+own PR only once the first merges, as [`AGENTS.md`](../../../AGENTS.md#autonomous-pr-lifecycle-cloud-sessions)'s
+one-open-PR-per-screen rule says.
+
+Then tell the user in one line that it's started, with the session's title, and don't also emit the
+block. The new session reports in its own chat; don't poll it. Archive it (`archive_session`) only
+when the user asks.
+
+Without either tool, emit the block below.
 
 ## Emit exactly one fenced block
 
