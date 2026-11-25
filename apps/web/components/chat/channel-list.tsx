@@ -35,7 +35,7 @@ import {
   FILTER_CHANNELS_ON_LABEL,
   FOLD_ALL_LABEL,
   UNFOLD_ALL_LABEL,
-  foldAllSectionKeys,
+  foldAllWrites,
   foldSectionLabel,
   HIDE_MUTED_LABEL,
   isAddressed,
@@ -65,7 +65,10 @@ import {
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { compactControlClassName } from "@/components/shared/table-controls";
+import {
+  compactControlClassName,
+  headingControlClassName,
+} from "@/components/shared/table-controls";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AuditGlyph, LockGlyph, MuteGlyph } from "./chat-glyphs";
@@ -430,7 +433,7 @@ export interface ChannelListProps {
    * Threads under their channel (#5300): each channel's active threads, as
    * `sidebarThreadsByChannel` (`@repo/chat-core/threads`) picks them, drawn
    * indented under its row. A channel with a thread with new replies also
-   * counts as unread for Unread only and a folded section, as on the phone,
+   * counts as unread for Unread only and stays in view under a folded heading, as on the phone,
    * since thread replies never count toward the channel's own unread. Absent,
    * no row has threads under it.
    */
@@ -668,8 +671,8 @@ export function ChannelList({
    */
   // What the arrangement reads as unread: the server's counts, plus a channel
   // whose listed thread has new replies (#5300, the phone's rule since #5277),
-  // so Unread only keeps it and its threads, and a folded section reads unread
-  // over it. The rows' own weight and badges read the server's counts alone.
+  // so Unread only keeps it and its threads, and a folded section keeps it in
+  // view. The rows' own weight and badges read the server's counts alone.
   const threadsByChannel = threads?.byChannel;
   const arrangementUnread = useMemo(
     () =>
@@ -930,19 +933,19 @@ export function ChannelList({
     // @-mentions only (the RPC filters on `m.mentions`), so a DM
     // has to be folded in here or the one signal the fixed red
     // exists for never fires for the most personal channel there is.
-    // `isAddressed` is the rule the arrangement's header totals use too.
+    // `isAddressed` is the rule the arrangement's folding uses too.
     const hasMention = isAddressed(channel, counts);
     // A mention implies an unread row even if the two counts ever
     // disagree — a red badge on a read-styled row is a contradiction
     // on screen.
     const isUnread = countsKnown && (counts.unreadCount > 0 || hasMention);
     // `countsLookUnread` is the rule the phone's row and the arrangement's
-    // header totals and Unread only read too (#3999): a muted channel reads as
+    // folding and Unread only read too (#3999): a muted channel reads as
     // unread only when it addresses the member, and otherwise sits quietly in
     // `--muted`. It quiets from the arrangement's own muted set, as the phone's
     // row does, so a failed refetch of the levels (which `channel.muted` rides
-    // out on the last good answer) can't leave a read-looking row under a lit
-    // folded header. Without the sidebar there is no header to disagree with.
+    // out on the last good answer) can't keep a read-looking row in view under
+    // a folded heading. Without the sidebar nothing folds to disagree with.
     const isMuted = !!channel.muted;
     const quietedByMute = sidebar
       ? (mutedChannelIds?.has(channel.id) ?? false)
@@ -1287,7 +1290,10 @@ export function ChannelList({
         className={cn(
           // `mb-1` matches the heading's own bottom padding, so the + sits
           // on the label's line.
-          "mb-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-card hover:text-foreground",
+          cn(
+            headingControlClassName,
+            "mb-1 flex shrink-0 items-center justify-center",
+          ),
           "opacity-0 focus-visible:opacity-100 group-hover/head:opacity-100",
         )}
       >
@@ -1431,11 +1437,9 @@ export function ChannelList({
 
   // The list's own control (`headingControl`) rides its first heading.
   // A heading's menu (#6053): fold this section, or every section of the
-  // channel list at once. Fold all leaves out an empty group, which draws no
-  // heading, and writes only the sections whose state it changes.
-  const foldKeys = foldAllSectionKeys(
-    inputSections.filter((section) => section.channels.length > 0),
-  );
+  // channel list at once. Fold all folds the headings drawn; Unfold all
+  // unfolds every folded section; each writes only what it changes
+  // (`foldAllWrites`, one rule with the phone).
   const foldEntries = (
     key: SidebarSectionKey,
     label: string,
@@ -1443,10 +1447,13 @@ export function ChannelList({
   ): RowMenuEntry[] => {
     if (!sidebar) return [];
     const setAll = (fold: boolean) => {
-      for (const sectionKey of foldKeys) {
-        if (preferences.collapsed.has(sectionKey) !== fold) {
-          sidebar.onSetCollapsed(sectionKey, fold);
-        }
+      for (const sectionKey of foldAllWrites({
+        drawn: arranged.sections,
+        all: inputSections,
+        collapsed: preferences.collapsed,
+        fold,
+      })) {
+        sidebar.onSetCollapsed(sectionKey, fold);
       }
     };
     return [
@@ -1564,7 +1571,9 @@ export function ChannelList({
               )}
               <span className="truncate">{section.label}</span>
             </button>
-            {foldMenu ? (
+            {/* Gone while anything is held, as the + is, so the heading under
+                the pointer stays the whole drop target. */}
+            {foldMenu && !dragging ? (
               <span className="mb-1 flex shrink-0 items-center">
                 {foldMenu}
               </span>
@@ -1763,7 +1772,7 @@ export function ChannelFilters({
           className={cn(
             "relative",
             heading
-              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              ? cn(headingControlClassName, "p-0")
               : cn(compactControlClassName, "ml-auto"),
           )}
           aria-label={active ? FILTER_CHANNELS_ON_LABEL : FILTER_CHANNELS_LABEL}

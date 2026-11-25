@@ -467,11 +467,9 @@ function MutedMark({ color }: { color: string }) {
 /**
  * The count badge, drawn only when the member was addressed (a mention or an
  * unread DM), in the fixed mention red. A merely unread channel carries no
- * number since 2026-11-07, so the neutral fill it used is gone. Exported for
- * the folded section headers on s04 (#2877), so a header's total draws with
- * the row's recipe.
+ * number since 2026-11-07, so the neutral fill it used is gone.
  */
-export function UnreadBadge({
+function UnreadBadge({
   unreadCount,
   mentionCount,
 }: {

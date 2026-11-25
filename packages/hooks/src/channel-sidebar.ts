@@ -286,8 +286,8 @@ export function countsAddressMember(
  * Whether a row draws as unread (bold name, unread dot). A muted channel
  * stays quiet unless it addresses the member: a mention, or a direct
  * message, gets past a mute as it does for push. Shawn, 2026-11-13 (#3999):
- * the same rule decides what a folded header counts and what Unread only
- * keeps, so the header never lights for a channel whose row reads as read.
+ * the same rule decides what a folded section keeps in view and what Unread
+ * only keeps, so neither holds a channel whose row reads as read.
  */
 export function countsLookUnread(
   isDirect: boolean,
@@ -305,8 +305,8 @@ export function countsLookUnread(
  * Which channels hold a thread, among those listed under it
  * (`sidebarThreadsByChannel`), with replies new to the member (#5277). Thread
  * replies never count toward a channel's own unread (chat README § Message
- * threads), so the rail's Unread only filter and a folded section's total read
- * this too, or the only sign of those replies would be filtered away. One rule
+ * threads), so the rail's Unread only filter and a folded section read this
+ * too, or the only sign of those replies would be filtered away. One rule
  * for the phone's channel list and web's rail (#5300).
  */
 export function channelsWithUnreadThreads(
@@ -322,7 +322,7 @@ export function channelsWithUnreadThreads(
 /**
  * What the arrangement reads as unread (#5277): the server's counts, plus one
  * for a channel whose listed thread has new replies, so Unread only keeps that
- * channel and its thread rows, and a folded section reads unread over it. A
+ * channel and its thread rows, and a folded section keeps it in view. A
  * row's own badge still reads the server's counts alone. `undefined` (counts
  * unknown) stays `undefined`, so no filter hides a row on missing data.
  */
@@ -386,11 +386,8 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
 
   const passes = (channel: C, pinned: boolean) => {
     if (pinned || channel.id === activeChannelId) return true;
-    const counts = countsOf(channel);
-    const addressed = isAddressed(channel, counts);
-    if (applyUnreadOnly && counts.unreadCount === 0 && !addressed) {
-      return false;
-    }
+    if (applyUnreadOnly && !hasSomethingNew(channel)) return false;
+    const addressed = isAddressed(channel, countsOf(channel));
     // A mention gets past a mute, the same way it does for push.
     if (applyHideMuted && mutedChannelIds.has(channel.id) && !addressed) {
       return false;
@@ -464,17 +461,32 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
 }
 
 /**
- * The sections Fold all and Unfold all change (#6053): every section of the
- * channel list the member sees, except Pinned, which holds what they chose to
- * keep in view, and Direct messages, which web lists on its own page and the
- * phone on its Messages tab.
+ * The sections Fold all or Unfold all writes (#6053), one per section whose
+ * state it changes. Fold all folds the headings the member sees (`drawn`, the
+ * arrangement's sections), never a section hidden by a pin or a filter, which
+ * would otherwise come back folded once unpinned or unfiltered. Unfold all
+ * unfolds every folded section of the list (`all`, the arrangement's input),
+ * hidden ones included, so nothing stays folded out of sight. Both leave out
+ * Pinned, which holds what the member chose to keep in view, and Direct
+ * messages, which web lists on its own page and the phone on its Messages tab.
  */
-export function foldAllSectionKeys(
-  sections: readonly { key: SidebarSectionKey }[],
-): SidebarSectionKey[] {
-  return sections
+export function foldAllWrites({
+  drawn,
+  all,
+  collapsed,
+  fold,
+}: {
+  drawn: readonly { key: SidebarSectionKey }[];
+  all: readonly { key: SidebarSectionKey }[];
+  collapsed: ReadonlySet<string>;
+  fold: boolean;
+}): SidebarSectionKey[] {
+  return (fold ? drawn : all)
     .map((section) => section.key)
-    .filter((key) => key !== "pinned" && key !== "direct");
+    .filter(
+      (key) =>
+        key !== "pinned" && key !== "direct" && collapsed.has(key) !== fold,
+    );
 }
 
 // ── Copy ─────────────────────────────────────────────────────────────────────

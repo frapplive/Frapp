@@ -248,7 +248,7 @@ vi.mock("@repo/hooks", async () => {
     countsAddressMember: actual.countsAddressMember,
     countsLookUnread: actual.countsLookUnread,
     // #6053: a heading's menu, for real.
-    foldAllSectionKeys: actual.foldAllSectionKeys,
+    foldAllWrites: actual.foldAllWrites,
     foldSectionLabel: actual.foldSectionLabel,
     FOLD_ALL_LABEL: actual.FOLD_ALL_LABEL,
     UNFOLD_ALL_LABEL: actual.UNFOLD_ALL_LABEL,
@@ -776,7 +776,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     const header = pressableLabelled(tree, "Channels, folded");
     expect(header.props.accessibilityRole).toBe("header");
     expect(header.props.accessibilityHint).toBe(
-      "Double-tap to show its channels.",
+      "Double-tap to show all its channels.",
     );
     expect(header.props.accessibilityState).toEqual({ expanded: false });
     expect(rows(tree).map((row) => row.props.name)).toEqual(["general"]);
@@ -1518,6 +1518,44 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       ]);
     });
 
+    it("runs the heading's own entry: Fold, or Unfold once folded", () => {
+      const tree = renderWithCategory();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[0]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+      act(() =>
+        pressableLabelled(tree, "Executive, folded").props.onLongPress(),
+      );
+      setCollapsed.mockClear();
+      expect(menuOf().actions[0]!.label).toBe("Unfold Executive");
+      act(() => menuOf().actions[0]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "category:cat-exec", collapsed: false }],
+      ]);
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", () => {
+      // Every channel of Executive is pinned: it draws no heading, so
+      // folding it would hide what comes back once the member unpins.
+      categoriesData.value = [{ id: "cat-exec", name: "Executive" }];
+      channelsData.value = [general, exec];
+      sidebarPrefs.value = {
+        ...sidebarPrefs.value,
+        pinnedIds: new Set([exec.id]),
+        collapsed: new Set(),
+      };
+      const tree = render();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[1]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+    });
+
     it("offers Fold all and Unfold all to a screen reader as actions", () => {
       const tree = renderWithCategory();
       const header = pressableLabelled(tree, "Executive, folded");
@@ -1641,9 +1679,29 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       expect(vi.mocked(Alert.alert)).toHaveBeenLastCalledWith(
         "Couldn't save your channel list",
         "Nothing changed. Check your connection and try again.",
+        expect.any(Array),
+        expect.any(Object),
       );
     },
   );
+
+  // #6053: Fold all sends a write per section; a failed batch is one alert.
+  it("shows one alert while it's up, however many writes fail", () => {
+    channelsData.value = [general];
+    render();
+    vi.mocked(Alert.alert).mockClear();
+    writeOptions.fold?.onError?.();
+    writeOptions.fold?.onError?.();
+    writeOptions.pin?.onError?.();
+    expect(vi.mocked(Alert.alert)).toHaveBeenCalledTimes(1);
+    // Dismissed, the next failure says so again.
+    const buttons = vi.mocked(Alert.alert).mock.calls[0]![2] as {
+      onPress?: () => void;
+    }[];
+    act(() => buttons[0]!.onPress?.());
+    writeOptions.fold?.onError?.();
+    expect(vi.mocked(Alert.alert)).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("Chat home filters on unknown data (#2877)", () => {
@@ -1762,7 +1820,7 @@ describe("Chat home filters on unknown data (#2877)", () => {
     const folded = render();
     expect(
       pressableLabelled(folded, "Channels, folded").props.accessibilityHint,
-    ).toBe("Double-tap to show its channels.");
+    ).toBe("Double-tap to show all its channels.");
 
     sidebarPrefs.value = { ...sidebarPrefs.value, collapsed: new Set() };
     const open = render();

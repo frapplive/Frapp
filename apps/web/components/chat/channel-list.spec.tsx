@@ -840,11 +840,60 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
       expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
     });
 
-    it("has a visible ⋯ too, not only a right-click", () => {
+    it("runs the heading's own entry: Fold, or Unfold once folded", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Fold Channels" }));
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("unfolds a folded heading from its own entry", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Executive");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold Executive" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("has a visible ⋯ too, shown while the heading is hovered", () => {
       renderWithCategory();
-      expect(
-        screen.getByRole("button", { name: "More for Channels" }),
-      ).toBeInTheDocument();
+      const more = screen.getByRole("button", { name: "More for Channels" });
+      // RowMenu's ⋯ appears on `group-hover`: the heading's row is that group.
+      expect(more).toHaveClass("group-hover:opacity-100");
+      expect(more.closest(".group")).toBe(
+        screen.getByRole("button", { name: "Channels" }).parentElement,
+      );
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", async () => {
+      // Every channel of Executive is pinned, so Executive draws no heading:
+      // folding it would hide what comes back once the member unpins.
+      const onSetCollapsed = vi.fn();
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(["c-exec"]),
+              collapsed: new Set(),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
     });
   });
 

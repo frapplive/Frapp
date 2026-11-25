@@ -3,7 +3,7 @@ import {
   arrangeChannelSidebar,
   compareLatestFirst,
   countsLookUnread,
-  foldAllSectionKeys,
+  foldAllWrites,
   foldSectionLabel,
   sidebarMutedChannelIds,
   sidebarSections,
@@ -547,16 +547,48 @@ describe("sidebarUnreadCounts and sidebarMutedChannelIds", () => {
 });
 
 describe("Fold all (#6053)", () => {
-  it("changes every section of the channel list but Pinned and Direct messages", () => {
+  const all = [
+    { key: "pinned" as const },
+    { key: "channels" as const },
+    { key: CATEGORY_KEY },
+    { key: "direct" as const },
+    { key: "system" as const },
+  ];
+
+  it("folds only the headings drawn, never Pinned or Direct messages", () => {
+    // `system` is hidden (every channel pinned or filtered away): it draws
+    // no heading, so Fold all leaves it as it is.
+    const drawn = [
+      { key: "pinned" as const },
+      { key: "channels" as const },
+      { key: CATEGORY_KEY },
+      { key: "direct" as const },
+    ];
     expect(
-      foldAllSectionKeys([
-        { key: "pinned" },
-        { key: "channels" },
-        { key: CATEGORY_KEY },
-        { key: "direct" },
-        { key: "system" },
-      ]),
-    ).toEqual(["channels", CATEGORY_KEY, "system"]);
+      foldAllWrites({ drawn, all, collapsed: new Set(), fold: true }),
+    ).toEqual(["channels", CATEGORY_KEY]);
+  });
+
+  it("writes only the sections whose state changes", () => {
+    expect(
+      foldAllWrites({
+        drawn: all,
+        all,
+        collapsed: new Set(["channels"]),
+        fold: true,
+      }),
+    ).toEqual([CATEGORY_KEY, "system"]);
+  });
+
+  it("unfolds every folded section, hidden ones too, but not Pinned", () => {
+    expect(
+      foldAllWrites({
+        drawn: [{ key: "channels" }],
+        all,
+        collapsed: new Set(["pinned", "channels", "system", "category:gone"]),
+        fold: false,
+      }),
+    ).toEqual(["channels", "system"]);
   });
 
   it("names the heading's own fold by its state", () => {

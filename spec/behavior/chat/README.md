@@ -458,7 +458,7 @@ The categories themselves stay the chapter's (§ Channels).
   An @-mention, or anything unread in a DM, gets past the mute, as it does for push.
   The messages are still there when the channel is opened.
   While the mute levels are unknown, nothing is quieted.
-  One rule for the row, the header and the filter: `countsLookUnread` in `@repo/hooks`.
+  One rule for the row, what a folded heading keeps in view, and the filter: `countsLookUnread` in `@repo/hooks`.
 - **Folds.**
   Any section header, Pinned included, folds its section, and the choice is remembered.
   **Folding hides what the member has read, never what is new** (Paul's pick, 2026-11-25, [#6053](https://github.com/frapplive/Frapp/issues/6053), as Discord's collapsed categories keep their unread channels in view).
@@ -467,9 +467,9 @@ The categories themselves stay the chapter's (§ Channels).
   So a folded heading carries no count of its own: what it holds that is new is drawn under it.
   While the unread counts are unknown, nothing stays under a folded heading but the open channel, since unknown is not unread.
   _(Until 2026-11-25 a folded heading drew only the open channel, and showed the unread total of the rows inside it, in the mention red when any of them addressed the member. Changed in #6053 by pdcarlson, 2026-11-25: members didn't fold, because folding hid which channels had news.)_
-  **Fold all and Unfold all** (#6053): a heading's menu folds or unfolds that heading, or every section of the channel list at once, Pinned left as it is (it holds what the member chose to keep in view); Direct messages, listed on its own page on web and on the Messages tab on the phone, is left out too.
-  On web the menu is a heading's right-click and the `⋯` that shows while the heading is hovered or focused; on the phone it is a long press on the heading, which opens the glass menu, and Fold all and Unfold all are the heading's accessibility actions.
-  Fold all writes only the sections whose state it changes, one `PUT` or `DELETE` each, through the same per-section route.
+  **Fold all and Unfold all** (#6053): a heading's menu folds or unfolds that heading, or every section of the channel list at once. Fold all folds the headings the member sees, never a section a pin or a filter hides, which would otherwise come back folded once unpinned or unfiltered; Unfold all unfolds every folded section, hidden ones included. Both leave Pinned as it is (it holds what the member chose to keep in view), and Direct messages, listed on its own page on web and on the Messages tab on the phone. One rule for both clients: `foldAllWrites` in `@repo/hooks`.
+  On web the menu is a heading's right-click and the `⋯` that shows while the heading is hovered or focused, and hides while a row or heading is held, as the + does, so the heading stays the whole drop target; on the phone it is a long press on the heading, which opens the glass menu, and Fold all and Unfold all are the heading's accessibility actions.
+  Fold all writes only the sections whose state it changes, one `PUT` or `DELETE` each, through the same per-section route, and a batch that fails tells the member once: the phone shows no second alert while one is up, and web's one toast replaces the last.
   While the list scrolls, the section in view keeps its header pinned at the top, so it can still be folded from there ([`../../ui/design-system/components.md`](../../ui/design-system/components.md#sidebar-item) § Sidebar item, "Pinned section headings").
 - **Where it lives.**
   `chat_sidebar_preferences` holds one row per (member, chapter): the two filters, the sort (`chapter`, `recent` or `alpha`; `20261115001542`) and the folded section keys.

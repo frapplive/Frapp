@@ -21,7 +21,7 @@ import {
   arrangeChannelSidebar,
   countsLookUnread,
   FOLD_ALL_LABEL,
-  foldAllSectionKeys,
+  foldAllWrites,
   foldSectionLabel,
   groupChannelsByCategory,
   NO_MATCHING_CHANNELS,
@@ -273,10 +273,24 @@ export default function ChatHomeScreen() {
   // A hook option, not `mutate`'s per-call `onError`, which fires only for the
   // latest write on the hook. The write has already put the list back on the
   // server's state; this says so.
+  // One alert at a time: Fold all sends a write per section (#6053), and a
+  // failed batch is one failure to the member, not one alert per section.
+  const saveFailedShowing = useRef(false);
   const sidebarWriteOptions = useMemo(
     () => ({
-      onError: () =>
-        Alert.alert(SIDEBAR_SAVE_FAILED_TITLE, SIDEBAR_SAVE_FAILED_BODY),
+      onError: () => {
+        if (saveFailedShowing.current) return;
+        saveFailedShowing.current = true;
+        const settle = () => {
+          saveFailedShowing.current = false;
+        };
+        Alert.alert(
+          SIDEBAR_SAVE_FAILED_TITLE,
+          SIDEBAR_SAVE_FAILED_BODY,
+          [{ text: "OK", onPress: settle }],
+          { onDismiss: settle },
+        );
+      },
     }),
     [],
   );
@@ -467,7 +481,7 @@ export default function ChatHomeScreen() {
   );
   // What the arrangement reads as unread: the server's counts, plus one for a
   // channel whose thread has new replies (#5277), so Unread only keeps that
-  // channel and its thread rows, and a folded section reads unread over it.
+  // channel and its thread rows, and a folded section keeps it in view.
   // The rows' own badges still read the server's counts alone.
   const arrangementUnread = useMemo(
     () => withUnreadThreadChannels(unreadByChannelId, unreadThreadChannelIds),
@@ -523,20 +537,17 @@ export default function ChatHomeScreen() {
   const filtersOn =
     preferences.filters.unreadOnly || preferences.filters.hideMuted;
   // A heading's menu (#6053), web's heading menu on the phone's long-press:
-  // fold this section, or every section at once. Fold all leaves out an empty
-  // group, which draws no heading, and writes only what it changes.
-  const foldKeys = useMemo(
-    () =>
-      foldAllSectionKeys(
-        inputSections.filter((section) => section.channels.length > 0),
-      ),
-    [inputSections],
-  );
+  // fold this section, or every section at once. Fold all folds the headings
+  // drawn; Unfold all unfolds every folded section; each writes only what it
+  // changes (`foldAllWrites`, one rule with web).
   const setAllFolded = (fold: boolean) => {
-    for (const sectionKey of foldKeys) {
-      if (preferences.collapsed.has(sectionKey) !== fold) {
-        setSectionCollapsed({ sectionKey, collapsed: fold });
-      }
+    for (const sectionKey of foldAllWrites({
+      drawn: arranged.sections,
+      all: inputSections,
+      collapsed: preferences.collapsed,
+      fold,
+    })) {
+      setSectionCollapsed({ sectionKey, collapsed: fold });
     }
   };
   const headingMenuActions = (
@@ -1047,7 +1058,7 @@ export default function ChatHomeScreen() {
                         }
                         accessibilityHint={
                           section.collapsed
-                            ? "Double-tap to show its channels."
+                            ? "Double-tap to show all its channels."
                             : "Double-tap to fold this section."
                         }
                         accessibilityActions={headingMenuActions(
@@ -1289,8 +1300,6 @@ function createStyles(tokens: SignetTokens) {
       justifyContent: "center",
       marginRight: -(tokens.touch.minimum - HEADING_PLUS_SIZE) / 2,
     },
-    // A folded section's count, at the fold control's right end, where the
-    // rows' badges sit.
     headerActions: {
       flexDirection: "row",
       alignItems: "center",

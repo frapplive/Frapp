@@ -25,7 +25,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { compactControlClassName } from "@/components/shared/table-controls";
+import {
+  compactControlClassName,
+  headingControlClassName,
+} from "@/components/shared/table-controls";
 import { cn } from "@/lib/utils";
 
 /**
@@ -281,7 +284,7 @@ function MoreButton({
           title="More"
           className={cn(
             size === "heading"
-              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              ? cn(headingControlClassName, "p-0")
               : compactControlClassName,
             "shrink-0",
             // Out of the way until the row is hovered or focused; never hidden
