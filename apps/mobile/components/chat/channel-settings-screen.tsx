@@ -552,7 +552,13 @@ function ChannelSettings({
           <ListRow
             leading={<PinGlyph color={glyph} />}
             label={copy.pinnedMessages}
-            value={pinCount === null ? null : String(pinCount)}
+            value={
+              pinCount === null
+                ? null
+                : pinCount === 0
+                  ? "None"
+                  : String(pinCount)
+            }
             onPress={() => pinsSheetRef.current?.present?.()}
           />
         </ListSection>

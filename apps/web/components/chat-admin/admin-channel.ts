@@ -6,7 +6,8 @@ import type { ChatNotificationLevel } from "@repo/validation";
  * (`chat-admin-page.tsx`) and one channel's page (`channel-settings-page.tsx`).
  */
 
-export type ChannelType = "PUBLIC" | "PRIVATE" | "ROLE_GATED" | "DM" | "GROUP_DM";
+export type ChannelType =
+  "PUBLIC" | "PRIVATE" | "ROLE_GATED" | "DM" | "GROUP_DM";
 
 export interface AdminChannel {
   id: string;

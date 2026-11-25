@@ -103,6 +103,13 @@ import { useNetwork } from "@/lib/providers/network-provider";
 import { useToast } from "@/lib/hooks/use-toast";
 import { asArray, cn, getErrorMessage } from "@/lib/utils";
 
+/**
+ * A row's picker drawn as the row's value (a muted word and its chevron), as
+ * the rows that open a page show theirs, rather than a field box in a row.
+ */
+const ROW_PICKER =
+  "h-8 w-auto gap-1.5 border-transparent bg-transparent px-2 text-sm text-muted-foreground shadow-none hover:text-foreground";
+
 /** Sentinel for "no category": Radix `Select` rejects an empty-string value. */
 const NO_CATEGORY = "__none__";
 /** Sentinel for "no officer default": the channel uses its built-in level. */
@@ -154,7 +161,7 @@ export function ChannelSettingsPage({
       }
       offlineFallback={(retry) => (
         <PermissionsOfflineSurface
-          description="Reconnect to check whether you can manage chat channels."
+          description="Reconnect to check whether you can change this channel's settings."
           onRetry={retry}
         />
       )}
@@ -279,8 +286,7 @@ function ChannelSettings({
   const openReports = useChatReports("open", channel.id, canReviewReports);
   const pins = usePinnedMessages(channel.id);
 
-  const category =
-    categories.find((c) => c.id === channel.category_id) ?? null;
+  const category = categories.find((c) => c.id === channel.category_id) ?? null;
   const takesLists = takesAccessLists(channel);
   const audit = channel.is_audit_log === true;
   const see = channel.who_can_see ?? null;
@@ -438,6 +444,7 @@ function ChannelSettings({
             }
             options={accessOptions}
             optionsState={optionsState}
+            labelHidden
           />
           <div className="flex justify-end">
             <Button
@@ -575,7 +582,7 @@ function ChannelSettings({
             >
               <SelectTrigger
                 aria-label={copy.category}
-                className="h-8 w-auto min-w-[9rem] max-w-[14rem]"
+                className={cn(ROW_PICKER, "max-w-[16rem]")}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -675,7 +682,7 @@ function ChannelSettings({
             >
               <SelectTrigger
                 aria-label={copy.defaultNotifications}
-                className="h-8 w-auto min-w-[9rem]"
+                className={ROW_PICKER}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -723,7 +730,13 @@ function ChannelSettings({
         <SettingsRow
           icon={Pin}
           label={copy.pinnedMessages}
-          value={pinCount === null ? undefined : String(pinCount)}
+          value={
+            pinCount === null
+              ? undefined
+              : pinCount === 0
+                ? "None"
+                : String(pinCount)
+          }
           href={channelSettingsPath(channel.id, "pins")}
         />
         {canReviewReports ? (

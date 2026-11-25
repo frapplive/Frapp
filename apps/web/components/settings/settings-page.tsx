@@ -641,7 +641,11 @@ function SettingsPageContent() {
   const subpageFor = (key: string) =>
     settingsSubpageFor(
       key,
-      { channel: channelParam, tool: toolParam, page: searchParams.get("page") },
+      {
+        channel: channelParam,
+        tool: toolParam,
+        page: searchParams.get("page"),
+      },
       holdsTool,
     );
 

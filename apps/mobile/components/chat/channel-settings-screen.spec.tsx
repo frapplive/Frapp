@@ -81,9 +81,15 @@ vi.mock("@/components/option-sheet", async () => {
     }),
   };
 });
-vi.mock("@/components/chat/channel-access-sheet", stubSheet("ChannelAccessSheet"));
+vi.mock(
+  "@/components/chat/channel-access-sheet",
+  stubSheet("ChannelAccessSheet"),
+);
 vi.mock("@/components/chat/message-list-sheet", stubSheet("MessageListSheet"));
-vi.mock("@/components/chat/delete-channel-sheet", stubSheet("DeleteChannelSheet"));
+vi.mock(
+  "@/components/chat/delete-channel-sheet",
+  stubSheet("DeleteChannelSheet"),
+);
 
 vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => ({
@@ -181,7 +187,9 @@ describe("Channel settings on the phone (#6031)", () => {
       expect(text).toContain(words);
     }
     expect(text).toContain("Committees");
-    expect(text).toContain("Matches Committees. Changes to it reach this channel too.");
+    expect(text).toContain(
+      "Matches Committees. Changes to it reach this channel too.",
+    );
     // No report queue on the phone yet.
     expect(text).not.toContain(copy.reports);
     // Save channel waits for a typed change.
