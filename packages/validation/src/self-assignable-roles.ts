@@ -97,18 +97,19 @@ export const SELF_ASSIGNABLE_REFUSAL_COPY: Record<
 
 /**
  * What the role page's Non-chapter business switch says under its label, on
- * web and the phone, while the role can be marked.
+ * web and the phone, while the role can be marked. One short line (#6029,
+ * settings rows): what it opens and what turning it off keeps are the
+ * behaviour spec's, not the switch's.
  */
 export const SELF_ASSIGNABLE_SWITCH_DESCRIPTION =
-  "Members add and remove this role themselves, like an intramurals team or a study group. It opens its channels, and any event that lists it counts them in. Turn it off and members who have it keep it until an officer takes it off.";
+  "Members add and remove this role themselves, like an intramurals team.";
 
 /**
- * What the Roles overview says about its Non-chapter business section, on web
- * and the phone. It points at the section's own Add role (#5736), not at
- * another page.
+ * The footnote under the Roles overview's Non-chapter business group, on web
+ * and the phone (#6029: one muted line under a group).
  */
 export const SELF_ASSIGNABLE_SECTION_CAPTION =
-  "Members add and remove these themselves, like intramurals or a study group. Each opens the channels that list it, and any event that lists it counts them in.";
+  "Members add and remove these themselves, like intramurals or a study group.";
 
 /**
  * The section's Add role (#5736), on web and the phone: it creates a role
