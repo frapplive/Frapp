@@ -18,6 +18,7 @@ import { MIN_SIZE } from "../shared/window-state";
 import { installContextMenu } from "./context-menu";
 import { installAppMenu, launchedHidden } from "./menu";
 import { createTray } from "./tray";
+import { startUpdater } from "./updater";
 import { loadWindowState, trackWindowState } from "./window-state-store";
 
 const { origin: appOrigin, rejected } = resolveAppOrigin({
@@ -90,11 +91,24 @@ if (!app.requestSingleInstanceLock()) {
     registerAuthLinkScheme();
     installPermissionHandlers();
     installBridge();
-    const menus = { isPackaged: app.isPackaged, showWindow, onChange: () => rebuildMenus() };
     let tray: ReturnType<typeof createTray> | null = null;
     const rebuildMenus = (): void => {
       installAppMenu(menus);
       tray?.rebuild();
+    };
+    const updater = startUpdater({
+      onChange: () => rebuildMenus(),
+      // The updater closes the window before `before-quit` fires, and a
+      // window that only hides would stop the restart.
+      beforeRestart: () => {
+        quitting = true;
+      },
+    });
+    const menus = {
+      isPackaged: app.isPackaged,
+      showWindow,
+      onChange: () => rebuildMenus(),
+      updateItems: updater.menuItems,
     };
     installAppMenu(menus);
     if (process.platform !== "darwin") tray = createTray({ ...menus, iconPath: trayIconPath() });

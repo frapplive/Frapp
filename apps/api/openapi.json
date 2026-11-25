@@ -18746,6 +18746,47 @@
         ]
       }
     },
+    "/v1/desktop/updates/{file}": {
+      "get": {
+        "operationId": "DesktopUpdateController_file_v1",
+        "parameters": [
+          {
+            "name": "file",
+            "required": true,
+            "in": "path",
+            "description": "A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "The download link, in `Location`"
+          },
+          "404": {
+            "description": "Not a file a release publishes"
+          },
+          "503": {
+            "description": "This API cannot reach the releases bucket"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A desktop release file or update feed: redirects to a time-limited download link",
+        "tags": [
+          "Desktop updates"
+        ]
+      }
+    },
     "/v1/channels/{channelId}/polls": {
       "post": {
         "operationId": "PollController_createPoll_v1",

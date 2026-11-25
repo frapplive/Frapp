@@ -5554,6 +5554,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/desktop/updates/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A desktop release file or update feed: redirects to a time-limited download link */
+        get: operations["DesktopUpdateController_file_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/{channelId}/polls": {
         parameters: {
             query?: never;
@@ -28579,6 +28596,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ResolveFrappLinksResponseDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DesktopUpdateController_file_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names */
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download link, in `Location` */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a file a release publishes */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This API cannot reach the releases bucket */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
