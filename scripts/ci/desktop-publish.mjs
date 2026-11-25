@@ -64,6 +64,14 @@ const FEED_CACHE = "no-cache, max-age=0";
 
 const VERSION = /^\d+\.\d+\.\d+$/;
 
+/**
+ * The file names the API will hand a link out for (`RELEASE_FILE` in
+ * apps/api/src/domain/constants/desktop-updates.ts; the test holds the two
+ * together). A file named any other way would upload fine and then answer
+ * 404 to every installed app, so a release that has one stops here.
+ */
+export const SERVED_FILE = /^Frapp-[A-Za-z0-9.-]{1,60}\.(exe|dmg|zip)(\.blockmap)?$/;
+
 /** A plain `1.2.3`: channels are feeds here, never version suffixes. */
 export function assertVersion(version) {
   if (!VERSION.test(version ?? "")) {
@@ -131,6 +139,11 @@ export function releasePlan({ dir, files, read }) {
   // Blockmaps let an update download only what changed; installers people
   // download by hand (the dmg) ride along though no feed names them.
   const extras = files.filter((name) => /\.(dmg|blockmap)$/.test(name) && !needed.has(name));
+
+  const unserved = [...needed, ...extras].filter((name) => !SERVED_FILE.test(name));
+  if (unserved.length > 0) {
+    throw new Error(`The API serves no file named like ${unserved.join(", ")}; see SERVED_FILE.`);
+  }
 
   const steps = [];
   for (const name of [...needed, ...extras].sort()) {

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   PREFIX,
+  SERVED_FILE,
   assertVersion,
   channelFeedName,
   feedFiles,
@@ -199,6 +200,12 @@ test("the workflow, this script and the API name the same bucket and prefix", ()
   const gcp = readFileSync(join(repo, "scripts/gcp/lib.sh"), "utf8");
   assert.match(gcp, new RegExp(`^DESKTOP_RELEASES_BUCKET="${bucket}"$`, "m"));
   assert.equal(/^export const DESKTOP_RELEASES_PREFIX = '([^']+)';$/m.exec(api)?.[1], PREFIX);
+  assert.ok(api.includes(`const RELEASE_FILE = ${SERVED_FILE};`), "the API's file-name rule is SERVED_FILE");
   // What the app is built to ask is the API route in front of that bucket.
   assert.match(builder, /^    url: https:\/\/api\.frapp\.live\/v1\/desktop\/updates$/m);
+});
+
+test("a release with a file the API would not serve is refused", () => {
+  const files = FILES.map((name) => name.replace("Frapp-0.2.0-universal.dmg", "Frapp 0.2.0.dmg"));
+  assert.throws(() => releasePlan({ dir: "/out", files, read }), /serves no file named like Frapp 0\.2\.0\.dmg/);
 });
