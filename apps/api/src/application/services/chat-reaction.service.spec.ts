@@ -10,6 +10,7 @@ import {
   baseMessage,
   createChatServiceFixture,
   type ChatServiceFixture,
+  baseMember,
 } from '#test/helpers/chat-service.fixture';
 import {
   ChatMessageActionDuplicateError,
@@ -196,6 +197,44 @@ describe('ChatReactionService', () => {
   });
 
   // ── Hot-path actions (chat_message_actions) ──────────────────────────
+
+  // Chat timeouts (#6006): an emoji reaction is refused in a channel, by the
+  // `react` operation both routes authorize as; a reader's other actions
+  // (an RSVP) still pass.
+  describe('while the reacting member is timed out', () => {
+    beforeEach(async () => {
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue({
+        ...baseMember,
+        chat_timeout_until: new Date(Date.now() + 60 * 60_000).toISOString(),
+      });
+    });
+
+    it('refuses a toggled reaction with the coded 403', async () => {
+      const error = await reactions
+        .toggleReaction('msg-1', 'ch-1', 'user-1', '👍')
+        .catch((e: ForbiddenException) => e.getResponse());
+      expect(error).toEqual(
+        expect.objectContaining({ code: 'chat.timed_out' }),
+      );
+      expect(mockReactionRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a reaction action with the coded 403', async () => {
+      const error = await reactions
+        .recordMessageAction(
+          'msg-1',
+          'ch-1',
+          'user-1',
+          { action_type: 'reaction:👍' },
+          null,
+        )
+        .catch((e: ForbiddenException) => e.getResponse());
+      expect(error).toEqual(
+        expect.objectContaining({ code: 'chat.timed_out' }),
+      );
+      expect(mockActionRepo.create).not.toHaveBeenCalled();
+    });
+  });
 
   describe('recordMessageAction', () => {
     const baseAction: ChatMessageAction = {

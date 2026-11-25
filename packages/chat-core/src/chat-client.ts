@@ -18,8 +18,15 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ChatMessageFlag, MentionPick } from "@repo/validation";
 import {
+  CHAT_TIMED_OUT_CODE,
+  CHAT_TIMED_OUT_REFUSAL,
+  MY_CHAT_TIMEOUT_QUERY_ROOT,
+  type ChatMessageFlag,
+  type MentionPick,
+} from "@repo/validation";
+import {
+  codeOf,
   isDefinitiveClientError,
   isServerBusy,
   randomClientId,
@@ -201,6 +208,8 @@ function emitOutboxEvent(
 }
 
 interface FunctionsErrorWithStatus extends Error {
+  /** The API's structured error code, when the refusal had one. */
+  code?: string;
   context?: { response?: { status?: number } | Response; status?: number };
   status?: number;
   /** openapi-fetch error envelope; `response.status` carries the HTTP code. */
@@ -297,9 +306,20 @@ export function classifyChatError(error: unknown): {
     }
   }
   const reason = serverReasonOf(error);
+  // A chat timeout (#6006) reads as its own sentence, whatever the server's
+  // message says; the composer's banner says until when.
+  if (codeOf(error) === CHAT_TIMED_OUT_CODE) {
+    return {
+      terminal: true,
+      status,
+      message: CHAT_TIMED_OUT_REFUSAL,
+      busy: false,
+    };
+  }
   // A busy server's 429 (Cloud Run's `Rate exceeded.` when every copy of the
   // API is full) is nobody's pace: it reads as busy on every chat write.
-  const busy = status === 429 && isServerBusy({ statusCode: 429, message: reason });
+  const busy =
+    status === 429 && isServerBusy({ statusCode: 429, message: reason });
   const message = busy ? SERVER_BUSY_COPY : chatRefusalCopy(reason, status);
   const terminal =
     typeof status === "number" && isDefinitiveClientError(status);
@@ -344,6 +364,21 @@ export function definitiveRefusalMessage(error: unknown): string | null {
 }
 
 /**
+ * A write the API refused for a chat timeout (#6006): re-read the member's own
+ * timeout, so the composer's "You're timed out until …" banner replaces it now
+ * rather than at the next poll. Anything else is left alone.
+ */
+export function refreshTimeoutIfRefused(
+  queryClient: QueryClient,
+  error: unknown,
+): void {
+  if (codeOf(error) !== CHAT_TIMED_OUT_CODE) return;
+  void queryClient.invalidateQueries({
+    queryKey: [MY_CHAT_TIMEOUT_QUERY_ROOT],
+  });
+}
+
+/**
  * Normalize an openapi-fetch `{ data, error }` response into the same
  * thrown-Error shape `classifyChatError` understands. NestJS error bodies look
  * like `{ statusCode, message, error }`; openapi-fetch exposes the raw
@@ -356,6 +391,10 @@ function throwApiError(
 ): never {
   const msg = serverMessageOf(error) ?? fallback;
   const wrapped = new Error(msg) as FunctionsErrorWithStatus;
+  // The API's structured code rides along (`codeOf` reads it), so a refusal
+  // with one, such as a chat timeout's (#6006), reads as that refusal.
+  const code = codeOf(error);
+  if (code) wrapped.code = code;
   if (response) wrapped.response = { status: response.status };
   wrapped.context = { status: response?.status, response };
   throw wrapped;
@@ -609,6 +648,7 @@ export async function sendMessage(
       mergeServerRow(cache, message),
     );
   } catch (err) {
+    refreshTimeoutIfRefused(ctx.queryClient, err);
     const classified = classifyChatError(err);
     const { terminal, status } = classified;
     // A 429 reads as the one-minute sentence, unless it is a busy server's,
@@ -1075,6 +1115,7 @@ export async function react(
         false,
       ),
     );
+    refreshTimeoutIfRefused(ctx.queryClient, err);
     const { message } = classifyChatError(err);
     ctx.toast?.({
       title: "Couldn't react",
@@ -1152,6 +1193,7 @@ async function writeHeldRow(
       mergeHeldServerRow(cache, data as RawChatMessage),
     );
   } catch (err) {
+    refreshTimeoutIfRefused(ctx.queryClient, err);
     const { message } = classifyChatError(err);
     ctx.toast?.({ title, description: message, variant: "destructive" });
     ctx.onError?.({ title, description: message });
@@ -1486,6 +1528,7 @@ export async function actOnCard(
       );
     }
   } catch (err) {
+    refreshTimeoutIfRefused(ctx.queryClient, err);
     const { message } = classifyChatError(err);
     ctx.toast?.({
       title: "Couldn't record action",

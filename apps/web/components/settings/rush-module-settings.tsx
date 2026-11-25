@@ -22,6 +22,10 @@ import {
 } from "./rush-recruitment-picks";
 import { RushStaleDaysRow } from "./rush-stale-days";
 import { RushTagList } from "./rush-tag-list";
+import {
+  InterestFormRow,
+  InterestFormSettingsSection,
+} from "./interest-form-settings";
 
 /** The key that lets a role read recruitment notes. */
 export const RUSH_READ_NOTES = "rush:read_notes";
@@ -29,13 +33,14 @@ export const RUSH_READ_NOTES = "rush:read_notes";
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
  * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live), in
- * the settings-rows shape (#6030): a Rules group with the two day counts typed
- * in place (follow-ups #5934, bids) and a row each for the stages and the
- * tags, which open their own pages; then who an accepted prospect joins as
- * and who hears about sign-ups (#5973). One page, no second recruitment
- * settings screen. The stages and tags read through the pipeline's routes, so
- * they show only to a viewer who can open the pipeline while the module is
- * on; `rush:manage` edits them.
+ * the settings-rows shape (#6030): the interest form (#5977) as a row with
+ * whether it's open, opening its own page; a Rules group with the two day
+ * counts typed in place (follow-ups #5934, bids) and a row each for the
+ * stages and the tags, which open their own pages; then who an accepted
+ * prospect joins as and who hears about sign-ups (#5973). One page, no
+ * second recruitment settings screen. The stages, tags and form read through
+ * the pipeline's routes, so they show only to a viewer who can open the
+ * pipeline while the module is on; `rush:manage` edits them.
  */
 export function RushModuleSettings({
   moduleOn,
@@ -54,6 +59,11 @@ export function RushModuleSettings({
 
   return (
     <div className="space-y-8">
+      {moduleOn && access.view ? (
+        <SettingsGroup label="Interest form">
+          <InterestFormRow href={pageHref("interest-form")} />
+        </SettingsGroup>
+      ) : null}
       {moduleOn && access.view ? (
         pipeline.data ? (
           <SettingsGroup heading="Rules">
@@ -98,6 +108,12 @@ export function RushModuleSettings({
       ) : null}
     </div>
   );
+}
+
+/** Recruitment → Interest form, the page its row opens. */
+export function RushInterestFormPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  return <InterestFormSettingsSection canManage={access.manage} />;
 }
 
 /** Recruitment → Stages, the page its row opens. */

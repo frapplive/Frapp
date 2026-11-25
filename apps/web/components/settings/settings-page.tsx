@@ -63,7 +63,10 @@ import {
   isModuleSettingsTab,
   shownModuleSettings,
 } from "@/components/settings/settings-modules";
-import { chapterProfileSaveBody } from "@/components/settings/chapter-profile-save-body";
+import {
+  chapterProfileSaveBody,
+  readChapterBranding,
+} from "@repo/hooks/chapter-tab";
 import {
   ModuleSettingsPage,
   type ModulePage,
@@ -71,6 +74,7 @@ import {
 import {
   RUSH_READ_NOTES,
   RushModuleSettings,
+  RushInterestFormPage,
   RushNotesAccess,
   RushStagesPage,
   RushTagsPage,
@@ -131,15 +135,6 @@ import {
   SettingsBodySkeleton,
   SettingsTabSkeleton,
 } from "@/components/settings/settings-skeleton";
-
-type Branding = {
-  greek_letters?: string;
-  short_name?: string;
-  show_greek_letters?: boolean;
-  designation?: string;
-  school_short?: string;
-  founded_at?: number;
-};
 
 // Fallback shown before the config query resolves. Mirrors the API's
 // chapter_dues_config defaults for an unconfigured chapter.
@@ -479,33 +474,8 @@ function SettingsPageContent() {
   // name the pledge class tab and everything in it (#3939).
   const classTerm = vocab("class", chapterWords);
   const orderTerm = vocab("order", chapterWords);
-  const brandingRaw = config?.branding ?? {};
-  const branding: Branding = {
-    greek_letters:
-      typeof brandingRaw.greek_letters === "string"
-        ? brandingRaw.greek_letters
-        : undefined,
-    short_name:
-      typeof brandingRaw.short_name === "string"
-        ? brandingRaw.short_name
-        : undefined,
-    show_greek_letters:
-      typeof brandingRaw.show_greek_letters === "boolean"
-        ? brandingRaw.show_greek_letters
-        : undefined,
-    designation:
-      typeof brandingRaw.designation === "string"
-        ? brandingRaw.designation
-        : undefined,
-    school_short:
-      typeof brandingRaw.school_short === "string"
-        ? brandingRaw.school_short
-        : undefined,
-    founded_at:
-      typeof brandingRaw.founded_at === "number"
-        ? brandingRaw.founded_at
-        : undefined,
-  };
+  // Key by key, so one malformed key doesn't empty the rest (#2844).
+  const branding = readChapterBranding(config?.branding);
   const enabledModules = config?.enabled_modules;
   const workflows = config?.workflows ?? [];
   const dues = config?.dues ?? DEFAULT_DUES;
@@ -706,6 +676,11 @@ function SettingsPageContent() {
       // off, so their pages exist only where their rows do.
       if (moduleOn(key) && rushPipelineAccess(permissions).view) {
         pages.push(
+          {
+            id: "interest-form",
+            title: "Interest form",
+            body: <RushInterestFormPage />,
+          },
           { id: "stages", title: "Stages", body: <RushStagesPage /> },
           { id: "tags", title: "Tags", body: <RushTagsPage /> },
         );

@@ -6,16 +6,25 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  Timer,
   UserMinus,
 } from "lucide-react";
 import { SectionSkeleton } from "@/components/shared/page-skeletons";
 import { SkeletonText } from "@/components/shared/async-states";
 import {
+  useLiftChatTimeout,
   useMemberByUserId,
   useMemberDisplayNames,
   useMyPermissions,
+  useNowDate,
   useRemoveMember,
 } from "@repo/hooks";
+import { errorCopy } from "@repo/hooks/error-copy";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
+import { TimeoutMemberDialog } from "./timeout-member-dialog";
 import {
   BIRTHDAY_COPY,
   can,
@@ -255,6 +264,11 @@ export function MemberDetailSheet({
   // paid-ops, so the item is held while the chapter's plan blocks writes.
   const [adjusting, setAdjusting] = useState(false);
   if (!open && adjusting) setAdjusting(false);
+  // Time out (#6006): the dialog the chat's message menu opens too.
+  const [timingOut, setTimingOut] = useState(false);
+  if (!open && timingOut) setTimingOut(false);
+  const liftTimeout = useLiftChatTimeout();
+  const now = useNowDate();
   const adjustGate = useSubscriptionGate();
   const moduleGate = useChapterModuleGateState();
   const pointsOn =
@@ -339,6 +353,41 @@ export function MemberDetailSheet({
     dmTargetUserId !== currentUserId &&
     can("points:adjust", myPermissions);
   const canSeeLedger = pointsOn && can("points:view_all", myPermissions);
+  // The API's answer (`viewer_can_timeout`: `members:timeout`, not your own
+  // profile, not the President, and ranked below you), from the profile read
+  // only, like Remove's. The running timeout comes with it, to the member
+  // and to whoever can time out.
+  const canTimeOut =
+    !!memberId &&
+    !memberQuery.isError &&
+    fetched?.viewer_can_timeout === true &&
+    dmTargetUserId !== currentUserId;
+  const timeoutLine = runningTimeoutLine(
+    stringField(fetched, "chat_timeout_until"),
+    stringField(fetched, "chat_timeout_reason"),
+    now,
+  );
+
+  async function handleLiftTimeout() {
+    if (!memberId) return;
+    const confirmed = await confirm({
+      title: CHAT_TIMEOUT_COPY.liftConfirmTitle(displayName),
+      description: CHAT_TIMEOUT_COPY.liftConfirmBody,
+      confirmLabel: CHAT_TIMEOUT_COPY.lift,
+    });
+    if (!confirmed) return;
+    try {
+      await liftTimeout.mutateAsync({ memberId });
+    } catch (error) {
+      toast({
+        title: CHAT_TIMEOUT_COPY.liftFailed,
+        description: errorCopy(error, CHAT_TIMEOUT_COPY.liftFailed, {
+          serverWritesForMembers: true,
+        }),
+        variant: "destructive",
+      });
+    }
+  }
 
   async function handleRemoveMember() {
     if (!memberId) return;
@@ -395,10 +444,10 @@ export function MemberDetailSheet({
         */}
         <PanelHeader
           actions={
-            canRemove || canCorrect || canAdjustPoints ? (
+            canRemove || canCorrect || canAdjustPoints || canTimeOut ? (
               <ActionMenuButton
                 label={memberMenuButtonLabel(displayName)}
-                busy={removeMemberMutation.isPending}
+                busy={removeMemberMutation.isPending || liftTimeout.isPending}
                 entries={[
                   // Most used first; the one aimed at the person's place in
                   // the chapter stays last (rulebook § 2).
@@ -424,6 +473,26 @@ export function MemberDetailSheet({
                           icon: Pencil,
                           onSelect: () => setCorrecting(true),
                         },
+                      ]
+                    : []),
+                  // Moderation, before the removal it stops short of.
+                  ...(canTimeOut
+                    ? [
+                        timeoutLine
+                          ? {
+                              type: "item" as const,
+                              key: "lift-timeout",
+                              label: CHAT_TIMEOUT_COPY.lift,
+                              icon: Timer,
+                              onSelect: () => void handleLiftTimeout(),
+                            }
+                          : {
+                              type: "item" as const,
+                              key: "time-out",
+                              label: CHAT_TIMEOUT_COPY.action,
+                              icon: Timer,
+                              onSelect: () => setTimingOut(true),
+                            },
                       ]
                     : []),
                   ...(canRemove
@@ -466,6 +535,9 @@ export function MemberDetailSheet({
             </PanelTitle>
             {meta ? (
               <p className="text-caption text-muted-foreground">{meta}</p>
+            ) : null}
+            {timeoutLine ? (
+              <p className="text-caption text-warning">{timeoutLine}</p>
             ) : null}
           </div>
 
@@ -708,6 +780,14 @@ export function MemberDetailSheet({
             open={adjusting}
             onOpenChange={setAdjusting}
             member={{ userId: dmTargetUserId, name: displayName }}
+          />
+        ) : null}
+        {canTimeOut && dmTargetUserId ? (
+          <TimeoutMemberDialog
+            target={
+              timingOut ? { userId: dmTargetUserId, name: displayName } : null
+            }
+            onClose={() => setTimingOut(false)}
           />
         ) : null}
         {memberId && canCorrect ? (

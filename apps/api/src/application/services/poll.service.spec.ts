@@ -167,6 +167,8 @@ describe('PollService', () => {
 
     mockMemberRepo = {
       completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUser: jest.fn(),
       findByUserAndChapter: jest.fn(),

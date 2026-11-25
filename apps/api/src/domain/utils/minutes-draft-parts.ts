@@ -1,4 +1,8 @@
-import { MEETING_NOTES_COPY, type MeetingDraftOutput } from '@repo/validation';
+import {
+  MEETING_NOTES_COPY,
+  MEETING_TEXT_MAX_LENGTH,
+  type MeetingDraftOutput,
+} from '@repo/validation';
 import type { MinutesDraftRequest } from './minutes-draft';
 import { interleavedBullets } from './minutes-text';
 
@@ -133,6 +137,22 @@ function lines(texts: readonly string[]): string {
 }
 
 /**
+ * Every part's notes as one outline: topic blocks keep their blank line
+ * between parts, and a meeting whose notes pass the section's limit ends at
+ * a whole line, never mid-point (the verifier's own cut is a plain slice).
+ * These are the notes a draft keeps when the notes pass wrote none.
+ */
+export function notesOfParts(parts: readonly MeetingDraftOutput[]): string {
+  const joined = parts
+    .map((part) => part.discussion_log.trim())
+    .filter((text) => text.length > 0)
+    .join('\n\n');
+  if (joined.length <= MEETING_TEXT_MAX_LENGTH) return joined;
+  const cut = joined.lastIndexOf('\n', MEETING_TEXT_MAX_LENGTH);
+  return (cut > 0 ? joined.slice(0, cut) : joined).trimEnd();
+}
+
+/**
  * The parts' drafts as one draft, in meeting order, for when the review
  * pass can't run: the parts' summaries joined, every item kept once.
  */
@@ -159,11 +179,7 @@ export function mergeParts(
     officer_reports: lines(parts.map((part) => part.officer_reports)),
     old_business: lines(parts.map((part) => part.old_business)),
     new_business: lines(parts.map((part) => part.new_business)),
-    // Topic blocks keep their blank line between parts.
-    discussion_log: parts
-      .map((part) => part.discussion_log.trim())
-      .filter((text) => text.length > 0)
-      .join('\n\n'),
+    discussion_log: notesOfParts(parts),
     // A bullet from each part in turn, so the verifier's first few cover the
     // whole meeting. The review pass, when it runs, writes one for all of it.
     tldr: interleavedBullets(parts.map((part) => part.tldr ?? '')),

@@ -77,10 +77,18 @@ export const SCREEN_TITLES = {
   // Tasks and, since #3930, events: `AI_SUGGESTION_COPY.listHeading`.
   "suggested-tasks": "Suggested",
   "arrange-channels": "Arrange channels",
+  // One channel's settings (#6031), titled by the channel's name, which a
+  // capsule has no room for.
+  "channel-settings": "Channel settings",
   "chapter-settings": "Chapter settings",
   "chapter-roles": "Roles and groups",
   // Pushed from Chapter settings (Paul, 2026-11-21).
   "chapter-logs": "Logs",
+  // The Chapter rows' pages (#6027), titled as web's.
+  "chapter-mark": "Chapter mark",
+  "chapter-identity": "Identity & founding",
+  "chapter-type": "Organization type",
+  "chapter-vocabulary": "Vocabulary",
   // A tier's and a role's pages are titled by their own name, which a
   // capsule has no room for, so both read as the list they belong to.
   "role-tier": "Roles",

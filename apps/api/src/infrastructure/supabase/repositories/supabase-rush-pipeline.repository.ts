@@ -20,6 +20,7 @@ import type {
 import type {
   RushCandidate,
   RushCandidateRow,
+  RushCandidateTableRow,
 } from '#domain/entities/rush-candidate.entity';
 
 @Injectable()
@@ -99,7 +100,7 @@ export class SupabaseRushPipelineRepository implements IRushPipelineRepository {
     return this.listStages(chapterId);
   }
 
-  async listCandidates(chapterId: string): Promise<RushCandidateRow[]> {
+  async listCandidates(chapterId: string): Promise<RushCandidateTableRow[]> {
     const { data, error } = await this.supabase
       .from('rush_candidates')
       .select('*')

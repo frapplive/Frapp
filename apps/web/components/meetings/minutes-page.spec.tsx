@@ -140,6 +140,11 @@ vi.mock("@/components/meetings/coming-up-post-review", () => ({
   },
 }));
 
+// Each action item's Create task has its own spec (#6051).
+vi.mock("@/components/meetings/action-item-task", () => ({
+  useActionItemTaskRow: () => undefined,
+}));
+
 vi.mock("@/components/ai/suggested-tasks", () => ({
   SuggestedTasks: ({ source }: { source: { type: string; id: string } }) => (
     <div data-testid="suggested-tasks">{`${source.type}:${source.id}`}</div>

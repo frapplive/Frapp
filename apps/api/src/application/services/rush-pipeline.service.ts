@@ -236,7 +236,10 @@ export class RushPipelineService {
           closed_reason: candidate.closed_reason,
           bid_status: candidate.bid_status,
           created_by: candidate.created_by,
-          created_by_name: names.get(candidate.created_by) ?? 'Unknown member',
+          created_by_name: candidate.created_by
+            ? (names.get(candidate.created_by) ?? 'Unknown member')
+            : null,
+          origin: candidate.origin,
           created_at: candidate.created_at,
           tag_ids: (tagIds.get(candidate.id) ?? []).map((row) => row.tag_id),
           ...(results

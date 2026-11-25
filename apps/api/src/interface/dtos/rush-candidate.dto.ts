@@ -106,8 +106,14 @@ export class CreateRushCandidateResponseDto implements RushCandidate {
   })
   bid_state: RushBidState;
 
-  @ApiProperty({ format: 'uuid' })
-  created_by: string;
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      "Who added the candidate; null for one the PNM's own interest form created (#5977).",
+  })
+  created_by: string | null;
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;
@@ -158,8 +164,14 @@ export class RushCandidateViewDto implements RushCandidateView {
   })
   bid_state: RushBidState;
 
-  @ApiProperty({ format: 'uuid' })
-  created_by: string;
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      "Who added the candidate; null for one the PNM's own interest form created (#5977).",
+  })
+  created_by: string | null;
 
   @ApiProperty({ format: 'date-time' })
   created_at: string;

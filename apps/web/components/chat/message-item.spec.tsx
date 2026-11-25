@@ -2344,6 +2344,36 @@ describe("MessageItem Forward (#4907)", () => {
   });
 });
 
+describe("MessageItem Time out (#6006)", () => {
+  it("puts Time out after Report and before Block, and hands over the message", async () => {
+    const onTimeOut = vi.fn();
+    renderItemWithProps({
+      onReport: vi.fn(),
+      onBlock: vi.fn(),
+      onTimeOut,
+      isMember: () => true,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Report message", "Time out", "Block Alice Chen"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Time out" }));
+    expect(onTimeOut).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "msg-1" }),
+    );
+  });
+
+  it("never on the viewer's own message", () => {
+    renderItemWithProps({
+      message: message({ sender_id: VIEWER }),
+      onTimeOut: vi.fn(),
+    });
+    expect(
+      screen.queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("MessageItem Report and Block (#2687)", () => {
   const everyoneIsMember = () => true;
 

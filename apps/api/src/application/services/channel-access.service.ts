@@ -8,7 +8,11 @@ import {
 import {
   AUDIT_LOG_READ_ONLY_REFUSAL,
   auditLogAllowsChange,
+  CHAT_TIMED_OUT_CODE,
+  CHAT_TIMED_OUT_REFUSAL,
+  chatTimeoutApplies,
   EVERYONE_MEMBER_LIST_HEADING,
+  isChatTimeoutActive,
   type ChatMessageChange,
 } from '@repo/validation';
 import {
@@ -51,7 +55,42 @@ export const AUDIT_LOG_READ_ONLY_MESSAGE = AUDIT_LOG_READ_ONLY_REFUSAL;
  * accepted, so every change says which it is.
  */
 export type MessageOperation =
-  Exclude<ChannelOperation, 'modify'> | ChatMessageChange;
+  Exclude<ChannelOperation, 'modify'> | ChatMessageChange | 'react';
+
+/**
+ * What a channel is authorized for here: a {@link ChannelOperation}, or
+ * `react`, an emoji reaction. A reaction is a `read` to the channel predicate
+ * (any reader may react, even in a read-only channel), but a timeout refuses
+ * it as it refuses a post (#6006).
+ */
+export type ChannelAccessOperation = ChannelOperation | 'react';
+
+/**
+ * The operations a chat timeout refuses (#6006, `spec/behavior/chat/README.md`
+ * § Timeouts): anything that puts the member's words or reactions in a
+ * channel. A send, an edit, an upload, a card or poll posted in a channel
+ * and a scheduled send are `post`; a thread reply is `thread`. Votes, a
+ * form's answers and sign-ups (`vote`, `answer`), closing one's own poll
+ * (`close`) and deleting one's own message (`modify`) stay open: they add
+ * nothing anyone can be spammed with.
+ */
+const TIMEOUT_REFUSES: ReadonlySet<ChannelAccessOperation> = new Set([
+  'post',
+  'thread',
+  'react',
+]);
+
+/**
+ * The coded 403 for a write a timeout refuses (#6006). The message is the
+ * member-facing sentence; the clients key on the code and read until when
+ * from `GET /v1/chat/timeout`.
+ */
+export function chatTimedOutRefusal(): ForbiddenException {
+  return new ForbiddenException({
+    code: CHAT_TIMED_OUT_CODE,
+    message: CHAT_TIMED_OUT_REFUSAL,
+  });
+}
 
 const MESSAGE_CHANGES: ReadonlySet<string> = new Set<ChatMessageChange>([
   'delete',
@@ -68,7 +107,9 @@ function isMessageChange(
 }
 
 /** The channel operation a message operation authorizes as. */
-function channelOperationOf(operation: MessageOperation): ChannelOperation {
+function channelOperationOf(
+  operation: MessageOperation,
+): ChannelAccessOperation {
   return isMessageChange(operation) ? 'modify' : operation;
 }
 
@@ -297,8 +338,9 @@ export class ChannelAccessService {
     channelId: string,
     chapterId: string,
     userId: string,
-    operation: ChannelOperation = 'read',
+    access: ChannelAccessOperation = 'read',
   ): Promise<ChatChannel> {
+    const operation: ChannelOperation = access === 'react' ? 'read' : access;
     const channel = await this.channelRepo.findById(channelId, chapterId);
     if (!channel) {
       throw new NotFoundException('Channel not found');
@@ -349,6 +391,18 @@ export class ChannelAccessService {
         throw new ForbiddenException(AUDIT_LOG_READ_ONLY_MESSAGE);
       }
       throw new ForbiddenException('You do not have access to this channel');
+    }
+
+    // A timeout (#6006) refuses what the channel would otherwise take: after
+    // the predicate, so a member who can't see a channel still reads as
+    // having no access to it. Off the member row read above, so the hot path
+    // pays nothing for it.
+    if (
+      TIMEOUT_REFUSES.has(access) &&
+      chatTimeoutApplies(channel) &&
+      isChatTimeoutActive(member?.chat_timeout_until)
+    ) {
+      throw chatTimedOutRefusal();
     }
 
     return channel;

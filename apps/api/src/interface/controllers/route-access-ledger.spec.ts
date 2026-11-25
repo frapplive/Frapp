@@ -72,6 +72,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "Discord's OAuth redirect; the signed state parameter binds it to the officer who started it.",
   'CalendarFeedFetchController.fetch':
     "A calendar app fetches a member's .ics feed; the 256-bit token in the query is the credential, checked in the service.",
+  'DesktopUpdateController.file':
+    "The desktop app's updater asks before anyone signs in (#4843); it redirects to a time-limited link for a release file, the installer anyone may download, and only for the file names a release publishes.",
   'GoogleCalendarCallbackController.callback':
     "Google's OAuth redirect; connects nothing, only sends the browser back to where the sign-in started, whose signed-in member finishes it.",
   'InviteDetailsController.details':
@@ -82,6 +84,18 @@ const PUBLIC_ROUTES: Record<string, string> = {
     "The page a recorded bid acceptance's email opens on (#5973), for a PNM who may have no account; the 256-bit token in the body is the credential (only its hash is stored), and it shows only the chapter, who recorded it and whether it waits.",
   'RushBidConfirmationController.confirm':
     "The PNM's one tap confirming an acceptance a member recorded (#5973); the same token is the credential, it accepts only a waiting acceptance on an open bid, and a used token matches nothing.",
+  'PublicInterestFormController.get':
+    "A chapter's interest form at /f/<form-slug> (ADR-27, #5977); the slug names one form, and it answers only the form's public fields.",
+  'PublicInterestFormController.startCode':
+    "Sends the form's one-time code before anything else shows (#5977); ceilings per address and per IP in start_interest_form_code.",
+  'PublicInterestFormController.verify':
+    "Checks the form code (#5977); a match answers a proof and the address's own last details, nothing else.",
+  'PublicInterestFormController.submit':
+    'Submits the form (#5977); the single-use proof a matched code minted is the credential, checked in submit_interest_form.',
+  'PublicInterestFormController.previewWithdrawal':
+    'What a "Withdraw or delete my info" link is for (#5977); the single-purpose emailed token is the credential, and it answers only the chapter\'s name.',
+  'PublicInterestFormController.withdraw':
+    'Withdraws from a chapter or deletes the recruitment information (#5977); the single-purpose emailed token is the credential, spent by the call.',
   'DevLogController.post':
     'Posts to the dev-log channel; guarded by DevLogTokenGuard (a shared secret), not a user session.',
 };
