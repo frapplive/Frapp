@@ -704,6 +704,23 @@ describe('AttendanceService', () => {
       await expect(service.mintCheckInToken('evt-1', 'ch-1')).rejects.toThrow(
         ConflictException,
       );
+      await expect(
+        service.reportCheckInScreen('evt-1', 'ch-1', 'officer-1', {
+          lat: 1,
+          lng: 1,
+          accuracy: 5,
+        } as never),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.updateStatus(
+          'evt-1',
+          'user-1',
+          'ch-1',
+          'PRESENT',
+          null,
+          'officer',
+        ),
+      ).rejects.toThrow(ConflictException);
       expect(mockAttendanceRepo.checkInAtomic).not.toHaveBeenCalled();
     });
 

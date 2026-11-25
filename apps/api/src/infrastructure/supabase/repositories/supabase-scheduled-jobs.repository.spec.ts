@@ -56,6 +56,7 @@ function makeSupabase(pages: Page[]) {
     'order',
     'is',
     'neq',
+    'gt',
   ]) {
     builder[method] = jest.fn(() => builder);
   }
@@ -295,9 +296,24 @@ describe('SupabaseScheduledJobsRepository', () => {
     });
   });
 
+  describe('findEventsStartingBetween', () => {
+    it('reads only timed events that take attendance (#6098)', async () => {
+      const { repo, supabase } = await buildRepo([{ data: [], error: null }]);
+
+      await repo.findEventsStartingBetween(
+        new Date('2026-08-05T10:00:00Z'),
+        new Date('2026-08-05T10:30:00Z'),
+      );
+
+      // A dated event's start is a midnight bound, not a time to remind at.
+      expect(supabase.builder.eq).toHaveBeenCalledWith('timing', 'timed');
+      expect(supabase.builder.eq).toHaveBeenCalledWith('calendar_only', false);
+    });
+  });
+
   describe('findEventsPendingAutoAbsent', () => {
     it('drops events whose required_role_ids is an empty array', async () => {
-      const { repo } = await buildRepo([
+      const { repo, supabase } = await buildRepo([
         {
           data: [
             {
@@ -337,6 +353,9 @@ describe('SupabaseScheduledJobsRepository', () => {
         'evt-mandatory',
         'evt-targeted',
       ]);
+      // Nobody is held to an event that takes no attendance (#6098).
+      expect(supabase.builder.eq).toHaveBeenCalledWith('calendar_only', false);
+      expect(supabase.builder.neq).toHaveBeenCalledWith('timing', 'time_tbd');
       // The service only needs these three fields; the filter columns stay in
       // the repository.
       expect(result[0]).toEqual({

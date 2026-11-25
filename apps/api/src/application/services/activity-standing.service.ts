@@ -3,6 +3,7 @@ import {
   MAX_CHECK_IN_OPENS_MINUTES,
   checkInWindowBounds,
   isModuleEnabled,
+  eventTakesAttendance,
 } from '@repo/validation';
 import { ATTENDANCE_REPOSITORY } from '#domain/repositories/attendance.repository.interface';
 import type { IAttendanceRepository } from '#domain/repositories/attendance.repository.interface';
@@ -356,6 +357,9 @@ export class ActivityStandingService {
     const required = events.filter(
       (event) =>
         (from === null || new Date(event.start_time) > from) &&
+        // Nobody can attend one that takes no attendance (#6098), so it
+        // counts neither way.
+        eventTakesAttendance(event) &&
         memberAttendance(event, member.role_ids, alumniRoleId) === 'required',
     );
     if (required.length === 0) return { required: 0, attended: 0, excused: 0 };

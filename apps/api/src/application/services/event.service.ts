@@ -39,6 +39,7 @@ import {
   checkSeriesLength,
   isRepeatRule,
   eventLimitsAudience,
+  eventIsDated,
   eventOthersInvited,
   eventTakesAttendance,
 } from '@repo/validation';
@@ -420,6 +421,17 @@ export class EventService {
       required_role_ids: input.required_role_ids,
       excluded_role_ids: input.excluded_role_ids,
     });
+    // A chat card is a snapshot of start and end times (#1717), which a
+    // dated or calendar-only event would misstate; `/event` can make
+    // neither, so only a direct POST reaches this (#6098).
+    if (
+      (when.timing !== 'timed' || input.calendar_only) &&
+      (input.channel_id || input.client_message_id)
+    ) {
+      throw new BadRequestException(
+        'An all-day, time-TBD or calendar-only event cannot post a chat card yet. Create it without channel_id/client_message_id.',
+      );
+    }
     if (limitsAudience && (input.channel_id || input.client_message_id)) {
       throw new BadRequestException(
         'An event that leaves anyone out cannot post a chat card: the card ' +
@@ -595,7 +607,38 @@ export class EventService {
             'A repeating event needs a time for now; change this one event, or make it timed.',
           );
         }
-        input = { ...rawInput, ...when };
+        // A time edit to a timed event goes through as sent, as before:
+        // the series rules read which of start and end it names. Every
+        // other change writes the shape whole.
+        if (when.timing !== 'timed' || eventIsDated(existing)) {
+          input = { ...rawInput, ...when };
+        }
+      }
+    }
+
+    // A repeat rule added on its own to a dated event is refused like one
+    // sent with a dated timing above (#6098).
+    if (rawInput.recurrence_rule && input === rawInput) {
+      existing ??= await this.findById(id, chapterId);
+      if (eventIsDated(existing) && rawInput.timing === undefined) {
+        throw new BadRequestException(
+          'A repeating event needs a time for now; make it timed first.',
+        );
+      }
+    }
+
+    // On the calendar only is the whole series' or nothing (#6098): a series
+    // edit spreads points and Required to every upcoming meeting, which one
+    // calendar-only meeting among them couldn't hold.
+    if (rawInput.calendar_only !== undefined && scope === 'instance') {
+      existing ??= await this.findById(id, chapterId);
+      if (
+        rawInput.calendar_only !== existing.calendar_only &&
+        (existing.parent_event_id !== null || !!existing.recurrence_rule)
+      ) {
+        throw new BadRequestException(
+          'Put a repeating event on the calendar only for all upcoming events, not for one of them.',
+        );
       }
     }
 

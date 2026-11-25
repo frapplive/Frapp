@@ -2,12 +2,17 @@ import { BadRequestException } from '@nestjs/common';
 import {
   addEventDays,
   eventDatesProblem,
+  eventDayNumber,
   eventTiming,
   isEventTiming,
   type EventTiming,
 } from '@repo/validation';
 import type { Event } from '#domain/entities/event.entity';
-import { localDateIn, zonedTimeToUtc } from '#domain/utils/zoned-time';
+import {
+  localDateIn,
+  validTimeZone,
+  zonedTimeToUtc,
+} from '#domain/utils/zoned-time';
 
 /**
  * When an event happens, as a create or update sends it
@@ -32,19 +37,6 @@ export interface EventTimingColumns {
   end_time: string;
 }
 
-/** The zone a dated event's bounds are written in when a request names none. */
-const FALLBACK_ZONE = 'UTC';
-
-function validZone(zone: string | null | undefined): string {
-  if (!zone) return FALLBACK_ZONE;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: zone });
-    return zone;
-  } catch {
-    return FALLBACK_ZONE;
-  }
-}
-
 /**
  * A dated event's columns: its days, and as `start_time`/`end_time` the
  * local midnight that starts its first day and the one that ends its last,
@@ -61,7 +53,7 @@ function datedColumns(
   if (problem) throw new BadRequestException(problem);
   const start = startDate as string;
   const end = timing === 'time_tbd' ? start : (endDate ?? start);
-  const tz = validZone(zone);
+  const tz = validTimeZone(zone);
   const dayAfter = addEventDays(end, 1) as string;
   const startAt = zonedTimeToUtc(start, '00:00', tz);
   const endAt = zonedTimeToUtc(dayAfter, '00:00', tz);
@@ -165,32 +157,63 @@ export function resolveUpdateTiming(
         'A timed event has no start_date or end_date; send start_time and end_time.',
       );
     }
-    const wasTimed = current === 'timed';
-    return timedColumns(
-      input.start_time ?? (wasTimed ? existing.start_time : undefined),
-      input.end_time ?? (wasTimed ? existing.end_time : undefined),
-    );
+    if (current === 'timed') {
+      return timedColumns(
+        input.start_time ?? existing.start_time,
+        input.end_time ?? existing.end_time,
+      );
+    }
+    // A dated event's stored instants are midnight bounds, never a time, so
+    // a bound the request leaves out is an hour from the one it sends (a
+    // build from before #6098 sends only the bound it changed).
+    const start =
+      input.start_time ??
+      (input.end_time ? shiftIso(input.end_time, -HOUR_MS) : undefined);
+    const end =
+      input.end_time ??
+      (input.start_time ? shiftIso(input.start_time, HOUR_MS) : undefined);
+    return timedColumns(start, end);
   }
   // A timed event made all-day or TBD keeps the day it was on.
   const startDate =
     input.start_date !== undefined
       ? input.start_date
       : (existing.start_date ??
-        localDateIn(new Date(existing.start_time), validZone(zone)));
-  // A new first day with no last day sent keeps the event's length.
-  let endDate =
-    input.end_date !== undefined ? input.end_date : existing.end_date;
-  if (
-    input.start_date &&
-    input.end_date === undefined &&
-    existing.start_date &&
-    existing.end_date &&
-    current === 'all_day'
-  ) {
-    const span =
-      (Date.parse(existing.end_date) - Date.parse(existing.start_date)) /
-      86_400_000;
-    endDate = addEventDays(input.start_date, Math.round(span));
+        localDateIn(new Date(existing.start_time), validTimeZone(zone)));
+  return datedColumns(
+    timing,
+    startDate,
+    datedEndDate(timing, current, input, existing, startDate),
+    zone,
+  );
+}
+
+/**
+ * The last day a dated update lands on when it doesn't send one: a TBD event
+ * is one day; an all-day event that already ran several days keeps its
+ * length from its (possibly new) first day; anything else is one day.
+ */
+function datedEndDate(
+  timing: Exclude<EventTiming, 'timed'>,
+  current: EventTiming,
+  input: EventTimingInput,
+  existing: Pick<Event, 'start_date' | 'end_date'>,
+  startDate: string | null | undefined,
+): string | null | undefined {
+  if (input.end_date !== undefined) return input.end_date;
+  if (timing === 'time_tbd' || !startDate) return startDate;
+  if (current === 'all_day' && existing.start_date && existing.end_date) {
+    const from = eventDayNumber(existing.start_date);
+    const to = eventDayNumber(existing.end_date);
+    if (from !== null && to !== null) return addEventDays(startDate, to - from);
   }
-  return datedColumns(timing, startDate, endDate, zone);
+  return startDate;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** `iso` moved by `ms`, or `iso` itself when it doesn't parse (refused later). */
+function shiftIso(iso: string, ms: number): string {
+  const at = Date.parse(iso);
+  return Number.isNaN(at) ? iso : new Date(at + ms).toISOString();
 }

@@ -1,3 +1,4 @@
+import { addEventDays } from '@repo/validation';
 /**
  * The iCalendar text a calendar subscription link serves (#3322, RFC 5545).
  *
@@ -84,9 +85,7 @@ export function icsDate(day: string): string {
 
 /** The day after `day` (`YYYY-MM-DD`), as `YYYYMMDD`: an all-day `DTEND`. */
 function icsNextDate(day: string): string {
-  const [year, month, date] = day.split('-').map(Number);
-  const next = new Date(Date.UTC(year, month - 1, date + 1));
-  return next.toISOString().slice(0, 10).replace(/-/g, '');
+  return (addEventDays(day, 1) ?? day).replace(/-/g, '');
 }
 
 /**

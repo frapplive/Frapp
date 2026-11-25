@@ -206,10 +206,11 @@ export class CreateEventDto {
   @IsISO8601()
   end_time?: string;
 
+  // No `default:` here or on the two flags below: openapi-typescript would
+  // make a property with a default required in the clients' create type.
   @ApiPropertyOptional({
     enum: EVENT_TIMINGS,
-    default: 'timed',
-    description: TIMING_DESCRIPTION,
+    description: `${TIMING_DESCRIPTION} Omitted: timed.`,
   })
   @IsOptional()
   @IsIn(EVENT_TIMINGS)
@@ -235,14 +236,15 @@ export class CreateEventDto {
   @Matches(DAY_PATTERN, { message: 'end_date must be YYYY-MM-DD' })
   end_date?: string | null;
 
-  @ApiPropertyOptional({ default: false, description: TENTATIVE_DESCRIPTION })
+  @ApiPropertyOptional({
+    description: `${TENTATIVE_DESCRIPTION} Omitted: false.`,
+  })
   @IsOptional()
   @IsStrictBoolean()
   is_tentative?: boolean;
 
   @ApiPropertyOptional({
-    default: false,
-    description: CALENDAR_ONLY_DESCRIPTION,
+    description: `${CALENDAR_ONLY_DESCRIPTION} Omitted: false.`,
   })
   @IsOptional()
   @IsStrictBoolean()

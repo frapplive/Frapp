@@ -30178,8 +30178,7 @@
               "all_day",
               "time_tbd"
             ],
-            "default": "timed",
-            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed. Omitted: timed."
           },
           "start_date": {
             "type": "string",
@@ -30195,13 +30194,11 @@
           },
           "is_tentative": {
             "type": "boolean",
-            "default": false,
-            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative. Omitted: false."
           },
           "calendar_only": {
             "type": "boolean",
-            "default": false,
-            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. Omitted: false."
           },
           "point_value": {
             "type": "number",

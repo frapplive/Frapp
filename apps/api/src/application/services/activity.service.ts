@@ -2563,6 +2563,7 @@ export class ActivityService {
       if (isAlumni && !answer.byRole) continue;
       const required =
         answer.status === 'required' &&
+        eventTakesAttendance(event) &&
         (joinedAt === null || new Date(event.start_time).getTime() > joinedAt);
       const window = this.checkInWindowOf(event);
       if (

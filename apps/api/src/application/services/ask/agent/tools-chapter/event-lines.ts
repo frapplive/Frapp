@@ -7,6 +7,7 @@ import type { EventService } from '../../../event.service';
 import type { AgentToolContext } from '../agent-tool';
 import {
   DAY_MS,
+  longDay,
   longRange,
   matchByName,
   quoted,
@@ -128,35 +129,24 @@ export function eventHeadline(event: Event, context: AgentToolContext): string {
     event.is_tentative ? 'tentative: it might not happen' : null,
     event.calendar_only ? 'on the calendar only: no check-in or points' : null,
   ].filter((flag): flag is string => flag !== null);
-  return `${quoted(event.name)}${flags.length > 0 ? ` (${flags.join('; ')})` : ''}: ${eventWhenWords(event, context)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
-}
-
-/** A day written out from its `YYYY-MM-DD`, with no zone to shift it. */
-function longDay(day: string, withWeekday: boolean): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
-    timeZone: 'UTC',
-    ...(withWeekday ? { weekday: 'long' as const } : {}),
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return `${quoted(event.name)}${flags.length > 0 ? ` (${flags.join('; ')})` : ''}: ${eventWhenWords(event, context.timeZone)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
 }
 
 /**
  * When the event is, in words: its times, or for a dated event its days
  * (#6098), whose stored instants are only midnight bounds and never a time.
  */
-function eventWhenWords(event: Event, context: AgentToolContext): string {
+export function eventWhenWords(event: Event, timeZone: string): string {
   if (eventIsDated(event) && event.start_date) {
     if (eventTiming(event) === 'time_tbd') {
-      return `${longDay(event.start_date, true)}, time not set yet`;
+      return `${longDay(event.start_date, 'UTC')}, time not set yet`;
     }
     const last = event.end_date ?? event.start_date;
     return last === event.start_date
-      ? `${longDay(event.start_date, true)}, all day`
-      : `${longDay(event.start_date, true)} to ${longDay(last, true)}, all day`;
+      ? `${longDay(event.start_date, 'UTC')}, all day`
+      : `${longDay(event.start_date, 'UTC')} to ${longDay(last, 'UTC')}, all day`;
   }
-  return longRange(event.start_time, event.end_time, context.timeZone);
+  return longRange(event.start_time, event.end_time, timeZone);
 }
 
 export const ATTENDANCE_WORDS: Record<EventAttendanceStatus, string> = {

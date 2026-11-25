@@ -1,3 +1,4 @@
+import { addEventDays } from '@repo/validation';
 import { createHash } from 'node:crypto';
 import type { GoogleCalendarEventInput } from '#domain/adapters/google-calendar.interface';
 import type { IcsItem } from '../calendar-feed/ics';
@@ -67,9 +68,7 @@ function googleTimes(item: IcsItem): {
 }
 
 function nextDay(date: string): string {
-  const day = new Date(`${date}T00:00:00Z`);
-  day.setUTCDate(day.getUTCDate() + 1);
-  return day.toISOString().slice(0, 10);
+  return addEventDays(date, 1) ?? date;
 }
 
 /**

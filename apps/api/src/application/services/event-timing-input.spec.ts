@@ -169,4 +169,43 @@ describe('resolveUpdateTiming', () => {
       end_time: '2027-01-15T04:00:00.000Z',
     });
   });
+  it("moves a TBD event's day without its end being sent", () => {
+    const tbd = {
+      timing: 'time_tbd' as const,
+      start_date: '2027-01-14',
+      end_date: '2027-01-14',
+      start_time: '2027-01-14T05:00:00.000Z',
+      end_time: '2027-01-15T05:00:00.000Z',
+    };
+    expect(
+      resolveUpdateTiming({ start_date: '2027-01-20' }, tbd, NY),
+    ).toMatchObject({ start_date: '2027-01-20', end_date: '2027-01-20' });
+    expect(
+      resolveUpdateTiming(
+        { timing: 'all_day', start_date: '2027-01-20' },
+        tbd,
+        NY,
+      ),
+    ).toMatchObject({ start_date: '2027-01-20', end_date: '2027-01-20' });
+  });
+
+  it('makes a multi-day event TBD on its first day', () => {
+    expect(
+      resolveUpdateTiming({ timing: 'time_tbd' }, allDay, NY),
+    ).toMatchObject({ start_date: '2027-01-22', end_date: '2027-01-22' });
+  });
+
+  it('gives a dated event made timed by one bound an hour', () => {
+    expect(
+      resolveUpdateTiming(
+        { start_time: '2027-01-23T00:00:00.000Z' },
+        allDay,
+        NY,
+      ),
+    ).toMatchObject({
+      timing: 'timed',
+      start_time: '2027-01-23T00:00:00.000Z',
+      end_time: '2027-01-23T01:00:00.000Z',
+    });
+  });
 });
