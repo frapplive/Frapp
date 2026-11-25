@@ -690,7 +690,7 @@ const NOTIFY_EMITTERS: Record<string, { calls: number; entries: Entry[] }> = {
     entries: [
       {
         status: 'no-foreign-content',
-        why: "Tells a member about their own timeout: who set or lifted it, how long, and the reason the officer wrote for them. It quotes no chat message.",
+        why: 'Tells a member about their own timeout: who set or lifted it, how long, and the reason the officer wrote for them. It quotes no chat message.',
       },
     ],
   },
