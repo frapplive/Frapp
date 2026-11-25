@@ -39,19 +39,30 @@ export function everyoneOffered({
   );
 }
 
-/** `everyoneOffered` from the reads the board and Activity share. */
-export function useEveryoneOffered(): boolean {
+/**
+ * `everyoneOffered` from the reads the board and Activity share. The task read
+ * runs only when it can change the answer: with Tasks on (the module guard
+ * refuses `GET /v1/tasks` otherwise), permissions known, and no
+ * `tasks:manage`, whose holder is offered Everyone's without it (and whose
+ * read is the chapter's whole board).
+ */
+export function useEveryoneOffered(tasksOn: boolean): boolean {
   const permissions = useMyPermissions();
   const currentUser = useCurrentUser();
-  const tasksQuery = useTasks();
+  const canManage = can("tasks:manage", permissions.data?.permissions);
+  const permissionsKnown = permissions.data !== undefined;
+  const tasksQuery = useTasks({
+    enabled: tasksOn && permissionsKnown && !canManage,
+  });
   const viewerId = (currentUser.data as { id?: string } | undefined)?.id ?? "";
   const tasks = useMemo(
     () => asArray<BoardTask>(tasksQuery.data),
     [tasksQuery.data],
   );
+  if (!tasksOn) return false;
   return everyoneOffered({
-    canManage: can("tasks:manage", permissions.data?.permissions),
-    permissionsKnown: permissions.data !== undefined,
+    canManage,
+    permissionsKnown,
     viewerId,
     tasks,
   });

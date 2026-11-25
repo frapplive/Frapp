@@ -53,11 +53,10 @@ describe("the task card", () => {
     expect(screen.getByText("Jo Park")).toBeInTheDocument();
     expect(screen.getByText("Waiting on an officer")).toBeInTheDocument();
     expect(screen.getAllByText("To do")).toHaveLength(2);
-    // The first copy's link, which opens the task for everyone it is in.
-    expect(screen.getByRole("link", { name: "Open task" })).toHaveAttribute(
-      "href",
-      expect.stringMatching(/^\/activity\?task=/),
-    );
+    // Three members' tasks in one entry: Everyone's lists each (#5948).
+    expect(
+      screen.getByRole("link", { name: "Open in Everyone's" }),
+    ).toHaveAttribute("href", "/activity?view=everyone");
   });
 
   it("says who assigned the viewer's own task, from the hour grid's chip", async () => {
@@ -69,6 +68,11 @@ describe("the task card", () => {
     );
     expect(await screen.findByText("Assigned by Marcus")).toBeInTheDocument();
     expect(screen.getByText("Overdue")).toBeInTheDocument();
+    // One task opens in its panel on Activity (#5948).
+    expect(screen.getByRole("link", { name: "Open task" })).toHaveAttribute(
+      "href",
+      `/activity?task=${mine!.kind === "mine" ? mine!.taskId : ""}`,
+    );
   });
 });
 

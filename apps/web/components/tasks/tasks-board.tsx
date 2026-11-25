@@ -108,6 +108,8 @@ import {
 import { TaskPanel, type TaskPanelTarget } from "./task-panel";
 import { OpenTaskPanel, UpForGrabs } from "./up-for-grabs";
 import { SuggestionsStrip } from "./suggestions-strip";
+import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
+
 import { TasksPageSkeleton } from "@/components/tasks/tasks-skeleton";
 import {
   ActiveFilterChips,
@@ -115,6 +117,9 @@ import {
   type FilterMenuFilter,
 } from "@/components/shared/filter-menu";
 import { useListLayout, type ListLayout } from "@/lib/list-layout";
+
+/** The notifications Everyone's shows the subject of: suggested tasks. */
+const SUGGESTION_SCREENS = ["ai_suggestions"] as const;
 
 type Task = BoardTask;
 
@@ -263,12 +268,18 @@ function confirmedAt(task: Task): number {
  */
 function LinkedTaskParam({
   tasks,
+  ready,
   refetch,
+  onAsked,
   onOpen,
   onMissing,
 }: {
   tasks: Task[];
+  /** The board's read has answered; until then a link waits. */
+  ready: boolean;
   refetch: () => Promise<unknown>;
+  /** A link is in the address: the board's read must run for it. */
+  onAsked: () => void;
   onOpen: (target: { kind: "task" | "group"; id: string }) => void;
   onMissing: () => void;
 }) {
@@ -280,9 +291,9 @@ function LinkedTaskParam({
   const rereading = useRef<string | null>(null);
   const [reread, setReread] = useState<string | null>(null);
   // The board hands new callbacks each render; the link is acted on once.
-  const latest = useRef({ refetch, onOpen, onMissing });
+  const latest = useRef({ refetch, onAsked, onOpen, onMissing });
   useEffect(() => {
-    latest.current = { refetch, onOpen, onMissing };
+    latest.current = { refetch, onAsked, onOpen, onMissing };
   });
   useEffect(() => {
     if (!key) {
@@ -290,6 +301,8 @@ function LinkedTaskParam({
       return;
     }
     if (handled.current === key) return;
+    latest.current.onAsked();
+    if (!ready) return;
     let target: { kind: "task" | "group"; id: string } | null = null;
     if (groupId) {
       if (tasks.some((task) => task.group_id === groupId))
@@ -325,7 +338,7 @@ function LinkedTaskParam({
       "",
       `${url.pathname}${url.search}`,
     );
-  }, [key, groupId, taskId, tasks, reread]);
+  }, [key, groupId, taskId, tasks, reread, ready]);
   return null;
 }
 
@@ -346,7 +359,11 @@ export function TasksBoard({
   // for GET, and it remains the enforcement either way.
   const gate = useSubscriptionGate();
   const { confirm, confirmDialog } = useConfirmDialog();
-  const tasksQuery = useTasks();
+  // Mine draws no board, so it reads the tasks only once a `?task=` or
+  // `?group=` link asks for one (`LinkedTaskParam`), and keeps reading while
+  // the panel it opened is up. Activity's own read holds the member's tasks.
+  const [linkAsked, setLinkAsked] = useState(false);
+  const tasksQuery = useTasks({ enabled: part === "everyone" || linkAsked });
   // `none`: the server can't scope the read, so `useTasks` never sends it (#4094).
   const chapterScope = useChapterScope();
   const membersQuery = useMembers();
@@ -1107,11 +1124,12 @@ export function TasksBoard({
           sendingBack ? sendBack(sendingBack, body) : Promise.resolve()
         }
       />
-      {tasksQuery.data !== undefined ? (
-        <Suspense fallback={null}>
-          <LinkedTaskParam
+      <Suspense fallback={null}>
+        <LinkedTaskParam
           tasks={tasks}
+          ready={tasksQuery.data !== undefined}
           refetch={tasksQuery.refetch}
+          onAsked={() => setLinkAsked(true)}
           onOpen={setOpened}
           onMissing={() =>
             toast({
@@ -1119,9 +1137,8 @@ export function TasksBoard({
               description: "It may have been deleted.",
             })
           }
-          />
-        </Suspense>
-      ) : null}
+        />
+      </Suspense>
       <TaskPanel
         target={panelTarget}
         onClose={() => setOpened(null)}
@@ -1155,16 +1172,16 @@ export function TasksBoard({
     </>
   );
   const newTask = canManage ? (
-      <NewButton
-        ref={newTaskRef}
-        type="button"
-        thing="task"
-        {...gate.controlProps()}
-        onClick={() => {
-          setAdding(true);
-          setExpandSignal((n) => n + 1);
-        }}
-      />
+    <NewButton
+      ref={newTaskRef}
+      type="button"
+      thing="task"
+      {...gate.controlProps()}
+      onClick={() => {
+        setAdding(true);
+        setExpandSignal((n) => n + 1);
+      }}
+    />
   ) : null;
 
   if (!everyone) {
@@ -1219,8 +1236,14 @@ export function TasksBoard({
         }}
       />
 
-      {/* One line until asked for (Paul, 2026-11-18). */}
-      {canManage ? <SuggestionsStrip /> : null}
+      {/* One line until asked for (Paul, 2026-11-18). Seen here, where they
+          are drawn, not on every Activity visit (`seen-screens.ts`). */}
+      {canManage ? (
+        <>
+          <SuggestionsStrip />
+          <MarkScreensSeen screens={SUGGESTION_SCREENS} />
+        </>
+      ) : null}
 
       {permissionsLoading && tasks.length === 0 ? null : (
         /*

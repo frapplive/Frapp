@@ -59,5 +59,9 @@ describe("the old Tasks route", () => {
     await expect(open(Tasks, { group: ["g-1", "g-2"] })).rejects.toThrow(
       "redirect:/activity?group=g-1",
     );
+    // New's New task from a page loaded before the fold.
+    await expect(open(Tasks, { new: "1" })).rejects.toThrow(
+      "redirect:/activity?new=1",
+    );
   });
 });

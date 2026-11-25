@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -45,7 +46,10 @@ const {
   searchRef,
   routerReplace,
   tasksRefetch,
+  tasksEnabled,
 } = vi.hoisted(() => ({
+  // Every `enabled` the board passed to `useTasks`: Mine reads only for a link.
+  tasksEnabled: [] as boolean[],
   // The address's query (`?group=<id>`, `?task=<id>`, #5538).
   searchRef: { current: new URLSearchParams() },
   routerReplace: vi.fn(),
@@ -192,13 +196,17 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useTaskPhotoUrl: () => ({ data: undefined }),
   useCurrentChapter: () => mockCurrentChapter(),
   useChapterScope: () => chapterScopeRef.current,
-  useTasks: () => ({
-    data: tasksPending.current ? undefined : tasksRef.current,
-    isPending: tasksPending.current,
-    isFetching: false,
-    isError: false,
-    refetch: tasksRefetch,
-  }),
+  useTasks: (options?: { enabled?: boolean }) => {
+    const enabled = options?.enabled ?? true;
+    tasksEnabled.push(enabled);
+    return {
+      data: tasksPending.current || !enabled ? undefined : tasksRef.current,
+      isPending: tasksPending.current || !enabled,
+      isFetching: false,
+      isError: false,
+      refetch: tasksRefetch,
+    };
+  },
   useMembers: () => ({
     data:
       membersFailed.current && !failedReadsKeepData.current
@@ -284,6 +292,17 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: routerReplace }),
 }));
 
+// Everyone's marks suggested-task notifications seen while it shows them
+// (#5948); which screens it names is pinned here, the read itself elsewhere.
+const { markedScreens } = vi.hoisted(() => ({
+  markedScreens: [] as (readonly string[])[],
+}));
+vi.mock("@/lib/notifications/mark-screens-seen", () => ({
+  MarkScreensSeen: ({ screens }: { screens: readonly string[] }) => {
+    markedScreens.push(screens);
+    return null;
+  },
+}));
 vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
   useChapterModuleGateState: () => ({
     status: "ready",
@@ -371,6 +390,7 @@ const deleteButtons = () =>
 
 beforeEach(() => {
   searchRef.current = new URLSearchParams();
+  tasksEnabled.length = 0;
   routerReplace.mockClear();
   tasksRefetch.mockReset();
   tasksRefetch.mockImplementation(() => Promise.resolve());
@@ -454,8 +474,11 @@ describe("TasksBoard suggested tasks (#4313)", () => {
     expect(screen.getByTestId("suggested-tasks")).toBeInTheDocument();
     await userEvent.click(within(strip).getByRole("button", { name: "Hide" }));
     expect(screen.queryByTestId("suggested-tasks")).toBeNull();
+    // Where they are drawn, their notifications are read (#5948).
+    expect(markedScreens).toContainEqual(["ai_suggestions"]);
     unmount();
 
+    markedScreens.length = 0;
     permissionsRef.current = ["members:view"];
     tasksRef.current = TASKS;
     try {
@@ -463,6 +486,7 @@ describe("TasksBoard suggested tasks (#4313)", () => {
       expect(
         screen.queryByRole("region", { name: "Suggested tasks" }),
       ).toBeNull();
+      expect(markedScreens).toEqual([]);
     } finally {
       tasksRef.current = [];
     }
@@ -2323,6 +2347,36 @@ describe("TasksBoard tasks for everyone (#4295 step 3)", () => {
       expect(toastSpy).not.toHaveBeenCalled();
     });
 
+    it("opens a link on Mine too, reading the tasks only once one asks (#5948)", async () => {
+      render(<TasksBoard part="mine" />);
+      // No link: Mine draws no board, so it reads none.
+      expect(tasksEnabled.at(-1)).toBe(false);
+      cleanup();
+
+      const replaceState = dropsParam();
+      searchRef.current = new URLSearchParams("view=everyone&group=group-1");
+      window.history.pushState(
+        null,
+        "",
+        "/activity?view=everyone&group=group-1",
+      );
+      render(<TasksBoard part="mine" />);
+      expect(
+        await screen.findByRole("dialog", {
+          name: "Fill out the tabling form",
+        }),
+      ).toBeInTheDocument();
+      expect(tasksEnabled.at(-1)).toBe(true);
+      // Only the link's own param leaves the address: Activity's `?view=`
+      // stays.
+      expect(replaceState).toHaveBeenCalledWith(
+        null,
+        "",
+        "/activity?view=everyone",
+      );
+      window.history.pushState(null, "", "/");
+    });
+
     it("opens a copy's link as its group", async () => {
       searchRef.current = new URLSearchParams("task=copy-other");
       render(<TasksBoard part="everyone" />);
@@ -2484,9 +2538,7 @@ describe("TasksBoard up for grabs (2026-11-18)", () => {
       }),
     );
     // A person only: no roles tab, no mode switch.
-    expect(
-      screen.queryByRole("tab", { name: "Roles and groups" }),
-    ).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Roles and groups" })).toBeNull();
     await userEvent.click(
       await screen.findByRole("radio", { name: /Cole Martin/ }),
     );

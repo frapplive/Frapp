@@ -39,13 +39,16 @@ export function everyonesTasksLink(): string {
 
 /**
  * Where an old `/tasks` address goes: Activity, with the link's `task` or
- * `group` kept. Any other param the old page read is dropped.
+ * `group` kept, and New task's `?new=1` (`new-intent.ts`), which Activity's
+ * Mine answers as the page did. Any other param the old page read is dropped.
  */
 export function tasksRedirectPath(
   searchParams: Record<string, string | string[] | undefined>,
 ): string {
   const kept = new URLSearchParams();
-  for (const key of [TASKS_TASK_PARAM, TASKS_GROUP_PARAM]) {
+  // `new` is `NEW_INTENT_PARAM`, spelled out: that module is a client one,
+  // and this runs in the redirect's server component.
+  for (const key of [TASKS_TASK_PARAM, TASKS_GROUP_PARAM, "new"]) {
     const value = searchParams[key];
     const first = Array.isArray(value) ? value[0] : value;
     if (first) kept.set(key, first);

@@ -401,6 +401,8 @@ describe('CalendarFeedService.fetch', () => {
       'DESCRIPTION:Open in Frapp: https://app.frapp.live/events?event=event-1\\n\\nRequired\\n\\nBring your dues form',
     );
     expect(ics).toContain('SUMMARY:Due: Clean the kitchen');
+    // The task itself on the web app's Activity (#5948), not the board.
+    expect(ics).toContain('URL:https://app.frapp.live/activity?task=task-1');
     expect(ics).toContain('DTSTART;VALUE=DATE:20261130');
     expect(ics).toContain('DTSTART:20261120T220000Z');
     // A moment with no length has no DTEND, which must follow DTSTART.

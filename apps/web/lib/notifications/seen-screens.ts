@@ -23,8 +23,10 @@ const SCREENS_BY_ROUTE: readonly (readonly [string, readonly string[]])[] = [
   // A submitted task's review opens here (`?review=`), as do the tasks
   // waiting on the member and every task link (the Tasks page folded in,
   // #5948), so a visit reads task rows too, and the weekly recap push
-  // (#4985) opens here. Suggested tasks (#4313) are reviewed in Everyone's.
-  ["/activity", ["tasks", "activity", "ai_suggestions"]],
+  // (#4985) opens here. Suggested tasks (#4313) are drawn only on Everyone's,
+  // which a pathname can't tell from Mine, so that view marks them itself
+  // (`MarkScreensSeen` in `tasks-board.tsx`).
+  ["/activity", ["tasks", "activity"]],
   // A member's own points and service hours are read on their Profile, whose
   // figures and panels show what those rows are about (#5950).
   ["/profile", ["points", "service"]],

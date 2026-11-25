@@ -41,6 +41,8 @@ const SHIPPED = new Set<string>([
   // Polls live in chat since #3871 retired the nav row, as dues lives on
   // /billing: still paid, still shipped, with no row for the nav to read.
   "polls",
+  // Tasks live in Activity since #5948 retired the Tasks row, the same way.
+  "tasks",
 ]);
 const PAID = MODULE_CATALOG.filter(
   (entry) => entry.tier === "paid" && SHIPPED.has(entry.key),
@@ -65,7 +67,18 @@ describe("PlanMatrix", () => {
     // Study Zones left the nav for the Settings rail (#2946) and dropped out of
     // a derivation that read only nav rows.
     render(<PlanMatrix />);
-    for (const key of ["events", "tasks", "points", "hours", "polls", "documents", "backwork", "reports", "geofences", "dues"]) {
+    for (const key of [
+      "events",
+      "tasks",
+      "points",
+      "hours",
+      "polls",
+      "documents",
+      "backwork",
+      "reports",
+      "geofences",
+      "dues",
+    ]) {
       const entry = MODULE_CATALOG.find((m) => m.key === key);
       expect(entry, `${key} is not in the catalog`).toBeDefined();
       if (entry?.tier !== "paid") continue;

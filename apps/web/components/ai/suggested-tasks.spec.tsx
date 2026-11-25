@@ -804,7 +804,7 @@ describe("SuggestedTasks (#4313)", () => {
         screen
           .getByRole("link", { name: "Open the existing task" })
           .getAttribute("href"),
-      ).toBe("/tasks?task=t-hall");
+      ).toBe("/activity?task=t-hall");
       // Nothing creates it until the officer says which it is.
       expect(screen.queryByRole("button", { name: "Create task" })).toBeNull();
 

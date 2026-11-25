@@ -76,6 +76,10 @@ import { ProChip } from "@/components/billing/pro-chip";
  *   the `/polls` page, polls live only in chat (the `/poll` command and the
  *   poll card's Vote), so no nav row carries the key, but the module still
  *   gates them and the subscription still buys it.
+ * - **`tasks` is listed by hand for the same reason.** Since #5948 the Tasks
+ *   page folded into Activity, whose row carries no module, so no nav row
+ *   carries the key; the module still gates tasks (Activity's Mine and
+ *   Everyone's) and the subscription still buys it.
  * - **`billing` can never appear**, and would be actively self-contradicting
  *   if it did. `BillingController` is class-level `@SubscriptionExempt()`
  *   precisely so the chapter can reach the screen that ungates it
@@ -99,6 +103,7 @@ const SHIPPED_PAID_KEYS = new Set<string>([
   ...SETTINGS_TOOLS.flatMap((tool) => (tool.module ? [tool.module] : [])),
   "dues",
   "polls",
+  "tasks",
 ]);
 
 const FREE_MODULES = MODULE_CATALOG.filter((entry) => entry.tier === "free");

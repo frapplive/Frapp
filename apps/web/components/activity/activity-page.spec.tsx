@@ -151,7 +151,7 @@ vi.mock("next/navigation", () => ({
 // for; `tasks-board.spec.tsx` owns what each draws.
 const mockEveryoneOffered = vi.fn(() => false);
 vi.mock("@/components/tasks/everyones-tasks", () => ({
-  useEveryoneOffered: () => mockEveryoneOffered(),
+  useEveryoneOffered: (tasksOn: boolean) => tasksOn && mockEveryoneOffered(),
 }));
 vi.mock("@/components/tasks/tasks-board", () => ({
   TasksBoard: ({
@@ -1479,9 +1479,10 @@ describe("ActivityPage", () => {
       mockActivity.mockReturnValue(loaded({}));
       render(<ActivityPage />);
       const tabs = views()!;
-      expect(
-        within(tabs).getByRole("tab", { name: "Mine" }),
-      ).toHaveAttribute("aria-selected", "true");
+      expect(within(tabs).getByRole("tab", { name: "Mine" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
       expect(toDo()).toBeInTheDocument();
 
       await userEvent.click(
