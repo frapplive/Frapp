@@ -29781,6 +29781,35 @@
             "type": "string",
             "format": "date-time"
           },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
+          },
           "point_value": {
             "type": "number"
           },
@@ -29893,6 +29922,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -29942,6 +29976,35 @@
           "end_time": {
             "type": "string",
             "format": "date-time"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"
@@ -30059,6 +30122,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -30096,10 +30164,44 @@
             "maxLength": 500
           },
           "start_time": {
-            "type": "string"
+            "type": "string",
+            "description": "When a timed event starts. Required unless `timing` is `all_day` or `time_tbd`, whose bounds the server writes from `start_date`/`end_date`."
           },
           "end_time": {
-            "type": "string"
+            "type": "string",
+            "description": "When a timed event ends. Required unless `timing` is `all_day` or `time_tbd`."
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "default": "timed",
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "default": false,
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number",
@@ -30195,9 +30297,7 @@
           }
         },
         "required": [
-          "name",
-          "start_time",
-          "end_time"
+          "name"
         ]
       },
       "CreateEventResponseDto": {
@@ -30229,6 +30329,35 @@
           "end_time": {
             "type": "string",
             "format": "date-time"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"
@@ -30346,6 +30475,11 @@
           "location",
           "start_time",
           "end_time",
+          "timing",
+          "start_date",
+          "end_date",
+          "is_tentative",
+          "calendar_only",
           "point_value",
           "is_mandatory",
           "recurrence_rule",
@@ -30386,6 +30520,33 @@
           },
           "end_time": {
             "type": "string"
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "timed",
+              "all_day",
+              "time_tbd"
+            ],
+            "description": "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed. Omitted leaves it, except that times sent without it make the event timed (a build from before all-day events only ever edits a time)."
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event."
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event."
+          },
+          "is_tentative": {
+            "type": "boolean",
+            "description": "The event might not happen. Shown as a status and sent to calendars as tentative."
+          },
+          "calendar_only": {
+            "type": "boolean",
+            "description": "On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role."
           },
           "point_value": {
             "type": "number"

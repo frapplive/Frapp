@@ -62,6 +62,11 @@ function event(overrides: Partial<Event> = {}): Event {
     location: 'House',
     start_time: '2026-11-14T00:00:00.000Z',
     end_time: '2026-11-14T01:00:00.000Z',
+    timing: 'timed',
+    start_date: null,
+    end_date: null,
+    is_tentative: false,
+    calendar_only: false,
     point_value: 10,
     is_mandatory: true,
     recurrence_rule: null,
@@ -420,6 +425,91 @@ describe('CalendarFeedService.fetch', () => {
     const { service } = setup({ events: [event({ is_mandatory: false })] });
     const ics = await service.fetch(TOKEN, NOW);
     expect(ics).not.toContain('Required');
+  });
+
+  describe('dated, tentative and calendar-only events (#6098)', () => {
+    // Bounds as a request in New York saved them: they must never be used.
+    const dated = {
+      start_time: '2027-01-11T05:00:00.000Z',
+      end_time: '2027-01-12T05:00:00.000Z',
+    };
+    const unfolded = (ics: string) => ics.replace(/\r\n /g, '');
+
+    it('serves a one-day all-day event on its day, not its instants', async () => {
+      const { service } = setup({
+        tasks: [],
+        events: [
+          event({
+            ...dated,
+            timing: 'all_day',
+            start_date: '2027-01-11',
+            end_date: '2027-01-11',
+          }),
+        ],
+      });
+      const ics = await service.fetch(TOKEN, NOW);
+      expect(ics).toContain('DTSTART;VALUE=DATE:20270111');
+      expect(ics).toContain('DTEND;VALUE=DATE:20270112');
+      expect(ics).not.toContain('DTSTART:2027');
+      expect(ics).not.toContain('Time TBD');
+    });
+
+    it('serves a multi-day all-day event through its last day', async () => {
+      const { service } = setup({
+        tasks: [],
+        events: [
+          event({
+            start_time: '2027-01-22T05:00:00.000Z',
+            end_time: '2027-02-13T05:00:00.000Z',
+            timing: 'all_day',
+            start_date: '2027-01-22',
+            end_date: '2027-02-12',
+          }),
+        ],
+      });
+      const ics = await service.fetch(TOKEN, NOW);
+      expect(ics).toContain('DTSTART;VALUE=DATE:20270122');
+      expect(ics).toContain('DTEND;VALUE=DATE:20270213');
+    });
+
+    it('serves a time-TBD event as its one day, saying Time TBD first', async () => {
+      const { service } = setup({
+        tasks: [],
+        events: [
+          event({
+            ...dated,
+            timing: 'time_tbd',
+            start_date: '2027-01-14',
+            end_date: '2027-01-14',
+          }),
+        ],
+      });
+      const ics = unfolded(await service.fetch(TOKEN, NOW));
+      expect(ics).toContain('DTSTART;VALUE=DATE:20270114');
+      expect(ics).toContain('DTEND;VALUE=DATE:20270115');
+      expect(ics).toContain(
+        'DESCRIPTION:Time TBD\\n\\nOpen in Frapp: https://app.frapp.live/events?event=event-1',
+      );
+    });
+
+    it('marks a tentative event STATUS:TENTATIVE, and only that one', async () => {
+      const { service } = setup({
+        tasks: [],
+        events: [event({ is_tentative: true })],
+      });
+      expect(await service.fetch(TOKEN, NOW)).toContain('STATUS:TENTATIVE');
+
+      const plain = setup({ tasks: [] });
+      expect(await plain.service.fetch(TOKEN, NOW)).not.toContain('STATUS:');
+    });
+
+    it('never says Required for an event on the calendar only', async () => {
+      const { service } = setup({
+        tasks: [],
+        events: [event({ is_mandatory: true, calendar_only: true })],
+      });
+      expect(await service.fetch(TOKEN, NOW)).not.toContain('Required');
+    });
   });
 
   it.each([

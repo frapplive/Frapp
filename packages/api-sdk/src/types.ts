@@ -9317,6 +9317,25 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+            /**
+             * @description `timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed.
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.
+             */
+            start_date: string | null;
+            /**
+             * Format: date
+             * @description Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.
+             */
+            end_date: string | null;
+            /** @description The event might not happen. Shown as a status and sent to calendars as tentative. */
+            is_tentative: boolean;
+            /** @description On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. */
+            calendar_only: boolean;
             point_value: number;
             is_mandatory: boolean;
             recurrence_rule: string | null;
@@ -9364,6 +9383,25 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+            /**
+             * @description `timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed.
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.
+             */
+            start_date: string | null;
+            /**
+             * Format: date
+             * @description Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.
+             */
+            end_date: string | null;
+            /** @description The event might not happen. Shown as a status and sent to calendars as tentative. */
+            is_tentative: boolean;
+            /** @description On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. */
+            calendar_only: boolean;
             point_value: number;
             is_mandatory: boolean;
             recurrence_rule: string | null;
@@ -9405,8 +9443,36 @@ export interface components {
             name: string;
             description?: string;
             location?: string;
-            start_time: string;
-            end_time: string;
+            /** @description When a timed event starts. Required unless `timing` is `all_day` or `time_tbd`, whose bounds the server writes from `start_date`/`end_date`. */
+            start_time?: string;
+            /** @description When a timed event ends. Required unless `timing` is `all_day` or `time_tbd`. */
+            end_time?: string;
+            /**
+             * @description `timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed.
+             * @default timed
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.
+             */
+            start_date?: string | null;
+            /**
+             * Format: date
+             * @description Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.
+             */
+            end_date?: string | null;
+            /**
+             * @description The event might not happen. Shown as a status and sent to calendars as tentative.
+             * @default false
+             */
+            is_tentative: boolean;
+            /**
+             * @description On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role.
+             * @default false
+             */
+            calendar_only: boolean;
             /**
              * @description Points for attending. On create, kept only when the caller holds `events:update`; anyone else's event is stored with 0, whatever is sent (#3709).
              * @default 10
@@ -9460,6 +9526,25 @@ export interface components {
             start_time: string;
             /** Format: date-time */
             end_time: string;
+            /**
+             * @description `timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed.
+             * @enum {string}
+             */
+            timing: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.
+             */
+            start_date: string | null;
+            /**
+             * Format: date
+             * @description Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.
+             */
+            end_date: string | null;
+            /** @description The event might not happen. Shown as a status and sent to calendars as tentative. */
+            is_tentative: boolean;
+            /** @description On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. */
+            calendar_only: boolean;
             point_value: number;
             is_mandatory: boolean;
             recurrence_rule: string | null;
@@ -9503,6 +9588,25 @@ export interface components {
             location?: string;
             start_time?: string;
             end_time?: string;
+            /**
+             * @description `timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed. Omitted leaves it, except that times sent without it make the event timed (a build from before all-day events only ever edits a time).
+             * @enum {string}
+             */
+            timing?: "timed" | "all_day" | "time_tbd";
+            /**
+             * Format: date
+             * @description First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.
+             */
+            start_date?: string;
+            /**
+             * Format: date
+             * @description Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.
+             */
+            end_date?: string;
+            /** @description The event might not happen. Shown as a status and sent to calendars as tentative. */
+            is_tentative?: boolean;
+            /** @description On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role. */
+            calendar_only?: boolean;
             point_value?: number;
             is_mandatory?: boolean;
             /** @description Repeat rule. Either a legacy token (WEEKLY, BIWEEKLY, MONTHLY: a fixed run of 12, 6 or 6 meetings after the first, still accepted from older phone builds) or an iCalendar RRULE subset such as `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TH;COUNT=20;TZID=America/New_York`: FREQ DAILY|WEEKLY|MONTHLY, INTERVAL 1-30, BYDAY (weekly: the days, required; monthly: the nth weekday such as 2TU or -1FR), BYMONTHDAY (monthly by date: 1-31, not with BYDAY), exactly one of COUNT (2-120 meetings, the first included) or UNTIL (YYYYMMDD, inclusive), and TZID (the zone whose wall clock the series keeps). */

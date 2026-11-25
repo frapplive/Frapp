@@ -462,6 +462,12 @@ describe('EventService', () => {
       location: null,
       start_time: baseEvent.start_time,
       end_time: baseEvent.end_time,
+      // No timing sent: a timed event, as before #6098.
+      timing: 'timed',
+      start_date: null,
+      end_date: null,
+      is_tentative: false,
+      calendar_only: false,
       point_value: 10,
       is_mandatory: false,
       recurrence_rule: null,
@@ -757,7 +763,13 @@ describe('EventService', () => {
       end_time: '2026-02-26T20:00:00.000Z',
     });
 
+    // The timing columns are written together (#6098): the stored start
+    // fills in beside the new end.
     expect(mockEventRepo.update).toHaveBeenCalledWith('evt-1', 'ch-1', {
+      timing: 'timed',
+      start_date: null,
+      end_date: null,
+      start_time: baseEvent.start_time,
       end_time: '2026-02-26T20:00:00.000Z',
     });
     expect(result.end_time).toBe('2026-02-26T20:00:00.000Z');

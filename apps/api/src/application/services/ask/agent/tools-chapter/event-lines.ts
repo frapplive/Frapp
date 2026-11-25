@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { Event } from '#domain/entities/event.entity';
 import type { EventAttendanceStatus } from '#domain/entities/event-attendance.entity';
 import { localDateIn } from '#domain/utils/zoned-time';
+import { eventIsDated, eventTiming } from '@repo/validation';
 import type { EventService } from '../../../event.service';
 import type { AgentToolContext } from '../agent-tool';
 import {
@@ -83,9 +84,12 @@ export async function findEvent(
   if (args.on) {
     // The window catches an event that only runs into the day (it started
     // the night before); one that starts on the day is the better reading.
-    const starting = fits.filter(
-      (event) =>
-        localDateIn(new Date(event.start_time), context.timeZone) === args.on,
+    const on = args.on;
+    const starting = fits.filter((event) =>
+      // A dated event is on each of its days, whatever the zone (#6098).
+      event.start_date && event.end_date
+        ? event.start_date <= on && on <= event.end_date
+        : localDateIn(new Date(event.start_time), context.timeZone) === on,
     );
     if (starting.length > 0) fits = starting;
   }
@@ -119,7 +123,40 @@ export function ambiguityNote(found: FoundEvent): string | null {
  */
 export function eventHeadline(event: Event, context: AgentToolContext): string {
   const over = Date.parse(event.end_time) < context.now.getTime();
-  return `${quoted(event.name)}${over ? ' (already happened)' : ''}: ${longRange(event.start_time, event.end_time, context.timeZone)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
+  const flags = [
+    over ? 'already happened' : null,
+    event.is_tentative ? 'tentative: it might not happen' : null,
+    event.calendar_only ? 'on the calendar only: no check-in or points' : null,
+  ].filter((flag): flag is string => flag !== null);
+  return `${quoted(event.name)}${flags.length > 0 ? ` (${flags.join('; ')})` : ''}: ${eventWhenWords(event, context)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
+}
+
+/** A day written out from its `YYYY-MM-DD`, with no zone to shift it. */
+function longDay(day: string, withWeekday: boolean): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    ...(withWeekday ? { weekday: 'long' as const } : {}),
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * When the event is, in words: its times, or for a dated event its days
+ * (#6098), whose stored instants are only midnight bounds and never a time.
+ */
+function eventWhenWords(event: Event, context: AgentToolContext): string {
+  if (eventIsDated(event) && event.start_date) {
+    if (eventTiming(event) === 'time_tbd') {
+      return `${longDay(event.start_date, true)}, time not set yet`;
+    }
+    const last = event.end_date ?? event.start_date;
+    return last === event.start_date
+      ? `${longDay(event.start_date, true)}, all day`
+      : `${longDay(event.start_date, true)} to ${longDay(last, true)}, all day`;
+  }
+  return longRange(event.start_time, event.end_time, context.timeZone);
 }
 
 export const ATTENDANCE_WORDS: Record<EventAttendanceStatus, string> = {

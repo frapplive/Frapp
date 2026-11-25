@@ -4,6 +4,7 @@ import {
   IsArray,
   IsISO8601,
   IsIn,
+  Matches,
   IsInt,
   IsOptional,
   IsString,
@@ -39,6 +40,8 @@ import {
   type EventAgendaTabledFrom,
   type EventAttachment,
   type EventAttendancePicks,
+  EVENT_TIMINGS,
+  type EventTiming,
 } from '@repo/validation';
 import { IsRepeatRule } from '../decorators/is-repeat-rule.decorator';
 import type { Event } from '#domain/entities/event.entity';
@@ -149,6 +152,20 @@ export class EventAttachmentDto extends FrappLinkDto {
 const AGENDA_DESCRIPTION = `This meeting's agenda, in order: at most ${EVENT_AGENDA_MAX} short items. Sent whole; it replaces the stored list, and \`[]\` clears it (null is refused). Belongs to this one meeting: with \`scope: 'series'\` it is still written to the addressed occurrence only (the response is the series head, as for any series save, so read the occurrence again), and a new occurrence starts with none.`;
 const ATTACHMENTS_DESCRIPTION = `This meeting's attachments, in order: at most ${FRAPP_LINKS_MAX} Frapp links: titled web links, or Chapter Files documents, minutes, events or chat messages. Sent whole; it replaces the stored list, and \`[]\` clears it. Per meeting, like \`agenda\`. A record must be the chapter's when it is added; one the meeting already holds stays even if it was deleted since. A repeat of a record already in the list is dropped. On an update, send \`attachments_all_kinds: true\` with it; without it (phone builds from before Frapp links, which read only web links and documents) the stored minutes, event and message links are kept.`;
 
+/** A calendar day as the API takes it (`YYYY-MM-DD`); the service checks it is real. */
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const TIMING_DESCRIPTION =
+  "`timed` (a start and end time), `all_day` (whole days, `start_date` through `end_date`) or `time_tbd` (one day, time not set yet; no check-in until it is). A dated event's `start_time`/`end_time` are the server's local-midnight bounds of its days, in the `X-Time-Zone` zone; show its days, not those instants. A repeating event must be timed.";
+const START_DATE_DESCRIPTION =
+  'First day of an `all_day` or `time_tbd` event, `YYYY-MM-DD` with no zone (it reads as that day for everyone). Null on a timed event.';
+const END_DATE_DESCRIPTION =
+  "Last day, inclusive, of an `all_day` event (omitted: one day; at most 366 days); a `time_tbd` event's is its start_date. Null on a timed event.";
+const TENTATIVE_DESCRIPTION =
+  'The event might not happen. Shown as a status and sent to calendars as tentative.';
+const CALENDAR_ONLY_DESCRIPTION =
+  'On the calendar for information only: nobody checks in, earns points or is marked absent. Stored with 0 points, nobody required, and no Required or Optional roles (sending one is a 400); Not invited still hides it from a role.';
+
 export class CreateEventDto {
   @ApiProperty({ maxLength: EVENT_NAME_MAX_LENGTH })
   @IsString()
@@ -173,13 +190,63 @@ export class CreateEventDto {
   })
   location?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'When a timed event starts. Required unless `timing` is `all_day` or `time_tbd`, whose bounds the server writes from `start_date`/`end_date`.',
+  })
+  @ValidateIf((o: CreateEventDto) => !o.timing || o.timing === 'timed')
   @IsISO8601()
-  start_time: string;
+  start_time?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'When a timed event ends. Required unless `timing` is `all_day` or `time_tbd`.',
+  })
+  @ValidateIf((o: CreateEventDto) => !o.timing || o.timing === 'timed')
   @IsISO8601()
-  end_time: string;
+  end_time?: string;
+
+  @ApiPropertyOptional({
+    enum: EVENT_TIMINGS,
+    default: 'timed',
+    description: TIMING_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsIn(EVENT_TIMINGS)
+  timing?: EventTiming;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: START_DATE_DESCRIPTION,
+  })
+  @IsOptional()
+  @Matches(DAY_PATTERN, { message: 'start_date must be YYYY-MM-DD' })
+  start_date?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: END_DATE_DESCRIPTION,
+  })
+  @IsOptional()
+  @Matches(DAY_PATTERN, { message: 'end_date must be YYYY-MM-DD' })
+  end_date?: string | null;
+
+  @ApiPropertyOptional({ default: false, description: TENTATIVE_DESCRIPTION })
+  @IsOptional()
+  @IsStrictBoolean()
+  is_tentative?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: CALENDAR_ONLY_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsStrictBoolean()
+  calendar_only?: boolean;
 
   @ApiPropertyOptional({
     default: 10,
@@ -417,6 +484,31 @@ export class EventResponseDto implements Event {
   @ApiProperty({ format: 'date-time' })
   end_time: string;
 
+  @ApiProperty({ enum: EVENT_TIMINGS, description: TIMING_DESCRIPTION })
+  timing: EventTiming;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: START_DATE_DESCRIPTION,
+  })
+  start_date: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description: END_DATE_DESCRIPTION,
+  })
+  end_date: string | null;
+
+  @ApiProperty({ description: TENTATIVE_DESCRIPTION })
+  is_tentative: boolean;
+
+  @ApiProperty({ description: CALENDAR_ONLY_DESCRIPTION })
+  calendar_only: boolean;
+
   @ApiProperty()
   point_value: number;
 
@@ -577,6 +669,42 @@ export class UpdateEventDto {
   @IsOptional()
   @IsISO8601()
   end_time?: string;
+
+  @ApiPropertyOptional({
+    enum: EVENT_TIMINGS,
+    description: `${TIMING_DESCRIPTION} Omitted leaves it, except that times sent without it make the event timed (a build from before all-day events only ever edits a time).`,
+  })
+  @IsOptional()
+  @IsIn(EVENT_TIMINGS)
+  timing?: EventTiming;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    description: START_DATE_DESCRIPTION,
+  })
+  @IsOptional()
+  @Matches(DAY_PATTERN, { message: 'start_date must be YYYY-MM-DD' })
+  start_date?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date',
+    description: END_DATE_DESCRIPTION,
+  })
+  @IsOptional()
+  @Matches(DAY_PATTERN, { message: 'end_date must be YYYY-MM-DD' })
+  end_date?: string;
+
+  @ApiPropertyOptional({ description: TENTATIVE_DESCRIPTION })
+  @IsOptional()
+  @IsStrictBoolean()
+  is_tentative?: boolean;
+
+  @ApiPropertyOptional({ description: CALENDAR_ONLY_DESCRIPTION })
+  @IsOptional()
+  @IsStrictBoolean()
+  calendar_only?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -104,6 +104,9 @@ export * from "./event-attendance";
 // Editing or deleting an existing event: what a save sends, and whether to
 // ask "this event or all upcoming" first. Web and the phone share it (#3667).
 export * from "./event-edit";
+// All-day, multi-day and time-TBD events, tentative, and on the calendar only
+// (#6098): the shapes and the rules both apps and the API read.
+export * from "./event-timing";
 // Absence excuses for required events: the late window and reason limit the
 // API enforces and the apps read (#3735).
 export * from "./event-excuse";

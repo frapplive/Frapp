@@ -37,6 +37,9 @@ export function toGoogleEvent(item: IcsItem): GoogleCalendarEventInput {
     sourceUrl: item.url,
     // A due time marks a moment; it should not show the member as busy.
     transparent: isTask,
+    // Spread in only when set, so an event that never was tentative keeps
+    // the hash it had and isn't rewritten (#6098).
+    ...(item.tentative ? { tentative: true } : {}),
   };
   return { ...body, hash: hashOf(body) };
 }
@@ -46,10 +49,10 @@ function googleTimes(item: IcsItem): {
   end: GoogleCalendarEventInput['end'];
 } {
   if (item.when.kind === 'day') {
-    // Google's all-day end date is exclusive: the day after.
+    // Google's all-day end date is exclusive: the day after the last day.
     return {
       start: { date: item.when.date },
-      end: { date: nextDay(item.when.date) },
+      end: { date: nextDay(item.when.endDate ?? item.when.date) },
     };
   }
   const startMs = Date.parse(item.when.start);
@@ -71,7 +74,10 @@ function nextDay(date: string): string {
 
 /**
  * What a write carries, short. Kept on the event in Google, so a sync rewrites
- * only the events whose content changed.
+ * only the events whose content changed. It covers an event's timing and days
+ * (`start`/`end` as dates or date-times, "Time TBD" leading the description)
+ * and whether it's on the calendar only (no "Required" in the description),
+ * so a change to any of them re-syncs (#6098).
  */
 function hashOf(body: Omit<GoogleCalendarEventInput, 'hash'>): string {
   return createHash('sha256')

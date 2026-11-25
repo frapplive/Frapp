@@ -4,7 +4,12 @@ import type { IUserRepository } from '#domain/repositories/user.repository.inter
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { Event } from '#domain/entities/event.entity';
-import { isRepeatRule } from '@repo/validation';
+import {
+  EVENT_TENTATIVE_LABEL,
+  eventIsDated,
+  eventTiming,
+  isRepeatRule,
+} from '@repo/validation';
 import { NotificationService } from './notification.service';
 import type { NotifyPayload, NotifyRecipient } from './notification.service';
 import { ChatService } from './chat.service';
@@ -14,6 +19,7 @@ import type { EventAttendanceStatus as EventAttendance } from '@repo/validation'
 import type { CreateEventInput, UpdateEventInput } from './event-input';
 import {
   DEFAULT_PUSH_TIME_ZONE,
+  formatEventDays,
   formatEventWhen,
   joinFacts,
 } from './push-copy';
@@ -34,28 +40,64 @@ function sameInstant(a: string, b: string): boolean {
 }
 
 /**
+ * Whether a dated event's days moved (#6098): its timing, first or last day.
+ * Its instants are only the saving request's midnights, so a re-save from
+ * another zone shifts them without moving the event, and they're ignored.
+ */
+function datedTimeChanged(
+  before: Partial<Pick<Event, 'timing' | 'start_date' | 'end_date'>>,
+  patch: Pick<UpdateEventInput, 'timing' | 'start_date' | 'end_date'>,
+): boolean {
+  const pick = <T>(value: T | undefined, fallback: T): T =>
+    value !== undefined ? value : fallback;
+  return (
+    eventTiming({ timing: pick(patch.timing, before.timing) }) !==
+      eventTiming(before) ||
+    (pick(patch.start_date, before.start_date) ?? null) !==
+      (before.start_date ?? null) ||
+    (pick(patch.end_date, before.end_date) ?? null) !==
+      (before.end_date ?? null)
+  );
+}
+
+/**
  * Which of when and where `patch` actually moves on `before`, or null when it
  * moves neither. Compares values, not key presence: a client that
  * round-trips the whole event (web did until #3667; an older build still may)
  * sends a rename carrying the same times and location, and announcing that as
  * "rescheduled" would push the whole chapter for a typo fix. Instants are compared as instants (`+00:00` vs `Z` is no change), and a
- * new recurrence pattern counts as a change of time.
+ * new recurrence pattern counts as a change of time. An event dated before or
+ * after the edit (all day, time TBD) compares its timing and days instead of
+ * its instants; a switch between timed and dated is a change of time.
  */
 export function eventChangeOf(
   before: Pick<
     Event,
     'start_time' | 'end_time' | 'location' | 'recurrence_rule'
-  >,
+  > &
+    Partial<Pick<Event, 'timing' | 'start_date' | 'end_date'>>,
   patch: Pick<
     UpdateEventInput,
-    'start_time' | 'end_time' | 'location' | 'recurrence_rule'
+    | 'start_time'
+    | 'end_time'
+    | 'location'
+    | 'recurrence_rule'
+    | 'timing'
+    | 'start_date'
+    | 'end_date'
   >,
 ): EventChange | null {
+  const dated =
+    eventIsDated(before) ||
+    (patch.timing !== undefined && eventIsDated({ timing: patch.timing }));
+  const instantMoved = dated
+    ? datedTimeChanged(before, patch)
+    : (patch.start_time !== undefined &&
+        !sameInstant(patch.start_time, before.start_time)) ||
+      (patch.end_time !== undefined &&
+        !sameInstant(patch.end_time, before.end_time));
   const time =
-    (patch.start_time !== undefined &&
-      !sameInstant(patch.start_time, before.start_time)) ||
-    (patch.end_time !== undefined &&
-      !sameInstant(patch.end_time, before.end_time)) ||
+    instantMoved ||
     (patch.recurrence_rule !== undefined &&
       (patch.recurrence_rule ?? null) !== (before.recurrence_rule ?? null));
   const place =
@@ -110,7 +152,7 @@ export class EventAnnouncementService {
         (copy) => ({
           title: event.name,
           body: joinFacts(
-            attendanceLabel(copy.attendance),
+            ...statusFacts(event, copy.attendance),
             copy.when,
             event.location,
           ),
@@ -208,14 +250,20 @@ export class EventAnnouncementService {
     // The server has no creator-timezone context, so render the snapshot time
     // explicitly in UTC (labelled) rather than the API host's local zone. This
     // string is only the fallback shown when the rich renderer can't read the
-    // payload; the event card itself localises start_time per viewer.
-    const startLabel = new Date(event.start_time).toLocaleString('en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'UTC',
-    });
+    // payload; the event card itself localises start_time per viewer. A
+    // dated event (#6098) names its days, which are zone-free, never a time.
+    const startLabel =
+      formatEventDays(event) ??
+      `${new Date(event.start_time).toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'UTC',
+      })} UTC`;
     const locationSuffix = event.location ? ` at ${event.location}` : '';
-    const content = `${creatorName} scheduled "${event.name}" — ${startLabel} UTC${locationSuffix}`;
+    const content = `${creatorName} scheduled "${event.name}" — ${joinFacts(
+      event.is_tentative && EVENT_TENTATIVE_LABEL,
+      startLabel,
+    )}${locationSuffix}`;
 
     await this.chatService.sendMessage({
       chapter_id: input.chapter_id,
@@ -261,7 +309,7 @@ export class EventAnnouncementService {
                   ? `Now at ${updated.location}`
                   : 'No location set now',
                 when,
-                attendanceLabel(attendance),
+                ...statusFacts(updated, attendance),
               ),
             };
           }
@@ -271,7 +319,7 @@ export class EventAnnouncementService {
               `Now ${lowerFirst(when)}`,
               change === 'time_and_place' &&
                 (updated.location ? `at ${updated.location}` : null),
-              attendanceLabel(attendance),
+              ...statusFacts(updated, attendance),
             ),
           };
         },
@@ -335,6 +383,7 @@ export class EventAnnouncementService {
         timeZone: recipient?.timeZone ?? actorZone ?? DEFAULT_PUSH_TIME_ZONE,
         labelZone: !recipient?.timeZone,
         recurrence,
+        dates: event,
       });
 
     const payload: NotifyPayload = {
@@ -356,6 +405,21 @@ export class EventAnnouncementService {
       payload,
     );
   }
+}
+
+/**
+ * What the event asks of the member, then whether it's on: "Required",
+ * "Optional", and "Tentative" when it might not happen (#6098). An event on
+ * the calendar only asks nothing of anyone, so it names no attendance.
+ */
+function statusFacts(
+  event: Pick<Event, 'is_tentative' | 'calendar_only'>,
+  attendance: EventAttendance,
+): (string | null)[] {
+  return [
+    event.calendar_only ? null : attendanceLabel(attendance),
+    event.is_tentative ? EVENT_TENTATIVE_LABEL : null,
+  ];
 }
 
 /** "Required" / "Optional": the first thing a member needs to know. */

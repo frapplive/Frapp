@@ -47,7 +47,16 @@ function makeSupabase(pages: Page[]) {
   let deleting = false;
 
   const builder: Record<string, unknown> = {};
-  for (const method of ['select', 'gte', 'lte', 'in', 'or', 'order', 'is']) {
+  for (const method of [
+    'select',
+    'gte',
+    'lte',
+    'in',
+    'or',
+    'order',
+    'is',
+    'neq',
+  ]) {
     builder[method] = jest.fn(() => builder);
   }
 
@@ -729,6 +738,8 @@ const tenantSeed = () => ({
       location: 'House',
       start_time: '2026-09-01T18:00:00.000Z',
       end_time: '2026-09-01T19:00:00.000Z',
+      timing: 'timed',
+      calendar_only: false,
       point_value: 10,
       is_mandatory: true,
       required_role_ids: [],
@@ -741,6 +752,8 @@ const tenantSeed = () => ({
       location: 'House',
       start_time: '2026-09-01T18:00:00.000Z',
       end_time: '2026-09-01T19:00:00.000Z',
+      timing: 'timed',
+      calendar_only: false,
       point_value: 10,
       is_mandatory: true,
       required_role_ids: [],

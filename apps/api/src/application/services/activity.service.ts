@@ -13,6 +13,7 @@ import {
   eventOnAt,
   isModuleEnabled,
   MAX_CHECK_IN_OPENS_MINUTES,
+  eventTakesAttendance,
 } from '@repo/validation';
 import { ACTIVITY_ITEM_READ_REPOSITORY } from '#domain/repositories/activity-item-read.repository.interface';
 import type {
@@ -1779,6 +1780,8 @@ export class ActivityService {
       .filter(
         ({ event, window, answer }) =>
           answer.status !== 'not_invited' &&
+          // Nothing to have missed at one that takes no attendance (#6098).
+          eventTakesAttendance(event) &&
           window !== null &&
           window.closesAt <= now &&
           // Not one from before they joined: it was never theirs, and with no
@@ -2562,7 +2565,14 @@ export class ActivityService {
         answer.status === 'required' &&
         (joinedAt === null || new Date(event.start_time).getTime() > joinedAt);
       const window = this.checkInWindowOf(event);
-      if (required || (window !== null && window.closesAt > now)) open += 1;
+      if (
+        required ||
+        (eventTakesAttendance(event) &&
+          window !== null &&
+          window.closesAt > now)
+      ) {
+        open += 1;
+      }
     }
     return weekCount(done, open);
   }
@@ -2642,7 +2652,10 @@ export class ActivityService {
     const open = rows
       .map((row) => eventById.get(row.id))
       .filter((event): event is Event => {
-        const window = event ? this.checkInWindowOf(event) : null;
+        const window =
+          event && eventTakesAttendance(event)
+            ? this.checkInWindowOf(event)
+            : null;
         return window !== null && window.opensAt <= now;
       });
     if (open.length === 0) return rows;
@@ -2749,6 +2762,7 @@ export class ActivityService {
         const alumniByDefault = isAlumni && !answer.byRole;
         const checkInOpen =
           answer.status !== 'not_invited' &&
+          eventTakesAttendance(event) &&
           window !== null &&
           window.opensAt <= now &&
           !alumniByDefault;

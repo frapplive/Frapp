@@ -33,6 +33,8 @@ export interface GoogleCalendarEventInput {
   sourceUrl: string;
   /** Free time on the member's calendar (a task's due time), not busy. */
   transparent: boolean;
+  /** The event might not happen (#6098); absent on every other event. */
+  tentative?: boolean;
   /** What this write carries, kept on the event to skip unchanged ones. */
   hash: string;
 }

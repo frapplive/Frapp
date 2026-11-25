@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { eventTakesAttendance } from '@repo/validation';
 import { z } from 'zod';
 import { SystemPermissions } from '#domain/constants/permissions';
 import { AttendanceService } from '../../../attendance.service';
@@ -89,25 +90,29 @@ export class OpenEventAgentTool implements AgentReadTool<Args> {
     const lines = [
       todayLine(context),
       `${eventHeadline(event, context)}.`,
-      asked === 'required'
-        ? over
-          ? 'You were required to attend.'
-          : 'You are required to attend.'
-        : asked === 'optional'
-          ? 'It is optional for you.'
-          : over
-            ? 'You were not invited.'
-            : 'You are not invited.',
+      event.calendar_only && asked !== 'not_invited'
+        ? 'It is on the calendar for information: nobody checks in or earns points for it.'
+        : asked === 'required'
+          ? over
+            ? 'You were required to attend.'
+            : 'You are required to attend.'
+          : asked === 'optional'
+            ? 'It is optional for you.'
+            : over
+              ? 'You were not invited.'
+              : 'You are not invited.',
       event.point_value > 0
         ? `It is worth ${event.point_value} points.`
         : 'It is worth no points.',
       event.description ? `About: ${quoted(event.description)}.` : null,
       event.notes ? `Organizer's notes: ${quoted(event.notes)}.` : null,
-      mine
-        ? `Your attendance: ${ATTENDANCE_WORDS[mine.status]}${mine.check_in_time ? `, checked in at ${clockTime(mine.check_in_time, timeZone)}` : ''}.`
-        : over
-          ? 'Your attendance: nothing was recorded for you.'
-          : 'Your attendance: you have not checked in.',
+      !eventTakesAttendance(event)
+        ? null
+        : mine
+          ? `Your attendance: ${ATTENDANCE_WORDS[mine.status]}${mine.check_in_time ? `, checked in at ${clockTime(mine.check_in_time, timeZone)}` : ''}.`
+          : over
+            ? 'Your attendance: nothing was recorded for you.'
+            : 'Your attendance: you have not checked in.',
       excuse.excuse
         ? `Your excuse: ${excuse.excuse.status === 'APPROVED' ? 'approved' : excuse.excuse.status === 'DECLINED' ? 'declined' : 'sent and waiting for an answer'}.`
         : null,
