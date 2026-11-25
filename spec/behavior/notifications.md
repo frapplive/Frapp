@@ -91,7 +91,7 @@ came from (`/meetings/<sourceId>` when `sourceType` is `meeting`), where they ar
 the action items, the Events page when `sourceType` is `event` (an event from this time last year, #3930), and otherwise the Tasks board's Suggested list; mobile opens its one Suggested list for all three
 ([`../ui/mobile/screens.md`](../ui/mobile/screens.md), Suggested; corrected 2026-11-12: it fell through to the notification list until #4415 built the list). `chat_reports` names the officer report queue
 (the new-report notification, [`chat/README.md`](./chat/README.md#report)); web
-resolves it to `/settings?tab=chat#reported-messages`, the queue at the foot of Chapter settings' Chat page (#3837), and mobile, which has no queue, falls through to the
+resolves it to `/settings?tab=chat&page=chat-admin#reported-messages`, the queue at the foot of Chat admin, which the Chapter settings Chat page's row opens (#3837, #6030), and mobile, which has no queue, falls through to the
 notification list like any screen it does not route. `discord_import` is the notice
 that a Discord import finished or stopped on an error, sent to the admin who set it up
 ([`chat/README.md`](./chat/README.md#imported-archive-messages)); web resolves it to
@@ -528,7 +528,7 @@ The due-soon and overdue reminders for a task due on a day (not at a time) and f
 
 ## Pre-Event Reminders
 
-`ScheduledJobsService.sweepEventReminders` runs every five minutes and pushes a NORMAL reminder for events starting inside `(now, now + 30min]`.
+`ScheduledJobsService.sweepEventReminders` runs every five minutes and pushes a NORMAL reminder for timed events starting inside `(now, now + 30min]`. An all-day or time-TBD event gets none, since its stored start is a midnight, and neither does an event on the calendar only ([`events.md` § Dates, tentative and on the calendar only](events.md#dates-tentative-and-on-the-calendar-only)).
 
 **Who gets one.** The event's _required_ members, resolved by `AttendanceService.resolveRequiredMembers` — the same call the auto-absent sweep makes, deliberately shared rather than reimplemented:
 

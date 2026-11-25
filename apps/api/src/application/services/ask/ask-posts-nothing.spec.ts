@@ -149,6 +149,7 @@ const CALLS = new Set([
   'channelReads.unreadCounts',
   'meetings.get',
   'meetings.list',
+  'retrieval.describe',
   'retrieval.readSource',
   'scope.authorRoles',
   'scope.findChannel',

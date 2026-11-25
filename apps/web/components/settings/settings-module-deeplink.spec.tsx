@@ -79,7 +79,7 @@ vi.mock("@/lib/hooks/use-toast", async () =>
 
 const { SettingsPage } = await import("./settings-page");
 
-const eventsSwitch = () => screen.getByRole("switch", { name: /^events on$/i });
+const eventsSwitch = () => screen.getByRole("switch", { name: /^events$/i });
 
 /**
  * The receiving half of chat's ops-setup nudge deep link (#492). The nudge
@@ -184,7 +184,7 @@ describe("settings ?module= on a cold load", () => {
     activeChapterId = null;
     const { rerender } = render(<SettingsPage />);
     expect(
-      screen.queryByRole("switch", { name: /^events on$/i }),
+      screen.queryByRole("switch", { name: /^events$/i }),
     ).not.toBeInTheDocument();
 
     activeChapterId = "chap-1";
@@ -222,7 +222,7 @@ describe("settings while the AI read is out", () => {
     render(<SettingsPage />);
     expect(screen.getByText("Loading chapter settings")).toBeInTheDocument();
     expect(
-      screen.queryByRole("switch", { name: /^events on$/i }),
+      screen.queryByRole("switch", { name: /^events$/i }),
     ).not.toBeInTheDocument();
   });
 

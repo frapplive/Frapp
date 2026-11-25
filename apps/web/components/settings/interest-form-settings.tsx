@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import QRCode from "qrcode";
-import { Check, Copy, Download, Plus } from "lucide-react";
+import { Check, ClipboardList, Copy, Download, Plus } from "lucide-react";
 import {
   interestFormErrorCopy,
   useAddInterestFormLabel,
@@ -98,7 +98,34 @@ function QrButton({ path, name }: { path: string; name: string }) {
 }
 
 /**
- * The interest form's settings on the Recruitment module page (#5977,
+ * Recruitment → the interest form's row (#6030): whether the form is taking
+ * interest, opening the page with its settings.
+ */
+export function InterestFormRow({ href }: { href: string }) {
+  const settings = useInterestFormSettings();
+  const value = settings.isPending
+    ? "Loading"
+    : settings.isError
+      ? "Couldn't load"
+      : !settings.data.offered || !settings.data.form
+        ? "Not offered"
+        : settings.data.form.is_open
+          ? "Open"
+          : COPY.closed;
+  return (
+    <SettingsRow
+      id="module-row-interest-form"
+      icon={ClipboardList}
+      label={COPY.title}
+      value={value}
+      href={href}
+    />
+  );
+}
+
+/**
+ * The interest form's settings, on the page the Recruitment module page's
+ * Interest form row opens (#5977, #6030,
  * `ifc-recruitment.md` § Where the chapter's settings live): open or closed,
  * its link and a QR code per label, the referrer question, who's told of a
  * submission, the blurb and the chapter's own questions, and replacing the

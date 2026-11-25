@@ -766,7 +766,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       "reported messages",
     ],
     requires: ["channels:manage"],
-    web: { page: "chat" },
+    web: { page: "chat", params: { page: "chat-admin" } },
   },
   {
     // The phone's Chapter settings row (#5296); web makes a channel from the
@@ -777,7 +777,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     section: "Chat",
     keywords: ["create channel", "add channel", "make a channel"],
     requires: ["channels:create", "channels:manage"],
-    web: { page: "chat" },
+    web: { page: "chat", params: { page: "chat-admin" } },
     phone: { screen: "/chapter-settings", anchor: "new-channel" },
   },
   {
@@ -809,13 +809,31 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
   },
   {
     id: "service-goals",
-    label: "Service and study goals",
+    label: "Service hours goal",
     area: "chapter",
     section: "Service hours",
     keywords: ["goal", "target", "requirement", "minimum", "quota"],
     requires: CONFIG,
     betaModule: "hours",
-    web: { page: "hours", anchor: "settings-module-service-goals" },
+    web: {
+      page: "hours",
+      anchor: "settings-module-service-goals",
+      params: { page: "goal-service" },
+    },
+  },
+  {
+    id: "study-goals",
+    label: "Study hours goal",
+    area: "chapter",
+    section: "Service hours",
+    keywords: ["goal", "target", "requirement", "study hours", "weekly"],
+    requires: CONFIG,
+    betaModule: "hours",
+    web: {
+      page: "hours",
+      anchor: "settings-module-study-goals",
+      params: { page: "goal-study" },
+    },
   },
   {
     id: "study-zones",
@@ -825,7 +843,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["geofence", "map", "library", "study area", "location"],
     requires: ["geofences:manage"],
     module: "geofences",
-    web: { page: "geofences", anchor: "settings-module-geofences-zones" },
+    web: {
+      page: "geofences",
+      anchor: "settings-module-geofences-zones",
+      params: { page: "study-zones" },
+    },
   },
   {
     id: "points-rules",
@@ -845,7 +867,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["goal", "target", "requirement", "minimum", "quota"],
     requires: CONFIG,
     betaModule: "points",
-    web: { page: "points", anchor: "settings-module-points-goals" },
+    web: {
+      page: "points",
+      anchor: "settings-module-points-goals",
+      params: { page: "goal-points" },
+    },
   },
   {
     id: "minutes-sections",
@@ -856,7 +882,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     requires: CONFIG,
     // The template's write is refused while Meetings is off.
     module: "meetings",
-    web: { page: "meetings", anchor: "settings-module-meetings-rules" },
+    web: {
+      page: "meetings",
+      anchor: "settings-module-meetings-rules",
+      params: { page: "sections" },
+    },
   },
   {
     id: "export-reports",
@@ -866,7 +896,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["csv", "spreadsheet", "download", "attendance report"],
     requires: ["reports:export"],
     module: "reports",
-    web: { page: "reports" },
+    web: { page: "reports", params: { page: "reports" } },
   },
   {
     id: "dues-amounts",

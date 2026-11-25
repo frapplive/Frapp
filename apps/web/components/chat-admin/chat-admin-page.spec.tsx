@@ -225,7 +225,6 @@ describe("ChatAdminPage — on the page surface (#2500)", () => {
 // Paul, 2026-11-11: "scope the chat admin panel to whatever channel you're
 // editing", reports at the bottom, and no list of every channel.
 describe("ChatAdminPage — scoped to the channel being edited", () => {
-
   it("shows only that channel on a channel's page: no other channel, no categories, no chapter background", () => {
     render(exec());
 
@@ -233,10 +232,10 @@ describe("ChatAdminPage — scoped to the channel being edited", () => {
     expect(screen.queryByText("#general")).toBeNull();
     expect(screen.queryByRole("region", { name: "Categories" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New channel" })).toBeNull();
-    // The way back to the Chat page of Chapter settings (#3837).
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    // The way back to Chat admin in Chapter settings (#3837, #6030).
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat",
+      "/settings?tab=chat&page=chat-admin",
     );
   });
 
@@ -286,7 +285,9 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
 
   it("has no Edit a channel picker: the tree reaches every channel", () => {
     render(<ChatAdminPage />);
-    expect(screen.queryByRole("combobox", { name: "Edit a channel" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Edit a channel" }),
+    ).toBeNull();
   });
 
   it("opens a category out to its channels, each opening its settings, and folds it again", () => {
@@ -303,14 +304,10 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     ) as HTMLElement;
     const links = within(list).getAllByRole("link");
     // No one has arranged them, so A to Z, as the rail draws them.
-    expect(links.map(channelName)).toEqual([
-      "exec",
-      "general",
-      "officers",
-    ]);
+    expect(links.map(channelName)).toEqual(["exec", "general", "officers"]);
     expect(within(list).getByRole("link", { name: "general" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-1",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
     );
 
     fireEvent.click(chapter);
@@ -328,9 +325,7 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     render(<ChatAdminPage />);
     fireEvent.click(toggle("Chapter"));
     expect(
-      within(categoriesRegion())
-        .getAllByRole("link")
-        .map(channelName),
+      within(categoriesRegion()).getAllByRole("link").map(channelName),
     ).toEqual(["officers", "general", "exec"]);
   });
 
@@ -405,9 +400,10 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
       }),
     ).toBeNull();
     fireEvent.click(system);
-    expect(
-      screen.getByRole("link", { name: "chapter-audit" }),
-    ).toHaveAttribute("href", "/settings?tab=chat&channel=ch-audit");
+    expect(screen.getByRole("link", { name: "chapter-audit" })).toHaveAttribute(
+      "href",
+      "/settings?tab=chat&page=chat-admin&channel=ch-audit",
+    );
   });
 
   it("opens the Uncategorized group by default when the chapter has no categories, and closes it on a click", () => {
@@ -417,7 +413,7 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     expect(none).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "general" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-1",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
     );
     fireEvent.click(none);
     expect(none).toHaveAttribute("aria-expanded", "false");
@@ -1257,9 +1253,10 @@ describe("ChatAdminPage — opened from a channel start", () => {
 
     expect(screen.getByText(/isn.t here anymore/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "All chat settings" }),
-    ).toHaveAttribute("href", "/settings?tab=chat");
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
+      "href",
+      "/settings?tab=chat&page=chat-admin",
+    );
   });
 
   it("says so for a channel id it doesn't know", () => {

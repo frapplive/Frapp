@@ -16,7 +16,7 @@ import {
   type PatchChapterConfig,
 } from "@repo/validation";
 import type { OrgPoints, OrgWorkflow } from "@repo/hooks";
-import { ProfileSection } from "@/components/profile/profile-section";
+import { SettingsGroup } from "@/components/shared/settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -62,6 +62,7 @@ export function NumberRule({
   onBlur,
   disabled,
   example,
+  asItem = false,
 }: {
   label: string;
   hint: ReactNode;
@@ -73,10 +74,21 @@ export function NumberRule({
   disabled: boolean;
   /** One line saying what the number means for a real member. */
   example?: ReactNode;
+  /**
+   * A row of a `RuleGroup` (`SettingsGroup`): an `<li>` at the settings row's
+   * height, rather than a block of an older `RulesList`.
+   */
+  asItem?: boolean;
 }) {
   const id = useId();
+  const Row = asItem ? "li" : "div";
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+    <Row
+      className={cn(
+        "flex flex-col gap-3 px-4 sm:flex-row sm:justify-between sm:gap-8",
+        asItem ? "min-h-11 py-2.5 sm:items-center" : "py-4 sm:items-start",
+      )}
+    >
       <div className="min-w-0 space-y-0.5">
         <label htmlFor={id} className="text-sm font-medium text-foreground">
           {label}
@@ -110,7 +122,7 @@ export function NumberRule({
           </p>
         ) : null}
       </div>
-    </div>
+    </Row>
   );
 }
 
@@ -122,6 +134,7 @@ export function SwitchRule({
   disabled,
   nested = false,
   muted = false,
+  asItem = false,
 }: {
   label: string;
   hint: ReactNode;
@@ -132,13 +145,17 @@ export function SwitchRule({
   nested?: boolean;
   /** Its label greys while the switch it waits on is off. */
   muted?: boolean;
+  /** A row of a `RuleGroup`: an `<li>` at the settings row's height. */
+  asItem?: boolean;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
+  const Row = asItem ? "li" : "div";
   return (
-    <div
+    <Row
       className={cn(
-        "flex items-start justify-between gap-8 px-4 py-4",
+        "flex justify-between gap-8 px-4",
+        asItem ? "min-h-11 items-center py-2.5" : "items-start py-4",
         nested && "pl-10",
       )}
     >
@@ -163,7 +180,28 @@ export function SwitchRule({
         onCheckedChange={onChange}
         aria-describedby={hintId}
       />
-    </div>
+    </Row>
+  );
+}
+
+/**
+ * A module page's group of rules (#6030): the settings group, its heading and
+ * at most one footnote, holding `NumberRule`s and `SwitchRule`s drawn
+ * `asItem`, and any `SettingsRow` that opens a rule's own page.
+ */
+export function RuleGroup({
+  heading = "Rules",
+  footnote,
+  children,
+}: {
+  heading?: string;
+  footnote?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsGroup heading={heading} footnote={footnote}>
+      {children}
+    </SettingsGroup>
   );
 }
 
@@ -261,60 +299,62 @@ export function ServiceHoursRules({
   );
 
   return (
-    <ProfileSection
+    <form
       id="settings-module-hours-rules"
-      title="Rules"
-      hint="Changes are written to the chapter audit log."
+      aria-label="Rules"
+      onSubmit={submit}
+      className="scroll-mt-16 space-y-3"
+      noValidate
     >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <RulesList>
-          <NumberRule
-            label="Minutes of service per point"
-            hint="Approved service earns points at this rate. Entries already approved keep what they earned."
-            suffix="minutes"
-            draft={draft}
-            onDraft={setDraft}
-            onBlur={() => void check()}
-            error={error}
-            disabled={!canManage || savingRate}
-            example={
-              <>
-                A 3-hour volunteer shift earns{" "}
-                {shiftPoints.toLocaleString("en-US")}{" "}
-                {shiftPoints === 1 ? "point" : "points"}, and 10 points take{" "}
-                {hoursForPoints(10, rate)}.
-              </>
+      <RuleGroup footnote={rulesFootnote(canManage)}>
+        <NumberRule
+          asItem
+          label="Minutes of service per point"
+          hint={
+            <>
+              A 3-hour shift earns {shiftPoints.toLocaleString("en-US")}{" "}
+              {shiftPoints === 1 ? "point" : "points"}, and 10 points take{" "}
+              {hoursForPoints(10, rate)}. Entries already approved keep theirs.
+            </>
+          }
+          suffix="minutes"
+          draft={draft}
+          onDraft={setDraft}
+          onBlur={() => void check()}
+          error={error}
+          disabled={!canManage || savingRate}
+        />
+        {hasProofWorkflow ? (
+          <SwitchRule
+            asItem
+            label="Ask for proof"
+            hint="A photo or a signed slip, which the approving officer sees."
+            checked={proof}
+            disabled={!canManage || savingWorkflows}
+            onChange={(enabled) =>
+              void onPatch(
+                { workflows: [{ key: "wf_hours_receipt", enabled }] },
+                enabled ? "Proof is now required" : "Proof is now optional",
+              )
             }
           />
-          {hasProofWorkflow ? (
-            <SwitchRule
-              label="Ask for proof"
-              hint="Members attach a photo or a signed slip when they log service. The officer approving it sees it."
-              checked={proof}
-              disabled={!canManage || savingWorkflows}
-              onChange={(enabled) =>
-                void onPatch(
-                  { workflows: [{ key: "wf_hours_receipt", enabled }] },
-                  enabled ? "Proof is now required" : "Proof is now optional",
-                )
-              }
-            />
-          ) : null}
-        </RulesList>
-        <SaveRow
-          dirty={draft !== String(saved)}
-          saving={savingRate}
-          disabled={!canManage}
-          label="Save rate"
-        />
-      </form>
-      {!canManage ? (
-        <p className="text-caption text-muted-foreground">
-          Your role can&apos;t change these.
-        </p>
-      ) : null}
-    </ProfileSection>
+        ) : null}
+      </RuleGroup>
+      <SaveRow
+        dirty={draft !== String(saved)}
+        saving={savingRate}
+        disabled={!canManage}
+        label="Save rate"
+      />
+    </form>
   );
+}
+
+/** A module's Rules footnote: they're logged, and whether you can change them. */
+function rulesFootnote(canManage: boolean, lead?: string): string {
+  const logged = "Changes are recorded in Logs.";
+  const said = lead ? `${lead} ${logged}` : logged;
+  return canManage ? said : `${said} Your role can't change these.`;
 }
 
 /** Points → Rules: the two anti-fraud limits on manual adjustments. */
@@ -377,47 +417,49 @@ export function PointsRules({
   const disabled = !canManage || saving;
 
   return (
-    <ProfileSection
+    <form
       id="settings-module-points-rules"
-      title="Rules"
-      hint="Limits on officers adding or taking points by hand. Points from events, tasks and service aren't limited. Changes are written to the chapter audit log."
+      aria-label="Rules"
+      onSubmit={submit}
+      className="scroll-mt-16 space-y-3"
+      noValidate
     >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <RulesList>
-          <NumberRule
-            label="Adjustments per officer each hour"
-            hint="Past this, an officer's next adjustment is refused until the hour is up. It keeps a slip, or someone using an officer's account, from rewriting the board."
-            suffix="an hour"
-            draft={rateDraft}
-            onDraft={setRateDraft}
-            onBlur={() => void checkRate()}
-            error={rateError}
-            disabled={disabled}
-          />
-          <NumberRule
-            label="Flag adjustments of"
-            hint="An adjustment this size or bigger, up or down, is flagged in the ledger below for another officer to look at. It still goes through."
-            suffix="points"
-            draft={flagDraft}
-            onDraft={setFlagDraft}
-            onBlur={() => void checkFlag()}
-            error={flagError}
-            disabled={disabled}
-          />
-        </RulesList>
-        <SaveRow
-          dirty={dirty}
-          saving={saving}
-          disabled={!canManage}
-          label="Save limits"
+      <RuleGroup
+        footnote={rulesFootnote(
+          canManage,
+          "Limits on points added or taken by hand; points from events, tasks and service aren't limited.",
+        )}
+      >
+        <NumberRule
+          asItem
+          label="Adjustments per officer each hour"
+          hint="Past this, an officer's next one waits for the hour."
+          suffix="an hour"
+          draft={rateDraft}
+          onDraft={setRateDraft}
+          onBlur={() => void checkRate()}
+          error={rateError}
+          disabled={disabled}
         />
-      </form>
-      {!canManage ? (
-        <p className="text-caption text-muted-foreground">
-          Your role can&apos;t change these.
-        </p>
-      ) : null}
-    </ProfileSection>
+        <NumberRule
+          asItem
+          label="Flag adjustments of"
+          hint="Up or down, flagged in the ledger for another officer to check."
+          suffix="points"
+          draft={flagDraft}
+          onDraft={setFlagDraft}
+          onBlur={() => void checkFlag()}
+          error={flagError}
+          disabled={disabled}
+        />
+      </RuleGroup>
+      <SaveRow
+        dirty={dirty}
+        saving={saving}
+        disabled={!canManage}
+        label="Save limits"
+      />
+    </form>
   );
 }
 

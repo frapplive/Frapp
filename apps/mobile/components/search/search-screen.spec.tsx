@@ -224,7 +224,9 @@ describe("SearchScreen", () => {
       );
       await act(async () => row.props.onPress());
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
-        expect.stringContaining("/settings?tab=points&setting=points-goal"),
+        expect.stringContaining(
+          "/settings?tab=points&page=goal-points&setting=points-goal",
+        ),
       );
       expect(drawnText(tree.root)).toContain(
         "The web dashboard couldn't be opened.",

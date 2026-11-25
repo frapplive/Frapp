@@ -20,6 +20,11 @@ const ok = (data: unknown) => ({
   isSuccess: true,
 });
 
+const reads = vi.hoisted(() => ({
+  pipeline: [] as boolean[],
+  settings: 0,
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useRoles: () => ok(roles.current),
@@ -34,6 +39,14 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useCreateRushTag: () => ({ mutateAsync: vi.fn() }),
   useRenameRushTag: () => ({ mutate: vi.fn() }),
   useDeleteRushTag: () => ({ mutateAsync: vi.fn() }),
+  useRushPipeline: (options: { enabled?: boolean }) => {
+    reads.pipeline.push(options.enabled !== false);
+    return { data: undefined, isError: false };
+  },
+  useRushSettings: () => {
+    reads.settings += 1;
+    return { data: undefined };
+  },
 }));
 
 vi.mock("@/lib/hooks/use-chapter-vocabulary", () => ({
@@ -45,9 +58,10 @@ vi.mock("@/lib/hooks/use-toast", () => ({
   toast: vi.fn(),
 }));
 
-const { RushNotesAccess } = await import("./rush-module-settings");
+const { RushModuleSettings, RushNotesAccess } =
+  await import("./rush-module-settings");
 const { RushStageEditor, stagesBody } = await import("./rush-stage-editor");
-const { RushStaleDays } = await import("./rush-stale-days");
+const { RushStaleDaysRow } = await import("./rush-stale-days");
 
 const stage = (key: string, label: string, category: string, position = 0) => ({
   id: `s-${key}`,
@@ -373,7 +387,11 @@ describe("the stale days (#5934)", () => {
   beforeEach(() => saveSettings.mockReset());
 
   it("reads as a sentence for a role that can't change it", () => {
-    render(<RushStaleDays staleDays={7} canEdit={false} />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit={false} />
+      </ul>,
+    );
     expect(
       screen.getByText("Needs follow-up after 7 days without a logged contact"),
     ).toBeInTheDocument();
@@ -382,7 +400,11 @@ describe("the stale days (#5934)", () => {
 
   it("saves a new number on Enter for rush:manage", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "10{Enter}");
@@ -394,7 +416,11 @@ describe("the stale days (#5934)", () => {
 
   it("refuses a number outside 1 to 60 and sends nothing", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "90{Enter}");
@@ -406,11 +432,52 @@ describe("the stale days (#5934)", () => {
 
   it("puts the old number back on Escape", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "12{Escape}");
     expect(field).toHaveValue("7");
     expect(saveSettings).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The pipeline and recruitment settings routes refuse a viewer without
+ * rush:view and a chapter with Recruitment off, so the Recruitment page
+ * doesn't ask them (#6030).
+ */
+describe("the Recruitment page's reads", () => {
+  it("asks for nothing while Recruitment is off", () => {
+    reads.pipeline = [];
+    reads.settings = 0;
+    render(
+      <RushModuleSettings
+        moduleOn={false}
+        canSeeWhoCan
+        pageHref={(page) => `/settings?tab=rush&page=${page}`}
+      />,
+    );
+    expect(reads.pipeline.every((enabled) => !enabled)).toBe(true);
+    expect(reads.settings).toBe(0);
+  });
+
+  it("asks for nothing from a viewer without rush:view", () => {
+    reads.pipeline = [];
+    reads.settings = 0;
+    mine.permissions = ["chapter-config:view", "members:view"];
+    render(
+      <RushModuleSettings
+        moduleOn
+        canSeeWhoCan
+        pageHref={(page) => `/settings?tab=rush&page=${page}`}
+      />,
+    );
+    expect(reads.pipeline.every((enabled) => !enabled)).toBe(true);
+    expect(reads.settings).toBe(0);
+    mine.permissions = ["*"];
   });
 });

@@ -100,6 +100,7 @@ describe('MeetingMinutesCorpusSource', () => {
   function setup(row: Meeting | null = meeting()) {
     const meetings = {
       findById: jest.fn().mockResolvedValue(row),
+      findByIds: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<IMeetingRepository>;
     const readableAmong = jest
       .fn()
@@ -111,6 +112,26 @@ describe('MeetingMinutesCorpusSource', () => {
     } as unknown as MeetingService);
     return { source, meetings, readableAmong };
   }
+
+  it('says who posted the minutes, by user id, in one read (#5180)', async () => {
+    const { source, meetings } = setup();
+    meetings.findByIds.mockResolvedValueOnce([
+      meeting({ posted_by: 'user-poster' }),
+      meeting({ id: 'meeting-2', posted_by: null }),
+    ]);
+    const facts = await source.describe(CHAPTER, ['meeting-1', 'meeting-2']);
+    expect(meetings.findByIds).toHaveBeenCalledWith(CHAPTER, [
+      'meeting-1',
+      'meeting-2',
+    ]);
+    expect(facts.get('meeting-1')).toEqual({
+      type: null,
+      folder: null,
+      by: { verb: 'posted', userId: 'user-poster' },
+      fromDrive: false,
+    });
+    expect(facts.get('meeting-2')?.by).toBeNull();
+  });
 
   it('reads posted minutes as dated, decaying text', async () => {
     const { source } = setup();
@@ -258,6 +279,41 @@ describe('ChapterDocumentCorpusSource', () => {
       getChannelAccessHolder,
     };
   }
+
+  it('says what each document is: its type, folder, Drive copy and uploader (#5180)', async () => {
+    const { source, documents } = setup();
+    documents.findByIds.mockResolvedValueOnce([
+      {
+        ...document,
+        document_type: 'Policy',
+        folder: 'Governance',
+        uploaded_by: 'uploader',
+        drive_file_id: 'drive-1',
+      },
+      {
+        ...document,
+        id: 'doc-2',
+        document_type: null,
+        folder: null,
+        // A meeting's minutes filed as a document have no uploader.
+        uploaded_by: null,
+        drive_file_id: null,
+      },
+    ] as never);
+    const facts = await source.describe(CHAPTER, ['doc-1', 'doc-2']);
+    expect(facts.get('doc-1')).toEqual({
+      type: 'Policy',
+      folder: 'Governance',
+      by: { verb: 'uploaded', userId: 'uploader' },
+      fromDrive: true,
+    });
+    expect(facts.get('doc-2')).toEqual({
+      type: null,
+      folder: null,
+      by: null,
+      fromDrive: false,
+    });
+  });
 
   it('reads the file from the documents bucket and dates it by its effective date', async () => {
     const { source, documents, storage, extractor } = setup();

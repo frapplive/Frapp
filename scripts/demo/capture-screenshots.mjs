@@ -23,13 +23,19 @@ import { chromium } from "playwright";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-import { LOCAL_DEMO_EMAIL, LOCAL_DEMO_PASSWORD, TEMPLATE_NAMESPACE, demoIds } from "./seed-demo.mjs";
+import {
+  LOCAL_DEMO_EMAIL,
+  LOCAL_DEMO_PASSWORD,
+  TEMPLATE_NAMESPACE,
+  demoIds,
+} from "./seed-demo.mjs";
 
 // `localhost`, not `127.0.0.1`: the API's CORS allowlist (apps/api/src/main.ts)
 // names `http://localhost:3000`, and every browser call fails preflight from
 // the numeric origin — which looks exactly like "the app has no data".
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
-const CHAPTER_ID = process.env.DEMO_CHAPTER_ID ?? demoIds(TEMPLATE_NAMESPACE).chapterId;
+const CHAPTER_ID =
+  process.env.DEMO_CHAPTER_ID ?? demoIds(TEMPLATE_NAMESPACE).chapterId;
 const OUT_DIR = process.env.OUT_DIR ?? "screenshots/web";
 // The local login setup-demo.sh creates; seed-demo.mjs owns the values.
 const EMAIL = process.env.DEMO_EMAIL ?? LOCAL_DEMO_EMAIL;
@@ -50,15 +56,15 @@ const ROUTES = [
   ["billing", "/billing", "Dues & billing"],
   // Points, Service hours and Study hours are not pages (#5950): a member's
   // own open from their Profile, standings are a Directory sort, and the
-  // chapter ledger is on Chapter settings' Points page.
+  // chapter ledger opens from Chapter settings' Points page (#6030).
   ["points", "/profile?open=points", "Your points"],
   ["service", "/profile?open=service", "Your service hours"],
   ["study", "/profile?open=study", "Your study sessions"],
   ["standings", "/members?sort=points", "Standings"],
-  ["points-ledger", "/settings?tab=points", "Points ledger"],
+  ["points-ledger", "/settings?tab=points&page=points-ledger", "Points ledger"],
   ["documents", "/documents", "Document library"],
-  ["reports", "/settings?tab=reports", "Reports"],
-  ["geofences", "/settings?tab=geofences", "Study zones"],
+  ["reports", "/settings?tab=reports&page=reports", "Reports"],
+  ["geofences", "/settings?tab=geofences&page=study-zones", "Study zones"],
   ["backwork", "/backwork", "Backwork archive"],
   ["settings", "/settings", "Chapter settings"],
   ["profile", "/profile", "Member profile"],

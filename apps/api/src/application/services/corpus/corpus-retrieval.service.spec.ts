@@ -1,3 +1,4 @@
+import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import type { CorpusCandidate } from '#domain/entities/corpus.entity';
 import type { ICorpusRepository } from '#domain/repositories/corpus.repository.interface';
 import type { AiGatewayService } from '../ai/ai-gateway.service';
@@ -57,15 +58,23 @@ function setup(candidates: CorpusCandidate[] = []) {
     model: 'gemini-embedding-001',
     dimensions: 1536,
   });
-  const service = new CorpusRetrievalService(corpus, [documents, minutes], {
-    embed,
-  } as unknown as AiGatewayService);
+  const members = {
+    findChapterMemberIdentities: jest.fn(async () => [
+      { user_id: 'uploader', display_name: 'Dana Reyes', role_ids: [] },
+    ]),
+  } as unknown as jest.Mocked<IMemberRepository>;
+  const service = new CorpusRetrievalService(
+    corpus,
+    [documents, minutes],
+    { embed } as unknown as AiGatewayService,
+    members,
+  );
   const retrieve = (query = 'What are dues?', limit?: number) =>
     service.retrieve(
       { chapterId: CHAPTER, actingUserId: ASKER, query, limit },
       NOW,
     );
-  return { service, corpus, documents, minutes, embed, retrieve };
+  return { service, corpus, documents, minutes, embed, retrieve, members };
 }
 
 const ids = (
@@ -243,8 +252,79 @@ describe('CorpusRetrievalService', () => {
       messageId: null,
       authorIds: [],
       messageCount: null,
+      facts: null,
     });
     expect(result.passages[2].matchedBy).toEqual(['words']);
+  });
+
+  it('says what each kept source is, read only for sources the asker may open, naming people once (#5180)', async () => {
+    const { retrieve, documents, minutes, members } = setup([
+      candidate({ chunk_id: 'doc', source_id: 'doc-1', dense_rank: 1 }),
+      candidate({ chunk_id: 'doc-b', source_id: 'doc-2', dense_rank: 3 }),
+      candidate({
+        chunk_id: 'exec-1',
+        source_type: 'meeting_minutes',
+        source_id: 'exec',
+        dense_rank: 2,
+      }),
+    ]);
+    documents.describe = jest.fn(
+      async () =>
+        new Map([
+          [
+            'doc-1',
+            {
+              type: 'Policy',
+              folder: null,
+              by: { verb: 'uploaded' as const, userId: 'uploader' },
+              fromDrive: false,
+            },
+          ],
+          [
+            'doc-2',
+            {
+              type: null,
+              folder: 'Old',
+              // No longer a member: not named.
+              by: { verb: 'uploaded' as const, userId: 'gone' },
+              fromDrive: false,
+            },
+          ],
+        ]),
+    );
+    minutes.describe = jest.fn(async () => new Map());
+    const result = await retrieve();
+    if (result.status !== 'ok') throw new Error('expected passages');
+    expect(result.passages.map((passage) => passage.facts)).toEqual([
+      {
+        type: 'Policy',
+        folder: null,
+        by: { verb: 'uploaded', name: 'Dana Reyes' },
+        fromDrive: false,
+      },
+      { type: null, folder: 'Old', by: null, fromDrive: false },
+    ]);
+    expect(documents.describe).toHaveBeenCalledWith(CHAPTER, [
+      'doc-1',
+      'doc-2',
+    ]);
+    expect(members.findChapterMemberIdentities).toHaveBeenCalledTimes(1);
+    // The Exec minutes the asker cannot open are never described.
+    expect(minutes.describe).not.toHaveBeenCalled();
+  });
+
+  it('keeps the passages when a source cannot be described', async () => {
+    const { retrieve, documents } = setup([
+      candidate({ chunk_id: 'doc', source_id: 'doc-1', dense_rank: 1 }),
+    ]);
+    documents.describe = jest.fn(async () => {
+      throw new Error('database down');
+    });
+    const result = await retrieve();
+    if (result.status !== 'ok') throw new Error('expected passages');
+    expect(
+      result.passages.map((passage) => [passage.id, passage.facts]),
+    ).toEqual([['doc', null]]);
   });
 
   it('puts newer minutes above older ones at the same rank, and never ages a standing document', async () => {
@@ -341,6 +421,7 @@ describe('CorpusRetrievalService — chat (#4314)', () => {
       base.corpus,
       [base.documents, base.minutes, chatAdapter],
       { embed: base.embed } as unknown as AiGatewayService,
+      base.members,
     );
     const retrieve = () =>
       service.retrieve(
@@ -530,7 +611,10 @@ describe('CorpusRetrievalService — chat (#4314)', () => {
 
     it('reads the passages for a member who may open the source, with no model call', async () => {
       const { service, corpus, documents, embed } = withChunks();
-      await expect(service.readSource(request)).resolves.toEqual(chunks);
+      await expect(service.readSource(request)).resolves.toEqual({
+        ...chunks,
+        facts: null,
+      });
       expect(documents.readableBy).toHaveBeenCalledWith(CHAPTER, ASKER, [
         'doc-1',
       ]);
@@ -543,6 +627,33 @@ describe('CorpusRetrievalService — chat (#4314)', () => {
         limit: 5,
       });
       expect(embed).not.toHaveBeenCalled();
+    });
+
+    it('says what the source is, from its adapter, with its uploader named (#5180)', async () => {
+      const { service, documents } = withChunks();
+      documents.describe = jest.fn(
+        async () =>
+          new Map([
+            [
+              'doc-1',
+              {
+                type: 'Policy',
+                folder: null,
+                by: { verb: 'uploaded' as const, userId: 'uploader' },
+                fromDrive: false,
+              },
+            ],
+          ]),
+      );
+      await expect(service.readSource(request)).resolves.toMatchObject({
+        facts: {
+          type: 'Policy',
+          folder: null,
+          by: { verb: 'uploaded', name: 'Dana Reyes' },
+          fromDrive: false,
+        },
+      });
+      expect(documents.describe).toHaveBeenCalledWith(CHAPTER, ['doc-1']);
     });
 
     it('reads nothing for a source the member cannot open', async () => {
