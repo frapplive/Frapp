@@ -641,6 +641,7 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
             listState={listState}
             loadError={documentsQuery.error}
             visible={tieredVisible}
+            revealId={openId}
             activeFolder={activeFolder}
             total={folderTotal}
             filtering={filtering}

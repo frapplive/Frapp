@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,8 @@ import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import type { DocumentMarks } from "@/components/documents/use-document-marks";
 import { useKeepFocus } from "@/components/documents/use-keep-focus";
 import { DocumentRowsSkeleton } from "@/components/documents/documents-skeleton";
+import { MoreRowsSentinel } from "@/components/shared/more-rows-sentinel";
+import { useRenderWindow } from "@repo/hooks/use-render-window";
 
 export type DocumentListState =
   "offline" | "loading" | "error" | "empty" | "ready";
@@ -67,6 +69,7 @@ export function DocumentList({
   folderPicker,
   folderLine,
   folderHue,
+  revealId = null,
 }: {
   listState: DocumentListState;
   /** The failed read behind `listState === "error"`, for its wording. */
@@ -134,10 +137,27 @@ export function DocumentList({
   folderLine?: ReactNode;
   /** The hue a file's tile wears, by its folder (#5576). */
   folderHue: (folder: string | null) => string;
+  /**
+   * The document the viewer is showing, whose row is drawn wherever it sits
+   * so closing the viewer can hand focus back to it (#6088).
+   */
+  revealId?: string | null;
 }) {
   // Starring a file inside a folder or a search moves its row to the head of
   // the list; this keeps focus on the Star that moved it (#3934).
   const { rootRef, remember } = useKeepFocus<HTMLElement>();
+  // A page of rows at a time (#6088), the next drawn as the reader nears
+  // the end; a new folder, search, filter or order starts over.
+  // The row whose Star or Pin was just pressed stays drawn wherever its new
+  // place is, so `useKeepFocus` finds it; the viewer's document likewise.
+  const [markedRowId, setMarkedRowId] = useState<string | null>(null);
+  const rowWindow = useRenderWindow(
+    visible,
+    JSON.stringify([activeFolder, deferredSearch, filters, sort]),
+    {
+      reveal: ({ doc }) => doc.id === markedRowId || doc.id === revealId,
+    },
+  );
   return (
     // Its own container (#4022): the rows break on the list's width, which
     // the folder rail and, beside chat, the chat panel both take from.
@@ -351,39 +371,54 @@ export function DocumentList({
             `denseListClassName`; the Directory lane extracted them when it
             became the third and fourth copy of the same string.
           */
-          <ul className={denseListClassName}>
-            {visible.map(({ doc, uploader }) => {
-              const props = {
-                doc,
-                uploader,
-                hue: folderHue(doc.folder),
-                gate,
-                deleting: deletingIds.has(doc.id),
-                starred: marks.isStarred({ kind: "document", id: doc.id }),
-                pinBusy: marks.pinBusy,
-                onOpen,
-                onDelete,
-                onToggleStar: (row: ChapterDocument) => {
-                  onHoldRow?.(row.id);
-                  remember(`star:${row.id}`);
-                  marks.toggleStar({ kind: "document", id: row.id }, row.title);
-                },
-                onTogglePin: (row: ChapterDocument) => {
-                  onHoldRow?.(row.id);
-                  remember(`pin:${row.id}`);
-                  void marks.setPinned(
-                    { kind: "document", id: row.id },
-                    row.title,
-                    !row.pinned_at,
-                  );
-                },
-                limited: isLimited?.(doc) ?? false,
-                onSetAccess:
-                  onSetAccess && canSetAccess?.(doc) ? onSetAccess : undefined,
-              };
-              return <DocumentRow key={doc.id} {...props} />;
-            })}
-          </ul>
+          <>
+            <ul className={denseListClassName}>
+              {rowWindow.shown.map(({ doc, uploader }) => {
+                const props = {
+                  doc,
+                  uploader,
+                  hue: folderHue(doc.folder),
+                  gate,
+                  deleting: deletingIds.has(doc.id),
+                  starred: marks.isStarred({ kind: "document", id: doc.id }),
+                  pinBusy: marks.pinBusy,
+                  onOpen,
+                  onDelete,
+                  onToggleStar: (row: ChapterDocument) => {
+                    onHoldRow?.(row.id);
+                    setMarkedRowId(row.id);
+                    remember(`star:${row.id}`);
+                    marks.toggleStar(
+                      { kind: "document", id: row.id },
+                      row.title,
+                    );
+                  },
+                  onTogglePin: (row: ChapterDocument) => {
+                    onHoldRow?.(row.id);
+                    setMarkedRowId(row.id);
+                    remember(`pin:${row.id}`);
+                    void marks.setPinned(
+                      { kind: "document", id: row.id },
+                      row.title,
+                      !row.pinned_at,
+                    );
+                  },
+                  limited: isLimited?.(doc) ?? false,
+                  onSetAccess:
+                    onSetAccess && canSetAccess?.(doc)
+                      ? onSetAccess
+                      : undefined,
+                };
+                return <DocumentRow key={doc.id} {...props} />;
+              })}
+            </ul>
+            {rowWindow.hasMore ? (
+              <MoreRowsSentinel
+                key={rowWindow.shown.length}
+                onReach={rowWindow.showMore}
+              />
+            ) : null}
+          </>
         )}
       </div>
     </section>
