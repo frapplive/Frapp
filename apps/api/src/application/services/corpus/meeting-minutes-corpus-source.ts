@@ -12,7 +12,11 @@ import {
 } from '#domain/repositories/meeting.repository.interface';
 import type { CorpusSection } from '#domain/utils/corpus-chunker';
 import { MeetingService } from '../meeting.service';
-import type { CorpusSourceAdapter, CorpusSourceRead } from './corpus-source';
+import type {
+  CorpusSourceAdapter,
+  CorpusSourceDescription,
+  CorpusSourceRead,
+} from './corpus-source';
 
 const SECTION_LABEL = new Map<string, string>(
   MEETING_SECTIONS.map((section) => [section.key, section.label]),
@@ -153,6 +157,30 @@ export class MeetingMinutesCorpusSource implements CorpusSourceAdapter {
         sections,
       },
     };
+  }
+
+  /**
+   * Who posted each meeting's minutes (#5180); the meeting's type is in its
+   * title already.
+   */
+  async describe(
+    chapterId: string,
+    sourceIds: readonly string[],
+  ): Promise<Map<string, CorpusSourceDescription>> {
+    const facts = new Map<string, CorpusSourceDescription>();
+    const ids = [...new Set(sourceIds)];
+    if (ids.length === 0) return facts;
+    for (const meeting of await this.meetings.findByIds(chapterId, ids)) {
+      facts.set(meeting.id, {
+        type: null,
+        folder: null,
+        by: meeting.posted_by
+          ? { verb: 'posted', userId: meeting.posted_by }
+          : null,
+        fromDrive: false,
+      });
+    }
+    return facts;
   }
 
   async readableBy(

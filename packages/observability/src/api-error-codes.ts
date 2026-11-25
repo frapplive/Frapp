@@ -267,6 +267,11 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // of one already counted.
   "attendance.check_in.window_closed",
   "attendance.already_checked_in",
+  // A check-in, code screen or hand mark on an event that takes no
+  // attendance (#6098): one on the calendar only, or one whose time isn't
+  // set yet. The member did nothing wrong; the event says why.
+  "attendance.calendar_only",
+  "attendance.time_tbd",
   // A picked Drive folder with files in it (#5583): Google lets a picker
   // sign-in share only the folder, not what's inside, so the officer shares
   // it with Frapp's address in Drive and the panel connects once they have.

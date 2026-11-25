@@ -77,3 +77,58 @@ describe('toGoogleEvent', () => {
     expect(toGoogleEvent(item({ location: null })).hash).not.toBe(hash);
   });
 });
+
+describe('toGoogleEvent, dated events (#6098)', () => {
+  it('marks a tentative event tentative, and leaves every other event as it was', () => {
+    const plain = toGoogleEvent(item());
+    const maybe = toGoogleEvent(item({ tentative: true }));
+
+    expect(plain).not.toHaveProperty('tentative');
+    expect(maybe.tentative).toBe(true);
+    expect(maybe.hash).not.toBe(plain.hash);
+  });
+
+  it('writes a one-day all-day event on its date, ending the next day', () => {
+    const event = toGoogleEvent(
+      item({ when: { kind: 'day', date: '2027-01-11' } }),
+    );
+
+    expect(event.start).toEqual({ date: '2027-01-11' });
+    expect(event.end).toEqual({ date: '2027-01-12' });
+  });
+
+  it('writes a multi-day all-day event ending the day after its last day', () => {
+    const event = toGoogleEvent(
+      item({
+        when: { kind: 'day', date: '2027-01-22', endDate: '2027-02-12' },
+      }),
+    );
+
+    expect(event.start).toEqual({ date: '2027-01-22' });
+    expect(event.end).toEqual({ date: '2027-02-13' });
+  });
+
+  it('re-syncs when the timing, the days or the Required line change', () => {
+    const timed = toGoogleEvent(item()).hash;
+    const oneDay = toGoogleEvent(
+      item({ when: { kind: 'day', date: '2027-01-11' } }),
+    ).hash;
+    const twoDays = toGoogleEvent(
+      item({
+        when: { kind: 'day', date: '2027-01-11', endDate: '2027-01-12' },
+      }),
+    ).hash;
+    const tbd = toGoogleEvent(
+      item({
+        when: { kind: 'day', date: '2027-01-11' },
+        description: `Time TBD\n\n${item().description}`,
+      }),
+    ).hash;
+    // A calendar-only event drops "Required" from the description.
+    const required = toGoogleEvent(
+      item({ description: `${item().description}\n\nRequired` }),
+    ).hash;
+
+    expect(new Set([timed, oneDay, twoDays, tbd, required]).size).toBe(5);
+  });
+});
