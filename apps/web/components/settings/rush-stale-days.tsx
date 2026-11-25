@@ -3,8 +3,7 @@
 import { useId, useState } from "react";
 import { useSaveRushSettings } from "@repo/hooks";
 import { RUSH_STALE_DAYS_MAX, RUSH_STALE_DAYS_MIN } from "@repo/validation";
-import { ProfileSection } from "@/components/profile/profile-section";
-import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
+import { SettingsRow } from "@/components/shared/settings-row";
 import { Input } from "@/components/ui/input";
 import { toastFailure } from "@/lib/failure-toast";
 
@@ -13,34 +12,25 @@ function daysWord(days: number): string {
 }
 
 /**
- * The chapter's stale days on the Recruitment module page (#5934,
- * `spec/behavior/rush.md` § Contacts, owner and follow-ups): how long an open
- * prospect goes without a logged contact before the board flags them "Needs
- * follow-up" and their owner is told. `rush:manage` types the number, saved on
- * Enter or leaving the field with a quiet "Saved", Escape putting the old one
- * back (rulebook § 9, settings save on their own); everyone else reads it.
+ * Recruitment → Rules' follow-up row (#5934): how many days without a logged
+ * contact before a prospect needs a follow-up, typed in place and saved on
+ * Enter or leaving the field. `rush:manage` changes it; everyone else reads
+ * it.
  */
-export function RushStaleDays({
+export function RushStaleDaysRow({
   staleDays,
   canEdit,
 }: {
   staleDays: number;
   canEdit: boolean;
 }) {
+  if (canEdit) return <StaleDaysRow staleDays={staleDays} />;
   return (
-    <ProfileSection id="settings-module-rush-follow-up" title="Follow-ups">
-      <SettingsGroup>
-        {canEdit ? (
-          <StaleDaysRow staleDays={staleDays} />
-        ) : (
-          <SettingsRow
-            label={`Needs follow-up after ${daysWord(staleDays)} without a logged contact`}
-            description="Your role can't change this."
-            control={null}
-          />
-        )}
-      </SettingsGroup>
-    </ProfileSection>
+    <SettingsRow
+      label={`Needs follow-up after ${daysWord(staleDays)} without a logged contact`}
+      description="Your role can't change this."
+      control={null}
+    />
   );
 }
 
