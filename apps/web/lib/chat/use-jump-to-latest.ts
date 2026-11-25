@@ -156,8 +156,6 @@ export function useJumpToLatest({
     scrollerRef,
     markNewest,
     measure,
-    /** The reader is at the newest message, where the list follows arrivals. */
-    atNewest: zone === "newest",
     /** Draw the jump control. */
     showsJump: zone === "away" || hasNewBelow,
     hasNewBelow,

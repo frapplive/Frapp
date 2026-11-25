@@ -30,7 +30,6 @@ const virtuosoProps = vi.hoisted(() => ({
     totalListHeightChanged?: (height: number) => void;
     rangeChanged?: (range: { startIndex: number; endIndex: number }) => void;
     initialTopMostItemIndex?: unknown;
-    atBottomStateChange?: (atBottom: boolean) => void;
   },
   // The handle's one method the timeline calls, for the cases that assert
   // where it scrolls.
@@ -78,7 +77,6 @@ vi.mock("react-virtuoso", async () => {
         totalListHeightChanged,
         rangeChanged,
         initialTopMostItemIndex,
-        atBottomStateChange,
         components,
         context,
       }: {
@@ -94,7 +92,6 @@ vi.mock("react-virtuoso", async () => {
           endIndex: number;
         }) => void;
         initialTopMostItemIndex?: unknown;
-        atBottomStateChange?: (atBottom: boolean) => void;
         components?: {
           Header?: (props: { context?: unknown }) => React.ReactNode;
         };
@@ -122,14 +119,15 @@ vi.mock("react-virtuoso", async () => {
         totalListHeightChanged,
         rangeChanged,
         initialTopMostItemIndex,
-        atBottomStateChange,
       };
       const Header = components?.Header;
       return (
         <div>
           {Header ? <Header context={context} /> : null}
           {data.map((item, index) => (
-            <div key={index} data-index={(firstItemIndex ?? 0) + index}>
+            // Virtuoso's own attribute: the index in `data`, never offset
+            // by `firstItemIndex`.
+            <div key={index} data-index={index}>
               {itemContent(index, item)}
             </div>
           ))}
@@ -2455,16 +2453,88 @@ describe("MessageTimeline New messages divider and pill (#6052)", () => {
     // Above Bob's message, skipping the viewer's own one after the cursor.
     const rowOf = (element: Element | null) =>
       element?.closest("[data-index]")?.getAttribute("data-index");
-    expect(rowOf(line)).toBe(String(FIRST + 2));
-    expect(rowOf(screen.getByText("first new"))).toBe(String(FIRST + 2));
+    expect(rowOf(line)).toBe("2");
+    expect(rowOf(screen.getByText("first new"))).toBe("2");
   });
 
-  it("opens the list on the divider", () => {
+  /** The timeline scrolls to the divider two frames after it decides to. */
+  const frames = async (count = 2) => {
+    for (let i = 0; i < count; i++) {
+      await act(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
+    }
+  };
+
+  it("opens the list on the divider", async () => {
     render(view(thread));
-    expect(virtuosoProps.current.initialTopMostItemIndex).toEqual({
+    await frames();
+    expect(virtuosoProps.scrollToIndex).toHaveBeenCalledWith({
       index: 2,
       align: "start",
+      behavior: "auto",
     });
+  });
+
+  it("opens a channel switched to from the rail on its divider, after the switch's own scroll", async () => {
+    const { rerender } = render(view(thread, { newMessages: null }));
+    await frames();
+    virtuosoProps.scrollToIndex.mockClear();
+    rerender(
+      view(
+        thread.map((m) => ({ ...m, channel_id: "chan-2" })),
+        {
+          channelId: "chan-2",
+        },
+      ),
+    );
+    await frames();
+    const calls = virtuosoProps.scrollToIndex.mock.calls.map(([arg]) => arg);
+    // The switch opens at the newest row, then the divider's frame wins.
+    expect(calls.at(-1)).toEqual({
+      index: 2,
+      align: "start",
+      behavior: "auto",
+    });
+    expect(calls[0]).toEqual({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    });
+  });
+
+  it("still re-pins the newest row as photos grow after a switch onto a divider", async () => {
+    const { rerender } = render(view(thread, { newMessages: null }));
+    rerender(
+      view(
+        thread.map((m) => ({ ...m, channel_id: "chan-2" })),
+        {
+          channelId: "chan-2",
+        },
+      ),
+    );
+    await frames();
+    virtuosoProps.scrollToIndex.mockClear();
+    // The divider's stretch is short, so the list sits at its bottom: growth
+    // there is followed, as on any channel (#3863).
+    act(() => virtuosoProps.current.totalListHeightChanged?.(4000));
+    expect(virtuosoProps.scrollToIndex).toHaveBeenCalledWith({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    });
+  });
+
+  it("leaves a channel opened by a jump to one message where the jump puts it", async () => {
+    render(view(thread, { holdFollow: true }));
+    await frames();
+    expect(virtuosoProps.scrollToIndex).not.toHaveBeenCalledWith(
+      expect.objectContaining({ index: 2, align: "start" }),
+    );
+    expect(divider()).not.toBeNull();
   });
 
   it("draws nothing without a mark, and opens at the newest row", () => {
@@ -2502,10 +2572,8 @@ describe("MessageTimeline New messages divider and pill (#6052)", () => {
   it("retires once the member has seen the divider and reached the newest message", () => {
     render(view(thread));
     showRows(2, 3);
+    // The newest row on screen, having seen the divider: read through.
     showRows(3, 3);
-    // Not at the bottom yet: the divider is above, and the pill says so.
-    expect(pill()).not.toBeNull();
-    act(() => virtuosoProps.current.atBottomStateChange?.(true));
     expect(pill()).toBeNull();
     // Scrolling back above it brings nothing back: they have read it all.
     showRows(0, 1);
@@ -2530,7 +2598,7 @@ describe("MessageTimeline New messages divider and pill (#6052)", () => {
       ]),
     );
     expect(divider()?.closest("[data-index]")?.getAttribute("data-index")).toBe(
-      String(FIRST + 2),
+      "2",
     );
   });
 
@@ -2559,6 +2627,17 @@ describe("MessageTimeline New messages divider and pill (#6052)", () => {
 
     await user.click(pill()!);
     expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a run at the divider, so the first new message names its author", () => {
+    render(
+      view([
+        message({ id: "m-1", client_message_id: "cm-1", created_at: at(5) }),
+        message({ id: "m-2", client_message_id: "cm-2", created_at: at(12) }),
+      ]),
+    );
+    // Alice wrote both, a minute apart: one run, but for the line.
+    expect(screen.getAllByText("Alice Chen")).toHaveLength(2);
   });
 
   it("puts the date on the divider when the first new message starts a day", () => {

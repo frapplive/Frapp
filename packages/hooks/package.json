@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@repo/api-sdk": "*",
-    "@repo/chat-core": "*",
     "@repo/color": "*",
     "@repo/formatting": "*",
     "@repo/org-archetypes": "*",

@@ -2466,6 +2466,8 @@ A function body (#2521). It re-creates `get_channel_unread_counts` with one more
 
 **Roll back with a new forward migration, not by hand.** See [§ 3) Undo one migration](#3-undo-one-migration). Put the whole of section 1 of `20260823123000_chat_imported_kind_semantics.sql` (the `create or replace function public.get_channel_unread_counts` statement and the grant block after it) in a new migration and ship it through Deploy production (`scope: migrations-only` is enough). Copy that body rather than retyping it: the rollback must keep `kind <> 'imported'`, `is distinct from` and `set search_path = public, pg_temp`, and dropping any of them is a different regression.
 
+_(Corrected 2026-11-25, [#6052](https://github.com/pdcarlson/Frapp/issues/6052): since `20261125020924` the function also returns `last_read_at`, and `create or replace` can't change a result type, so this recipe as written fails. Undo `20261125020924` first ([its page](database/migrations/20261125020924_chat_unread_counts_read_cursor.md)), which drops the function and re-issues its grants; or drop it here yourself with `drop function if exists public.get_channel_unread_counts(uuid, uuid);` and then re-issue `20261125020924`'s whole revoke and grant block, never `public` alone: a dropped function loses its grants, and Supabase's default privileges would let `anon` and `authenticated` call it. The API reads `last_read_at` from `20261125020924` on, so a body without it shows no New messages line.)_
+
 The same PR removes the `#2521` landmark from `scripts/pglite/landmarks.mjs` and the "Unread and mention counts skip a blocked sender" tier, `scripts/pglite/tiers/unread-counts-blocked-sender.mjs`, which would fail against the old body, and sets `ChatController_getUnreadCounts_v1` in `apps/api/src/application/services/chat-read-surface-ledger.spec.ts` back to `open` against #2521, since its proof names a scenario that tier holds.
 
 **This is a safety regression, not a neutral rollback.** Afterwards a blocked member's messages and @-mentions raise the blocker's channel-row, mention and mobile app-icon badges again, onto threads that show only tombstones. Guideline 1.2 expects the block to hold, so don't roll back on a build that is under review or live in a store unless the same deploy puts something in its place.
@@ -2846,6 +2848,8 @@ drop function if exists public.get_channel_latest_messages(uuid, uuid);
 A function body. It re-creates `get_channel_unread_counts` with one more join predicate, so an entry the audit mirror posted into `#chapter-audit` no longer counts toward unread or mention badges. No data changes and the signature is unchanged; no API or client code depends on the new behaviour.
 
 **Roll back with a new forward migration, not by hand.** See [§ 3) Undo one migration](#3-undo-one-migration). Put the `create or replace function public.get_channel_unread_counts` statement and the grant block after it from `20260927050000_chat_unread_counts_skip_blocked.sql` in a new migration and ship it through Deploy production (`scope: migrations-only` is enough). Copy that body rather than retyping it: it must keep the blocked-sender predicate (#2521), `kind <> 'imported'` and `set search_path = public, pg_temp`.
+
+_(Corrected 2026-11-25, [#6052](https://github.com/pdcarlson/Frapp/issues/6052): since `20261125020924` the function also returns `last_read_at`, and `create or replace` can't change a result type, so this recipe as written fails. Undo `20261125020924` first ([its page](database/migrations/20261125020924_chat_unread_counts_read_cursor.md)), which drops the function and re-issues its grants; or drop it here yourself with `drop function if exists public.get_channel_unread_counts(uuid, uuid);` and then re-issue `20261125020924`'s whole revoke and grant block, never `public` alone: a dropped function loses its grants, and Supabase's default privileges would let `anon` and `authenticated` call it. The API reads `last_read_at` from `20261125020924` on, so a body without it shows no New messages line.)_
 
 Afterwards every settings change lights the `#chapter-audit` badge again, for every member.
 
@@ -3319,6 +3323,10 @@ drop table if exists public.chat_thread_follows;
 -- Re-create get_channel_unread_counts from 20261106193000,
 -- get_channel_latest_messages from 20261106210000, and anonymize_user from
 -- 20261106200000, verbatim, before dropping the columns they reference.
+-- (Corrected 2026-11-25, #6052: since 20261125020924 get_channel_unread_counts
+-- returns last_read_at too; undo 20261125020924 first, or drop the function
+-- before re-creating it and re-issue 20261125020924's revoke/grant block,
+-- never public alone. See that migration's page.)
 alter table public.chat_messages
   drop constraint if exists chat_messages_thread_not_self,
   drop column if exists thread_recent_sender_ids,
@@ -3747,6 +3755,8 @@ drop function if exists public.reorder_role_tiers(uuid, uuid[], uuid[]);
 One function body, one new partial index, and one dropped index (`idx_chat_messages_channel`, unused beside `idx_chat_messages_channel_created`). It writes no row on apply, and the API calls the function the same way before and after.
 
 **Revert forward, and keep the migration file** ([§ 3) Undo one migration](#3-undo-one-migration)): in a later migration, re-create `get_channel_unread_counts(uuid, uuid)` with its body from `20261110220000_chat_message_threads.sql`, then `revoke execute on function public.get_channel_unread_counts(uuid, uuid) from public;`. Both bodies return the same rows, so nothing a member sees changes; only the speed does.
+
+_(Corrected 2026-11-25, [#6052](https://github.com/pdcarlson/Frapp/issues/6052): since `20261125020924` the function also returns `last_read_at`, and `create or replace` can't change a result type, so this recipe as written fails. Undo `20261125020924` first ([its page](database/migrations/20261125020924_chat_unread_counts_read_cursor.md)), which drops the function and re-issues its grants; or drop it here yourself with `drop function if exists public.get_channel_unread_counts(uuid, uuid);` and then re-issue `20261125020924`'s whole revoke and grant block, never `public` alone: a dropped function loses its grants, and Supabase's default privileges would let `anon` and `authenticated` call it. The API reads `last_read_at` from `20261125020924` on, so a body without it shows no New messages line.)_
 
 The new index is harmless to keep, and nothing needs the dropped one back. To restore both as they were, in the same later migration:
 

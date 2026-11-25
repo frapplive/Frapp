@@ -155,23 +155,18 @@ describe("dividerSide", () => {
   const visible = { first: 10, last: 20 };
 
   it("is shown inside what is on screen", () => {
-    expect(dividerSide(10, visible, true)).toBe("shown");
-    expect(dividerSide(20, visible, false)).toBe("shown");
+    expect(dividerSide(10, visible)).toBe("shown");
+    expect(dividerSide(20, visible)).toBe("shown");
   });
 
-  it("is above or below on a list oldest first (the web's)", () => {
-    expect(dividerSide(4, visible, true)).toBe("above");
-    expect(dividerSide(25, visible, true)).toBe("below");
-  });
-
-  it("is the other way round on an inverted list (the phone's)", () => {
-    expect(dividerSide(25, visible, false)).toBe("above");
-    expect(dividerSide(4, visible, false)).toBe("below");
+  it("is above an older row and below a newer one", () => {
+    expect(dividerSide(4, visible)).toBe("above");
+    expect(dividerSide(25, visible)).toBe("below");
   });
 
   it("is unknown before anything is on screen or without a row", () => {
-    expect(dividerSide(4, null, true)).toBeNull();
-    expect(dividerSide(-1, visible, true)).toBeNull();
+    expect(dividerSide(4, null)).toBeNull();
+    expect(dividerSide(-1, visible)).toBeNull();
   });
 });
 

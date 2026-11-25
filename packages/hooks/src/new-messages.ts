@@ -1,10 +1,11 @@
 /**
  * Where a channel's unread messages start, and the way back to them (#6052):
  * a "New messages" divider above the first one, and a pill pointing to it
- * while it is off screen, as Discord's and Slack's threads draw them. Shared
- * by the phone (`apps/mobile/lib/chat/use-new-messages.ts`) and the web
- * (`apps/web/lib/chat/use-new-messages.ts`); each owns its own scroll
- * geometry, as with `./jump-to-latest`, and the rules live here.
+ * while it is off screen, as Discord's and Slack's threads draw them. The
+ * rules live here; the per-visit state is `useNewMessages`
+ * (`./use-new-messages.ts`), which both threads use, each with its own scroll
+ * geometry as with `@repo/chat-core/jump-to-latest`. Here rather than in
+ * chat-core because this package doesn't depend on chat-core.
  *
  * ## Taken once, when the channel opens
  *
@@ -20,7 +21,9 @@
  *
  * The count is the server's (`unread_count`), never re-counted here: it
  * excludes the cases a client can't see (§ Read Receipts). The cursor only
- * places the divider.
+ * places the divider. A thread opened before the counts first answer, or on a
+ * stale copy of them (a phone resumed from a push), has no mark or an old one
+ * until #6081.
  */
 
 /** What the counts said for one channel as it opened. */
@@ -195,25 +198,19 @@ export function pillDirection(
 }
 
 /**
- * Where the divider sits against the rows on screen, by index into the rows
- * the list draws. `first` and `last` are the lowest and highest index on
- * screen; `newestLast` says which end the newest row is at (the web's list,
- * oldest first) or isn't (the phone's inverted list, newest first). `null`
- * when nothing is on screen yet, or the row is not in the list.
+ * Where the divider sits against the rows on screen, by index into the
+ * thread's rows oldest first (the phone turns its inverted list's indices
+ * round first). `first` and `last` are the lowest and highest index on screen.
+ * `null` when nothing is on screen yet, or the row is not in the list.
  */
 export function dividerSide(
   dividerIndex: number,
   visible: { first: number; last: number } | null,
-  newestLast: boolean,
 ): DividerSide | null {
   if (!visible || dividerIndex < 0) return null;
-  if (dividerIndex >= visible.first && dividerIndex <= visible.last) {
-    return "shown";
-  }
-  const beforeFirst = dividerIndex < visible.first;
-  // Oldest first, a lower index is older and so above the screen; newest
-  // first, it is newer and below.
-  return beforeFirst === newestLast ? "above" : "below";
+  if (dividerIndex < visible.first) return "above";
+  if (dividerIndex > visible.last) return "below";
+  return "shown";
 }
 
 /**

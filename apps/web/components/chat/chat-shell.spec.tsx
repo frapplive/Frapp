@@ -659,8 +659,12 @@ vi.mock("@repo/hooks", async () => ({
         DELETE_CHANNEL_CONFIRM_BODY,
         DELETE_CHANNEL_LABEL,
         memberFallbackLabel,
+        newMessagesMark,
+        readArrival,
         taskLinkChoices,
       }) => ({
+        newMessagesMark,
+        readArrival,
         memberFallbackLabel,
         taskLinkChoices,
         deleteChannelTypeLabel,

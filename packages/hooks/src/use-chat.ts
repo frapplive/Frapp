@@ -59,7 +59,7 @@ export interface ChannelUnreadCount {
   /**
    * The read cursor the counts were taken from, null for a channel never
    * opened (#6052). Only places a thread's "New messages" divider
-   * (`@repo/chat-core/new-messages`). Absent from an API before it, and from
+   * (`./new-messages`). Absent from an API before it, and from
    * a row the phone lays over the counts before they answer.
    */
   last_read_at?: string | null;

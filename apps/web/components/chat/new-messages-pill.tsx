@@ -1,15 +1,15 @@
 "use client";
 
-import { MARK_AS_READ_LABEL } from "@repo/hooks";
 import {
+  MARK_AS_READ_LABEL,
   NEW_MESSAGES_DIVIDER_LABEL,
   newMessagesCountLabel,
   newMessagesPillLabel,
   type PillDirection,
-} from "@repo/chat-core/new-messages";
+} from "@repo/hooks";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING } from "@/components/ui/focus";
-import { NewMessagesArrowGlyph } from "./chat-glyphs";
+import { JumpToLatestGlyph, SendArrowGlyph } from "./chat-glyphs";
 
 /**
  * The way to a channel's first unread message while its divider is off screen
@@ -51,7 +51,12 @@ export function NewMessagesPill({
         )}
       >
         <span>{newMessagesCountLabel(count)}</span>
-        <NewMessagesArrowGlyph direction={direction} className="h-3.5 w-3.5" />
+        {/* The send arrow points up, and turned over it is Jump to latest's. */}
+        {direction === "up" ? (
+          <SendArrowGlyph className="h-3.5 w-3.5" />
+        ) : (
+          <JumpToLatestGlyph className="h-3.5 w-3.5" />
+        )}
       </button>
       <span aria-hidden="true" className="h-4 w-px bg-border" />
       <button
@@ -67,6 +72,14 @@ export function NewMessagesPill({
     </div>
   );
 }
+
+/**
+ * A thread divider's row: the day divider's (`message-timeline.tsx`) and the
+ * New messages line's, so the two sit at the same height (`components.md`
+ * § 11, Day divider).
+ */
+export const THREAD_DIVIDER_ROW =
+  "flex items-center gap-3 px-5 pb-1 pt-4 text-caption font-semibold";
 
 /**
  * The line above a channel's first unread message (#6052): a rule in
@@ -87,7 +100,7 @@ export function NewMessagesDivider({ dayLabel }: { dayLabel?: string }) {
           ? `${NEW_MESSAGES_DIVIDER_LABEL}, ${dayLabel}`
           : NEW_MESSAGES_DIVIDER_LABEL
       }
-      className="flex items-center gap-3 px-5 pb-1 pt-4 text-caption font-semibold"
+      className={THREAD_DIVIDER_ROW}
     >
       <span aria-hidden="true" className="h-px flex-1 bg-foreground" />
       {dayLabel ? (

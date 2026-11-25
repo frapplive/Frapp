@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SignetTokens } from "@repo/theme/signet";
-import { MARK_AS_READ_LABEL } from "@repo/hooks";
 import {
-  NEW_MESSAGES_DIVIDER_LABEL,
+  MARK_AS_READ_LABEL,
   newMessagesCountLabel,
   newMessagesPillLabel,
   type PillDirection,
-} from "@repo/chat-core/new-messages";
+} from "@repo/hooks";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 const HEIGHT = 36;
@@ -81,41 +80,6 @@ export function NewMessagesPill({
   );
 }
 
-/**
- * The line above a channel's first unread message (#6052): a rule in
- * `--foreground` with "New messages" at its end, where Discord and Slack put
- * their "New" tag. Neutral, as unread is everywhere else (the channel row's
- * pip is `--foreground` too), and brighter than the day divider's hairline so
- * the two never read as one. When the first unread message also starts a day,
- * the one line carries the date in the middle, as Discord's does, rather than
- * stacking two rules.
- */
-export function NewMessagesDivider({ dayLabel }: { dayLabel?: string }) {
-  const { tokens } = useFrappTheme();
-  const styles = useMemo(() => createStyles(tokens), [tokens]);
-  return (
-    <View
-      testID="new-messages-divider"
-      style={styles.divider}
-      accessible
-      accessibilityLabel={
-        dayLabel
-          ? `${NEW_MESSAGES_DIVIDER_LABEL}, ${dayLabel}`
-          : NEW_MESSAGES_DIVIDER_LABEL
-      }
-    >
-      <View style={styles.line} />
-      {dayLabel ? (
-        <>
-          <Text style={styles.day}>{dayLabel}</Text>
-          <View style={styles.line} />
-        </>
-      ) : null}
-      <Text style={styles.label}>{NEW_MESSAGES_DIVIDER_LABEL}</Text>
-    </View>
-  );
-}
-
 function createStyles(tokens: SignetTokens) {
   const caption = typeRole({
     ...tokens.typography.role.caption,
@@ -171,29 +135,6 @@ function createStyles(tokens: SignetTokens) {
     markRead: {
       ...caption,
       color: tokens.color.text.mutedForeground,
-    },
-    divider: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing.md,
-      paddingHorizontal: tokens.spacing.lg,
-      paddingTop: tokens.spacing.lg,
-      paddingBottom: tokens.spacing.xs,
-    },
-    // A full point, not a hairline: the day divider's hairline beside it is
-    // the quiet one.
-    line: {
-      flex: 1,
-      height: 1,
-      backgroundColor: tokens.color.text.foreground,
-    },
-    day: {
-      ...caption,
-      color: tokens.color.text.mutedForeground,
-    },
-    label: {
-      ...caption,
-      color: tokens.color.text.foreground,
     },
   });
 }

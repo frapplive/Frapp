@@ -73,6 +73,9 @@ import {
   claimViewedChannel,
   useMarkChannelRead,
   useNewMessages,
+  newMessagesMark,
+  readArrival,
+  type NewMessagesRow,
   useMarkMessageUnread,
   holdChannelUnread,
   releaseChannelUnread,
@@ -114,11 +117,6 @@ import { ImportantStrip } from "@/components/chat/important-strip";
 import { WelcomeCard } from "@/components/onboarding/welcome-card";
 import { CatchUpStrip, useCatchUp } from "@/components/chat/catch-up";
 import { useAiSurfaces } from "@/lib/ai/availability";
-import {
-  newMessagesMark,
-  readArrival,
-  type NewMessagesRow,
-} from "@repo/chat-core/new-messages";
 import { NewMessagesPill } from "@/components/chat/new-messages-pill";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { useComposerPlus } from "@/components/chat/use-composer-plus";
@@ -986,11 +984,24 @@ function ChannelThreadScreen() {
   }, [important.reportVisible]);
   // The rows on screen, for the "New messages" pill (#6052), in the thread's
   // oldest-first order: the list draws newest first, so an index is turned
-  // round against the row count it was drawn with.
+  // round against the row count. Kept as the list's own indices and turned
+  // round again whenever the count changes: an older page lands past the top
+  // of the inverted list, which moves no row on screen and so reports
+  // nothing, but shifts every oldest-first index by its size.
   const reportRangeRef = useRef<(first: number, last: number) => void>(
     () => {},
   );
   const rowCountRef = useRef(0);
+  const viewableRef = useRef<{ newest: number; oldest: number } | null>(null);
+  const [reportViewable] = useState(() => () => {
+    const viewable = viewableRef.current;
+    if (!viewable) return;
+    const count = rowCountRef.current;
+    reportRangeRef.current(
+      count - 1 - viewable.oldest,
+      count - 1 - viewable.newest,
+    );
+  });
   const [viewability] = useState(() => ({
     viewabilityConfig: { itemVisiblePercentThreshold: 50 },
     onViewableItemsChanged: ({
@@ -1007,11 +1018,11 @@ function ChannelThreadScreen() {
         typeof index === "number" ? [index] : [],
       );
       if (indices.length === 0) return;
-      const count = rowCountRef.current;
-      reportRangeRef.current(
-        count - 1 - Math.max(...indices),
-        count - 1 - Math.min(...indices),
-      );
+      viewableRef.current = {
+        newest: Math.min(...indices),
+        oldest: Math.max(...indices),
+      };
+      reportViewable();
     },
   }));
 
@@ -1084,28 +1095,23 @@ function ChannelThreadScreen() {
     hasOlder,
     isLoadingOlder,
     olderError,
-    atNewest: latest.atNewest,
     scrollToRow: scrollRowToTop,
     loadOlder: handleLoadOlder,
     onMarkRead: markChannelRead,
+    // A push or a row about one message opens the channel on that message.
+    holdLanding: !!firstParam(params.focusMessageId),
   });
   const reportUnreadRange = unread.reportRange;
+  // A fresh list per channel (its `key`) reports afresh. Before the effect
+  // below, which would otherwise turn the last channel's rows round.
+  useEffect(() => {
+    viewableRef.current = null;
+  }, [channelId]);
   useEffect(() => {
     reportRangeRef.current = reportUnreadRange;
     rowCountRef.current = newMessagesRows.length;
-  }, [reportUnreadRange, newMessagesRows.length]);
-  // Opens on the first unread message when there is one, as Slack and Discord
-  // do: at the top of the screen, which a short stretch of unread can't fill,
-  // so the list stays at its newest message then. Once per channel, when its
-  // first rows are in.
-  const landedFor = useRef<string | null>(null);
-  const dividerIndex = unread.dividerIndex;
-  useEffect(() => {
-    if (!channelId || landedFor.current === channelId) return;
-    if (newMessagesRows.length === 0) return;
-    landedFor.current = channelId;
-    if (dividerIndex >= 0) scrollRowToTop(dividerIndex);
-  }, [channelId, newMessagesRows.length, dividerIndex, scrollRowToTop]);
+    reportViewable();
+  }, [reportUnreadRange, newMessagesRows.length, reportViewable]);
   const dividerKey = unread.dividerKey;
   const historyEdge = useMemo(
     () => (
@@ -1688,7 +1694,11 @@ function ChannelThreadScreen() {
       const row = (
         <ThreadMessageRow
           row={item}
-          startsRun={placement?.startsRun ?? true}
+          // The New messages line starts a run, as the day divider does.
+          startsRun={
+            (placement?.startsRun ?? true) ||
+            item.message.client_message_id === dividerKey
+          }
           endsRun={placement?.endsRun ?? true}
           startsDay={placement?.startsDay ?? false}
           newMessagesAbove={item.message.client_message_id === dividerKey}

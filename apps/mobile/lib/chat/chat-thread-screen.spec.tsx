@@ -3965,6 +3965,22 @@ describe("chat thread New messages divider and pill (#6052)", () => {
     act(() => tree.unmount());
   });
 
+  it("starts a run at the divider, so the first new message names its author", () => {
+    withRows();
+    arriveWith(2, at(1, 30));
+    const tree = renderList();
+    const m3 = rows(tree).find(
+      (row) => (row.props.row as ThreadRow).message.id === "m3",
+    );
+    const m4 = rows(tree).find(
+      (row) => (row.props.row as ThreadRow).message.id === "m4",
+    );
+    // One member wrote all four, a minute apart: one run, but for the line.
+    expect(m3!.props.startsRun).toBe(true);
+    expect(m4!.props.startsRun).toBe(false);
+    act(() => tree.unmount());
+  });
+
   it("draws nothing in a channel never opened, or with nothing new", () => {
     withRows();
     arriveWith(4, null);
@@ -4011,6 +4027,35 @@ describe("chat thread New messages divider and pill (#6052)", () => {
     act(() => byLabel(tree, "Mark as read").props.onPress());
     expect(pills(tree)).toHaveLength(0);
     expect(dividedRows(tree)).toEqual([]);
+    act(() => tree.unmount());
+  });
+
+  it("reads the screen again when an older page lands above it", () => {
+    // Everything loaded is new: the divider is in history not loaded yet.
+    channel = channelState({
+      messages: [
+        message("m3", { created_at: at(2) }),
+        message("m4", { created_at: at(3) }),
+      ],
+    });
+    arriveWith(3, at(0, 30));
+    const tree = renderList();
+    showInverted(tree, [0, 1]);
+    // An older page lands past the top: no row on screen moves, so the list
+    // reports nothing, but the divider (above m2) is now loaded and above.
+    channel = channelState({
+      messages: [
+        message("m1", { created_at: at(0) }),
+        message("m2", { created_at: at(1) }),
+        message("m3", { created_at: at(2) }),
+        message("m4", { created_at: at(3) }),
+      ],
+    });
+    rerender(tree);
+    expect(dividedRows(tree)).toEqual(["m2"]);
+    expect(pills(tree)[0]?.props.accessibilityLabel).toBe(
+      "3 new messages above. Jump to the first one",
+    );
     act(() => tree.unmount());
   });
 

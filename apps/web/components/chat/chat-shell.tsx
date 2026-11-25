@@ -53,6 +53,9 @@ import {
   useSetChannelBackground,
   chatBackgroundErrorCopy,
   useMarkChannelRead,
+  newMessagesMark,
+  readArrival,
+  type UnreadArrival,
   useCategories,
   useChapterRoster,
   useMemberDisplayNames,
@@ -92,7 +95,7 @@ import {
 import { sidebarThreadsByChannel } from "@repo/chat-core/threads";
 import { setChannelLocked, syncLockedChannels } from "@repo/chat-core/density";
 import { typingLabel } from "@repo/chat-core/typing-label";
-import { newMessagesMark, readArrival } from "@repo/chat-core/new-messages";
+
 import { attachmentRequestBody } from "@repo/chat-core/adapters";
 import {
   channelPreviewLine,
@@ -2922,53 +2925,76 @@ export function ChatShell({
     activeChannel.type !== "DM" &&
     activeChannel.type !== "GROUP_DM" &&
     activeChannel.is_audit_log !== true;
-  // How many messages were new when this channel was opened, and where the
-  // member had read to. Opening stamps it read, so the live count is gone by
-  // the time a member asks; the server finds the stretch again from this
-  // count and the moment of opening. The count and the cursor also draw the
-  // timeline's "New messages" divider and pill (#6052), which the stamps that
-  // follow must not move.
+  // How many messages were new when this channel was opened. Opening stamps
+  // it read, so the live count is gone by the time a member asks; the server
+  // finds the stretch again from this count and the moment of opening.
   const liveUnread = !activeChannelId
     ? null
     : unreadByChannelId
       ? (unreadByChannelId.get(activeChannelId)?.unreadCount ?? 0)
       : null;
-  const liveLastReadAt =
-    liveUnread === null
-      ? null
-      : (readArrival(unreadQuery.data, activeChannelId)?.lastReadAt ?? null);
   const [arrival, setArrival] = useState<{
     channelId: string | null;
     unread: number | null;
-    lastReadAt: string | null;
     offerDismissed: boolean;
-  }>({
-    channelId: null,
-    unread: null,
-    lastReadAt: null,
-    offerDismissed: false,
-  });
+  }>({ channelId: null, unread: null, offerDismissed: false });
   if (arrival.channelId !== activeChannelId) {
     setArrival({
       channelId: activeChannelId,
       unread: liveUnread,
-      lastReadAt: liveLastReadAt,
       offerDismissed: false,
     });
   } else if (arrival.unread === null && liveUnread !== null) {
     // The counts landed after the channel did (a first load).
-    setArrival({ ...arrival, unread: liveUnread, lastReadAt: liveLastReadAt });
+    setArrival({ ...arrival, unread: liveUnread });
   }
-  const arrivalUnread = arrival.unread;
-  const arrivalLastReadAt = arrival.lastReadAt;
+  /*
+    The "New messages" divider and pill (#6052) take the count and the
+    cursor the same way, once per visit: when the channel changes, and each
+    time the thread comes back on screen (below `lg`, back from the channel
+    list; the panel shown again), since leaving stamped it read. The stamps
+    while it is on screen move neither. A visit that opens before the counts
+    first answer takes the first answer.
+  */
+  const [threadVisit, setThreadVisit] = useState({
+    onScreen: threadOnScreen,
+    count: 0,
+  });
+  if (threadVisit.onScreen !== threadOnScreen) {
+    setThreadVisit({
+      onScreen: threadOnScreen,
+      count: threadVisit.count + (threadOnScreen ? 1 : 0),
+    });
+  }
+  const liveCounted: UnreadArrival | null =
+    liveUnread === null
+      ? null
+      : (readArrival(unreadQuery.data, activeChannelId) ?? {
+          unread: 0,
+          lastReadAt: null,
+        });
+  const [unreadAtOpen, setUnreadAtOpen] = useState<{
+    channelId: string | null;
+    visit: number;
+    counted: UnreadArrival | null;
+  }>({ channelId: null, visit: -1, counted: null });
+  if (
+    unreadAtOpen.channelId !== activeChannelId ||
+    unreadAtOpen.visit !== threadVisit.count
+  ) {
+    setUnreadAtOpen({
+      channelId: activeChannelId,
+      visit: threadVisit.count,
+      counted: liveCounted,
+    });
+  } else if (unreadAtOpen.counted === null && liveCounted !== null) {
+    setUnreadAtOpen({ ...unreadAtOpen, counted: liveCounted });
+  }
+  const countedAtOpen =
+    unreadAtOpen.channelId === activeChannelId ? unreadAtOpen.counted : null;
   const newMessages = useMemo(
-    () =>
-      newMessagesMark(
-        arrivalUnread === null
-          ? null
-          : { unread: arrivalUnread, lastReadAt: arrivalLastReadAt },
-      ),
-    [arrivalUnread, arrivalLastReadAt],
+    () => newMessagesMark(countedAtOpen),
+    [countedAtOpen],
   );
   const arrivedAt = useRef<{ channelId: string; at: string } | null>(null);
   useEffect(() => {
@@ -4388,9 +4414,7 @@ export function ChatShell({
                   avatarFor={avatarFor}
                   messages={channel.messages}
                   askTurns={askTurns}
-                  newMessages={
-                    arrival.channelId === activeChannelId ? newMessages : null
-                  }
+                  newMessages={newMessages}
                   onMarkRead={markActiveChannelRead}
                   threadUnread={threadUnread}
                   blockList={{ blockState, thread }}
