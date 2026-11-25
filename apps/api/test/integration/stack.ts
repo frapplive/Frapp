@@ -10,6 +10,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import {
+  createSupabaseDispatcher,
+  createSupabaseFetch,
+} from '../../src/infrastructure/supabase/supabase-fetch';
 import type {
   Database,
   FrappSupabaseClient,
@@ -142,6 +146,9 @@ export function createServiceRoleClient(): FrappSupabaseClient {
   }
   return createClient<Database>(creds.url, creds.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // The same transport as production's client (`supabase.provider.ts`), so
+    // this suite is where a defect in it meets a real PostgREST.
+    global: { fetch: createSupabaseFetch(createSupabaseDispatcher()) },
   });
 }
 
