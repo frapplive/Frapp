@@ -20,6 +20,7 @@ import {
   meetingTabledFromLabel,
   meetingVoteLine,
   minutesActionMeta,
+  minutesActionOwner,
   minutesActionRows,
   minutesActionStatePrefix,
   minutesAttendanceDetail,
@@ -35,9 +36,25 @@ import {
 } from "@repo/validation";
 import { CheckGlyph, DisclosureGlyph } from "@/components/control-glyphs";
 import { eyebrowStyle } from "@/components/eyebrow";
-import { Segmented } from "@/components/segmented";
+import {
+  itemMenuAccessibility,
+  longPressOf,
+  type ItemMenuHandle,
+} from "@/components/item-actions-menu";
+import { PressableRow } from "@/components/list-section";
+import { ViewLabels } from "@/components/view-labels";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { tint, typeRole, useFrappTheme } from "@/lib/theme";
+
+/**
+ * An action item's long-press menu, from the host (#6051): Create task or
+ * Open task for an officer, or null for a row with nothing to offer.
+ */
+export type ActionItemMenuFor = (row: {
+  index: number;
+  item: MeetingContent["action_items"][number];
+  task: MeetingActionItemTask | undefined;
+}) => ItemMenuHandle | null;
 
 /**
  * Minutes as a member reads them (`spec/behavior/meetings.md` § Reading
@@ -60,6 +77,7 @@ export function MinutesBody({
   tasks,
   onSectionLayout,
   renderDates,
+  actionItemMenu,
 }: {
   meeting: MeetingMinutes;
   content: MeetingContent;
@@ -75,6 +93,8 @@ export function MinutesBody({
    * (`ComingUpDates`, #5672). Plain tiles without it.
    */
   renderDates?: (dates: MeetingContent["dates"]) => ReactNode;
+  /** Each action item's long-press menu (#6051). */
+  actionItemMenu?: ActionItemMenuFor;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
@@ -113,6 +133,7 @@ export function MinutesBody({
             viewerId={viewerId}
             tasks={tasks ?? EMPTY_TASKS}
             renderDates={renderDates}
+            actionItemMenu={actionItemMenu}
           />
         </View>
       ))}
@@ -302,6 +323,7 @@ function Section({
   viewerId,
   tasks,
   renderDates,
+  actionItemMenu,
 }: {
   sectionKey: MeetingSectionKey;
   content: MeetingContent;
@@ -309,6 +331,7 @@ function Section({
   viewerId: string | null;
   tasks: ReadonlyMap<number, MeetingActionItemTask>;
   renderDates?: (dates: MeetingContent["dates"]) => ReactNode;
+  actionItemMenu?: ActionItemMenuFor;
 }) {
   switch (sectionKey) {
     case "tldr":
@@ -330,6 +353,7 @@ function Section({
           nameFor={nameFor}
           viewerId={viewerId}
           tasks={tasks}
+          menuFor={actionItemMenu}
         />
       );
     case "tabled":
@@ -485,18 +509,21 @@ function Decisions({ decisions }: { decisions: MeetingContent["decisions"] }) {
  * The action items as a checklist, ticked as each item's task is done; the
  * reader's own first, then the ones with a due day. Mine narrows to the
  * reader's own. The boxes only show: an item is checked off by doing its
- * task.
+ * task. An officer's long-press on an item offers Create task, or Open task
+ * once it is one (#6051, `menuFor`), as web's row and ⋯ menu do.
  */
 function ActionChecklist({
   items,
   nameFor,
   viewerId,
   tasks,
+  menuFor,
 }: {
   items: MeetingContent["action_items"];
   nameFor: (userId: string) => string | null;
   viewerId: string | null;
   tasks: ReadonlyMap<number, MeetingActionItemTask>;
+  menuFor?: ActionItemMenuFor;
 }) {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
@@ -516,9 +543,10 @@ function ActionChecklist({
       {mineCount > 0 || done > 0 ? (
         <View style={styles.checklistBar}>
           {mineCount > 0 ? (
-            <Segmented
-              dense
-              accessibilityLabel={MINUTES_READ_COPY.mine}
+            <ViewLabels
+              compact
+              flush
+              accessibilityLabel={MINUTES_READ_COPY.whoseActionItems}
               value={filter}
               onChange={setFilter}
               options={[
@@ -540,9 +568,14 @@ function ActionChecklist({
         const meta = [
           mine ? MINUTES_READ_COPY.yours : null,
           minutesActionMeta({
-            owner: item.owner_user_id
-              ? memberLabel(nameFor(item.owner_user_id), item.owner_user_id)
-              : MINUTES_READ_COPY.nobodyNamed,
+            // Who the task went to once an officer made it one, else who
+            // the minutes named (#6051).
+            owner: minutesActionOwner({
+              ownerId: item.owner_user_id,
+              task: task?.task ?? null,
+              group: task?.group ?? null,
+              nameOf: (userId) => memberLabel(nameFor(userId), userId),
+            }),
             dueLabel: item.due_date ? meetingDueLabel(item.due_date) : null,
             group: task?.group ?? null,
             done: isDone,
@@ -550,13 +583,10 @@ function ActionChecklist({
         ]
           .filter(Boolean)
           .join(" · ");
-        return (
-          <View
-            key={index}
-            accessible
-            accessibilityLabel={`${minutesActionStatePrefix(isDone, !!task)}${item.text}. ${meta}`}
-            style={styles.item}
-          >
+        const menu = menuFor?.({ index, item, task }) ?? null;
+        const label = `${minutesActionStatePrefix(isDone, !!task)}${item.text}. ${meta}`;
+        const content = (
+          <>
             <View
               style={[
                 styles.box,
@@ -573,6 +603,26 @@ function ActionChecklist({
               </Text>
               <Text style={styles.meta}>{meta}</Text>
             </View>
+          </>
+        );
+        return menu ? (
+          <PressableRow
+            key={index}
+            accessibilityLabel={label}
+            onLongPress={longPressOf(menu)}
+            {...itemMenuAccessibility(menu)}
+            style={styles.item}
+          >
+            {content}
+          </PressableRow>
+        ) : (
+          <View
+            key={index}
+            accessible
+            accessibilityLabel={label}
+            style={styles.item}
+          >
+            {content}
           </View>
         );
       })}

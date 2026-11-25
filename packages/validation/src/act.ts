@@ -245,7 +245,12 @@ export const ACT_COPY = {
   done_event: "Event created.",
   open_tasks: "Open Tasks",
   open_events: "Open Events",
-  open_points: "Open Points",
+  /**
+   * After points are given: the chapter ledger for a role that reads it,
+   * else Directory's standings (Points has no page of its own since #5950).
+   */
+  open_ledger: "Open the ledger",
+  open_standings: "See standings",
   /** A created event's link goes to the event itself. */
   open_event: "Open event",
   waiting: "Waiting for you",

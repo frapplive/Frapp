@@ -109,7 +109,7 @@ export class EventService {
     chapterId: string,
     stored: readonly EventAttachment[] = [],
   ): Promise<EventAttachment[] | undefined> {
-    const attachments = normalizeFrappLinks(input, 'event');
+    const attachments = normalizeFrappLinks(input, 'event', stored);
     if (!attachments) return attachments;
     return this.links.checked(chapterId, attachments, stored);
   }
@@ -375,8 +375,6 @@ export class EventService {
     // name / start / end / location / point_value into a message row that
     // Realtime fans out to every reader of the channel, so an ineligible
     // member saw in chat exactly what `GET /v1/events/:id` 404s to hide.
-    // (The activity feed was open the same way and is closed alongside this —
-    // see `ActivityFeedService.eventItems`.)
     //
     // Refusing is the only option the current architecture actually supports.
     // The card is a *snapshot*, not a live window — the renderer reads the

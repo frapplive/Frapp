@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { NEW_ACTION_LABELS, NEW_ACTION_ORDER, SECTION_NAMES } from "./sections";
+import {
+  availableNewActions,
+  NEW_ACTION_LABELS,
+  NEW_ACTION_ORDER,
+  SECTION_NAMES,
+  WEB_NEW_ACTIONS,
+} from "./sections";
 
 /**
  * These are the words both apps draw. They are written out here, not read
@@ -15,6 +21,7 @@ describe("the app's section names and New actions", () => {
       calendar: "Calendar",
       directory: "Directory",
       messages: "Messages",
+      resources: "Resources",
       search: "Search",
     });
   });
@@ -28,7 +35,7 @@ describe("the app's section names and New actions", () => {
       ["newEvent", "New event"],
       ["newTask", "New task"],
       ["invite", "Invite"],
-      ["message", "Message"],
+      ["message", "New message"],
       ["hostCheckIn", "Host check-in"],
       ["logHours", "Log hours"],
       ["study", "Study"],
@@ -40,5 +47,45 @@ describe("the app's section names and New actions", () => {
     expect(Object.keys(NEW_ACTION_LABELS).sort()).toEqual(
       [...NEW_ACTION_ORDER].sort(),
     );
+  });
+
+  it("draws on web only what a browser can start, in the shared order (#5946)", () => {
+    expect(WEB_NEW_ACTIONS).toEqual([
+      "newMinutes",
+      "newEvent",
+      "newTask",
+      "message",
+      "logHours",
+      "upload",
+    ]);
+  });
+
+  it("offers each action by the checks its endpoint makes", () => {
+    const officer = availableNewActions({
+      permissions: ["*"],
+      enabledModules: undefined,
+    });
+    expect(officer).toEqual([...NEW_ACTION_ORDER]);
+    // A member: search, message and study, with every module on.
+    expect(
+      availableNewActions({
+        permissions: ["members:view"],
+        enabledModules: undefined,
+      }),
+    ).toEqual(["search", "message", "study"]);
+    // A module switched off takes its actions with it.
+    expect(
+      availableNewActions({
+        permissions: ["*"],
+        enabledModules: { events: false },
+      }),
+    ).not.toContain("newEvent");
+    // Unknown permissions offer nothing.
+    expect(
+      availableNewActions({
+        permissions: undefined,
+        enabledModules: undefined,
+      }),
+    ).toEqual([]);
   });
 });

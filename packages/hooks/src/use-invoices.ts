@@ -183,7 +183,9 @@ export function useAwaitInvoicePaid(options?: {
       input: string | { invoiceId: string; since?: number },
     ): Promise<AwaitInvoicePaidResult> => {
       const { invoiceId, since } =
-        typeof input === "string" ? { invoiceId: input, since: undefined } : input;
+        typeof input === "string"
+          ? { invoiceId: input, since: undefined }
+          : input;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         const { data } = await client.GET("/v1/invoices/{id}", {
           params: { path: { id: invoiceId } },

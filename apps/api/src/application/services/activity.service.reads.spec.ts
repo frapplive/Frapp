@@ -245,6 +245,12 @@ function load(permissions: string[]) {
     } as never,
     { findAnswered: reads.findAnswered } as never,
     { readersOf: jest.fn() } as never,
+    // Meetings rows (#5949) are their own service's reads, not counted here.
+    {
+      listFor: jest
+        .fn()
+        .mockResolvedValue({ to_write: [], drafts: [], taking_notes: [] }),
+    } as never,
   );
   const enabled: Record<string, boolean> = {
     tasks: true,

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -15,6 +16,18 @@ import type { IChapterDriveRepository } from '#domain/repositories/chapter-drive
 import type { ChapterDriveConnection } from '#domain/entities/chapter-drive-connection.entity';
 import { GoogleDriveService, parseDriveFolderId } from './google-drive.service';
 import type { ChapterDocumentService } from '../chapter-document.service';
+import { reportSwallowed } from '../../../infrastructure/observability/report-swallowed';
+
+jest.mock('../../../infrastructure/observability/report-swallowed', () => ({
+  reportSwallowed: jest.fn(),
+}));
+
+/** What the last refused-share report sent to Sentry. */
+function lastShareReport(): Record<string, unknown> {
+  const calls = jest.mocked(reportSwallowed).mock.calls;
+  const build = calls[calls.length - 1]?.[2] as () => Record<string, unknown>;
+  return build();
+}
 
 const FOLDER_ID = '1AbCdEfGhIjKlMnOp';
 const EMAIL = 'frapp-docs@signet-frapp.iam.gserviceaccount.com';
@@ -463,13 +476,101 @@ describe('GoogleDriveService', () => {
       expect(drive.unshare).not.toHaveBeenCalled();
     });
 
+    // An editor isn't always allowed to share: Google says so up front.
+    it('names who can share when the officer’s role can’t', async () => {
+      drive.getItemAs.mockResolvedValueOnce(
+        picked({ canShare: false, driveId: 'shared-drive-1' }),
+      );
+      await expect(
+        service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN),
+      ).rejects.toThrow(new RegExp(`shared drive.*Managers.*${EMAIL}`));
+
+      drive.getItemAs.mockResolvedValueOnce(picked({ canShare: false }));
+      await expect(
+        service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN),
+      ).rejects.toThrow(/Only the folder’s owner can share it/);
+      expect(drive.shareWithServiceAccount).not.toHaveBeenCalled();
+      // Recorded, since canShare under drive.file isn't proved on live Drive.
+      expect(lastShareReport()).toMatchObject({
+        level: 'warning',
+        tags: { google_reason: 'canShare_false', drive_location: 'my_drive' },
+      });
+    });
+
+    it('records Google’s reason for a 403, and that the folder is in a shared drive', async () => {
+      jest.mocked(reportSwallowed).mockClear();
+      drive.getItemAs.mockResolvedValueOnce(
+        picked({ driveId: 'shared-drive-1' }),
+      );
+      drive.shareWithServiceAccount.mockRejectedValueOnce(
+        new GoogleDriveApiError(
+          'forbidden',
+          403,
+          'insufficientFilePermissions',
+        ),
+      );
+      await expect(
+        service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN),
+      ).rejects.toThrow(EMAIL);
+      expect(reportSwallowed).toHaveBeenCalledTimes(1);
+      expect(lastShareReport()).toMatchObject({
+        message: 'Google Drive refused to share a picked folder',
+        level: 'warning',
+        tags: {
+          google_reason: 'insufficientFilePermissions',
+          google_status: '403',
+          drive_location: 'shared_drive',
+        },
+      });
+    });
+
+    it('connects a folder Frapp already sees, even where the officer can’t share', async () => {
+      drive.getItemAs.mockResolvedValueOnce(picked({ canShare: false }));
+      // Shared with Frapp by hand already; nothing above it is.
+      drive.getItem.mockImplementation((id: string) =>
+        id === FOLDER_ID
+          ? Promise.resolve(picked({ canEdit: undefined }))
+          : Promise.reject(
+              new GoogleDriveApiError('not_found', 404, 'notFound'),
+            ),
+      );
+      await service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN);
+      expect(drive.shareWithServiceAccount).not.toHaveBeenCalled();
+      expect(repo.create).toHaveBeenCalled();
+    });
+
+    // Proved on staging 2026-11-25: Google won't let a picker sign-in share
+    // a folder with files in it.
+    it('asks the officer to share a folder with files in it, with a code the panel waits on', async () => {
+      jest.mocked(reportSwallowed).mockClear();
+      drive.shareWithServiceAccount.mockRejectedValueOnce(
+        new GoogleDriveApiError('forbidden', 403, 'appNotAuthorizedToChild'),
+      );
+      const refusal = service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN);
+      await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+      await expect(refusal).rejects.toMatchObject({
+        response: {
+          code: 'google_drive.share_by_hand',
+          message: expect.stringContaining(EMAIL),
+        },
+      });
+      expect(reportSwallowed).not.toHaveBeenCalled();
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
     it('treats Google refusing the share as a refusal, and an expired sign-in as pick again', async () => {
       drive.shareWithServiceAccount.mockRejectedValueOnce(
         new GoogleDriveApiError('failed', 400, 'invalidSharingRequest'),
       );
+      const warn = jest.spyOn(Logger.prototype, 'warn');
       const refused = service.connectPicked('ch-1', 'user-1', FOLDER_ID, TOKEN);
       await expect(refused).rejects.toBeInstanceOf(ForbiddenException);
       await expect(refused).rejects.toThrow(EMAIL);
+      // Google's reason is kept, since a 403 is logged nowhere else.
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('400 invalidSharingRequest (my_drive)'),
+      );
+      warn.mockRestore();
 
       drive.shareWithServiceAccount.mockRejectedValueOnce(
         new GoogleDriveApiError('failed', 401, 'authError'),

@@ -1,12 +1,16 @@
 import { forwardRef, useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
-import { useCreateRole } from "@repo/hooks";
+import {
+  useChapterRoleColors,
+  useCreateRole,
+  useViewerDisplayName,
+} from "@repo/hooks";
 import { errorCopy } from "@repo/hooks/error-copy";
 import {
   NEW_PICKABLE_ROLE_COPY,
-  ROLE_COLOR_PALETTE,
   ROLE_NAME_MAX_LENGTH,
+  roleColorLabel,
 } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -27,7 +31,9 @@ import {
   useGuardedSheetRef,
 } from "@/components/sheet-scaffold";
 import { OptionSheet, type SheetOption } from "@/components/option-sheet";
-import { CheckGlyph, ForwardGlyph } from "@/components/control-glyphs";
+import { ForwardGlyph } from "@/components/control-glyphs";
+import { RoleColorDot } from "@/components/roles/role-color-row";
+import { RoleColorSheet } from "@/components/roles/role-color-sheet";
 import { successHaptic } from "@/lib/haptics";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
 import {
@@ -59,7 +65,6 @@ const NEW_ROLE_COPY = {
   // Web's Add role row's placeholder (`roles-overview.tsx`).
   placeholder: "Philanthropy chair",
   color: "Color",
-  noColor: "No color",
 } as const;
 
 /**
@@ -80,8 +85,8 @@ const NEW_ROLE_COPY = {
  *   already marked for members to pick (`self_assignable: true`), in
  *   `NEW_PICKABLE_ROLE_COPY`'s words, which web's twin shares.
  *
- * The color is the palette's ten swatches and No color; web's hue slider for
- * any other color stays on the web. The name outlives a close, not a Cancel
+ * The color row opens the same picker as web's (`RoleColorSheet`, #5966):
+ * the thirty swatches, the chapter's own colors and Custom. The name outlives a close, not a Cancel
  * (`spec/ui/mobile/patterns.md` § Bottom sheets).
  */
 export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
@@ -95,6 +100,9 @@ export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
       useGuardedSheetRef(ref);
     const createRole = useCreateRole();
     const tierSheetRef = useRef<BottomSheetModal>(null);
+    const colorSheetRef = useRef<BottomSheetModal>(null);
+    const chapterColors = useChapterRoleColors({ enabled: !!chapterRole });
+    const memberName = useViewerDisplayName();
 
     const placements = chapterRole?.placements ?? [];
     const defaultPlacement = defaultNewRolePlacement(placements);
@@ -265,36 +273,23 @@ export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
                   <ForwardGlyph color={tokens.color.text.mutedForeground} />
                 </Pressable>
                 <View style={styles.groupDivider} />
-                <View style={styles.colorRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${NEW_ROLE_COPY.color}: ${roleColorLabel(color)}`}
+                  accessibilityState={{ disabled: saving }}
+                  disabled={saving}
+                  onPress={() => colorSheetRef.current?.present()}
+                  style={styles.optionRow}
+                >
                   <Text style={styles.optionLabel}>{NEW_ROLE_COPY.color}</Text>
-                  <View
-                    accessibilityRole="radiogroup"
-                    accessibilityLabel={NEW_ROLE_COPY.color}
-                    style={styles.swatches}
-                  >
-                    <Swatch
-                      hex={null}
-                      label={NEW_ROLE_COPY.noColor}
-                      on={color === null}
-                      disabled={saving}
-                      onPress={() => setColor(null)}
-                      tokens={tokens}
-                      styles={styles}
-                    />
-                    {ROLE_COLOR_PALETTE.map((swatch) => (
-                      <Swatch
-                        key={swatch.key}
-                        hex={swatch.hex}
-                        label={swatch.label}
-                        on={color === swatch.hex}
-                        disabled={saving}
-                        onPress={() => setColor(swatch.hex)}
-                        tokens={tokens}
-                        styles={styles}
-                      />
-                    ))}
+                  <View style={styles.optionValueRow}>
+                    <RoleColorDot value={color} />
+                    <Text style={styles.colorValue} numberOfLines={1}>
+                      {roleColorLabel(color)}
+                    </Text>
                   </View>
-                </View>
+                  <ForwardGlyph color={tokens.color.text.mutedForeground} />
+                </Pressable>
               </View>
             ) : null}
 
@@ -324,55 +319,21 @@ export const NewRoleSheet = forwardRef<BottomSheetModal, NewRoleSheetProps>(
             onSelect={setPlacement}
           />
         ) : null}
+        {chapterRole ? (
+          <RoleColorSheet
+            ref={colorSheetRef}
+            value={color}
+            onChange={setColor}
+            previewName={trimmed}
+            memberName={memberName}
+            chapterColors={chapterColors}
+            title={NEW_ROLE_COPY.color}
+          />
+        ) : null}
       </>
     );
   },
 );
-
-/**
- * One color, a round swatch the size of a row control: No color is the
- * ringed empty circle, as web's picker draws its None.
- */
-function Swatch({
-  hex,
-  label,
-  on,
-  disabled,
-  onPress,
-  tokens,
-  styles,
-}: {
-  hex: string | null;
-  label: string;
-  on: boolean;
-  disabled: boolean;
-  onPress: () => void;
-  tokens: SignetTokens;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={label}
-      accessibilityState={{ checked: on, disabled }}
-      disabled={disabled}
-      hitSlop={4}
-      onPress={onPress}
-      style={[
-        styles.swatch,
-        hex ? { backgroundColor: hex } : styles.swatchNone,
-        on ? styles.swatchOn : null,
-      ]}
-    >
-      {on ? (
-        <CheckGlyph
-          color={hex ? tokens.color.gold.onHouse : tokens.color.text.foreground}
-          size={16}
-        />
-      ) : null}
-    </Pressable>
-  );
-}
 
 function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
   const fieldStyles = sheetFieldStyles(tokens, brand.accent);
@@ -423,30 +384,17 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.mutedForeground,
     },
-    colorRow: {
-      paddingVertical: tokens.spacing.md,
-      gap: tokens.spacing.sm,
-    },
-    swatches: {
+    optionValueRow: {
+      flex: 1,
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing.sm,
-    },
-    swatch: {
-      // The Row control step (32), foundations § 9.
-      width: tokens.spacing["2xl"],
-      height: tokens.spacing["2xl"],
-      borderRadius: tokens.spacing["2xl"] / 2,
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: "flex-end",
+      gap: tokens.spacing.xs,
     },
-    swatchNone: {
-      borderWidth: 1,
-      borderColor: tokens.color.border.input,
-    },
-    swatchOn: {
-      borderWidth: 2,
-      borderColor: tokens.color.text.foreground,
+    colorValue: {
+      ...typeRole(tokens.typography.role.body),
+      color: tokens.color.text.mutedForeground,
+      flexShrink: 1,
     },
   });
 }

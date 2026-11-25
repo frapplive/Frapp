@@ -66,6 +66,7 @@ import {
 } from '#domain/repositories/chat.repository.interface';
 import type { ChatChannel } from '#domain/entities/chat.entity';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
+import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import { toReportableError } from '../../infrastructure/observability/reportable-error';
 
 /**
@@ -92,6 +93,52 @@ export const AUDITED_PROFILE_FIELDS = [
   'donation_url',
   'accent_color',
 ] as const satisfies readonly (keyof Chapter)[];
+
+/** One role a new tenant is seeded with: `DEFAULT_SYSTEM_ROLES`' shape. */
+export interface TenantSeedRole {
+  name: string;
+  system_key: string | null;
+  /** Position in the seed's `tiers`, 0 highest; `null` is outside them. */
+  starting_tier: number | null;
+  extra_permissions: readonly string[];
+  is_system: boolean;
+  display_order: number;
+  color?: string | null;
+  mentionable?: boolean;
+}
+
+/** One channel a new tenant is seeded with: `DEFAULT_CHANNELS`' shape. */
+export interface TenantSeedChannel {
+  name: string;
+  description: string;
+  who_can_see: SeededChannelAccess;
+  who_can_post: SeededChannelAccess;
+}
+
+/**
+ * What `ChapterService.create` seeds a new tenant with. A chapter's is
+ * {@link CHAPTER_SEED}; a council's comes from its role pack
+ * (`CouncilService`, #5933). Exactly one role must carry the `PRESIDENT`
+ * key: the founder holds it, and `founderAlsoHolds` picks what else.
+ */
+export interface TenantSeed {
+  tiers: readonly { name: string; permissions: readonly string[] }[];
+  roles: readonly TenantSeedRole[];
+  channels: readonly TenantSeedChannel[];
+  founderAlsoHolds: (role: {
+    system_key: string | null;
+    name: string;
+  }) => boolean;
+  /** Delete the tenant row when seeding fails after it was inserted. */
+  deleteOnFailure?: boolean;
+}
+
+export const CHAPTER_SEED: TenantSeed = {
+  tiers: STARTING_ROLE_TIERS,
+  roles: DEFAULT_SYSTEM_ROLES,
+  channels: DEFAULT_CHANNELS,
+  founderAlsoHolds: (role) => role.system_key === SystemRoleKeys.MEMBER,
+};
 
 /**
  * Hex equality, case-folded.
@@ -186,6 +233,12 @@ export class ChapterService {
    * chapter the caller cannot join must never reach the token. The caller must
    * refresh their session afterwards — the claim only changes when a token is
    * issued, so without a refresh the previous one stands until it expires.
+   *
+   * Any tenant kind (#5933, settling #5925's review note): the switcher lists
+   * councils too, and ADR-27 decision 4 has a choice made there write
+   * `active_chapter_id` whatever it names. Membership is the check; a route
+   * that doesn't serve the chosen kind refuses it on its own
+   * (`ChapterGuard`), and the token hook never defaults to a council.
    */
   async setActiveChapter(userId: string, chapterId: string): Promise<void> {
     const membership = await this.memberRepo.findByUserAndChapter(
@@ -286,14 +339,16 @@ export class ChapterService {
   async create(
     userId: string,
     data: { name: string; university: string; config: Partial<Chapter> },
+    seed: TenantSeed = CHAPTER_SEED,
   ): Promise<Chapter> {
     const { name, university, config } = data;
     // `config` carries the customization columns (archetype, branding, palette,
-    // enabled_modules, …) the onboarding flow sets. Onboarding is the API's
-    // only caller since the config-less `POST /v1/chapters` was deleted
-    // (#2608). The type still accepts `{}`, and the demo seed inserts chapters
-    // outside the API with no palette, so readers keep their no-palette
-    // fallbacks.
+    // enabled_modules, …) the onboarding flow sets, or a council's own fields
+    // (`CouncilService`, #5933). Onboarding and council creation are the
+    // API's only callers since the config-less `POST /v1/chapters` was
+    // deleted (#2608). The type still accepts `{}`, and the demo seed inserts
+    // chapters outside the API with no palette, so readers keep their
+    // no-palette fallbacks.
     const chapter = await this.chapterRepo.create({
       name,
       university,
@@ -302,16 +357,47 @@ export class ChapterService {
       // rather than at the schema default `incomplete`, which refuses every
       // paid-ops write until a checkout nobody is asked to do. Last, so no
       // config key can override it. `CHAPTER_BILLING_BETA_OFF` owns the why.
+      // A council is free for the pilot (Paul, 2026-11-11, `school-layer.md`
+      // § 8 Q3), which this covers too while it holds.
       ...(CHAPTER_BILLING_BETA_OFF
         ? { subscription_status: 'active' as const }
         : {}),
     });
 
+    try {
+      await this.seedTenant(userId, chapter, seed);
+    } catch (error) {
+      // A council that failed half-way would hold its type at its school
+      // for good (`chapters_one_council_per_type`) with nobody in it, so its
+      // seed deletes the row, and the cascade everything seeded under it
+      // (#5933). A chapter keeps today's behaviour.
+      if (seed.deleteOnFailure) {
+        await this.chapterRepo.deleteById(chapter.id).catch((cleanup) =>
+          reportCaughtFailure(this.logger, {
+            level: 'error',
+            site: 'tenant-seed-cleanup',
+            message: `Failed to delete tenant ${chapter.id} after its seed failed`,
+            error: cleanup,
+          }),
+        );
+      }
+      throw error;
+    }
+
+    return chapter;
+  }
+
+  /** Seeds a new tenant's tiers, roles, founder membership and channels. */
+  private async seedTenant(
+    userId: string,
+    chapter: Chapter,
+    seed: TenantSeed,
+  ): Promise<void> {
     // The starting tiers are rows from here on: the chapter can rename,
     // reorder, add and delete them, so they are matched to the seeded roles by
     // the position they were just inserted with and never looked up by name.
     const tiers = await this.roleTierRepo.createMany(
-      STARTING_ROLE_TIERS.map((tier, index) => ({
+      seed.tiers.map((tier, index) => ({
         chapter_id: chapter.id,
         position: index + 1,
         name: tier.name,
@@ -322,7 +408,7 @@ export class ChapterService {
       tiers.map((tier) => [tier.position, tier.id]),
     );
 
-    const rolesData = DEFAULT_SYSTEM_ROLES.map((roleDef) => {
+    const rolesData = seed.roles.map((roleDef) => {
       const tierId =
         roleDef.starting_tier === null
           ? null
@@ -330,7 +416,7 @@ export class ChapterService {
       if (tierId === undefined) {
         // caught-failure-exempt: rethrown; AllExceptionsFilter reports the 5xx
         this.logger.error(
-          `Starting tier missing for role ${roleDef.system_key} in chapter ${chapter.id}`,
+          `Starting tier missing for role ${roleDef.system_key ?? roleDef.name} in chapter ${chapter.id}`,
         );
         throw new InternalServerErrorException(
           'Failed to create the starting role tiers',
@@ -347,12 +433,19 @@ export class ChapterService {
         permission_overrides: Object.fromEntries(
           roleDef.extra_permissions.map((permission) => [permission, true]),
         ),
-        permissions: [...roleDef.permissions],
+        permissions: [
+          ...new Set<string>([
+            ...(roleDef.starting_tier === null
+              ? []
+              : (seed.tiers[roleDef.starting_tier]?.permissions ?? [])),
+            ...roleDef.extra_permissions,
+          ]),
+        ],
         is_system: roleDef.is_system,
         display_order: roleDef.display_order,
         color: roleDef.color ?? null,
         // Every seeded role is mentionable but Everyone.
-        mentionable: 'mentionable' in roleDef ? roleDef.mentionable : true,
+        mentionable: roleDef.mentionable ?? true,
       };
     });
 
@@ -378,15 +471,18 @@ export class ChapterService {
         'President role not found during chapter creation',
       );
     }
-    // The founder is an active too (#5802), so their profile carries a base
-    // role; the database appends Everyone.
-    const activesRole = roles.find(
-      (r) => r.system_key === SystemRoleKeys.MEMBER,
-    );
+    // A chapter's founder is an active too (#5802), so their profile carries
+    // a base role; a council's holds the title they picked (#5933). The
+    // database appends Everyone.
     await this.memberRepo.create({
       user_id: userId,
       chapter_id: chapter.id,
-      role_ids: [presidentRole.id, ...(activesRole ? [activesRole.id] : [])],
+      role_ids: [
+        presidentRole.id,
+        ...roles
+          .filter((role) => seed.founderAlsoHolds(role))
+          .map((role) => role.id),
+      ],
       has_completed_onboarding: true,
     });
 
@@ -412,7 +508,7 @@ export class ChapterService {
       }
       return normalizeChannelAccessList(entries);
     };
-    const defaultChannels: Partial<ChatChannel>[] = DEFAULT_CHANNELS.map(
+    const defaultChannels: Partial<ChatChannel>[] = seed.channels.map(
       (channelDef) => ({
         chapter_id: chapter.id,
         name: channelDef.name,
@@ -438,8 +534,6 @@ export class ChapterService {
         cause: toReportableError(err),
       });
     }
-
-    return chapter;
   }
 
   async update(

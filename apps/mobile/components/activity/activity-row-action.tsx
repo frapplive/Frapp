@@ -28,6 +28,7 @@ import {
   ActivityRowMenuContext,
   type ActivityRowActionControl,
 } from "./activity-row";
+import { ActivityMinutesContext } from "./activity-minutes";
 
 const LABELS: Record<ActivityRowAction, string> = {
   confirm: TASK_ACTION_LABELS.confirm,
@@ -279,8 +280,20 @@ export function ActivityRowItem({
   const action = actions
     ? activityRowAction(row, { canSupplyLocation: true, canScan: true })
     : null;
+  const minutes = useContext(ActivityMinutesContext);
   const control: ActivityRowActionControl | null =
-    action && actions ? rowActionControl(row, action, actions) : null;
+    action && actions
+      ? rowActionControl(row, action, actions)
+      : row.kind === "minutes-to-write" && minutes && row.badge
+        ? // Write minutes (#5949): starts them and opens them, one at a
+          // time, as the Minutes list's row did.
+          {
+            label: row.badge.label,
+            disabled: minutes.startingId !== null,
+            hint: undefined,
+            run: () => minutes.write(row),
+          }
+        : null;
   const menuFor = useContext(ActivityRowMenuContext);
   return (
     <ActivityListRow

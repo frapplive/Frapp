@@ -242,7 +242,7 @@ then, and the Member rows took the chapter accent before that.
 |---|---|---|
 | Study hours | `study`, `graduation-cap` | `StudyGlyph` |
 | Service hours | `service`, `hand-heart` | `ServiceGlyph` |
-| Recruitment (#5924) | `RecruitmentGlyph` (`components/more/more-glyphs.tsx`), the chat card's funnel; no nav set key yet | `RushGlyph` |
+| Recruitment (#5924; two-tone since #5931) | `recruitment`, `funnel` | `RecruitmentGlyph` |
 | Dues | `billing`, `credit-card` | `BillingGlyph` |
 | Documents | `documents`, `file-text` | `DocumentsGlyph` |
 | Directory | `directory`, `users-three` | `DirectoryGlyph` |
@@ -346,7 +346,7 @@ This table is the intent → glyph map; it MUST change in the same PR as
 | Points | `PointsGlyph` | `points`, `trophy` |
 | Study hours | `StudyGlyph` | `study`, `graduation-cap` |
 | Service hours | `ServiceGlyph` | `service`, `hand-heart` |
-| Recruitment (#5924) | `RushGlyph` from `components/chat/chat-glyphs.tsx`, the chat card's stroke funnel, borrowed until `@repo/theme`'s nav set has a two-tone one | — |
+| Recruitment (#5924; two-tone since #5931) | `RecruitmentGlyph` | `recruitment`, `funnel` |
 | Polls (no nav row since #3871; kept for the chat composer's + menu, #3865) | `PollsGlyph` | `polls`, `chart-bar` |
 | Meetings (minutes) | `MeetingsGlyph` | `meetings`, `notebook` |
 | Documents | `DocumentsGlyph` | `documents`, `file-text` |
@@ -415,6 +415,7 @@ composer controls, 16px in card eyebrows and inline metadata (§2).
 | Poll, in the composer's **+** menu | `PollsGlyph` (shared with the nav intent) |
 | Send a message: an up arrow, stroke only at 2.4 on the accent-filled round button, the web face of mobile's `↑` (2026-11-06) | `SendArrowGlyph` |
 | Jump to latest, on the round control over the thread's bottom-right corner: a down arrow, `SendArrowGlyph` turned over, the web face of mobile's `↓` (2026-11-12) | `JumpToLatestGlyph` |
+| New unreads, on the channel list's pill over its top or bottom edge: the same up and down arrows, pointing to where the unread channels are, the web face of mobile's `↑` and `↓` (#6045, 2026-11-25) | `SendArrowGlyph`, `JumpToLatestGlyph` |
 | Announcement | `AnnouncementGlyph` |
 | `#chapter-audit` / audit row (channel removed 2026-11-21) | `AuditGlyph` |
 | Private / role-gated channel | `LockGlyph` |

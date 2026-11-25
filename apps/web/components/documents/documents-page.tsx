@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useDeleteDocument,
   useDocumentFolders,
@@ -19,10 +19,15 @@ import {
   useMyPermissions,
   useSemesters,
   useDocumentTypes,
+  useGoogleDriveStatus,
   useViewerUserId,
   type DocumentTypeRow,
 } from "@repo/hooks";
-import { can } from "@repo/validation";
+import {
+  can,
+  DOCUMENTS_TYPE_PARAM,
+  MINUTES_TYPE_PARAM_VALUE,
+} from "@repo/validation";
 import { Can } from "@/components/shared/can";
 import { PageActions } from "@/components/layout/page-actions";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -37,6 +42,8 @@ import {
   NO_DOCUMENT_FILTERS,
   deleteDocumentTitle,
   documentFolderHues,
+  isMarkFiltering,
+  isMinutesDocument,
   limitedDocumentCheck,
   markedItems,
   tierRows,
@@ -44,11 +51,14 @@ import {
   type DocumentSort,
 } from "@repo/hooks/document-library";
 import { DocumentViewer } from "@/components/documents/document-viewer";
+import { DocumentsPageSkeleton } from "@/components/documents/documents-skeleton";
+import { meetingHref } from "@/components/meetings/meeting-copy";
 import { DOCUMENT_LINK_PARAM } from "@/components/ask/ask-source-link";
-import type {
-  ChapterDocument,
-  ChapterDocumentFolder,
-  FolderRow,
+import {
+  isFileDocument,
+  type ChapterDocument,
+  type ChapterDocumentFolder,
+  type FolderRow,
 } from "@/components/documents/document-types";
 import {
   FolderDialog,
@@ -60,6 +70,8 @@ import {
 } from "@/components/documents/document-access";
 import { FolderMenu, FolderRail } from "@/components/documents/folder-rail";
 import { UploadMenu } from "@/components/documents/upload-menu";
+import { DriveFolderLine } from "@/components/documents/drive-folder-line";
+import { ResourcesViews } from "@/components/documents/resources-views";
 import { MarkedStrip } from "@/components/documents/marked-strip";
 import { useDocumentMarks } from "@/components/documents/use-document-marks";
 import {
@@ -69,6 +81,7 @@ import {
 import { documentTypeOptions } from "@/lib/documents/upload-defaults";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { useChapterStore } from "@/lib/stores/chapter-store";
+import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
 import { useToast } from "@/lib/hooks/use-toast";
 import { asArray, getErrorMessage } from "@/lib/utils";
 
@@ -78,12 +91,23 @@ import { asArray, getErrorMessage } from "@/lib/utils";
   they were made in and must never be offered to the next one.
 */
 export function DocumentsPage() {
-  const chapterId = useChapterStore((state) => state.activeChapterId);
-  return <ChapterDocumentsPage key={chapterId ?? "none"} />;
+  return (
+    // `useSearchParams` needs a boundary; the skeleton is the page's own.
+    <Suspense fallback={<DocumentsPageSkeleton />}>
+      <DocumentsPageForLink />
+    </Suspense>
+  );
 }
 
-function ChapterDocumentsPage() {
+function DocumentsPageForLink() {
+  const chapterId = useChapterStore((state) => state.activeChapterId);
+  const type = useSearchParams()?.get(DOCUMENTS_TYPE_PARAM) ?? null;
+  return <ChapterDocumentsPage key={chapterId ?? "none"} initialType={type} />;
+}
+
+function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
   const { toast } = useToast();
+  const router = useRouter();
   // Every write route on `ChapterDocumentController` (upload URL, confirm,
   // delete) carries no `@FreeTier`, so they are all paid-ops behind the same
   // subscription guard — one gate covers the surface (#841).
@@ -100,9 +124,16 @@ function ChapterDocumentsPage() {
     so a long library re-ranks behind the keystroke rather than ahead of it.
   */
   const deferredSearch = useDeferredValue(search.trim());
-  const [filters, setFilters] = useState<DocumentFilters>(NO_DOCUMENT_FILTERS);
+  // `/documents?type=minutes` opens on the Minutes filter: where `/meetings`
+  // lands now that minutes are filed here (#5949), and what a meeting's
+  // minutes page goes back to. Read once; the filter is the member's after.
+  const [filters, setFilters] = useState<DocumentFilters>(() =>
+    initialType === MINUTES_TYPE_PARAM_VALUE
+      ? { ...NO_DOCUMENT_FILTERS, kind: "minutes" }
+      : NO_DOCUMENT_FILTERS,
+  );
   const [sort, setSort] = useState<DocumentSort>("name");
-  const documentsQuery = useDocuments();
+  const documentsQuery = useDocuments({ minutes: true });
   const foldersQuery = useDocumentFolders();
   const deleteDoc = useDeleteDocument();
 
@@ -185,6 +216,11 @@ function ChapterDocumentsPage() {
   */
   const viewerOpener = useRef<HTMLElement | null>(null);
   function openDocument(doc: ChapterDocument) {
+    // A meeting's minutes have no file: the row opens the minutes (#5949).
+    if (isMinutesDocument(doc)) {
+      router.push(meetingHref(doc.meeting_id));
+      return;
+    }
     viewerOpener.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -196,6 +232,11 @@ function ChapterDocumentsPage() {
     "chapter_docs:upload",
     permissionsPayload?.permissions ?? [],
   );
+  // New minutes, for whoever records them while the module is on (#5949).
+  const isModuleEnabled = useChapterModuleGate();
+  const canStartMinutes =
+    can("meetings:record", permissionsPayload?.permissions ?? []) &&
+    (isModuleEnabled?.("meetings") ?? false);
 
   /*
     The folder tab, then the toolbar's search, filters and order, all local,
@@ -247,6 +288,17 @@ function ChapterDocumentsPage() {
   */
   const showStrip =
     activeFolder === null && !filtering && deferredSearch === "";
+  // The Minutes filter and nothing else: an empty list there is a chapter
+  // with no minutes filed, not a search that missed (#5949).
+  const minutesOnly =
+    activeFolder === null &&
+    deferredSearch === "" &&
+    effectiveFilters.kind === "minutes" &&
+    effectiveFilters.uploader === null &&
+    effectiveFilters.date === null &&
+    !isMarkFiltering(effectiveFilters.marks);
+  // The add menu's New minutes, opened from that empty line.
+  const openNewMinutes = useRef<(() => void) | null>(null);
   // The tiers and the cards come from the builders mobile's s12 uses too
   // (`@repo/hooks/document-library`), so the two apps can't disagree.
   const { starred: starredIds } = marks;
@@ -265,8 +317,12 @@ function ChapterDocumentsPage() {
       }),
     [documents, folders, visible, starredIds],
   );
+  // The viewer steps through files only: minutes open on their own page.
   const visibleDocs = useMemo(
-    () => tieredVisible.map((row) => row.doc),
+    () =>
+      tieredVisible
+        .map((row) => row.doc)
+        .filter((doc) => !isMinutesDocument(doc)),
     [tieredVisible],
   );
 
@@ -292,6 +348,30 @@ function ChapterDocumentsPage() {
     "chapter_docs:manage",
     permissionsPayload?.permissions ?? [],
   );
+  // The connected Drive folder, where the Upload menu's Google Drive item
+  // goes once one is connected. `chapter_docs:manage` only, as on the API.
+  const driveStatus = useGoogleDriveStatus({ enabled: canManageTypes });
+  const driveRootId = canManageTypes
+    ? (driveStatus.data?.connection?.folder_id ?? null)
+    : null;
+  const driveRoot = driveRootId
+    ? folders.find((folder) => folder.drive_folder_id === driveRootId)
+    : undefined;
+  // An officer the connected folder's list leaves out, or a folder the first
+  // pass never made, still gets its line and ⋯ (Disconnect above all), at
+  // the top of Documents: managing the connection is `chapter_docs:manage`'s,
+  // as on the API, and doesn't wait on seeing the folder.
+  const driveConnection = canManageTypes
+    ? driveStatus.data?.connection
+    : undefined;
+  const driveLineFolder = activeFolder
+    ? folders.find((folder) => folder.name === activeFolder)
+    : !driveRoot && driveConnection
+      ? {
+          name: driveConnection.folder_name,
+          drive_folder_id: driveConnection.folder_id,
+        }
+      : undefined;
   /*
     Who can see (#3642 piece 1). A file in a limited folder, or with its own
     list, draws a lock; its uploader and whoever manages documents get its
@@ -313,8 +393,14 @@ function ChapterDocumentsPage() {
     () => folders.map((folder) => folder.name),
     [folders],
   );
+  // A folder import checks its files against the chapter's files: minutes
+  // rows have no file to be a copy of.
   const importContext = useMemo(
-    () => ({ typeOptions, folders: folderNames, documents }),
+    () => ({
+      typeOptions,
+      folders: folderNames,
+      documents: documents.filter(isFileDocument),
+    }),
     [typeOptions, folderNames, documents],
   );
   const upload = useDocumentUpload(gate, {
@@ -433,6 +519,8 @@ function ChapterDocumentsPage() {
     // A container (#4022): beside chat (#3779) the page is narrow while the
     // window is wide, so the folder rail counts the page's own width.
     <div className="@container/docs space-y-6">
+      {/* Documents and Backwork, the two views of Resources (#5949). */}
+      <ResourcesViews />
       <PageActions>
         <UploadMenu
           gate={gate}
@@ -441,10 +529,17 @@ function ChapterDocumentsPage() {
           typeOptions={typeOptions}
           typeRows={typesQuery.isSuccess ? typeRows : null}
           importContext={importContext}
-          documents={documents}
-          folderRows={folders}
+          onOpenDriveFolder={
+            driveRoot
+              ? () => setActiveFolder(driveRoot.name)
+              : driveConnection
+                ? () => setActiveFolder(null)
+                : undefined
+          }
           canUpload={canUpload}
           canManage={canManageTypes}
+          canStartMinutes={canStartMinutes}
+          minutesOpenerRef={openNewMinutes}
         />
         <Can permission="chapter_docs:upload">
           <DocumentsPageDropTarget
@@ -570,6 +665,10 @@ function ChapterDocumentsPage() {
             onDelete={(doc) => void handleDelete(doc)}
             onShowAllFiles={() => setActiveFolder(null)}
             onUpload={canUpload ? () => upload.openPanel() : undefined}
+            minutesOnly={minutesOnly}
+            onNewMinutes={
+              canStartMinutes ? () => openNewMinutes.current?.() : undefined
+            }
             marks={marks}
             onHoldRow={hold}
             isLimited={isLimited}
@@ -578,6 +677,16 @@ function ChapterDocumentsPage() {
             folderHue={folderHue}
             folderPicker={
               <FolderMenu {...railProps} className="@2xl/docs:hidden" />
+            }
+            folderLine={
+              canManageTypes ? (
+                <DriveFolderLine
+                  folder={driveLineFolder}
+                  gate={gate}
+                  documents={documents}
+                  folders={folders}
+                />
+              ) : null
             }
           />
         </div>
@@ -646,7 +755,17 @@ function OpenLinkedDocument({
   onOpen: (id: string) => void;
 }) {
   const linked = useSearchParams()?.get(DOCUMENT_LINK_PARAM) ?? null;
-  const found = linked !== null && known.some((doc) => doc.id === linked);
+  const linkedDoc =
+    linked === null ? undefined : known.find((doc) => doc.id === linked);
+  const found = linkedDoc !== undefined;
+  // A link to a meeting's minutes row (#5949) opens the minutes: the row is
+  // never in the viewer's list, so it must not wait to be shown there.
+  const minutesId =
+    linkedDoc && isMinutesDocument(linkedDoc) ? linkedDoc.meeting_id : null;
+  const router = useRouter();
+  useEffect(() => {
+    if (minutesId) router.replace(meetingHref(minutesId));
+  }, [minutesId, router]);
   const visible = found && shown.some((doc) => doc.id === linked);
   // The latest callbacks without making the effect depend on their identity.
   const callbacks = useRef({ onReveal, onOpen });
@@ -654,7 +773,7 @@ function OpenLinkedDocument({
     callbacks.current = { onReveal, onOpen };
   });
   useEffect(() => {
-    if (!linked || !found) return;
+    if (!linked || !found || minutesId) return;
     if (!visible) {
       callbacks.current.onReveal();
       return;
@@ -663,6 +782,6 @@ function OpenLinkedDocument({
     // Next keeps `useSearchParams` in step with the History API, so this
     // clears the parameter without a navigation.
     window.history.replaceState(null, "", window.location.pathname);
-  }, [linked, found, visible]);
+  }, [linked, found, visible, minutesId]);
   return null;
 }

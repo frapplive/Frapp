@@ -117,6 +117,8 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["service-hours"] }}
       />
       <Stack.Screen name="study" options={{ title: SCREEN_TITLES.study }} />
+      {/* A member's own points, pushed from You (#5950). */}
+      <Stack.Screen name="points" options={{ title: SCREEN_TITLES.points }} />
       <Stack.Screen name="dues" options={{ title: SCREEN_TITLES.dues }} />
       <Stack.Screen
         name="documents"
@@ -175,6 +177,11 @@ export default function AppLayout() {
       <Stack.Screen
         name="arrange-channels"
         options={{ title: SCREEN_TITLES["arrange-channels"] }}
+      />
+      {/* One channel's settings (#6031), from a channel row's Edit channel. */}
+      <Stack.Screen
+        name="channel-settings"
+        options={{ title: SCREEN_TITLES["channel-settings"] }}
       />
       {/* Chapter settings and its Roles screens (#4074), from Chat home's chapter menu. */}
       <Stack.Screen

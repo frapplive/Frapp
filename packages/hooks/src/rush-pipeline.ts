@@ -1,5 +1,6 @@
 import {
   can,
+  type RushBidState,
   RUSH_CLOSED_REASON_LABELS,
   formatRushRatingAverage,
   type RushClosedReason,
@@ -25,6 +26,8 @@ export interface RushCandidateLike {
   id: string;
   stage: string;
   closed_reason?: RushClosedReason | null;
+  /** The bid's full state (#5973), which places a card past its stage. */
+  bid_state?: RushBidState;
   created_at: string;
 }
 
@@ -46,6 +49,8 @@ export interface RushPipelineAccess {
   readNotes: boolean;
   /** Vote and rate (`rush:vote`). */
   vote: boolean;
+  /** Extend a bid, record a decline or an acceptance (`rush:bid`). */
+  bid: boolean;
   /** See vote counts and rating averages (`rush:view_results`). */
   viewResults: boolean;
   /** Edit stages and tags; delete anyone's note (`rush:manage`). */
@@ -65,6 +70,7 @@ export function rushPipelineAccess(
     writeNotes: may("rush:notes"),
     readNotes: may("rush:read_notes"),
     vote: may("rush:vote"),
+    bid: may("rush:bid"),
     viewResults: may("rush:view_results"),
     manage: may("rush:manage"),
   };
@@ -72,26 +78,52 @@ export function rushPipelineAccess(
 
 /** One column of the board. Closed stages fold into one column. */
 export interface RushBoardColumn<S extends RushStageView = RushStageView> {
-  /** A stage key, or `"closed"` for the folded column. */
+  /**
+   * A stage key, `"closed"` for the folded column, or
+   * {@link RUSH_BID_COLUMN} for the open bids.
+   */
   id: string;
   label: string;
   category: RushStageCategory;
-  /** The stages the column holds: one, or every Closed stage. */
+  /**
+   * The stages the column holds: one, or every Closed stage. None for the
+   * Bid extended column, which nothing is dropped into.
+   */
   stages: S[];
+  /** The Bid extended column (#5973). */
+  bid?: boolean;
+}
+
+/** The Bid extended column's id; no stage key can be it (keys are slugs). */
+export const RUSH_BID_COLUMN = "bid-extended";
+
+/**
+ * A card with an open bid or an accepted one sits in the Bid extended or the
+ * Closed column whatever its stage, because only a bid action moves it there
+ * (#5973, Winston's UI design v8 § 3b); so it isn't dragged between columns.
+ * Its stage still changes from the prospect's panel.
+ */
+export function rushPlacedByBid(candidate: RushCandidateLike): boolean {
+  return (
+    candidate.bid_state === "extended" || candidate.bid_state === "accepted"
+  );
 }
 
 /**
- * The board's columns, in order: each visible working stage, then one
- * Closed column that holds every Closed stage, so the board fits a laptop
- * window however many ways a chapter closes a prospect. A hidden stage that
- * still holds prospects keeps its column, so nobody goes missing; an empty
- * hidden one is left out.
+ * The board's columns, in order: each visible working stage, then **Bid
+ * extended** while anyone has an open bid (#5973), then one Closed column that
+ * holds every Closed stage and every accepted prospect, so the board fits a
+ * laptop window however many ways a chapter closes a prospect. A hidden stage
+ * that still holds prospects keeps its column, so nobody goes missing; an
+ * empty hidden one is left out.
  */
 export function rushBoardColumns<S extends RushStageView>(
   stages: readonly S[],
   candidates: readonly RushCandidateLike[],
 ): RushBoardColumn<S>[] {
-  const occupied = new Set(candidates.map((c) => c.stage));
+  const occupied = new Set(
+    candidates.filter((c) => !rushPlacedByBid(c)).map((c) => c.stage),
+  );
   const shown = stages.filter(
     (stage) => !stage.hidden || occupied.has(stage.key),
   );
@@ -103,11 +135,26 @@ export function rushBoardColumns<S extends RushStageView>(
       category: stage.category,
       stages: [stage],
     }));
+  const bids: RushBoardColumn<S>[] = candidates.some(
+    (c) => c.bid_state === "extended",
+  )
+    ? [
+        {
+          id: RUSH_BID_COLUMN,
+          label: "Bid extended",
+          category: "bid_ready",
+          stages: [],
+          bid: true,
+        },
+      ]
+    : [];
   const closed = shown.filter((stage) => stage.category === "closed");
-  return closed.length === 0
-    ? working
+  const accepted = candidates.some((c) => c.bid_state === "accepted");
+  return closed.length === 0 && !accepted
+    ? [...working, ...bids]
     : [
         ...working,
+        ...bids,
         { id: "closed", label: "Closed", category: "closed", stages: closed },
       ];
 }
@@ -138,8 +185,17 @@ export function rushCandidatesByColumn<C extends RushCandidateLike>(
   const sorted = [...candidates].sort((a, b) =>
     b.created_at.localeCompare(a.created_at),
   );
+  const byBid = (candidate: C): string | undefined => {
+    if (candidate.bid_state === "extended" && out.has(RUSH_BID_COLUMN)) {
+      return RUSH_BID_COLUMN;
+    }
+    if (candidate.bid_state === "accepted" && out.has("closed")) {
+      return "closed";
+    }
+    return undefined;
+  };
   for (const candidate of sorted) {
-    const id = columnOf.get(candidate.stage) ?? fallback;
+    const id = byBid(candidate) ?? columnOf.get(candidate.stage) ?? fallback;
     if (id) out.get(id)?.push(candidate);
   }
   return out;
@@ -194,12 +250,17 @@ interface RushStageKeyLike {
  */
 export function rushOpenProspectCount(
   stages: readonly RushStageKeyLike[],
-  candidates: readonly Pick<RushCandidateLike, "stage">[],
+  candidates: readonly Pick<RushCandidateLike, "stage" | "bid_state">[],
 ): number {
   const closed = new Set(
     stages.filter((stage) => stage.category === "closed").map((s) => s.key),
   );
-  return candidates.filter((candidate) => !closed.has(candidate.stage)).length;
+  // An accepted prospect folds into Closed on the board (#5973), so the
+  // count leaves them out too, whatever their stage.
+  return candidates.filter(
+    (candidate) =>
+      !closed.has(candidate.stage) && candidate.bid_state !== "accepted",
+  ).length;
 }
 
 /**
@@ -244,4 +305,25 @@ export function rushTagOverflow<T>(
 ): { shown: T[]; more: number } {
   if (items.length <= limit) return { shown: [...items], more: 0 };
   return { shown: items.slice(0, limit), more: items.length - limit };
+}
+
+/** Who added a prospect: a member, or their own interest form (#5977). */
+export interface RushCandidateAdder {
+  created_by_name: string | null;
+  origin?: "manual" | "pnm";
+}
+
+/** The adder's name, or "Interest form" for one the PNM's form created. */
+export function rushAddedBy(candidate: RushCandidateAdder): string {
+  if (candidate.origin === "pnm" || candidate.created_by_name === null) {
+    return "Interest form";
+  }
+  return candidate.created_by_name;
+}
+
+/** A row's meta line: "Added by Moiz Steenhuis" or "From the interest form". */
+export function rushAddedByLine(candidate: RushCandidateAdder): string {
+  return candidate.origin === "pnm" || candidate.created_by_name === null
+    ? "From the interest form"
+    : `Added by ${candidate.created_by_name}`;
 }

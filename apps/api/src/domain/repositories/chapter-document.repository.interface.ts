@@ -6,6 +6,11 @@ export interface ChapterDocumentFilter {
   folder?: string | null;
   /** Case-insensitive substring match on `title`. */
   search?: string;
+  /**
+   * Leave out the rows that file a meeting's minutes (#5949): for a client
+   * that didn't ask for them, such as a phone build from before they existed.
+   */
+  filesOnly?: boolean;
 }
 
 export interface IChapterDocumentRepository {
@@ -27,6 +32,22 @@ export interface IChapterDocumentRepository {
    */
   create(data: Partial<ChapterDocument>): Promise<ChapterDocument>;
   delete(id: string, chapterId: string): Promise<void>;
+  /** The chapter's documents filed in any of `folders` (by name). */
+  findInFolders(
+    chapterId: string,
+    folders: readonly string[],
+  ): Promise<ChapterDocument[]>;
+  /**
+   * Files a meeting's posted minutes as a document, or follows its name when
+   * filed already (`file_minutes_document`, #5949). The document's id, or
+   * `null` when the minutes aren't the chapter's or aren't posted.
+   */
+  fileMinutes(chapterId: string, meetingId: string): Promise<string | null>;
+  /**
+   * Files up to `limit` posted minutes that have no row yet, in every
+   * chapter (`file_unfiled_minutes`); how many it filed.
+   */
+  fileUnfiledMinutes(limit: number): Promise<number>;
   /**
    * The chapter's copies of its connected Google Drive folder's files
    * (#5157). Files added by their own link (#5434) aren't the folder's.

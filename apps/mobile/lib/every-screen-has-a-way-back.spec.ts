@@ -20,7 +20,11 @@ const BACK_CONTROL =
 /** Routes that draw no screen of their own, and why. */
 const NO_SCREEN: Readonly<Record<string, string>> = {
   ask: "opens the Ask sheet over Chat home and dismisses back to it",
+  // Until its screen lands (#6031): registered ahead of it, since the stack
+  // layout is frozen. The screen's PR takes this line out.
+  "channel-settings": "pops down to Chat home and draws nothing yet",
   chat: "forwards to Chat home or a thread and draws nothing",
+  minutes: "forwards to Documents on the Minutes file type and draws nothing",
 };
 
 function importedComponents(source: string): string[] {
@@ -45,6 +49,14 @@ const SCREENS = readdirSync(APP)
 describe("every pushed phone screen has a way back", () => {
   it("finds the screens", () => {
     expect(SCREENS.length).toBeGreaterThan(20);
+  });
+
+  // An exemption holds only while the route really draws nothing: a route
+  // listed above that grows a screen (`ScreenShell`) is checked like any
+  // other, so a forgotten entry can't hide a screen with no way back.
+  it.each(Object.keys(NO_SCREEN))("%s still draws no screen", (name) => {
+    const source = readFileSync(path.join(APP, `${name}.tsx`), "utf8");
+    expect(source).not.toMatch(/\bScreenShell\b/);
   });
 
   it.each(SCREENS)("%s draws a back row or a close", (name) => {

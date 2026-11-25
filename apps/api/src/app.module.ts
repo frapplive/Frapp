@@ -34,12 +34,15 @@ import { BillingModule } from './modules/billing/billing.module';
 import { FinancialInvoiceModule } from './modules/financial-invoice/financial-invoice.module';
 import { BackworkModule } from './modules/backwork/backwork.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { SchoolModule } from './modules/school/school.module';
+import { AffiliationModule } from './modules/affiliation/affiliation.module';
 import { ServiceEntryModule } from './modules/service-entry/service-entry.module';
 import { TaskModule } from './modules/task/task.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { AiSuggestionModule } from './modules/ai-suggestion/ai-suggestion.module';
 import { PledgeClassModule } from './modules/pledge-class/pledge-class.module';
 import { ChapterGroupModule } from './modules/chapter-group/chapter-group.module';
+import { InterestFormModule } from './modules/interest-form/interest-form.module';
 import { RushModule } from './modules/rush/rush.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { StudyModule } from './modules/study/study.module';
@@ -49,7 +52,6 @@ import { PredictionModule } from './modules/prediction/prediction.module';
 import { SemesterRolloverModule } from './modules/semester-rollover/semester-rollover.module';
 import { ReportModule } from './modules/report/report.module';
 import { SearchModule } from './modules/search/search.module';
-import { ActivityFeedModule } from './modules/activity-feed/activity-feed.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { BirthdayModule } from './modules/birthday/birthday.module';
 import { GoalsModule } from './modules/goals/goals.module';
@@ -118,6 +120,7 @@ import { validateEnv } from './config/env.validation';
     FinancialInvoiceModule,
     BackworkModule,
     ChatModule,
+    SchoolModule,
     ServiceEntryModule,
     TaskModule,
     TenantModule,
@@ -125,6 +128,7 @@ import { validateEnv } from './config/env.validation';
     PledgeClassModule,
     ChapterGroupModule,
     RushModule,
+    InterestFormModule,
     NotificationModule,
     StudyModule,
     ChapterDocumentModule,
@@ -135,7 +139,6 @@ import { validateEnv } from './config/env.validation';
     SemesterRolloverModule,
     ReportModule,
     SearchModule,
-    ActivityFeedModule,
     ActivityModule,
     BirthdayModule,
     GoalsModule,
@@ -170,6 +173,8 @@ import { validateEnv } from './config/env.validation';
     MeetingNoMinutesModule,
     MeetingDateReminderModule,
     BootstrapModule,
+    // Last, so its routes append to the exported contract (#5974).
+    AffiliationModule,
   ],
   providers: [
     {

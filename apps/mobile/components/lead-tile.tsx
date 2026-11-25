@@ -80,14 +80,14 @@ export const LEAD_TILE_SIZE = { row: 32, lead: 40 } as const;
 /** iconography.md §2's size for a list row's leading icon, in either tile. */
 export const LEAD_TILE_GLYPH = 20;
 
-/** The `lead` tile's stand-in while its row loads: same side, same corner. */
-export function LeadTileSkeleton() {
+/** A tile's stand-in while its row loads: same side, same corner. */
+export function LeadTileSkeleton({ size = "lead" }: { size?: LeadTileSize }) {
   const { tokens } = useFrappTheme();
   return (
     <SkeletonBlock
-      width={LEAD_TILE_SIZE.lead}
-      height={LEAD_TILE_SIZE.lead}
-      radius={tokens.radius.chipLarge}
+      width={LEAD_TILE_SIZE[size]}
+      height={LEAD_TILE_SIZE[size]}
+      radius={size === "lead" ? tokens.radius.chipLarge : tokens.radius.chip}
     />
   );
 }

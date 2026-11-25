@@ -129,7 +129,7 @@ describe("StandingCards: Last week (#4983)", () => {
 });
 
 describe("StandingCards: This semester (#4766)", () => {
-  it("draws a gauge per number, each linking to the page that owns it, with a ring only toward a target", () => {
+  it("draws a gauge per number, each opening what is behind its number, with a ring only toward a target", () => {
     mockStanding.mockReturnValue({
       isPending: false,
       data: {
@@ -155,7 +155,7 @@ describe("StandingCards: This semester (#4766)", () => {
     const points = within(standing).getByRole("link", {
       name: "42 points this semester, ranked 5 of 58",
     });
-    expect(points).toHaveAttribute("href", "/points");
+    expect(points).toHaveAttribute("href", "/profile?open=points");
     expect(
       within(standing).queryByTestId("activity-gauge-ring-points"),
     ).toBeNull();
@@ -163,7 +163,7 @@ describe("StandingCards: This semester (#4766)", () => {
     const service = within(standing).getByRole("link", {
       name: "Service hours: couldn't load",
     });
-    expect(service).toHaveAttribute("href", "/service");
+    expect(service).toHaveAttribute("href", "/profile?open=service");
     expect(service).toHaveTextContent("–");
     expect(service).toHaveTextContent("Couldn't load");
     // Study wasn't served and didn't fail: no gauge, not a zero.

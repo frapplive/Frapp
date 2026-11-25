@@ -31,6 +31,7 @@ import {
 import { canAny } from "@repo/validation";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useChapterModuleGate } from "@/lib/hooks/use-chapter-module-gate";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { useSettingsSearch } from "@/lib/settings/use-settings-search";
 import { asArray, cn } from "@/lib/utils";
 import { AnalyticsContext } from "@/lib/providers/analytics-provider";
@@ -69,6 +70,8 @@ import {
  */
 
 export const FIND_PLACEHOLDER = "Find channels, members, messages and more";
+/** A council's Find lists its channels alone (#5933). */
+export const COUNCIL_FIND_PLACEHOLDER = "Find channels";
 
 const GROUP_ICON: Record<FindGroup, LucideIcon> = {
   Channels: Hash,
@@ -197,7 +200,8 @@ function FindPanel({
   // Null until the member moves the highlight, which otherwise sits on the
   // first result.
   const [movedTo, setMovedTo] = useState<number | null>(null);
-  const placeholder = FIND_PLACEHOLDER;
+  // Set below, once the tenant's kind is read.
+  let placeholder = FIND_PLACEHOLDER;
 
   // The server search is debounced; the channel match is not, in effect,
   // because it reads the same debounced query and the channel list is cached.
@@ -212,7 +216,12 @@ function FindPanel({
    */
   const hasMinQuery = debouncedQuery.trim().length >= SEARCH_MIN_QUERY_LENGTH;
   const isDebouncing = query !== debouncedQuery;
-  const search = useSearch(debouncedQuery);
+  // A council's Find is its channels (#5933): `/v1/search` serves chapters
+  // only, so the search-backed groups (members, messages, events, backwork)
+  // never ask there, and Settings' index names a chapter's settings.
+  const isCouncil = useIsCouncil();
+  if (isCouncil) placeholder = COUNCIL_FIND_PLACEHOLDER;
+  const search = useSearch(isCouncil ? "" : debouncedQuery);
   const channels = useChannels();
   const isModuleEnabled = useChapterModuleGate();
   const permissions = usePermissionList();
@@ -239,8 +248,13 @@ function FindPanel({
       if (key && !(isModuleEnabled?.(key) ?? false)) hidden.add(group);
     }
     if (!canBrowseBackwork) hidden.add("Backwork");
+    if (isCouncil) {
+      for (const group of FIND_GROUPS) {
+        if (group !== "Channels") hidden.add(group);
+      }
+    }
     return hidden;
-  }, [isModuleEnabled, canBrowseBackwork]);
+  }, [isModuleEnabled, canBrowseBackwork, isCouncil]);
   const departments = useDepartments({
     enabled: !hiddenGroups.has("Backwork"),
   });
@@ -473,32 +487,35 @@ function FindPanel({
         />
       </div>
 
-      <div
-        role="group"
-        aria-label="Show"
-        className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-1 pt-3"
-      >
-        {chips.map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            aria-pressed={effectiveFilter === chip}
-            onClick={() => {
-              setFilter(chip);
-              inputRef.current?.focus();
-            }}
-            className={cn(
-              "h-7 rounded-full border px-3 text-caption transition",
-              effectiveFilter === chip
-                ? "border-transparent bg-accent-subtle text-accent-text"
-                : "border-border text-muted-foreground hover:text-foreground",
-              FOCUS_RING,
-            )}
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
+      {/* One group (a council's channels, #5933) is nothing to narrow. */}
+      {chips.length > 2 ? (
+        <div
+          role="group"
+          aria-label="Show"
+          className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-1 pt-3"
+        >
+          {chips.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              aria-pressed={effectiveFilter === chip}
+              onClick={() => {
+                setFilter(chip);
+                inputRef.current?.focus();
+              }}
+              className={cn(
+                "h-7 rounded-full border px-3 text-caption transition",
+                effectiveFilter === chip
+                  ? "border-transparent bg-accent-subtle text-accent-text"
+                  : "border-border text-muted-foreground hover:text-foreground",
+                FOCUS_RING,
+              )}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/*
         A live region outside the list, so a screen reader hears "Searching...",

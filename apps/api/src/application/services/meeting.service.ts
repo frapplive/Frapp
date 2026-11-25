@@ -39,6 +39,7 @@ import type { IMemberRepository } from '#domain/repositories/member.repository.i
 import {
   LIVE_RECORDING_STALE_MS,
   type Meeting,
+  type PostedMeetingSummary,
 } from '#domain/entities/meeting.entity';
 import type { Event } from '#domain/entities/event.entity';
 import { SystemPermissions } from '#domain/constants/permissions';
@@ -68,6 +69,25 @@ export interface MeetingListFacts {
   started: boolean;
   /** Who is recording the meeting on their phone right now, else `null`. */
   recording_by: string | null;
+}
+
+/**
+ * What Documents shows of posted minutes on their row (#5949,
+ * `spec/behavior/chapter-docs.md` § Minutes): the meeting's name and start
+ * as the minutes hold them, and the same facts the Minutes list drew.
+ */
+export interface PostedMinutesFacts {
+  meeting_id: string;
+  event_name: string;
+  event_start_time: string;
+  meeting_type: MeetingType;
+  other_label: string | null;
+  decision_count: number;
+  action_item_count: number;
+  /** Whether a recording's transcript is kept with the minutes. */
+  recorded: boolean;
+  /** The TL;DR's first line. */
+  gist: string | null;
 }
 
 /**
@@ -143,6 +163,9 @@ export interface UpdateMeetingInput {
   other_label?: string | null;
   content?: MeetingContentPatch;
 }
+
+/** What the read rule (`readable`) looks at on a set of minutes. */
+type MeetingReadFacts = Pick<Meeting, 'event_id' | 'status' | 'created_by'>;
 
 interface ViewerAccess {
   canEditAny: boolean;
@@ -366,6 +389,54 @@ export class MeetingService {
     return this.readableRows(chapterId, viewerId, rows);
   }
 
+  /**
+   * Of `eventIds`, the events that already have minutes, posted or a draft,
+   * whoever started them (#5949): Activity's Write minutes rows leave those
+   * out, so an officer is never asked to write minutes another officer's
+   * unreadable draft already holds. It says only that minutes exist, which
+   * New minutes already says ("Has minutes"), never what they hold.
+   */
+  async eventIdsWithMinutes(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (const chunk of chunkIds([...new Set(eventIds)])) {
+      for (const id of await this.meetingRepo.findEventIdsWithMinutes(
+        chapterId,
+        chunk,
+      )) {
+        found.add(id);
+      }
+    }
+    return found;
+  }
+
+  /**
+   * The viewer's own unposted minutes they may still read, newest meeting
+   * first, with each one's list facts (#5949, Activity's To do): a draft
+   * whose event no longer shows itself to its author is left out, as
+   * `readable` leaves it out of the Minutes list.
+   */
+  async ownDrafts(
+    chapterId: string,
+    viewerId: string,
+    limit: number,
+  ): Promise<{ rows: Meeting[]; facts: Map<string, MeetingListFacts> }> {
+    const drafts = await this.meetingRepo.findDraftsBy(
+      chapterId,
+      viewerId,
+      limit,
+    );
+    const { rows, events } = await this.readableWithEvents(
+      chapterId,
+      viewerId,
+      drafts,
+    );
+    const facts = await this.listFacts(chapterId, viewerId, rows, events);
+    return { rows, facts };
+  }
+
   /** The rows of `rows` the viewer may read (`readable`), in their order. */
   private async readableRows(
     chapterId: string,
@@ -397,11 +468,11 @@ export class MeetingService {
    * `readableRows`, with the events it read to decide: the ones the viewer
    * may see, which the Minutes list's facts reuse.
    */
-  private async readableWithEvents(
+  private async readableWithEvents<Row extends MeetingReadFacts>(
     chapterId: string,
     viewerId: string,
-    rows: Meeting[],
-  ): Promise<{ rows: Meeting[]; events: Map<string, Event> }> {
+    rows: Row[],
+  ): Promise<{ rows: Row[]; events: Map<string, Event> }> {
     if (rows.length === 0) return { rows: [], events: new Map() };
     const access = await this.access(chapterId, viewerId);
     // Only the events these rows point at, never the whole calendar: a
@@ -477,6 +548,53 @@ export class MeetingService {
           this.readable(row, userId, access, (id) => visibleEventIds.has(id)),
         )
         .map((row) => row.id),
+    );
+  }
+
+  /**
+   * Of `meetingIds`, the posted minutes `userId` may read, each with what
+   * its Documents row shows (#5949). The rule is `readable`, as every other
+   * door here, over one read of the rows and one of their events however
+   * many ids; a draft is never in the answer, its author's included, because
+   * only posted minutes are filed. A missing or other-chapter id is left out.
+   */
+  async readablePosted(
+    chapterId: string,
+    userId: string,
+    meetingIds: readonly string[],
+  ): Promise<Map<string, PostedMinutesFacts>> {
+    const ids = [...new Set(meetingIds)];
+    if (ids.length === 0) return new Map();
+    // Read without transcripts: this runs on every Documents open.
+    const found: PostedMeetingSummary[] = [];
+    for (const chunk of chunkIds(ids)) {
+      found.push(
+        ...(await this.meetingRepo.findPostedSummaries(chapterId, chunk)),
+      );
+    }
+    const { rows } = await this.readableWithEvents(
+      chapterId,
+      userId,
+      found.filter((row) => row.status === 'posted'),
+    );
+    return new Map(
+      rows.map((row) => {
+        const content = readMeetingContent(row.content);
+        return [
+          row.id,
+          {
+            meeting_id: row.id,
+            event_name: row.event_name,
+            event_start_time: row.event_start_time,
+            meeting_type: row.meeting_type,
+            other_label: row.other_label,
+            decision_count: content.decisions.length,
+            action_item_count: content.action_items.length,
+            recorded: row.has_transcript,
+            gist: minutesGist(content.tldr),
+          },
+        ];
+      }),
     );
   }
 
@@ -813,7 +931,7 @@ export class MeetingService {
   }
 
   private readable(
-    meeting: Meeting,
+    meeting: MeetingReadFacts,
     viewerId: string,
     access: ViewerAccess,
     eventVisible: (eventId: string) => boolean,

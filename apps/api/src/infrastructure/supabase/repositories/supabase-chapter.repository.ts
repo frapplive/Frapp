@@ -1,3 +1,4 @@
+import type { CouncilType } from '@repo/validation';
 import { Inject, Injectable } from '@nestjs/common';
 import { SUPABASE_CLIENT } from '../supabase.provider';
 import type {
@@ -49,6 +50,22 @@ export class SupabaseChapterRepository implements IChapterRepository {
     return data?.analytics_opt_out ?? false;
   }
 
+  async findCouncilBySchoolAndType(
+    schoolId: string,
+    councilType: CouncilType,
+  ): Promise<{ id: string } | null> {
+    const { data, error } = await this.supabase
+      .from('chapters')
+      .select('id')
+      .eq('kind', 'council')
+      .eq('council_school_id', schoolId)
+      .eq('council_type', councilType)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new SupabaseQueryError(error);
+    return data;
+  }
+
   async findByIds(ids: string[]): Promise<Chapter[]> {
     if (!ids.length) return [];
     const { data, error } = await this.supabase
@@ -80,6 +97,9 @@ export class SupabaseChapterRepository implements IChapterRepository {
           .from('chapters')
           .select('id, name, enabled_modules')
           .neq('subscription_status', 'canceled')
+          // The recap is a chapter's week in Activity, which serves the
+          // chapter kind only (#5933): a council has nothing to recap.
+          .eq('kind', 'chapter')
           .order('id', { ascending: true })
           .range(from, to),
       { pageSize: BIRTHDAY_CHANNEL_PAGE },
@@ -195,6 +215,14 @@ export class SupabaseChapterRepository implements IChapterRepository {
       ...row.applied,
       previous_subscription_status: row.previous_subscription_status,
     };
+  }
+
+  async deleteById(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('chapters')
+      .delete()
+      .eq('id', id);
+    if (error) throw new SupabaseQueryError(error);
   }
 
   async create(chapterData: TablesInsert<'chapters'>): Promise<Chapter> {

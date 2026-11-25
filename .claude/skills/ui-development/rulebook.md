@@ -63,11 +63,12 @@ These cause most of the iterations, so they come first.
 - **Page actions live in the page's header, never on a row of their own.** Search, filters, view
   switches, export and the create button sit in the header beside the title, the way Linear, Notion and
   Slack put them. A row of controls under the header is the defect Paul called out on Events, Meetings,
-  Service hours, Documents, Points and Directory. On web a page renders its actions inside `PageActions`
+  Service hours, Documents, Points and Directory (the Service hours and Points pages are gone since
+  #5950). On web a page renders its actions inside `PageActions`
   (`components/layout/page-actions.tsx`); with #5686 it portals them into the page header between the
   title and the close at every width. Until #5686 merges, `PageActions` still draws its own row, so a
-  page built before then is checked again after. Only a control that needs the page's width (Points'
-  window switch) stays in the body. (11-19, P8.1)
+  page built before then is checked again after. Only a control that needs the page's width stays in
+  the body. (11-19, P8.1)
 - **A list opens on the viewer's own items, and nothing sits between the header and the first item at
   rest.** Whose items is the header's view switch and the filters are § Filtering a list's one Filter
   button, so nothing waits under the header until a filter is on; a create row appears only after New
@@ -79,21 +80,32 @@ These cause most of the iterations, so they come first.
   what it lists: a different list is a different row or page (Messages has its own row). Where one page
   has two or three views (Mine / Everyone's, Documents / Backwork) they are plain words beside the title,
   the current one in the foreground colour and weight and the others muted, with no box, fill or accent,
-  and a member with one view sees none. The shared component and the sweep of the existing switches are
-  #5947; until it merges, don't add a new segmented view switch. (11-24, #5943)
+  and a member with one view sees none. The component is `ViewLabels`, inside `PageViews` on a web page
+  header and as `ScreenShell`'s `views` on a phone screen
+  ([`components.md` § View labels](../../../spec/ui/design-system/components.md#view-labels-change-a-pages-or-a-lists-view));
+  the sweep of the switches already on screen is #5947. **lint** rejects the segmented control in a page
+  or screen header; one drawn over a list in the body is the same defect, caught in review.
+  (11-24, #5943)
 - **One create button, one look, everywhere.** Every "New …" action is the same shared component with
   the same icon, style and wording pattern ("New event", "New minutes", "New task"), on web and phone.
   A filled pill on one page and an outlined button on the next is a defect. On web it is
   `<NewButton thing="event" />` (`components/ui/new-button.tsx`, outlined accent, Paul's pick 11-19), and
-  a page's main action that isn't "New" (Log service, Upload, Adjust points) is
+  a page's main action that isn't "New" (Log hours, Upload, Adjust points) is
   `<Button variant="action">`; both land with #5686, which also adds the lint rule against a
   hand-rolled `<Button>New …</Button>`. On the phone's pushed
   screens it is the floating glass "+" (`ScreenShell`'s `createAction`); on the four tabs that spot is the
   tab bar's quick-actions "+". Whether the phone moves it into the header is open with Paul (11-19).
   (11-05, 11-19, P8.2)
 - **Every page beside chat can close** (`ToolPageHeader`'s close; Escape too), and its title sits in its
-  own 48px header at 1056px and wider, paired with chat's channel header. Top-level pages show the title
-  alone, no chapter-name prefix; only Settings pages read "Settings › X". (11-05, 11-11)
+  own 48px header at `lg` (1024px) and wider, paired with chat's channel header (1056px until 11-24,
+  #5946). Top-level pages show the title alone, no chapter-name prefix; only Settings pages read
+  "Settings › X". (11-05, 11-11)
+- **A page beside chat works at every width chat leaves it, down to the 375px floor.** "yikes", on Rush's
+  board with chat open: four fixed columns cut the one holding prospects off mid-card, the header's views
+  ran under its count and the title vanished. The title and the views keep their room and the actions
+  fold first (glyphs, then one View menu); a board's columns share the width and empty ones fold; a table
+  drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
+  The widths to capture are in [`review-checklist.md`](review-checklist.md) § 1. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
   its tools inside itself, not in drawers. (11-11, 11-12)
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a
@@ -155,6 +167,9 @@ These cause most of the iterations, so they come first.
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
+- **No made-up school logo.** A school is drawn by its name and short name: no initials on a colored
+  tile standing in for its logo, and no real logo either, which is the school's trademark. "Get rid of it
+  or make it real." (11-25, #6066)
 
 ## 4. Controls and forms
 
@@ -193,7 +208,8 @@ These cause most of the iterations, so they come first.
   A done state or a search miss is one inline line; a card survives only for errors. Don't "customise the
   shit that was already bad" with nicer copy on the same card. Hide features a member can't use or set
   up. (11-05, P1.3, P1.4)
-- **One connection indicator**, the pill in the top bar. Never draw your own offline notice. (11-06)
+- **One connection indicator**, the pill in the sidebar's head (in the top bar below `lg`). Never draw your
+  own offline notice. (11-06; changed 11-24, #5946)
 - **Plain-words errors:** what happened and what to do, never a permission key, status code or raw
   provider error. "Your role can't …". (11-05, 11-06, P2.3)
 - **No fake or placeholder identity:** real names and real avatars, never "Member 000000" or an account
@@ -286,7 +302,8 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
 - **Picking a value:** web `Select` (or `SearchablePicker` for a long list), phone `OptionSheet`. The
   field shows its current value; search appears past 8 options; no Save or Cancel. `SegmentedChoice` /
   `Segmented` only for 2 to 4 short choices that stay visible inside a form, never to change a page's
-  view (§ 2, 11-24); swatches only for a look (accent,
+  view (§ 2, 11-24), and neutral since 11-24: the held answer is a raised card step, never the accent;
+  swatches only for a look (accent,
   background, density). Never a hand-drawn radio list, and never filter chips used as a form picker.
 - **lint** (partly) **Acting on a thing:** one action menu. Web: `RowMenu` (right-click plus the row's ⋯) and
   `ActionMenuButton` (a header's ⋯), the same entries. Phone: the glass menu, `useItemMenu` for a row's
@@ -314,7 +331,7 @@ the plan and the screens still to migrate are #5739. A site not yet migrated is 
   same rows in the same order ending in "Show 23 members"; the shared phone sheet doesn't exist yet and
   is built from the Directory's in the filters PR (#5739). A list that splits into two or three named sets people switch between all day (Actives /
   Alumni, All / Unread) is a view, not a filter, and its views are the plain labels beside the title
-  (§ 2). *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
+  (§ 2), `ViewLabels` on both apps. *Changed 11-24 by Paul: until then this read "a segmented view switch"; the boxed switch is no
   longer a way to change views.*
 - **Creating and editing:** a borderless title plus property rows (§ 2), on the record itself when
   editing, saved per row. **Phone commit is the floating glass action bar** from task approval

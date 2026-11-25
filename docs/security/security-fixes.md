@@ -80,7 +80,7 @@ The declared floor was moved to `^11.1.28` rather than left at `^11.1.24`. The o
 
 The `overrides.undici` range was `>=6.24.0 <8.0.0` — a floor four minors *below* the patched release — so it still resolved `7.26.0`, squarely inside the vulnerable 7.0.0–7.28.0 band, defeating the point of having pinned an override at all. Narrowed to `>=7.29.0 <8.0.0`, clearing 12 advisories including TLS certificate-validation bypass via SOCKS5 ProxyAgent, HTTP header injection via `Set-Cookie` percent-decoding, cross-user cache poisoning, and response-queue poisoning via keep-alive socket reuse. **Four of the twelve have range `<7.29.0`, so `7.28.x` would not have sufficed.**
 
-undici reaches the *production* image (`apps/api` → `expo-server-sdk` → `undici`), not just test tooling, so this floor is load-bearing for the deployed artifact. The `<8.0.0` ceiling is retained, though its original `node:20-alpine` engine reason lapsed with the Node 24 move recorded above — see #2360.
+undici reaches the *production* image (`apps/api` → `expo-server-sdk` → `undici`, and since 2026-11-24 as a direct `apps/api` dependency for its Supabase connection pool), not just test tooling, so this floor is load-bearing for the deployed artifact. The `<8.0.0` ceiling is retained, though its original `node:20-alpine` engine reason lapsed with the Node 24 move recorded above — see #2360.
 
 ### Result
 

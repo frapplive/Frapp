@@ -5,6 +5,8 @@ import { ChannelMark, type ChannelStartChannel } from "./channel-start";
  * and, when it has one, "• description" after it on the same line, the
  * description muted and cut off (owner's reference, 2026-11-05).
  *
+ * The name comes first for the room: the description fills what it leaves.
+ *
  * Every item is centered on the row, never baseline-aligned
  * ([foundations.md](../../../../spec/ui/design-system/foundations.md) §7,
  * Aligning a row). The row used to be `items-baseline`, and the heading is a
@@ -63,19 +65,24 @@ export function ChannelHeaderTitle({
           placeholder
         )}
       </h2>
-      {/* The dot is decoration: the name is the heading and the description its own paragraph. */}
+      {/*
+        The description takes only the room the name leaves (`basis-0`), so a
+        long one never squeezes the name: before, both shrank alike and a
+        narrow header read "A... • Notification channel used for..." (Paul,
+        2026-11-24). The name truncates only once it alone outgrows the row.
+        The dot rides inside the description's box, so with no room left both
+        go together rather than leaving a stray dot.
+
+        The dot is decoration: the name is the heading and the description its
+        own paragraph.
+      */}
       {description ? (
-        <>
-          <span
-            aria-hidden="true"
-            className="shrink-0 text-caption text-muted-foreground"
-          >
+        <p className="flex min-w-0 flex-1 basis-0 items-center gap-2 overflow-hidden text-caption text-muted-foreground">
+          <span aria-hidden="true" className="shrink-0">
             •
           </span>
-          <p className="min-w-0 truncate text-caption text-muted-foreground">
-            {description}
-          </p>
-        </>
+          <span className="min-w-0 truncate">{description}</span>
+        </p>
       ) : null}
     </div>
   );

@@ -13,8 +13,8 @@ import { expect } from "vitest";
  *
  * Used by `lib/more/service-hours-screen.spec.tsx`; Profile's read, shared
  * with web, is pinned in `packages/hooks/src/profile-stats.hook.spec.tsx`. Web's
- * approval queue is the one deliberate unscoped caller
- * (`apps/web/components/service/service-page.spec.tsx`).
+ * reviewed-entries list in Chapter settings is the one deliberate unscoped
+ * caller (`apps/web/components/service/service-history.tsx`).
  */
 export function expectViewerScopedReads(
   calls: readonly (readonly unknown[])[],

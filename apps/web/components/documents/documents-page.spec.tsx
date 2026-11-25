@@ -135,6 +135,7 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
       permissions: [
         ...(canGate.granted ? ["chapter_docs:upload"] : []),
         ...(manageGate.granted ? ["chapter_docs:manage"] : []),
+        ...(recordGate.granted ? ["meetings:record"] : []),
       ],
     },
   }),
@@ -190,12 +191,29 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 
 // `/documents?document=<id>`: what a source cited by Ask links to.
 const linkedDocument = vi.hoisted(() => ({ current: null as string | null }));
+// `meetings:record`, for New minutes in the add menu (#5949).
+const recordGate = vi.hoisted(() => ({ granted: false }));
+vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
+  useChapterModuleGate: () => () => true,
+}));
+vi.mock("@/components/meetings/start-minutes-panel", () => ({
+  MINUTES_DRAFT: "minutes-start",
+  StartMinutesPanel: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="New minutes" /> : null,
+}));
+
+// `/documents?type=minutes`: where `/meetings` lands (#5949).
+const linkedType = vi.hoisted(() => ({ current: null as string | null }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
-    new URLSearchParams(
-      linkedDocument.current ? { document: linkedDocument.current } : {},
-    ),
+    new URLSearchParams({
+      ...(linkedDocument.current ? { document: linkedDocument.current } : {}),
+      ...(linkedType.current ? { type: linkedType.current } : {}),
+    }),
+  useRouter: () => router,
+  usePathname: () => "/documents",
 }));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("@/lib/stores/chapter-store", () => ({
   useChapterStore: (selector: (s: { activeChapterId: string }) => unknown) =>
@@ -1338,7 +1356,8 @@ describe("DocumentsPage search, filters and sort (#3852)", () => {
     await user.type(screen.getByLabelText("Search documents"), "week one");
 
     await waitFor(() => expect(rowTitles()).toEqual(["Rush schedule"]));
-    expect(documentsArgs.value).toBeUndefined();
+    // The one list read, with the minutes rows (#5949) and no search.
+    expect(documentsArgs.value).toEqual({ minutes: true });
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
   });
 
@@ -2455,6 +2474,77 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     }
   });
 
+  describe("a connected Google Drive folder (#5583)", () => {
+    const connectedDrive = {
+      data: {
+        available: true,
+        service_account_email: "drive@example.com",
+        picker: null,
+        connection: {
+          folder_id: "drive-gov",
+          folder_name: "Governance",
+          folder_url: "https://drive.google.com/drive/folders/drive-gov",
+          status: "active",
+          last_synced_at: null,
+          synced_count: 12,
+          skipped_count: 0,
+          folders_left_out: 0,
+          syncing: false,
+          who_can_see: null,
+        },
+      },
+    };
+    afterEach(() => {
+      mockDriveStatus.mockReturnValue({ data: undefined });
+    });
+
+    it("opens the connected folder from the Upload menu, with its line", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [
+        {
+          id: "f-1",
+          name: "Governance",
+          sort_order: 0,
+          drive_folder_id: "drive-gov",
+        },
+        { id: "f-2", name: "Rush", sort_order: 1 },
+      ];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(screen.queryByText(/^Google Drive · /)).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "More ways to add documents" }),
+      );
+      await user.click(
+        await screen.findByRole("menuitem", { name: "Google Drive" }),
+      );
+      expect(
+        await screen.findByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "More for Governance" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the line, and Disconnect, for an officer who can't open the folder", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [{ id: "f-2", name: "Rush", sort_order: 1 }];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(
+        screen.getByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "More for Governance" }),
+      );
+      expect(
+        await screen.findByRole("menuitem", { name: /Disconnect/ }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("keeps a row's controls out of sight until hover or focus, and behind More on touch (#5576)", () => {
     render(<DocumentsPage />);
     const star = screen.getByRole("button", { name: "Star Chapter bylaws" });
@@ -3417,5 +3507,127 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     expect(
       within(dialog).queryByRole("radio", { name: "Chosen roles" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+// #5949: a meeting's posted minutes are filed as a row in Documents. The row
+// has no file: it opens the minutes, and offers no Download or Delete.
+describe("DocumentsPage minutes rows (#5949)", () => {
+  const MINUTES = {
+    ...BYLAWS,
+    id: "doc-minutes",
+    title: "Chapter Meeting",
+    folder: "Minutes",
+    storage_path: null,
+    uploaded_by: null,
+    document_type: "Minutes",
+    created_at: "2026-11-20T03:00:00Z",
+    meeting_id: "mtg-1",
+    minutes: {
+      meeting_id: "mtg-1",
+      event_name: "Chapter Meeting",
+      event_start_time: "2026-11-19T00:00:00Z",
+      meeting_type: "chapter",
+      other_label: null,
+      decision_count: 2,
+      action_item_count: 0,
+      recorded: true,
+      gist: "Formal moved to December 4",
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOffline.value = false;
+    resolvedDocumentsQuery();
+    documentsQuery.data = [BYLAWS, MINUTES];
+    linkedType.current = null;
+    linkedDocument.current = null;
+    recordGate.granted = false;
+    manageGate.granted = true;
+    chapter.active();
+  });
+
+  afterEach(() => {
+    manageGate.granted = false;
+    linkedType.current = null;
+  });
+
+  it("opens the minutes, not a viewer, and offers no Download or Delete", async () => {
+    const user = userEvent.setup();
+    render(<DocumentsPage />);
+
+    await user.click(await screen.findByText("Chapter Meeting"));
+    expect(router.push).toHaveBeenCalledWith("/meetings/mtg-1");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download Chapter Meeting" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete Chapter Meeting" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download Chapter bylaws" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says what the minutes hold in the row's line, in the Minutes list's words", async () => {
+    render(<DocumentsPage />);
+    expect(
+      await screen.findByText(
+        /Minutes · Recorded · 2 decisions · Formal moved to December 4/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("opens on the Minutes filter from /documents?type=minutes, where /meetings lands", async () => {
+    linkedType.current = "minutes";
+    render(<DocumentsPage />);
+    expect(await screen.findByText("Chapter Meeting")).toBeInTheDocument();
+    expect(screen.queryByText("Chapter bylaws")).not.toBeInTheDocument();
+  });
+
+  it("says a chapter has no minutes yet on the Minutes filter, and offers New minutes to whoever records them", async () => {
+    const user = userEvent.setup();
+    linkedType.current = "minutes";
+    documentsQuery.data = [BYLAWS];
+    const { unmount } = render(<DocumentsPage />);
+    expect(
+      await screen.findByText(/No minutes yet\. Posted minutes are filed here\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/match these filters/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New minutes" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    recordGate.granted = true;
+    render(<DocumentsPage />);
+    await user.click(await screen.findByRole("button", { name: "New minutes" }));
+    expect(
+      screen.getByRole("dialog", { name: "New minutes" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers New minutes in the add menu only to a member who records minutes", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<DocumentsPage />);
+    await user.click(
+      screen.getByRole("button", { name: "More ways to add documents" }),
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "New minutes" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    recordGate.granted = true;
+    render(<DocumentsPage />);
+    await user.click(
+      screen.getByRole("button", { name: "More ways to add documents" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "New minutes" }));
+    expect(
+      screen.getByRole("dialog", { name: "New minutes" }),
+    ).toBeInTheDocument();
   });
 });

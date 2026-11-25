@@ -4,9 +4,13 @@ import { useRouter } from "expo-router";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import {
   groupFollowsLabel,
+  useChapterRoleColors,
   useGroups,
   useIsPermissionHidden,
   usePermissionList,
+  useUpdateGroup,
+  useViewerDisplayName,
+  type ChapterGroup,
 } from "@repo/hooks";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { matchesWordStarts, normalizeWords } from "@repo/hooks/fuzzy-match";
@@ -36,6 +40,9 @@ import {
 } from "@/components/list-section";
 import { SearchField } from "@/components/filter-chips";
 import { NewRoleSheet } from "@/components/roles/new-role-sheet";
+import { usePendingColors } from "@/components/roles/role-color-row";
+import { RoleColorSheet } from "@/components/roles/role-color-sheet";
+import { describeError } from "@/lib/roles/save-error";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { PlusGlyph } from "@/components/control-glyphs";
 import { useRolesData } from "@/lib/roles/use-roles-data";
@@ -109,6 +116,11 @@ export default function ChapterRolesScreen() {
     permissions,
   );
   const groupsQuery = useGroups({ enabled: true });
+  const groupColor = useGroupColor(
+    canAny(["groups:manage"], permissions),
+    groupsQuery.data,
+    groupsQuery.dataUpdatedAt,
+  );
   const groups = useMemo(() => {
     const all = groupsQuery.data ?? [];
     const shown = filtering
@@ -313,7 +325,7 @@ export default function ChapterRolesScreen() {
                 />
               ) : (
                 groups.map((group) => {
-                  const color = roleColorOrNull(group.color);
+                  const color = groupColor.shown(group);
                   const count = group.member_ids.length;
                   return (
                     <ListRow
@@ -328,9 +340,26 @@ export default function ChapterRolesScreen() {
                           ]}
                         />
                       }
-                      description={groupFollowsLabel(group)}
+                      description={
+                        groupColor.failure?.groupId === group.id
+                          ? groupColor.failure.message
+                          : groupFollowsLabel(group)
+                      }
+                      descriptionTone={
+                        groupColor.failure?.groupId === group.id
+                          ? "destructive"
+                          : "default"
+                      }
                       value={String(count)}
                       accessibilityValue={`${count} ${count === 1 ? "member" : "members"}`}
+                      accessibilityHint={
+                        groupColor.canEdit ? "Opens its color." : undefined
+                      }
+                      onPress={
+                        groupColor.canEdit
+                          ? () => groupColor.open(group)
+                          : undefined
+                      }
                     />
                   );
                 })
@@ -344,6 +373,7 @@ export default function ChapterRolesScreen() {
             : `Add, rename and reorder ${words.plural}, roles and groups on the web dashboard.`}{" "}
           Put someone in a group from their profile.
         </Text>
+        {groupColor.sheet}
         <NewRoleSheet
           ref={newPickableRef}
           onCreated={(roleId) =>
@@ -370,6 +400,75 @@ export default function ChapterRolesScreen() {
       {body}
     </ScreenShell>
   );
+}
+
+/**
+ * A group's color on the phone (#5966, folding in #5791): a `groups:manage`
+ * holder taps a group's row for the same picker as a role's, as web's group
+ * editor offers it; a swatch saves on the tap and Custom when the sheet
+ * closes. Naming, members and pinging stay where they are. The sheet reads
+ * the group live from the groups read, so it follows a save that lands while
+ * it's open.
+ */
+function useGroupColor(
+  canEdit: boolean,
+  groups: readonly ChapterGroup[] | undefined,
+  groupsUpdatedAt: number,
+) {
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const updateGroup = useUpdateGroup();
+  const chapterColors = useChapterRoleColors({ enabled: canEdit });
+  const memberName = useViewerDisplayName();
+  const colors = usePendingColors(groupsUpdatedAt);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = groups?.find((group) => group.id === editingId) ?? null;
+  const [failure, setFailure] = useState<{
+    groupId: string;
+    message: string;
+  } | null>(null);
+
+  const shown = (group: ChapterGroup) =>
+    colors.shown(group.id, roleColorOrNull(group.color));
+
+  async function save(group: ChapterGroup, color: string | null) {
+    setFailure((current) => (current?.groupId === group.id ? null : current));
+    const error = await colors.save(group.id, color, () =>
+      updateGroup.mutateAsync({ id: group.id, body: { color } }),
+    );
+    if (error) {
+      setFailure({
+        groupId: group.id,
+        message: describeError(
+          groupDisplayName(group),
+          error,
+          "The color was not changed. Try again in a moment.",
+        ),
+      });
+    }
+  }
+
+  return {
+    canEdit,
+    shown,
+    failure,
+    open: (group: ChapterGroup) => {
+      setEditingId(group.id);
+      sheetRef.current?.present();
+    },
+    sheet: canEdit ? (
+      <RoleColorSheet
+        ref={sheetRef}
+        value={editing ? shown(editing) : null}
+        subject={editing?.id ?? ""}
+        onChange={(next) => {
+          if (editing) void save(editing, next);
+        }}
+        previewName={editing ? groupDisplayName(editing) : ""}
+        memberName={memberName}
+        chapterColors={chapterColors}
+      />
+    ) : null,
+  };
 }
 
 function createStyles(tokens: SignetTokens) {

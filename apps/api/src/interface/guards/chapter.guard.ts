@@ -513,11 +513,21 @@ export class ChapterGuard implements CanActivate {
       throw requested.refusal;
     }
 
+    // ADR-27: a route serves the tenant kinds it declares, `chapter` alone by
+    // default.
+    const declaredKinds = this.reflector.getAllAndOverride<unknown>(
+      TENANT_KINDS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const servedKinds: readonly TenantKind[] = Array.isArray(declaredKinds)
+      ? declaredKinds
+      : DEFAULT_TENANT_KINDS;
+
     // Resolved after the user, because auto-resolving a single-chapter user
     // requires knowing which memberships they hold.
     const resolved = explicitChapterId
       ? { chapterId: explicitChapterId }
-      : await this.resolveSoleChapter(appUser.id);
+      : await this.resolveSoleChapter(appUser.id, servedKinds);
     const chapterId = resolved.chapterId;
 
     // The auto-resolve path already read the membership row it selected the
@@ -542,17 +552,10 @@ export class ChapterGuard implements CanActivate {
       throw new ForbiddenException('Chapter not found');
     }
 
-    // ADR-27: a route serves the tenant kinds it declares, `chapter` alone by
-    // default. Refused as a non-member is, so a council's id sent to a
-    // chapter route (or the reverse) says nothing about what the id is, and
-    // before the subscription check, whose refusal would.
-    const declaredKinds = this.reflector.getAllAndOverride<unknown>(
-      TENANT_KINDS_KEY,
-      [context.getHandler(), context.getClass()],
-    );
-    const servedKinds: readonly TenantKind[] = Array.isArray(declaredKinds)
-      ? declaredKinds
-      : DEFAULT_TENANT_KINDS;
+    // A tenant of a kind the route doesn't serve is refused as a non-member
+    // is, so a council's id sent to a chapter route (or the reverse) says
+    // nothing about what the id is, and before the subscription check, whose
+    // refusal would.
     if (!servedKinds.includes(chapter.kind)) {
       throw notAMember();
     }
@@ -580,16 +583,26 @@ export class ChapterGuard implements CanActivate {
     return true;
   }
 
-  /** Rule 3 of `readRequestedChapter`: neither the header nor the claim. */
+  /**
+   * Rule 3 of `readRequestedChapter`: neither the header nor the claim.
+   *
+   * Counts only memberships in tenants of the kinds the route serves (#5933,
+   * from #5925's review): a member of one chapter and one council calling a
+   * chapter route is still a single-chapter member there, and a council's
+   * route resolves their one council. The kind check after it then always
+   * passes for a tenant chosen here.
+   */
   private async resolveSoleChapter(
     appUserId: string,
+    servedKinds: readonly TenantKind[],
   ): Promise<{ chapterId: string; member?: MemberContext }> {
-    // Two rows is all it takes to tell "exactly one" from "more than one".
+    // A person's memberships are a handful of rows, so all are read, then
+    // narrowed to the served kinds. Two reads, on the one path where the
+    // request named no tenant at all.
     const { data: memberships, error: membershipsError } = await this.supabase
       .from('members')
       .select('id, role_ids, chapter_id')
-      .eq('user_id', appUserId)
-      .limit(2);
+      .eq('user_id', appUserId);
 
     // Without this a failed read fell through to `chapter.context.required`,
     // a 400 telling a single-chapter member to pick a chapter they already have.
@@ -600,9 +613,33 @@ export class ChapterGuard implements CanActivate {
       );
     }
 
-    if (memberships?.length === 1) {
-      const sole = memberships[0] as MemberContext & { chapter_id: string };
-      return { chapterId: sole.chapter_id, member: sole };
+    const rows = (memberships ?? []) as (MemberContext & {
+      chapter_id: string;
+    })[];
+    if (rows.length > 0) {
+      // Two rows is all it takes to tell "exactly one" from "more than one".
+      const { data: served, error: servedError } = await this.supabase
+        .from('chapters')
+        .select('id')
+        .in(
+          'id',
+          rows.map((row) => row.chapter_id),
+        )
+        .in('kind', [...servedKinds])
+        .limit(2);
+      if (servedError) {
+        throw lookupUnavailable(
+          LOOKUP_FAILED,
+          new SupabaseQueryError(servedError),
+        );
+      }
+      if (served?.length === 1) {
+        const sole = rows.find((row) => row.chapter_id === served[0].id)!;
+        return {
+          chapterId: sole.chapter_id,
+          member: { id: sole.id, role_ids: sole.role_ids },
+        };
+      }
     }
 
     throw new BadRequestException({

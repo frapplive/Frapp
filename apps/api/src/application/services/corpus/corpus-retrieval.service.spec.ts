@@ -3,6 +3,8 @@ import type { ICorpusRepository } from '#domain/repositories/corpus.repository.i
 import type { AiGatewayService } from '../ai/ai-gateway.service';
 import { CorpusRetrievalService } from './corpus-retrieval.service';
 import type { CorpusSourceAdapter } from './corpus-source';
+import { LanguageModelError } from '#domain/adapters/language-model.interface';
+import * as caughtFailure from '../../../infrastructure/observability/report-caught-failure';
 
 const CHAPTER = '11111111-1111-4111-8111-111111111111';
 const ASKER = '44444444-4444-4444-8444-444444444444';
@@ -88,9 +90,49 @@ describe('CorpusRetrievalService', () => {
       chapterId: CHAPTER,
       userId: ASKER,
       query: 'What are dues?',
-      embedding: VECTOR,
-      embeddingModel: 'gemini-embedding-001',
+      embedding: { vector: VECTOR, model: 'gemini-embedding-001' },
       limit: 40,
+    });
+  });
+
+  describe('when the embedding provider fails', () => {
+    it('searches by words alone instead of failing the question', async () => {
+      const reported = jest
+        .spyOn(caughtFailure, 'reportCaughtFailure')
+        .mockImplementation(() => undefined);
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(
+        new LanguageModelError('invalid_request', 'google', { status: 400 }),
+      );
+      const result = await retrieve();
+      expect(result.status).toBe('ok');
+      expect(corpus.match).toHaveBeenCalledWith(
+        expect.objectContaining({ query: 'What are dues?', embedding: null }),
+      );
+      expect(result).toMatchObject({ wordsOnly: true });
+      // A read that degrades still reports: nothing else would reach Sentry.
+      expect(reported).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          level: 'warning',
+          site: 'corpus-retrieval-embed-query',
+        }),
+      );
+      reported.mockRestore();
+    });
+
+    it('does not go on when the member cancelled', async () => {
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(new LanguageModelError('aborted', 'google'));
+      await expect(retrieve()).rejects.toBeInstanceOf(LanguageModelError);
+      expect(corpus.match).not.toHaveBeenCalled();
+    });
+
+    it('lets any other failure through', async () => {
+      const { retrieve, embed, corpus } = setup();
+      embed.mockRejectedValue(new Error('database is down'));
+      await expect(retrieve()).rejects.toThrow('database is down');
+      expect(corpus.match).not.toHaveBeenCalled();
     });
   });
 
@@ -117,6 +159,7 @@ describe('CorpusRetrievalService', () => {
       status: 'ok',
       passages: [],
       leftOutMessages: 0,
+      wordsOnly: false,
     });
     expect(embed).not.toHaveBeenCalled();
   });
@@ -385,7 +428,12 @@ describe('CorpusRetrievalService — chat (#4314)', () => {
       () => new Set(),
     );
     const result = await retrieve();
-    expect(result).toEqual({ status: 'ok', passages: [], leftOutMessages: 0 });
+    expect(result).toEqual({
+      status: 'ok',
+      passages: [],
+      leftOutMessages: 0,
+      wordsOnly: false,
+    });
     expect(chatAdapter.admit).not.toHaveBeenCalled();
   });
 

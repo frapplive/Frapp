@@ -6,7 +6,8 @@ describe("notificationScreensForPathname", () => {
   it("names the screens whose notifications a route shows the subject of", () => {
     expect(notificationScreensForPathname("/events")).toEqual(["events"]);
     expect(notificationScreensForPathname("/event-details")).toEqual(["events"]);
-    expect(notificationScreensForPathname("/tasks")).toEqual(["tasks", "points"]);
+    expect(notificationScreensForPathname("/tasks")).toEqual(["tasks"]);
+    expect(notificationScreensForPathname("/points")).toEqual(["points"]);
     expect(notificationScreensForPathname("/dues")).toEqual(["billing"]);
     expect(notificationScreensForPathname("/directory")).toEqual(["members"]);
     expect(notificationScreensForPathname("/activity")).toEqual([

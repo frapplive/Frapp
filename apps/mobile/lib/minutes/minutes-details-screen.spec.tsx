@@ -7,6 +7,7 @@ import * as expoRouter from "expo-router";
 import {
   EMPTY_MEETING_CONTENT,
   MEETING_COPY,
+  MEETING_LIST_COPY,
   MEETING_NOTES_COPY,
   MEETING_RECORDER_COPY,
   MINUTES_EDITOR_COPY,
@@ -35,6 +36,7 @@ const state = vi.hoisted(() => ({
   draftEnabled: undefined as boolean | undefined,
   draftPending: false,
   suggestions: [] as unknown[],
+  list: [] as Record<string, unknown>[],
   suggestionsEnabled: undefined as boolean | undefined,
   post: vi.fn(),
   notesSheet: 0,
@@ -112,6 +114,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isPending: state.updatePending,
   }),
   useMeetingActionItemTasks: () => ({ data: [] }),
+  useMeetings: (options: { enabled: boolean }) => ({
+    data: options.enabled ? state.list : undefined,
+  }),
 }));
 vi.mock("@/components/item-actions-menu", () => ({
   useItemMenu: () => ({
@@ -184,6 +189,10 @@ vi.mock("@/components/screen-shell", () => ({
 }));
 vi.mock("@/components/pull-to-refresh", () => ({
   useRefetchAll: () => undefined,
+}));
+// Each action item's long-press has its own spec (#6051).
+vi.mock("@/components/minutes/action-item-task", () => ({
+  useActionItemTaskMenu: () => ({ menuFor: () => null, sheet: null }),
 }));
 vi.mock("@/components/minutes/minutes-body", () => ({
   MinutesBody: () => React.createElement("MinutesBody"),
@@ -340,6 +349,7 @@ beforeEach(() => {
   state.surfaces = { available: true, meetingNotes: true, ready: true };
   state.draft = { status: "none" };
   state.suggestions = [];
+  state.list = [];
   state.notesSheet = 0;
   state.recording = null;
   state.recordingPending = false;
@@ -793,6 +803,44 @@ describe("Minutes on the phone", () => {
     );
     expect(screenText(review)).not.toContain(MINUTES_FLOW_COPY.start.heading);
     expect(state.notesProps?.bannerAbove).toBe(true);
+  });
+
+  // #5949, #5984: the series screen's way in, since the Minutes list went.
+  it("links a repeating meeting's series once it holds other minutes", () => {
+    state.meeting = meeting({
+      status: "posted",
+      can_edit: false,
+      posted_at: "2026-11-10T02:00:00Z",
+    });
+    const row = (id: string, start: string) => ({
+      id,
+      series_key: "event-first",
+      event_start_time: start,
+    });
+    state.list = [row("m1", "2026-11-09T23:00:00Z")];
+    expect(screenText(render())).not.toContain(MEETING_LIST_COPY.series);
+
+    state.list = [
+      row("m1", "2026-11-09T23:00:00Z"),
+      row("m0", "2026-11-02T23:00:00Z"),
+    ];
+    const tree = render();
+    expect(screenText(tree)).toContain(MEETING_LIST_COPY.minutesCount(2));
+    act(() =>
+      tree.root
+        .findAll(
+          (node) =>
+            typeof node.type === "string" &&
+            node.props.accessibilityHint ===
+              "Opens this meeting's other minutes and their open action items." &&
+            typeof node.props.onPress === "function",
+        )[0]
+        .props.onPress(),
+    );
+    expect(vi.mocked(expoRouter.useRouter)().push).toHaveBeenCalledWith({
+      pathname: "/minutes-series",
+      params: { key: "event-first" },
+    });
   });
 
   it("links the tasks suggested from posted minutes, and asks only where AI is on", () => {

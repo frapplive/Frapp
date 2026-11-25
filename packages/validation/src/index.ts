@@ -55,6 +55,7 @@ export * from "./chapter-groups";
 export * from "./chapter-logs";
 // ── Chapter mark (logo → short name → Greek letters → initials) ─────────────
 export * from "./chapter-mark";
+export * from "./chapter-settings-copy";
 // The audit log (#3909): what may change on a line already in it.
 export * from "./chat-audit-log";
 export * from "./chat-backgrounds";
@@ -76,6 +77,10 @@ export * from "./coming-up-tracking";
 // mobile cannot disagree about ONLINE / DEGRADED / OFFLINE. Each app owns
 // the effects that feed it; this package owns the rule.
 export * from "./connection-state";
+// Councils (#5933): profiles, role packs and recruitment models.
+export * from "./council";
+// Affiliations and PNM records (#5974): link states, offers, codes, copy.
+export * from "./council-chapters";
 // A member's own custom-field values (#581): the rule the API and both forms check.
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
@@ -87,6 +92,7 @@ export * from "./discord-export";
 export * from "./discord-import";
 // The " / " a Drive-synced folder's path is joined with (#5337).
 export * from "./document-folders";
+export * from "./document-links";
 export * from "./error-copy";
 // An event's agenda and attachments (#4934): their limits and shapes, which
 // the API enforces and both editors read.
@@ -132,6 +138,9 @@ export {
 // `apps/api/src/domain/constants/field-limits.ts` (#3268).
 export * from "./field-limits";
 export * from "./frapp-link";
+// A chapter's public interest form (#5977): limits, the approved consent
+// text, refusal codes and the page's words.
+export * from "./interest-form";
 export * from "./invite-emails";
 // The invite card funnel (#5663): steps, closed property sets, shapes.
 export * from "./invite-funnel";
@@ -173,7 +182,6 @@ export * from "./minutes-flow";
 export * from "./minutes-read";
 export * from "./minutes-request-copy";
 // Which meetings on the calendar need minutes, and the next one coming.
-export * from "./minutes-timeline";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
@@ -219,6 +227,10 @@ export * from "./permission-registry";
 export * from "./permissions";
 export * from "./phone";
 export * from "./phone-reach";
+// What each points category is called, and the officer action's one name,
+// on web and phone (#5950).
+export * from "./point-category";
+export * from "./point-history";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";
@@ -238,9 +250,11 @@ export {
   nextReleaseNoteSnapshot,
   parseReleaseNoteSnapshot,
   parseReleaseNoteVersion,
+  RELEASE_NOTE_TIME_ZONE,
   RELEASE_NOTE_VERSION_PATTERN,
   RELEASE_NOTES,
   type ReleaseNote,
+  releaseNoteDay,
   releaseNoteGroups,
   type ReleaseNoteSnapshot,
   releaseNoteStoreText,
@@ -259,6 +273,8 @@ export * from "./role-colors";
 export * from "./role-rank";
 // The recruitment pipeline's stage categories, closed reasons and limits (#5924).
 export * from "./rush-pipeline";
+// School-email verification (#5929): limits, refusal codes and the step's words.
+export * from "./school-verification";
 export * from "./screen-copy";
 // The names of the app's places and of what New starts, one list for web and
 // the phone (#5943).

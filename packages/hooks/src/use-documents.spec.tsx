@@ -43,7 +43,7 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: "finance", search: undefined } },
+      params: { query: { folder: "finance", search: undefined, minutes: undefined } },
     });
   });
 
@@ -64,7 +64,7 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: "bylaws" } },
+      params: { query: { folder: undefined, search: "bylaws", minutes: undefined } },
     });
   });
 
@@ -85,7 +85,28 @@ describe("useDocuments", () => {
 
     expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
       signal: expect.any(AbortSignal),
-      params: { query: { folder: undefined, search: undefined } },
+      params: { query: { folder: undefined, search: undefined, minutes: undefined } },
+    });
+  });
+
+  it("asks for minutes rows only when the caller does (#5949)", async () => {
+    const mockGet = vi.fn().mockResolvedValue({
+      data: [{ id: "doc-1" }],
+      error: null,
+    });
+    const mockClient = { GET: mockGet };
+
+    const { result } = renderHook(() => useDocuments({ minutes: true }), {
+      wrapper: createWrapper(queryClient, mockClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(mockGet).toHaveBeenCalledWith("/v1/documents", {
+      signal: expect.any(AbortSignal),
+      params: { query: { folder: undefined, search: undefined, minutes: "true" } },
     });
   });
 });

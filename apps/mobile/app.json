@@ -2,7 +2,7 @@
   "expo": {
     "name": "Frapp",
     "slug": "frapp",
-    "version": "0.14.0",
+    "version": "0.15.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frapp",
@@ -25,8 +25,12 @@
       "bundleIdentifier": "live.frapp.mobile",
       "associatedDomains": ["applinks:app.frapp.live"],
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.usernotifications.communication": true
+      },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserActivityTypes": ["INSendMessageIntent"]
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,
@@ -87,6 +91,7 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+      "@bacons/apple-targets",
       [
         "expo-secure-store",
         {
@@ -166,9 +171,9 @@
     "extra": {
       "router": {},
       "googleSignIn": {
-        "webClientId": "661618060468-nefnjm72f4at1hfrl48bf4fjb2l18uel.apps.googleusercontent.com",
-        "iosClientId": "",
-        "androidClientId": ""
+        "webClientId": "661618060468-etspe94rd05e9tm53j4ed4kbpto9s37t.apps.googleusercontent.com",
+        "iosClientId": "661618060468-17k28mo9skblcjufg2mkcrel644jkp8a.apps.googleusercontent.com",
+        "androidClientId": "661618060468-34h5aop6ltfn5seajvmc3623a18f3g5q.apps.googleusercontent.com"
       },
       "eas": {
         "projectId": "4ba05e35-7d91-4bb4-9597-be754127de95"

@@ -20,7 +20,7 @@
     "@repo/org-archetypes": "*",
     "@repo/theme": "*",
     "@repo/validation": "*",
-    "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-query": "^5.108.2",
     "react": "19.2.3"
   },
   "devDependencies": {

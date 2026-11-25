@@ -1,9 +1,18 @@
 import type { components } from "@repo/api-sdk";
 import type { NavGlyphName } from "@repo/theme/nav-glyphs";
-import { eventOnAt, signUpLinkKind, taskGroupLabel } from "@repo/validation";
+import {
+  MEETING_LIST_COPY,
+  MEETING_NOTE_TAKERS_COPY,
+  eventOnAt,
+  minutesDraftState,
+  minutesDraftStateLabel,
+  signUpLinkKind,
+  taskGroupLabel,
+} from "@repo/validation";
 import { isSentBack, localTaskStatus, taskStatusLabel } from "./task-card";
 import {
   closesAtHasPassed,
+  formatDayHeading,
   formatDueLabel,
   formatMinutesRounded,
   formatRelativeDayTime,
@@ -30,6 +39,17 @@ export type ActivityCard = components["schemas"]["ActivityCardDto"];
 /** How many have answered something the member made, of how many can (#4792). */
 type ActivityProgress = components["schemas"]["ActivityProgressDto"];
 export type ActivitySection = Activity["unavailable"][number];
+/**
+ * A meeting that ended with no minutes, for a holder of `meetings:record`
+ * (#5949): To do's Write minutes row, where the Meetings list page's was.
+ */
+export type ActivityMinutesToWrite =
+  components["schemas"]["ActivityMinutesToWriteDto"];
+/** Minutes the member started and hasn't posted (#5949). */
+export type ActivityMinutesDraft =
+  components["schemas"]["ActivityMinutesDraftDto"];
+/** Another officer's draft the member takes notes on (#4935, #5949). */
+export type ActivityNoteTaking = components["schemas"]["ActivityNoteTakingDto"];
 /** What `POST /v1/activity/reads` names: an item's kind and id. */
 export type ActivityItemRef = components["schemas"]["ActivityItemRefDto"];
 
@@ -66,7 +86,8 @@ export type ActivityGlyph =
   | "link"
   | "signup"
   | "form"
-  | "reminder";
+  | "reminder"
+  | "minutes";
 
 /**
  * The shared nav glyph each kind draws (`@repo/theme/nav-glyphs`), so a row
@@ -84,6 +105,7 @@ export const ACTIVITY_GLYPH_NAV: Record<ActivityGlyph, NavGlyphName> = {
   signup: "signup",
   form: "form",
   reminder: "schedule",
+  minutes: "meetings",
 };
 
 /**
@@ -250,6 +272,12 @@ export type ActivityRow = RowBase &
     | { kind: "link"; link: ActivityLink }
     | { kind: "card"; card: ActivityCard }
     | { kind: "reminder"; reminder: ActivityReminder }
+    /** A meeting to write minutes for (#5949): Write minutes on the row. */
+    | { kind: "minutes-to-write"; meeting: ActivityMinutesToWrite }
+    /** The member's own unposted minutes: the row opens them. */
+    | { kind: "minutes-draft"; draft: ActivityMinutesDraft }
+    /** Notes the member takes on another officer's minutes. */
+    | { kind: "minutes-notes"; notes: ActivityNoteTaking }
   );
 
 /**
@@ -287,6 +315,7 @@ export const ACTIVITY_SECTION_NAMES: Record<ActivitySection, string> = {
   made_events: "events you made",
   links: "links",
   reminders: "reminders",
+  minutes: "minutes",
 };
 
 function channelLabel(
@@ -730,6 +759,128 @@ function reminderRow(reminder: ActivityReminder, now: Date): ActivityRow {
   };
 }
 
+/**
+ * The read's minutes rows (#5949). A read cached before the API served them
+ * (a phone's persisted cache, an open tab across a deploy) has none.
+ */
+function activityMinutes(activity: Activity): Activity["minutes"] {
+  return activity.minutes ?? { to_write: [], drafts: [], taking_notes: [] };
+}
+
+/** The heading over To do's minutes rows (#5949), on both apps. */
+export const ACTIVITY_MINUTES_LABEL = "Minutes";
+
+/**
+ * A meeting on the calendar that ended in the last 30 days with no minutes
+ * (#5949, where the Meetings list page's Write minutes row was): its name,
+ * the day it met, and Write minutes, which starts them on that event in one
+ * press, as the event's own Minutes row does. No dot and no Snooze: the
+ * rows name events and meetings, which Coming up's event snooze would
+ * collide with.
+ */
+function minutesToWriteRow(
+  meeting: ActivityMinutesToWrite,
+  now: Date,
+): ActivityRow {
+  return {
+    kind: "minutes-to-write",
+    key: `minutes:write:${meeting.event_id}`,
+    meeting,
+    title: meeting.name,
+    detail: formatDayHeading(meeting.start_time, now) ?? "",
+    soon: null,
+    faceId: null,
+    badge: { label: MEETING_LIST_COPY.writeMinutes, variant: "warning" },
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * The member's own unposted minutes (#5949): the meeting's name, its day
+ * ("No meeting" first while none is linked), and where the draft stands in
+ * the words the minutes list and the event's Minutes row use
+ * (`minutesDraftStateLabel`): "Drafting", "Not started", or who is recording.
+ */
+function minutesDraftRow(draft: ActivityMinutesDraft, now: Date): ActivityRow {
+  const state = minutesDraftState({ ...draft, status: "draft" });
+  return {
+    kind: "minutes-draft",
+    key: `minutes:draft:${draft.meeting_id}`,
+    draft,
+    title: draft.name,
+    detail: [
+      draft.event_id === null ? MEETING_LIST_COPY.noMeeting : null,
+      formatDayHeading(draft.event_start_time, now),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: null,
+    badge: state
+      ? {
+          label: minutesDraftStateLabel(state, draft.recording_by_name),
+          // Recording is live, in the status red the minutes list gives it;
+          // the others are quiet state, never an ask.
+          variant: state === "recording" ? "destructive" : "outline",
+        }
+      : null,
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * Notes the member takes on another officer's minutes (#4935, #5949): the
+ * meeting, its day and whose minutes they are, then Take notes for one they
+ * were added to and haven't started, else Taking notes.
+ */
+function minutesNotesRow(notes: ActivityNoteTaking, now: Date): ActivityRow {
+  return {
+    kind: "minutes-notes",
+    key: `minutes:notes:${notes.meeting_id}`,
+    notes,
+    title: notes.name,
+    detail: [
+      formatDayHeading(notes.event_start_time, now),
+      MEETING_NOTE_TAKERS_COPY.listItem(notes.author_name),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    soon: null,
+    faceId: null,
+    badge: notes.joined
+      ? { label: MEETING_NOTE_TAKERS_COPY.takingNotes, variant: "outline" }
+      : { label: MEETING_NOTE_TAKERS_COPY.takeNotes, variant: "warning" },
+    glyph: "minutes",
+    dateBlock: null,
+    unread: false,
+    readRef: null,
+    progress: null,
+  };
+}
+
+/**
+ * The meeting a Write minutes row starts minutes on, as the calendar read
+ * names it (`CalendarMeeting`), for the start and the No minutes mark.
+ */
+export function activityMinutesMeeting(
+  row: Extract<ActivityRow, { kind: "minutes-to-write" }>,
+): { id: string; name: string; start_time: string; end_time: string } {
+  return {
+    id: row.meeting.event_id,
+    name: row.meeting.name,
+    start_time: row.meeting.start_time,
+    end_time: row.meeting.end_time,
+  };
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
@@ -903,6 +1054,11 @@ export interface ActivityToDo {
   now: boolean;
   /** A task past its due date. */
   overdue: boolean;
+  /**
+   * A run of its own rather than a day: `minutes` for the minutes rows
+   * (#5949), which have no deadline but are not "anytime" either.
+   */
+  run?: "minutes";
 }
 
 /**
@@ -991,6 +1147,30 @@ export function activityToDos(
         due ? endOfLocalDay(now) : at,
       );
     }),
+    // What the Meetings list page asked of the member (#5949), in its own
+    // run: meetings to write minutes for, newest first, then their own
+    // drafts, then the notes they take on others'. The row names its day.
+    ...minutesToDos(activity, now),
+  ];
+}
+
+/** The minutes rows as To do entries, in the read's order (#5949). */
+function minutesToDos(activity: Activity, now: Date): ActivityToDo[] {
+  const minutes = activityMinutes(activity);
+  const entry = (row: ActivityRow): ActivityToDo => ({
+    dated: row,
+    timed: row,
+    at: null,
+    now: false,
+    overdue: false,
+    run: "minutes",
+  });
+  return [
+    ...minutes.to_write.map((meeting) =>
+      entry(minutesToWriteRow(meeting, now)),
+    ),
+    ...minutes.drafts.map((draft) => entry(minutesDraftRow(draft, now))),
+    ...minutes.taking_notes.map((notes) => entry(minutesNotesRow(notes, now))),
   ];
 }
 

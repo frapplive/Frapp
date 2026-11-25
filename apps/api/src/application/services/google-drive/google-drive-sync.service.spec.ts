@@ -84,6 +84,7 @@ const copy = (over: Partial<ChapterDocument>): ChapterDocument => ({
   drive_link_status: null,
   drive_synced_at: null,
   who_can_see: null,
+  meeting_id: null,
   ...over,
 });
 
@@ -98,6 +99,7 @@ const frappFolder = (
   pinned_at: null,
   who_can_see: null,
   drive_folder_id: null,
+  minutes_series_key: null,
   ...over,
 });
 
@@ -161,6 +163,9 @@ describe('GoogleDriveSyncService', () => {
       setWhoCanSee: jest.fn(),
       updateFiling: jest.fn(),
       moveMany: jest.fn(),
+      findInFolders: jest.fn().mockResolvedValue([]),
+      fileMinutes: jest.fn(),
+      fileUnfiledMinutes: jest.fn(),
     };
     storage = {
       uploadFile: jest.fn().mockResolvedValue(undefined),
@@ -402,22 +407,24 @@ describe('GoogleDriveSyncService', () => {
     );
   });
 
-  it('reads the ten levels and 300 folders the spec and the panel name', () => {
+  it('reads the ten levels, 1,000 folders and 5,000 files the spec and the panel name', () => {
     expect(DRIVE_MAX_DEPTH).toBe(10);
-    expect(DRIVE_MAX_FOLDERS).toBe(300);
+    expect(DRIVE_MAX_FOLDERS).toBe(1000);
+    expect(DRIVE_MAX_FILES).toBe(5000);
   });
 
   it('leaves the folders past the folder cap out of Documents, the same each pass, and still removes what left Drive', async () => {
     tree[ROOT] = Array.from({ length: DRIVE_MAX_FOLDERS + 4 }, (_, i) =>
-      folder(`sub-${String(i).padStart(3, '0')}`, `Sub ${i}`),
+      folder(`sub-${String(i).padStart(4, '0')}`, `Sub ${i}`),
     );
     const last = `sub-${DRIVE_MAX_FOLDERS + 3}`;
+    const lastName = `Chapter files / Sub ${DRIVE_MAX_FOLDERS + 3}`;
     // A synced folder past the cap, with a copy filed in it, and a copy of a
     // file deleted from a folder that was read.
     folderRows = [
       frappFolder({
         id: 'past',
-        name: 'Chapter files / Sub 303',
+        name: lastName,
         drive_folder_id: last,
       }),
     ];
@@ -425,7 +432,7 @@ describe('GoogleDriveSyncService', () => {
       copy({
         id: 'in-unread',
         drive_file_id: 'unread-file',
-        folder: 'Chapter files / Sub 303',
+        folder: lastName,
       }),
       copy({
         id: 'deleted',
@@ -436,18 +443,24 @@ describe('GoogleDriveSyncService', () => {
 
     await service.process(connection(), NOW);
 
-    // The connected folder and the first 299 below it are read; five aren't.
+    // The connected folder and the first cap-minus-one below it are read;
+    // five aren't.
     expect(drive.listChildren).toHaveBeenCalledTimes(DRIVE_MAX_FOLDERS);
     expect(documents.delete).toHaveBeenCalledWith('deleted', 'ch-1');
     expect(documents.delete).toHaveBeenCalledWith('in-unread', 'ch-1');
     expect(folders.deleteMovingDocuments).toHaveBeenCalledWith('past', 'ch-1');
     // No empty folder is made for one that wasn't read.
-    expect(folderRows.some((row) => row.drive_folder_id === 'sub-299')).toBe(
-      false,
-    );
-    expect(folderRows.some((row) => row.drive_folder_id === 'sub-298')).toBe(
-      true,
-    );
+    const subId = (i: number) => `sub-${String(i).padStart(4, '0')}`;
+    expect(
+      folderRows.some(
+        (row) => row.drive_folder_id === subId(DRIVE_MAX_FOLDERS - 1),
+      ),
+    ).toBe(false);
+    expect(
+      folderRows.some(
+        (row) => row.drive_folder_id === subId(DRIVE_MAX_FOLDERS - 2),
+      ),
+    ).toBe(true);
     expect(connections.finishSync).toHaveBeenCalledWith(
       'conn-1',
       expect.objectContaining({ folders_left_out: 5 }),

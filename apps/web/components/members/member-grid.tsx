@@ -1,6 +1,5 @@
 "use client";
 
-import { formatPoints } from "@repo/formatting";
 import type { MemberAvatarTint, MemberProfile } from "@repo/hooks";
 import type { PresenceStatus } from "@repo/hooks/presence-status";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,7 +22,17 @@ export interface MemberFacts {
   roleName: string | null;
   joined: string | null;
   className: string | null;
-  points: number;
+  /**
+   * The member's number as text: all-time points, or under a standings sort
+   * the period's total ("45 points", "2.5 hours"). `null` while Points is off.
+   */
+  figure: string | null;
+  /** The member's place under a standings sort; `null` with nothing in it. */
+  rank: number | null;
+  /** Whether the list is a standing (a points or service hours sort). */
+  standing: boolean;
+  /** The viewer's own tile, marked on a standing. */
+  isViewer: boolean;
   status: PresenceStatus | null;
   customLine: string | null;
   /**
@@ -160,8 +169,16 @@ export function MemberGrid({
                 ) : null}
               </span>
               <span className="text-caption tabular-nums text-muted">
-                {formatPoints(facts.points)}
-                {facts.joined ? ` · joined ${facts.joined}` : null}
+                {[
+                  facts.rank === null ? null : `#${facts.rank}`,
+                  facts.figure,
+                  !facts.standing && facts.joined
+                    ? `joined ${facts.joined}`
+                    : null,
+                  facts.isViewer && facts.standing ? "You" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </button>
             <label

@@ -338,41 +338,28 @@ export function minutesGist(tldr: string | null | undefined): string | null {
   return `${(space > MINUTES_GIST_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}\u2026`;
 }
 
-/** The list of a chapter's minutes. */
+/**
+ * Minutes' shared words: the row that asks for them (Activity's Minutes run
+ * since #5949, when the Meetings list page went), the tags a minutes row
+ * carries, and the series screen.
+ */
 export const MEETING_LIST_COPY = {
   title: "Minutes",
   /**
-   * Meetings, tied to their events (Paul, 2026-11-19), as one timeline
-   * (Paul, 2026-11-20; `minutesTimeline`): the next meeting on top, then
-   * every past meeting at its date, a meeting that ended with no minutes
-   * among them. "Write minutes", not "Start": the meeting already happened.
+   * "Write minutes", not "Start": the meeting already happened (Paul,
+   * 2026-11-20).
    */
   writeMinutes: "Write minutes",
   /** An officer settles a meeting that had none: it stops asking. */
   markNoMinutes: "No minutes for this meeting",
-  /** The tag on a meeting marked so. */
-  noMinutes: "No minutes",
-  /** Takes the mark off: the meeting asks for minutes again. */
-  undoNoMinutes: "Ask for minutes again",
   markedNoMinutes: (name: string) => `${name} marked as no minutes`,
   noMinutesFailed: "Couldn't save that",
   undo: "Undo",
-  nextUp: "Next up",
-  openEvent: "Open event",
-  rowActions: (name: string) => `More for ${name}`,
-  none: "Minutes show here once a secretary posts them.",
   loadFailedTitle: "Couldn't load the minutes",
   loadFailedBody: "Check your connection and try again.",
   /** Minutes started with no meeting, until they are linked to one. */
   noMeeting: "No meeting",
-  /** The list's grouping and finding (#5290). */
-  search: "Search minutes",
-  allTypes: "All",
-  types: "Meeting types",
   series: "Series",
-  nothingMatches: "No minutes match.",
-  newMinutes: "New minutes",
-  newMinutesHint: "Records a meeting, or starts minutes to type.",
   recorded: "Recorded",
   decisions: (count: number) =>
     count === 1 ? "1 decision" : `${count} decisions`,
@@ -380,7 +367,6 @@ export const MEETING_LIST_COPY = {
     count === 1 ? "1 action item" : `${count} action items`,
   minutesCount: (count: number) =>
     count === 1 ? "1 meeting" : `${count} meetings`,
-  lastOn: (day: string) => `last ${day}`,
   /** The series screen (#5290). */
   seriesActions: "Open action items",
   seriesActionsFrom: (day: string) => `from ${day}`,

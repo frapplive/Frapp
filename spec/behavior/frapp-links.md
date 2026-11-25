@@ -8,7 +8,7 @@ A **Frapp link** is one entry in a list of things a task or an event points at. 
 
 | Kind | Stored | Points at |
 | --- | --- | --- |
-| `link` | `url` (http or https only, `normalizeFrappLinkUrl`) and a `title` (the domain when none is given) | A web page |
+| `link` | `url` (http or https only, `normalizeFrappLinkUrl`; a new one must also name a public site, [§ Writing a list](#writing-a-list)) and a `title` (the domain when none is given) | A web page |
 | `document` | `document_id` | A Chapter Files document ([`chapter-docs.md`](chapter-docs.md)) |
 | `minutes` | `meeting_id` | A meeting's minutes ([`meetings.md`](meetings.md)) |
 | `event` | `event_id` | An event ([`events.md`](events.md)) |
@@ -31,6 +31,8 @@ A record link stores ids, not a name. A name copied into the list would show to 
 ## Writing a list
 
 A list is written whole: `attachments` on `POST /v1/tasks`, `PATCH /v1/tasks/:id`, and `PATCH /v1/events/:id` (with `POST /v1/events`). The API normalizes each entry (`normalizeFrappLinks`), and checks that each record **newly added** is one of the chapter's and from a module the chapter has on (one read per kind, `FrappLinkChecker`). A record the list already held isn't checked again, so one deleted since never blocks a later save, and a held message keeps the channel stored with it. A refused entry is a 400 naming it.
+
+- **A web link must open on a phone** (#5883, a task proof link's rule since #5882, `frappWebLinkOpens`): a name that resolves nowhere, such as `https://test`, `http://localhost:3000`, an IP address or a `.local` name, is refused, with the reason under the picker's field on both apps and as the API's 400 (`FRAPP_LINK_NOT_PUBLIC_MESSAGE`). An address the list already held isn't checked again, as a held record isn't, so one saved before the rule never blocks a later save. Its row reads as text, its domain then "not a working link", and doesn't open (`frappLinkRow`).
 
 - **A group task** (`tasks.md` § Tasks for everyone): every copy holds the same list. A group edit (`scope: "group"`) changes it on every copy, checked once.
 - **A repeating task** (`tasks.md` § Repeating tasks): the series holds the list, and each new copy is made with it. "All upcoming tasks" changes the series' list as it changes the series' other fields, checked once and written to the open copy as checked.

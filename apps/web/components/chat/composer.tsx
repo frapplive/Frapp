@@ -35,6 +35,7 @@ import {
   takeDroppedFiles,
   type CommandFormOutcome,
 } from "./composer-shell";
+import { SlashChoicePicker } from "./slash-choice-picker";
 import { AUDIT_LOG_COMPOSER_NOTE } from "@repo/chat-core/audit-log-copy";
 import { cn } from "@/lib/utils";
 import { compactControlClassName } from "@/components/shared/table-controls";
@@ -58,7 +59,7 @@ import { definitiveRefusalMessage } from "@repo/chat-core/chat-client";
 // when it is missing a field, so a hand-written `{ ok, error? }` silently erases
 // any outcome added later — which is exactly what happened at the
 // `use-chat-channel` boundary before #544 added `warning`.
-import type { DispatchResult } from "@repo/chat-core/dispatch";
+import type { DispatchChoices, DispatchResult } from "@repo/chat-core/dispatch";
 import { useToast } from "@/lib/hooks/use-toast";
 import type { ChapterModuleGateStatus } from "@/lib/hooks/use-chapter-module-gate";
 import {
@@ -582,7 +583,7 @@ function StagedFileChip({
        * `INDISTINGUISHABLE` (`apps/web/tests/signet-contrast.ts`, the one place
        * that bound is written), so the chip would read as no fill at all.
        * `--popover` on `--surface-1` is 1.1583:1. Same skip, for the same
-       * reason, as the chapter picker row in `layout/chapter-nav-header.tsx`.
+       * reason, as the chapter picker row in `layout/chapter-switcher.tsx`.
        */
       className={cn(
         "flex max-w-full items-center gap-1.5 rounded-md border border-border bg-popover py-1 pl-2 pr-1 text-caption transition-opacity",
@@ -1091,6 +1092,22 @@ export function Composer({
     open: boolean;
     view: PlusMenuCommand | null;
   }>({ open: false, view: null });
+  // A command that named several things (two prospects with one name) asks
+  // which, and runs again for the pick (`SlashChoicePicker`).
+  const [slashChoices, setSlashChoices] = useState<{
+    command: SlashCommand;
+    choices: DispatchChoices;
+  } | null>(null);
+  const reportDispatch = useCallback(
+    (command: SlashCommand, result: DispatchResult) => {
+      if (result.choices) {
+        setSlashChoices({ command, choices: result.choices });
+        return;
+      }
+      notifyDispatchOutcome(toast, `/${slashToken(command)}`, result);
+    },
+    [toast],
+  );
   // A form the host opened (a row, or a typed command it couldn't read)
   // shows in the card when the host draws one.
   const showPlusForm = useCallback(
@@ -1142,9 +1159,8 @@ export function Composer({
           return;
         }
         void (async () => {
-          notifyDispatchOutcome(
-            toast,
-            `/${slashToken(command)}`,
+          reportDispatch(
+            command,
             await runDispatch(onSlashDispatch, command, parsed.args),
           );
         })();
@@ -1261,6 +1277,7 @@ export function Composer({
     pending,
     recruitmentVocab,
     replyTo,
+    reportDispatch,
     showPlusForm,
     slashRefusal,
     spacedNames,
@@ -1714,13 +1731,13 @@ export function Composer({
         showPlusForm(command.name);
         return;
       }
-      notifyDispatchOutcome(
-        toast,
-        `/${slashToken(command)}`,
+      reportDispatch(
+        command,
         await runDispatch(onSlashDispatch, command, args),
       );
     },
     [
+      reportDispatch,
       editor,
       onSlashDispatch,
       onOpenCommandForm,
@@ -1777,8 +1794,24 @@ export function Composer({
   }
 
   return (
-    <div className={COMPOSER_BOX_CLASS} onKeyDown={handleHostKey}>
-      {/*
+    <>
+      <SlashChoicePicker
+        choices={slashChoices?.choices ?? null}
+        onClose={() => setSlashChoices(null)}
+        onPick={(choice) => {
+          const picked = slashChoices;
+          setSlashChoices(null);
+          if (!picked || !onSlashDispatch) return;
+          void (async () => {
+            reportDispatch(
+              picked.command,
+              await runDispatch(onSlashDispatch, picked.command, choice.args),
+            );
+          })();
+        }}
+      />
+      <div className={COMPOSER_BOX_CLASS} onKeyDown={handleHostKey}>
+        {/*
         The well is `--surface-1` on the thread's `--background`, per the s05
         composer — one step up from the floor it sits on, which is how elevation
         reads on a shadowless surface. It used to be `bg-background` inside a
@@ -1788,87 +1821,87 @@ export function Composer({
         `focus:outline-none` and, before this, nothing replaced it, so the
         composer had no visible focus indicator at all.
       */}
-      <div className={cn(COMPOSER_WELL_CLASS, FOCUS_RING_WITHIN)}>
-        {/*
+        <div className={cn(COMPOSER_WELL_CLASS, FOCUS_RING_WITHIN)}>
+          {/*
           The staged reply, above the input and above the attachment chips —
           it is context for everything below it, not another attachment. Same
           `QuotedMessage` the timeline uses, so what a member stages looks like
           what they are about to send.
         */}
-        {replyTo ? (
-          <div className="mb-2 flex items-start gap-1.5">
-            {/* `py-1` matches the quote block's padding, and the button's
+          {replyTo ? (
+            <div className="mb-2 flex items-start gap-1.5">
+              {/* `py-1` matches the quote block's padding, and the button's
                 `mt-0.5` centres it on the same first line, so both stay on
                 the quote's first line when it wraps to two (#4001). */}
-            <span className="shrink-0 py-1 text-caption text-muted-foreground">
-              Replying to
-            </span>
-            <QuotedMessage
-              className="flex-1"
-              author={replyTo.author}
-              preview={replyTo.preview}
-              hidden={replyTo.hidden}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="mt-0.5 h-5 w-5 shrink-0"
-              aria-label="Cancel reply"
-              onClick={cancelReply}
+              <span className="shrink-0 py-1 text-caption text-muted-foreground">
+                Replying to
+              </span>
+              <QuotedMessage
+                className="flex-1"
+                author={replyTo.author}
+                preview={replyTo.preview}
+                hidden={replyTo.hidden}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mt-0.5 h-5 w-5 shrink-0"
+                aria-label="Cancel reply"
+                onClick={cancelReply}
+              >
+                <span aria-hidden="true">×</span>
+              </Button>
+            </div>
+          ) : null}
+          {stagedCount > 0 ? (
+            <ul
+              className="mb-2 flex flex-wrap items-end gap-1.5"
+              aria-label={`${stagedCount} file${stagedCount === 1 ? "" : "s"} attached`}
             >
-              <span aria-hidden="true">×</span>
-            </Button>
-          </div>
-        ) : null}
-        {stagedCount > 0 ? (
-          <ul
-            className="mb-2 flex flex-wrap items-end gap-1.5"
-            aria-label={`${stagedCount} file${stagedCount === 1 ? "" : "s"} attached`}
-          >
-            {pending.map((attachment) => {
-              const preview = previews.get(attachment.storagePath);
-              return preview ? (
-                <StagedThumbnail
-                  key={attachment.storagePath}
-                  src={preview}
-                  filename={attachment.filename}
-                  removeLabel={`Remove ${attachment.filename}`}
-                  onRemove={() => removePending(attachment.storagePath)}
-                />
-              ) : (
-                <StagedFileChip
-                  key={attachment.storagePath}
-                  filename={attachment.filename}
-                  removeLabel={`Remove ${attachment.filename}`}
-                  onRemove={() => removePending(attachment.storagePath)}
-                />
-              );
-            })}
-            {uploading.map((file) =>
-              file.previewUrl ? (
-                <StagedThumbnail
-                  key={file.key}
-                  src={file.previewUrl}
-                  filename={file.filename}
-                  uploading
-                  removeLabel={`Cancel upload of ${file.filename}`}
-                  onRemove={() => cancelUpload(file.key)}
-                />
-              ) : (
-                <StagedFileChip
-                  key={file.key}
-                  filename={file.filename}
-                  uploading
-                  removeLabel={`Cancel upload of ${file.filename}`}
-                  onRemove={() => cancelUpload(file.key)}
-                />
-              ),
-            )}
-          </ul>
-        ) : null}
-        <EditorContent editor={editor} />
-        {/*
+              {pending.map((attachment) => {
+                const preview = previews.get(attachment.storagePath);
+                return preview ? (
+                  <StagedThumbnail
+                    key={attachment.storagePath}
+                    src={preview}
+                    filename={attachment.filename}
+                    removeLabel={`Remove ${attachment.filename}`}
+                    onRemove={() => removePending(attachment.storagePath)}
+                  />
+                ) : (
+                  <StagedFileChip
+                    key={attachment.storagePath}
+                    filename={attachment.filename}
+                    removeLabel={`Remove ${attachment.filename}`}
+                    onRemove={() => removePending(attachment.storagePath)}
+                  />
+                );
+              })}
+              {uploading.map((file) =>
+                file.previewUrl ? (
+                  <StagedThumbnail
+                    key={file.key}
+                    src={file.previewUrl}
+                    filename={file.filename}
+                    uploading
+                    removeLabel={`Cancel upload of ${file.filename}`}
+                    onRemove={() => cancelUpload(file.key)}
+                  />
+                ) : (
+                  <StagedFileChip
+                    key={file.key}
+                    filename={file.filename}
+                    uploading
+                    removeLabel={`Cancel upload of ${file.filename}`}
+                    onRemove={() => cancelUpload(file.key)}
+                  />
+                ),
+              )}
+            </ul>
+          ) : null}
+          <EditorContent editor={editor} />
+          {/*
           No `COMPOSER_TOOLBAR_CLASS` here, and that is deliberate: this row's
           height is intrinsic — `compactControlClassName` is `h-8` and
           `pointer-coarse:h-11`, and the Send button matches. Pinning it to the
@@ -1876,79 +1909,79 @@ export function Composer({
           overflow every touch target on it. The constant reserves what this row
           *comes out as*; it does not set it.
         */}
-        <div className="@container mt-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            {/*
+          <div className="@container mt-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {/*
               One + for a file and every command's form (#3865, layout A),
               replacing the paperclip and the slash-palette button. Typing
               `/` in the message box still opens the palette, and each row
               shows its shortcut so the menu teaches it.
             */}
-            <ComposerPlusCard
-              model={plusMenu}
-              triggerClassName={compactControlClassName}
-              open={plusCard.open}
-              onOpenChange={(open) =>
-                // Opened from the +, the card starts on the menu, where a
-                // row with a kept draft says so.
-                setPlusCard({ open, view: null })
-              }
-              view={plusCard.view}
-              onAttach={() => fileInput.current?.click()}
-              // After the card has closed, so the picker's popover doesn't
-              // open under the card's own dismissal.
-              onGif={
-                onSendGif
-                  ? () => setTimeout(() => setGifOpen(true), 0)
-                  : undefined
-              }
-              onPick={openPlusMenuForm}
-              onBack={plusCardControls.back}
-              form={
-                plusCard.view && renderPlusForm
-                  ? renderPlusForm(plusCard.view, plusCardControls)
-                  : null
-              }
-              drafts={plusDrafts}
-            />
-            <input
-              ref={fileInput}
-              type="file"
-              accept={acceptAttribute("document")}
-              multiple
-              className="sr-only"
-              onChange={(event) => void handleAttach(event)}
-              aria-hidden="true"
-            />
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className={compactControlClassName}
-                  aria-label="Open emoji picker"
-                  onPointerEnter={preloadEmojiPicker}
-                  onFocus={preloadEmojiPicker}
-                >
-                  <ReactionGlyph className="h-5 w-5" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <EmojiPicker onPick={insertEmoji} />
-              </PopoverContent>
-            </Popover>
-            {onSendGif ? (
-              <GifPickerButton
-                provider={gifProvider ?? ""}
-                onPick={onSendGif}
-                open={gifOpen}
-                onOpenChange={setGifOpen}
+              <ComposerPlusCard
+                model={plusMenu}
+                triggerClassName={compactControlClassName}
+                open={plusCard.open}
+                onOpenChange={(open) =>
+                  // Opened from the +, the card starts on the menu, where a
+                  // row with a kept draft says so.
+                  setPlusCard({ open, view: null })
+                }
+                view={plusCard.view}
+                onAttach={() => fileInput.current?.click()}
+                // After the card has closed, so the picker's popover doesn't
+                // open under the card's own dismissal.
+                onGif={
+                  onSendGif
+                    ? () => setTimeout(() => setGifOpen(true), 0)
+                    : undefined
+                }
+                onPick={openPlusMenuForm}
+                onBack={plusCardControls.back}
+                form={
+                  plusCard.view && renderPlusForm
+                    ? renderPlusForm(plusCard.view, plusCardControls)
+                    : null
+                }
+                drafts={plusDrafts}
               />
-            ) : null}
-            <ComposerHelp />
-          </div>
-          {/*
+              <input
+                ref={fileInput}
+                type="file"
+                accept={acceptAttribute("document")}
+                multiple
+                className="sr-only"
+                onChange={(event) => void handleAttach(event)}
+                aria-hidden="true"
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={compactControlClassName}
+                    aria-label="Open emoji picker"
+                    onPointerEnter={preloadEmojiPicker}
+                    onFocus={preloadEmojiPicker}
+                  >
+                    <ReactionGlyph className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <EmojiPicker onPick={insertEmoji} />
+                </PopoverContent>
+              </Popover>
+              {onSendGif ? (
+                <GifPickerButton
+                  provider={gifProvider ?? ""}
+                  onPick={onSendGif}
+                  open={gifOpen}
+                  onOpenChange={setGifOpen}
+                />
+              ) : null}
+              <ComposerHelp />
+            </div>
+            {/*
             What Send will do while the draft names `@Frapp` (#4713), said
             before it does it. On the row's own line between the controls and
             Send, so it arrives and leaves without moving anything. Where the
@@ -1959,25 +1992,25 @@ export function Composer({
             itself (`@container`), since the window's width says little about
             the composer's. A screen reader always gets the sentence.
           */}
-          {asksFrapp ? (
-            <p
-              role="status"
-              data-ask-hint=""
-              className="flex min-w-0 flex-1 items-center justify-end gap-1 text-caption text-muted-foreground"
-            >
-              <EyeOff
-                className="h-3 w-3 shrink-0 @xl:hidden"
-                aria-hidden="true"
-              />
-              <span className="truncate @xl:hidden" aria-hidden="true">
-                {ASK_COPY.only_you_short}
-              </span>
-              <span className="sr-only @xl:not-sr-only @xl:truncate">
-                {ASK_COPY.only_you_hint}
-              </span>
-            </p>
-          ) : null}
-          {/*
+            {asksFrapp ? (
+              <p
+                role="status"
+                data-ask-hint=""
+                className="flex min-w-0 flex-1 items-center justify-end gap-1 text-caption text-muted-foreground"
+              >
+                <EyeOff
+                  className="h-3 w-3 shrink-0 @xl:hidden"
+                  aria-hidden="true"
+                />
+                <span className="truncate @xl:hidden" aria-hidden="true">
+                  {ASK_COPY.only_you_short}
+                </span>
+                <span className="sr-only @xl:not-sr-only @xl:truncate">
+                  {ASK_COPY.only_you_hint}
+                </span>
+              </p>
+            ) : null}
+            {/*
             A round arrow, the mobile composer's send (principles.md P6.5):
             one glyph for one action on both apps. 32px to a mouse and 44px to
             a finger, like every control on this row; the name lives in
@@ -1985,69 +2018,72 @@ export function Composer({
             something to send, muted when there isn't, so the button says
             whether Enter will do anything.
           */}
-          {/* Send and its schedule chevron stay together at the row's end,
+            {/* Send and its schedule chevron stay together at the row's end,
               as Slack draws its split send button (#4956). */}
-          <div className="flex shrink-0 items-center">
-            <Button
-              type="button"
-              size="icon"
-              className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
-              onClick={submit}
-              aria-label="Send message"
-              title="Send (Enter)"
-              /* An attached file is enough to send: an empty editor with a staged
+            <div className="flex shrink-0 items-center">
+              <Button
+                type="button"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-full pointer-coarse:h-11 pointer-coarse:w-11"
+                onClick={submit}
+                aria-label="Send message"
+                title="Send (Enter)"
+                /* An attached file is enough to send: an empty editor with a staged
                attachment is a real message, and `submit` accepts it. A lone
                `/` is not, so it reads as empty (#3781). */
-              disabled={
-                !editor ||
-                uploading.length > 0 ||
-                ((editor.isEmpty || isBareSlash(chatText(editor).trim())) &&
-                  pending.length === 0)
-              }
-            >
-              <SendArrowGlyph className="h-4 w-4" />
-            </Button>
-            {onSchedule ? (
-              <ScheduleSendButton
-                // As Send's: a staged file alone is a message to schedule.
                 disabled={
                   !editor ||
                   uploading.length > 0 ||
                   ((editor.isEmpty || isBareSlash(chatText(editor).trim())) &&
                     pending.length === 0)
                 }
-                onSchedule={schedule}
-              />
-            ) : null}
+              >
+                <SendArrowGlyph className="h-4 w-4" />
+              </Button>
+              {onSchedule ? (
+                <ScheduleSendButton
+                  // As Send's: a staged file alone is a message to schedule.
+                  disabled={
+                    !editor ||
+                    uploading.length > 0 ||
+                    ((editor.isEmpty || isBareSlash(chatText(editor).trim())) &&
+                      pending.length === 0)
+                  }
+                  onSchedule={schedule}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
-      {paletteMounted ? (
-        <SlashPalette
-          open={palette.open}
-          initialQuery={palette.query}
-          onQueryChange={(query) => setPalette((prev) => ({ ...prev, query }))}
-          isModuleEnabled={isModuleEnabled}
-          recruitmentVocab={recruitmentVocab}
-          canAnnounce={canAnnounce}
-          permissions={permissions}
-          status={slashCommandsStatus}
-          onRetry={onRetrySlashCommands}
-          onSelect={onPaletteSelect}
-          onOpenChange={(open) => {
-            setPalette((prev) => ({
-              ...prev,
-              open,
-              query: open ? prev.query : "",
-            }));
-            // Backing out of the palette takes back the `/` that opened it
-            // (#3781). Anything more in the box is the member's, and stays.
-            if (!open && editor && isBareSlash(chatText(editor).trim())) {
-              editor.commands.clearContent(true);
+        {paletteMounted ? (
+          <SlashPalette
+            open={palette.open}
+            initialQuery={palette.query}
+            onQueryChange={(query) =>
+              setPalette((prev) => ({ ...prev, query }))
             }
-          }}
-        />
-      ) : null}
-    </div>
+            isModuleEnabled={isModuleEnabled}
+            recruitmentVocab={recruitmentVocab}
+            canAnnounce={canAnnounce}
+            permissions={permissions}
+            status={slashCommandsStatus}
+            onRetry={onRetrySlashCommands}
+            onSelect={onPaletteSelect}
+            onOpenChange={(open) => {
+              setPalette((prev) => ({
+                ...prev,
+                open,
+                query: open ? prev.query : "",
+              }));
+              // Backing out of the palette takes back the `/` that opened it
+              // (#3781). Anything more in the box is the member's, and stays.
+              if (!open && editor && isBareSlash(chatText(editor).trim())) {
+                editor.commands.clearContent(true);
+              }
+            }}
+          />
+        ) : null}
+      </div>
+    </>
   );
 }

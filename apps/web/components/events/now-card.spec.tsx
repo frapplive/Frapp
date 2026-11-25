@@ -4,14 +4,26 @@ import { EventNowPill, NowCard } from "./now-card";
 
 const eventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
+  options: [] as unknown[],
 }));
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {
     ...actual,
-    useEventsOnNow: () => eventsNow.value,
+    useEventsOnNow: (options: unknown) => {
+      eventsNow.options.push(options);
+      return eventsNow.value;
+    },
   };
 });
+
+const gate = vi.hoisted(() => ({
+  value: ((key: string) => key === "events") as
+    ((key: string) => boolean) | undefined,
+}));
+vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
+  useChapterModuleGate: () => gate.value,
+}));
 
 const live = (overrides: Record<string, unknown> = {}) => ({
   id: "recruitment",
@@ -27,9 +39,22 @@ const live = (overrides: Record<string, unknown> = {}) => ({
 
 afterEach(() => {
   eventsNow.value = { events: [], now: Date.now() };
+  eventsNow.options = [];
+  gate.value = (key: string) => key === "events";
 });
 
 describe("NowCard (#5777)", () => {
+  it("reads only with Events known to be on, so a council never asks (#5933)", () => {
+    render(<NowCard />);
+    expect(eventsNow.options.at(-1)).toEqual({ enabled: true });
+    gate.value = () => false;
+    render(<NowCard />);
+    expect(eventsNow.options.at(-1)).toEqual({ enabled: false });
+    gate.value = undefined;
+    render(<NowCard />);
+    expect(eventsNow.options.at(-1)).toEqual({ enabled: false });
+  });
+
   it("renders nothing with nothing on", () => {
     const { container } = render(<NowCard />);
     expect(container).toBeEmptyDOMElement();

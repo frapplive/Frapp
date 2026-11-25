@@ -31,8 +31,9 @@ const CONFIRM_PROBE_TIMEOUT_MS = 1500;
 // 2026-11-17), and no automated caller reads
 // the dependency fields: they act on the status code, which is 2xx either way.
 // Probing per call made each hit two Supabase requests, and at that cadence
-// each opened a fresh TLS connection, because undici drops a socket after 4
-// idle seconds. Measured against Supabase (2026-09-29), that is ~2.4 KB sent
+// each opened a fresh TLS connection, because undici dropped a socket after 4
+// idle seconds (the Supabase client keeps them two minutes since 2026-11-24,
+// `supabase-fetch.ts`). Measured against Supabase (2026-09-29), that is ~2.4 KB sent
 // per probe before TCP/IP headers, which puts the probes at an estimated 60%
 // of an idle instance's ~6.5 MB/hour of billed egress (measured on Render). `/health/ready`
 // never uses this cache: the deploy gate, and anyone checking a recovery,

@@ -33,6 +33,12 @@ import {
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
+import {
+  PaletteGlyph,
+  ScrollTextGlyph,
+  WallpaperGlyph,
+} from "@/components/settings-glyphs";
+import { CHAPTER_LOOK_FOOTNOTE } from "@repo/validation";
 import { AccentSheet } from "@/components/settings/accent-sheet";
 import { ChatBackgroundSheet } from "@/components/settings/chat-background-sheet";
 import {
@@ -42,6 +48,7 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
+import { InterestFormSettingsSection } from "@/components/rush/interest-form-settings-section";
 import { PlusGlyph } from "@/components/control-glyphs";
 import {
   ChannelFormSheet,
@@ -56,6 +63,7 @@ import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { chapterSettingsAccess } from "@/lib/more/chapter-settings";
 import { typeRole, useFrappTheme } from "@/lib/theme";
+import { useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * Chapter settings, on the phone (#4074): the chapter's side of settings, as
@@ -96,6 +104,7 @@ export default function ChapterSettingsScreen() {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
   const styles = createStyles(tokens);
+  const glyphColor = tokens.color.text.mutedForeground;
   const accentSheetRef = useRef<BottomSheetModal>(null);
   const chatBackgroundSheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -114,7 +123,12 @@ export default function ChapterSettingsScreen() {
   const chapterBackground = useChapterChatBackground();
   // Member names (#5801): the config PATCH's guard, as web's switch reads it.
   const canManageConfig = can("chapter-config:manage", permissions);
-  const orgConfig = useOrgConfig({ enabled: access.chapter });
+  // `/v1/chapters/:id/config` is a chapter route and refuses a council
+  // (#5933), so a council's settings go without the name switch for now.
+  const chapterFeatures = useServesChapterFeatures();
+  const orgConfig = useOrgConfig({
+    enabled: access.chapter && chapterFeatures,
+  });
   const patchConfig = usePatchOrgConfig();
   const [namesSaveFailed, setNamesSaveFailed] = useState(false);
   const membersCanRename = orgConfig.data?.members_can_change_name === true;
@@ -170,10 +184,11 @@ export default function ChapterSettingsScreen() {
           <>
             {access.chapter ? (
               <>
-                <SectionHeader>Chapter</SectionHeader>
-                <ListSection>
+                <SectionHeader>Look</SectionHeader>
+                <ListSection footnote={CHAPTER_LOOK_FOOTNOTE}>
                   <SettingAnchor id="accent">
                     <ListRow
+                      leading={<PaletteGlyph color={glyphColor} />}
                       label="Chapter accent"
                       // An editor's row is the swatch and a chevron. Anyone else's
                       // can't open, so it says who can change it rather than leaving
@@ -199,6 +214,7 @@ export default function ChapterSettingsScreen() {
                   </SettingAnchor>
                   <SettingAnchor id="chat-background">
                     <ListRow
+                      leading={<WallpaperGlyph color={glyphColor} />}
                       label="Chat background"
                       value={
                         chapterBackground.data
@@ -220,60 +236,72 @@ export default function ChapterSettingsScreen() {
                       }
                     />
                   </SettingAnchor>
-                  {orgConfig.data ? (
-                    <SettingAnchor id="member-names">
-                      <ListRow
-                        label={NAME_LOCK_COPY.settingLabel}
-                        description={
-                          namesSaveFailed
-                            ? NAME_LOCK_COPY.saveFailed
-                            : canManageConfig
-                              ? NAME_LOCK_COPY.settingLine
-                              : readOnlyLine
-                        }
-                        descriptionTone={
-                          namesSaveFailed ? "destructive" : "default"
-                        }
-                        trailing={
-                          <Toggle
-                            value={membersCanRename}
-                            disabled={!canManageConfig || patchConfig.isPending}
-                            onValueChange={(next) => {
-                              setNamesSaveFailed(false);
-                              patchConfig.mutate(
-                                { members_can_change_name: next },
-                                { onError: () => setNamesSaveFailed(true) },
-                              );
-                            }}
-                            accessibilityLabel={NAME_LOCK_COPY.settingLabel}
-                          />
-                        }
-                      />
-                    </SettingAnchor>
-                  ) : null}
-                  {geofencesEnabled ? (
-                    // Read-only here (the phone has no zone editor), so it says
-                    // where zones are changed: the dashboard's Study zones tool.
-                    <ListRow
-                      label="Study zones"
-                      description="Managed on the web dashboard."
-                      value={
-                        zoneCount === null
-                          ? "—"
-                          : `${zoneCount} ${zoneCount === 1 ? "zone" : "zones"}`
-                      }
-                    />
-                  ) : null}
-                  {access.logs ? (
-                    // Last in Chapter, as web's Logs row is (Paul,
-                    // 2026-11-21): read when something needs looking into.
-                    <ListRow
-                      label={CHAPTER_LOGS_TITLE}
-                      accessibilityHint="Opens who changed what in the chapter, and when."
-                      onPress={() => router.push("/chapter-logs")}
-                    />
-                  ) : null}
                 </ListSection>
+                {/* Every row below is conditional, so the group draws only
+                    when one of them does, never as an empty card. */}
+                {orgConfig.data || geofencesEnabled || access.logs ? (
+                  <>
+                    <SectionHeader>Chapter</SectionHeader>
+                    <ListSection>
+                      {orgConfig.data ? (
+                        <SettingAnchor id="member-names">
+                          <ListRow
+                            label={NAME_LOCK_COPY.settingLabel}
+                            description={
+                              namesSaveFailed
+                                ? NAME_LOCK_COPY.saveFailed
+                                : canManageConfig
+                                  ? NAME_LOCK_COPY.settingLine
+                                  : readOnlyLine
+                            }
+                            descriptionTone={
+                              namesSaveFailed ? "destructive" : "default"
+                            }
+                            trailing={
+                              <Toggle
+                                value={membersCanRename}
+                                disabled={
+                                  !canManageConfig || patchConfig.isPending
+                                }
+                                onValueChange={(next) => {
+                                  setNamesSaveFailed(false);
+                                  patchConfig.mutate(
+                                    { members_can_change_name: next },
+                                    { onError: () => setNamesSaveFailed(true) },
+                                  );
+                                }}
+                                accessibilityLabel={NAME_LOCK_COPY.settingLabel}
+                              />
+                            }
+                          />
+                        </SettingAnchor>
+                      ) : null}
+                      {geofencesEnabled ? (
+                        // Read-only here (the phone has no zone editor), so it says
+                        // where zones are changed: the dashboard's Study zones tool.
+                        <ListRow
+                          label="Study zones"
+                          description="Managed on the web dashboard."
+                          value={
+                            zoneCount === null
+                              ? "—"
+                              : `${zoneCount} ${zoneCount === 1 ? "zone" : "zones"}`
+                          }
+                        />
+                      ) : null}
+                      {access.logs ? (
+                        // Last in Chapter, as web's Logs row is (Paul,
+                        // 2026-11-21): read when something needs looking into.
+                        <ListRow
+                          leading={<ScrollTextGlyph color={glyphColor} />}
+                          label={CHAPTER_LOGS_TITLE}
+                          accessibilityHint="Opens who changed what in the chapter, and when."
+                          onPress={() => router.push("/chapter-logs")}
+                        />
+                      ) : null}
+                    </ListSection>
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -341,6 +369,15 @@ export default function ChapterSettingsScreen() {
         {access.newChannel ? (
           <ChatSection searching={search.searching} />
         ) : null}
+        {search.searching ? null : (
+          <InterestFormSettingsSection
+            permissions={permissions}
+            moduleOn={isModuleEnabled(
+              chapterQuery.data?.enabled_modules,
+              "rush",
+            )}
+          />
+        )}
         {access.roles ? (
           access.newRole ? (
             <PeopleSectionWithNewRole searching={search.searching} />

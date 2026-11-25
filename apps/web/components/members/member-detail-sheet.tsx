@@ -33,7 +33,14 @@ import { useMessageMember } from "@/lib/chat/use-message-member";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { ActionMenuButton } from "@/components/shared/row-menu";
+import { useSubscriptionGate } from "@/components/shared/subscription-gate";
+import { PointsAdjustmentDialog } from "@/components/points/points-adjustment-dialog";
+import { AdjustGlyph } from "@/components/points/points-glyphs";
+import { ADJUST_POINTS_LABEL } from "@repo/validation";
+import { pointsLedgerPath } from "@/components/settings/settings-paths";
+import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
   Panel,
@@ -68,6 +75,7 @@ import {
 } from "@/components/members/member-detail-rows";
 import { MemberAssignments } from "@/components/members/member-assignments";
 import { MemberPledgeClassSection } from "@/components/members/member-pledge-class-section";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { MemberCorrectionDialog } from "@/components/members/member-correction-dialog";
 
 type CustomFieldValue = {
@@ -230,6 +238,7 @@ export function MemberDetailSheet({
   const { avatarTintFor } = useMemberDisplayNames();
   const myPermissionsQuery = useMyPermissions();
   const myPermissions = myPermissionsQuery.data?.permissions;
+  const isCouncil = useIsCouncil();
   const removeMemberMutation = useRemoveMember();
   const { toast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -241,6 +250,15 @@ export function MemberDetailSheet({
   const detailsRegionId = useId();
   const [correcting, setCorrecting] = useState(false);
   if (!open && correcting) setCorrecting(false);
+  // Adjust points starts from the member it is for (#5950; the Points page's
+  // own button until then, which asked who). `POST /v1/points/adjust` is
+  // paid-ops, so the item is held while the chapter's plan blocks writes.
+  const [adjusting, setAdjusting] = useState(false);
+  if (!open && adjusting) setAdjusting(false);
+  const adjustGate = useSubscriptionGate();
+  const moduleGate = useChapterModuleGateState();
+  const pointsOn =
+    moduleGate.status === "ready" && moduleGate.isModuleEnabled("points");
 
   const fetched =
     memberQuery.data && typeof memberQuery.data === "object"
@@ -312,6 +330,15 @@ export function MemberDetailSheet({
     dmTargetUserId !== currentUserId;
   const graduationYear =
     typeof member?.graduation_year === "number" ? member.graduation_year : null;
+  // Never against yourself: the API refuses an officer's own points
+  // (`PointsService`), so the item isn't offered on your own card.
+  const canAdjustPoints =
+    pointsOn &&
+    !!memberId &&
+    !!dmTargetUserId &&
+    dmTargetUserId !== currentUserId &&
+    can("points:adjust", myPermissions);
+  const canSeeLedger = pointsOn && can("points:view_all", myPermissions);
 
   async function handleRemoveMember() {
     if (!memberId) return;
@@ -368,11 +395,26 @@ export function MemberDetailSheet({
         */}
         <PanelHeader
           actions={
-            canRemove || canCorrect ? (
+            canRemove || canCorrect || canAdjustPoints ? (
               <ActionMenuButton
                 label={memberMenuButtonLabel(displayName)}
                 busy={removeMemberMutation.isPending}
                 entries={[
+                  // Most used first; the one aimed at the person's place in
+                  // the chapter stays last (rulebook § 2).
+                  ...(canAdjustPoints
+                    ? [
+                        {
+                          type: "item" as const,
+                          key: "adjust-points",
+                          label: ADJUST_POINTS_LABEL,
+                          icon: AdjustGlyph,
+                          disabled: !adjustGate.allowed,
+                          title: adjustGate.controlProps().title,
+                          onSelect: () => setAdjusting(true),
+                        },
+                      ]
+                    : []),
                   ...(canCorrect
                     ? [
                         {
@@ -544,7 +586,25 @@ export function MemberDetailSheet({
                   {joined ?? "Not recorded"}
                 </DetailRow>
                 {typeof points === "number" ? (
-                  <DetailRow label="Points">{points}</DetailRow>
+                  <DetailRow label="Points">
+                    {points}
+                    {/* The transactions behind the number, for a role that
+                        may read them: the chapter ledger, on this member. */}
+                    {canSeeLedger && dmTargetUserId ? (
+                      <>
+                        {" · "}
+                        <Link
+                          href={pointsLedgerPath(dmTargetUserId)}
+                          className={cn(
+                            "rounded-sm underline underline-offset-2",
+                            FOCUS_RING_OFFSET,
+                          )}
+                        >
+                          Ledger
+                        </Link>
+                      </>
+                    ) : null}
+                  </DetailRow>
                 ) : null}
                 {phoneReach ? (
                   <DetailRow label={PHONE_REACH_LABEL}>
@@ -585,7 +645,10 @@ export function MemberDetailSheet({
                   !!memberId &&
                   fetched !== null &&
                   !memberQuery.isError &&
-                  can("roles:manage", myPermissions)
+                  can("roles:manage", myPermissions) &&
+                  // Pledge classes are a chapter's (#5933): their routes
+                  // refuse a council.
+                  !isCouncil
                 }
               />
 
@@ -640,6 +703,13 @@ export function MemberDetailSheet({
           this sheet while it is still open (#2302).
         */}
         {confirmDialog}
+        {canAdjustPoints && dmTargetUserId ? (
+          <PointsAdjustmentDialog
+            open={adjusting}
+            onOpenChange={setAdjusting}
+            member={{ userId: dmTargetUserId, name: displayName }}
+          />
+        ) : null}
         {memberId && canCorrect ? (
           <MemberCorrectionDialog
             open={correcting}

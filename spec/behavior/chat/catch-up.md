@@ -14,8 +14,7 @@ The contract below is written so an implementation PR can be reviewed against it
 
 A **pulse card**: one server-originated chat message, `kind: "pulse"`, summarizing chapter-health
 signals with one action per signal. It is a *read-only aggregation* over data the chapter already
-has — no new table, no new store, the same rule [`../activity-feed.md`](../activity-feed.md) states
-for the activity aggregation.
+has: no new table, no new store.
 
 It is deliberately **not** a dashboard rebuilt inside a message. A pulse card answers "what needs me
 this week?", not "show me everything".
@@ -240,7 +239,7 @@ into paid ops modules" this artifact exists to create:
 | --- | --- | --- |
 | Events this week | View schedule | `/events` |
 | Overdue tasks | Open tasks | `/tasks` |
-| Awaiting approval | Review queue | `/service` |
+| Awaiting approval | Review queue | `/activity` (the one place hours are reviewed; `/service` until #5950 made it a redirect to the member's own log) |
 | Overdue dues | Review invoices | `/billing` |
 | New members | View directory | `/members` |
 
@@ -317,4 +316,3 @@ Tracked separately so this spec can be accepted independently of any build:
 
 - [`README.md`](./README.md#message-kinds-and-actions) — the kind registry this adds to.
 - [`integrations.md`](./integrations.md) — slash-command catalog and renderer registry.
-- [`../activity-feed.md`](../activity-feed.md) — the separate read-only activity aggregation.

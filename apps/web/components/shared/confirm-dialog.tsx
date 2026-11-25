@@ -37,7 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
  *
  * **`null` and `""` are different answers, and two call sites depend on it.**
  * `window.prompt` returns `null` when a person cancels and `""` when they press
- * OK having typed nothing; `tasks-board.tsx` and `service-page.tsx` both branch
+ * OK having typed nothing; `tasks-board.tsx` and `use-service-review.tsx` both branch
  * on `=== null` and then pass `comment || undefined`. A confirmation that
  * collapsed those would silently reject a task with no comment where the person
  * meant to abandon the rejection entirely. So this resolves `null` for cancel

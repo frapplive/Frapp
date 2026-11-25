@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Controller,
   Delete,
@@ -49,6 +50,8 @@ import { BookmarkDto, BookmarkRefDto } from '../dtos/chat.dto';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('bookmarks')
 export class ChatBookmarkController {
   constructor(private readonly bookmarkService: ChatBookmarkService) {}

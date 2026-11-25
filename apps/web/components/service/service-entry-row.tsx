@@ -29,7 +29,7 @@ export function ServiceEntryRow({
 }) {
   const pointsLabel = awardedPointsLabel(entry);
   return (
-    <li className="flex min-h-11 flex-col gap-1 py-2 @2xl:flex-row @2xl:items-center @2xl:justify-between @2xl:gap-3">
+    <li className="flex min-h-11 flex-col gap-1 py-2 @lg:flex-row @lg:items-center @lg:justify-between @lg:gap-3">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{title}</p>
         <p className="text-caption text-muted-foreground">{meta}</p>

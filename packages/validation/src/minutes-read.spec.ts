@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_MEETING_CONTENT, type MeetingContent } from "./meetings";
 import {
+  minutesActionItemMatchKey,
   minutesActionMeta,
+  minutesActionOwner,
   minutesActionRows,
+  minutesActionSuggestions,
   minutesActionStatePrefix,
   minutesAttendanceDetail,
   minutesPreviewCuts,
@@ -236,5 +239,105 @@ describe("notesLookLikeTranscript", () => {
 
   it("counts words", () => {
     expect(notesWordCount("  one two\nthree ")).toBe(3);
+  });
+});
+
+describe("an action item's own Create task (#6051)", () => {
+  const item = (text: string) => ({
+    text,
+    owner_user_id: null,
+    due_date: null,
+  });
+  const suggestion = (
+    id: string,
+    quote: string | null,
+    title = quote ?? "",
+  ) => ({
+    id,
+    quote,
+    task: { title },
+  });
+
+  it("matches an item to its suggestion whatever its case, spacing or punctuation", () => {
+    expect(minutesActionItemMatchKey("  Book the BUS!  ")).toBe(
+      minutesActionItemMatchKey("book the bus"),
+    );
+    const map = minutesActionSuggestions(
+      [item("Order shirts"), item("Book the bus."), item("Call the DJ")],
+      [
+        suggestion("s-bus", "book the bus"),
+        suggestion("s-shirts", "Order shirts"),
+      ],
+    );
+    expect(map.get(0)?.id).toBe("s-shirts");
+    expect(map.get(1)?.id).toBe("s-bus");
+    // Nothing waiting for this one: already a task, dismissed, or none made.
+    expect(map.has(2)).toBe(false);
+  });
+
+  it("gives a suggestion only to the first of two items that read the same", () => {
+    const map = minutesActionSuggestions(
+      [item("Order shirts"), item("order shirts.")],
+      [suggestion("s-shirts", "Order shirts")],
+    );
+    expect([...map.keys()]).toEqual([0]);
+  });
+
+  it("falls back to the title for a suggestion with no quote, and skips one that isn't a task", () => {
+    const map = minutesActionSuggestions(
+      [item("Book the bus")],
+      [
+        { id: "event", quote: "Book the bus", task: null },
+        suggestion("s-bus", null, "Book the bus"),
+      ],
+    );
+    expect(map.get(0)?.id).toBe("s-bus");
+  });
+
+  const nameOf = (id: string) =>
+    ({ u1: "Jake", u2: "Sam", u3: "Alex" })[id] ?? id;
+
+  it("says who the task went to once it is one, else who the minutes named", () => {
+    expect(
+      minutesActionOwner({ ownerId: null, task: null, group: null, nameOf }),
+    ).toBe("Nobody named yet");
+    expect(
+      minutesActionOwner({ ownerId: "u1", task: null, group: null, nameOf }),
+    ).toBe("Jake");
+    const who = (patch: object) => ({
+      who: { audience: null, audience_name: null, assignee_ids: [], ...patch },
+    });
+    expect(
+      minutesActionOwner({
+        ownerId: null,
+        task: who({ assignee_ids: ["u2"] }),
+        group: null,
+        nameOf,
+      }),
+    ).toBe("Sam");
+    expect(
+      minutesActionOwner({
+        ownerId: "u1",
+        task: who({ audience: "people", assignee_ids: ["u2", "u3"] }),
+        group: { total: 2 },
+        nameOf,
+      }),
+    ).toBe("Sam and Alex");
+    expect(
+      minutesActionOwner({
+        ownerId: null,
+        task: who({ audience: "role", audience_name: "Cabinet" }),
+        group: { total: 6 },
+        nameOf,
+      }),
+    ).toBe("Everyone in Cabinet");
+    expect(
+      minutesActionOwner({
+        ownerId: null,
+        task: who({ audience: "everyone" }),
+        group: { total: 40 },
+        nameOf,
+      }),
+    ).toBe("Everyone");
   });
 });

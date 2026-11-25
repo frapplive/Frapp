@@ -24,7 +24,10 @@ import {
  * categories (beside Frapp Intelligence's unrelated safety ones), and the recap push
  * names its own, `recap`, through `RECAP_NOTIFICATION_CATEGORY` (#4985).
  * Seven are here. The chat reminder's `reminder` answers a reminder the member
- * set themselves, so it has no switch. Three more are deliberately absent:
+ * set themselves, so it has no switch. Recruitment's `rush` (#5934) has none
+ * either: a follow-up someone set for the member, or the stale alert on a
+ * prospect they own, is the work itself, not noise around it
+ * (`RUSH_NOTIFICATION_CATEGORY` in `scheduled-jobs.service.ts`). Three more are deliberately absent:
  *
  * - **`chat`** — dropped as a switch on 2026-11-06 (the owner's iOS testing:
  *   "Do we really want users to be able to turn off chat?"). It silenced every

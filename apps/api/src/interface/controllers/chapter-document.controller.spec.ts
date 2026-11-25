@@ -161,9 +161,46 @@ describe('ChapterDocumentController', () => {
       const findByChapter = jest.fn().mockResolvedValue([]);
       Object.assign(mockChapterDocumentService, { findByChapter });
       await controller.list('chapter-123', 'user-1', 'Exec');
-      expect(findByChapter).toHaveBeenCalledWith('chapter-123', 'user-1', {
-        folder: 'Exec',
-      });
+      expect(findByChapter).toHaveBeenCalledWith(
+        'chapter-123',
+        'user-1',
+        { folder: 'Exec' },
+        { minutes: false },
+      );
+    });
+
+    // #5949: rows that file a meeting's minutes have no file, so a client
+    // from before them (a shipped phone build) must never be sent one.
+    it("sends meetings' minutes rows only to a client that asks with minutes=true", async () => {
+      const findByChapter = jest.fn().mockResolvedValue([]);
+      Object.assign(mockChapterDocumentService, { findByChapter });
+      await controller.list('chapter-123', 'user-1');
+      expect(findByChapter).toHaveBeenLastCalledWith(
+        'chapter-123',
+        'user-1',
+        undefined,
+        { minutes: false },
+      );
+      await controller.list(
+        'chapter-123',
+        'user-1',
+        undefined,
+        undefined,
+        'true',
+      );
+      expect(findByChapter).toHaveBeenLastCalledWith(
+        'chapter-123',
+        'user-1',
+        undefined,
+        { minutes: true },
+      );
+      await controller.list('chapter-123', 'user-1', undefined, undefined, '1');
+      expect(findByChapter).toHaveBeenLastCalledWith(
+        'chapter-123',
+        'user-1',
+        undefined,
+        { minutes: false },
+      );
     });
   });
 

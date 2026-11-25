@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   ConflictException,
+  ForbiddenException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -28,6 +29,8 @@ import type {
 } from '#domain/entities/chapter-document.entity';
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import { RbacService } from './rbac.service';
+import { MeetingService } from './meeting.service';
+import { CHAPTER_REPOSITORY } from '#domain/repositories/chapter.repository.interface';
 import { ChannelAccessListService } from './channel-access-list.service';
 import type { ChannelAccessHolder } from '#domain/utils/channel-access';
 
@@ -44,6 +47,8 @@ describe('ChapterDocumentService', () => {
     memberHasAnyPermission: jest.Mock;
   };
   let mockAccessLists: { normalize: jest.Mock; listOptions: jest.Mock };
+  let mockMeetings: { readablePosted: jest.Mock };
+  let mockChapterRepo: { findById: jest.Mock };
 
   /** What the caller holds for lists: nothing, unless a test says so. */
   const holder = (
@@ -55,7 +60,7 @@ describe('ChapterDocumentService', () => {
     alumniEntries: new Set(),
   });
 
-  const baseDocument: ChapterDocument = {
+  const baseDocument = {
     id: 'doc-1',
     chapter_id: 'ch-1',
     title: 'Bylaws 2025',
@@ -76,7 +81,8 @@ describe('ChapterDocumentService', () => {
     drive_link_status: null,
     drive_synced_at: null,
     who_can_see: null,
-  };
+    meeting_id: null,
+  } satisfies ChapterDocument;
 
   const baseFolder: ChapterDocumentFolder = {
     id: 'folder-1',
@@ -87,6 +93,7 @@ describe('ChapterDocumentService', () => {
     pinned_at: null,
     who_can_see: null,
     drive_folder_id: null,
+    minutes_series_key: null,
   };
 
   beforeEach(async () => {
@@ -105,7 +112,11 @@ describe('ChapterDocumentService', () => {
       setWhoCanSee: jest.fn(),
       updateFiling: jest.fn(),
       moveMany: jest.fn(),
+      findInFolders: jest.fn().mockResolvedValue([]),
+      fileMinutes: jest.fn(),
+      fileUnfiledMinutes: jest.fn(),
     };
+    mockMeetings = { readablePosted: jest.fn().mockResolvedValue(new Map()) };
 
     mockRbac = {
       getChannelAccessHolder: jest.fn().mockResolvedValue(holder()),
@@ -162,6 +173,11 @@ describe('ChapterDocumentService', () => {
       deleteFiles: jest.fn(),
     };
 
+    // Every module on (`enabled_modules` unset), unless a test turns one off.
+    mockChapterRepo = {
+      findById: jest.fn().mockResolvedValue({ id: 'ch-1' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChapterDocumentService,
@@ -183,6 +199,8 @@ describe('ChapterDocumentService', () => {
         },
         { provide: RbacService, useValue: mockRbac },
         { provide: ChannelAccessListService, useValue: mockAccessLists },
+        { provide: MeetingService, useValue: mockMeetings },
+        { provide: CHAPTER_REPOSITORY, useValue: mockChapterRepo },
       ],
     }).compile();
 
@@ -800,6 +818,7 @@ describe('ChapterDocumentService', () => {
 
       expect(mockDocumentRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
         folder: 'Governance',
+        filesOnly: true,
       });
       expect(result).toHaveLength(1);
     });
@@ -809,10 +828,9 @@ describe('ChapterDocumentService', () => {
 
       const result = await service.findByChapter('ch-1', 'user-1');
 
-      expect(mockDocumentRepo.findByChapter).toHaveBeenCalledWith(
-        'ch-1',
-        undefined,
-      );
+      expect(mockDocumentRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
+        filesOnly: true,
+      });
       expect(result).toHaveLength(1);
     });
 
@@ -823,6 +841,7 @@ describe('ChapterDocumentService', () => {
 
       expect(mockDocumentRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
         search: 'bylaws',
+        filesOnly: true,
       });
     });
 
@@ -837,6 +856,7 @@ describe('ChapterDocumentService', () => {
       expect(mockDocumentRepo.findByChapter).toHaveBeenCalledWith('ch-1', {
         folder: 'Governance',
         search: 'bylaws',
+        filesOnly: true,
       });
     });
   });
@@ -1984,6 +2004,319 @@ describe('ChapterDocumentService', () => {
   });
 
   // #5563: rename a file and move it to another folder after upload.
+  // #5949: a meeting's posted minutes are filed as a row here, and the row
+  // must never reach a member the meeting did not invite. `MeetingService`
+  // owns that rule; these pin that every read path here asks it.
+  describe("a meeting's minutes row (#5949)", () => {
+    const facts = {
+      meeting_id: 'mtg-exec',
+      event_name: 'Exec Board (renamed)',
+      event_start_time: '2026-11-19T00:00:00.000Z',
+      meeting_type: 'exec' as const,
+      other_label: null,
+      decision_count: 2,
+      action_item_count: 3,
+      recorded: false,
+      gist: 'Budget approved',
+    };
+    const minutesRow: ChapterDocument = {
+      ...baseDocument,
+      id: 'doc-minutes',
+      title: 'Exec Board',
+      description: null,
+      folder: 'Minutes / Exec Board',
+      storage_path: null,
+      uploaded_by: null,
+      content_type: null,
+      byte_size: null,
+      document_type: 'Minutes',
+      effective_date: null,
+      meeting_id: 'mtg-exec',
+    };
+    const seriesFolder: ChapterDocumentFolder = {
+      ...baseFolder,
+      id: 'folder-series',
+      name: 'Minutes / Exec Board',
+      minutes_series_key: 'event-exec-first',
+    };
+    const rootFolder: ChapterDocumentFolder = {
+      ...baseFolder,
+      id: 'folder-minutes',
+      name: 'Minutes',
+      minutes_series_key: 'root',
+    };
+    /** The meeting invites the member, or leaves them out. */
+    const invited = (yes: boolean) =>
+      mockMeetings.readablePosted.mockResolvedValue(
+        yes ? new Map([['mtg-exec', facts]]) : new Map(),
+      );
+
+    beforeEach(() => {
+      mockFolderRepo.findByChapter.mockResolvedValue([
+        baseFolder,
+        rootFolder,
+        seriesFolder,
+      ]);
+      mockDocumentRepo.findByChapter.mockResolvedValue([
+        baseDocument,
+        minutesRow,
+      ]);
+      mockDocumentRepo.findById.mockResolvedValue(minutesRow);
+      mockDocumentRepo.findByIds.mockResolvedValue([minutesRow]);
+      mockDocumentRepo.findInFolders.mockResolvedValue([minutesRow]);
+    });
+
+    it('lists it only to a member the meeting invites, asking the meeting rule for exactly its minutes', async () => {
+      invited(false);
+      const hidden = await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(hidden.map((doc) => doc.id)).toEqual(['doc-1']);
+      expect(mockMeetings.readablePosted).toHaveBeenCalledWith(
+        'ch-1',
+        'user-1',
+        ['mtg-exec'],
+      );
+
+      invited(true);
+      const shown = await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(shown.map((doc) => doc.id)).toEqual(['doc-1', 'doc-minutes']);
+    });
+
+    it('shows it to no one while the chapter has Meetings off, and reads the chapter only when one is in play', async () => {
+      invited(true);
+      mockChapterRepo.findById.mockResolvedValue({
+        id: 'ch-1',
+        enabled_modules: { meetings: false },
+      });
+      const off = await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(off.map((doc) => doc.id)).toEqual(['doc-1']);
+      expect(mockMeetings.readablePosted).not.toHaveBeenCalled();
+
+      mockChapterRepo.findById.mockClear();
+      mockDocumentRepo.findByChapter.mockResolvedValue([baseDocument]);
+      await service.findByChapter('ch-1', 'user-1', undefined);
+      expect(mockChapterRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('hides it without reading any who-can-see list: no list is in play here', async () => {
+      invited(false);
+      await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(mockRbac.getChannelAccessHolder).not.toHaveBeenCalled();
+    });
+
+    it("carries what the row shows, under the meeting's name as the minutes hold it now", async () => {
+      invited(true);
+      const [file, row] = await service.findByChapter(
+        'ch-1',
+        'user-1',
+        undefined,
+        { minutes: true },
+      );
+      expect(file.minutes).toBeNull();
+      expect(row.title).toBe('Exec Board (renamed)');
+      expect(row.minutes).toEqual(facts);
+    });
+
+    it('asks the repository for files only unless the client asked for minutes', async () => {
+      await service.findByChapter('ch-1', 'user-1');
+      expect(mockDocumentRepo.findByChapter).toHaveBeenLastCalledWith('ch-1', {
+        filesOnly: true,
+      });
+      await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(mockDocumentRepo.findByChapter).toHaveBeenLastCalledWith('ch-1', {
+        filesOnly: false,
+      });
+    });
+
+    it("is still held to its folder's list: never open to more people than its folder", async () => {
+      invited(true);
+      mockFolderRepo.findByChapter.mockResolvedValue([
+        baseFolder,
+        { ...seriesFolder, who_can_see: ['tier:exec'] },
+      ]);
+      mockRbac.getChannelAccessHolder.mockResolvedValue(
+        holder(['tier:member']),
+      );
+      const result = await service.findByChapter('ch-1', 'user-1', undefined, {
+        minutes: true,
+      });
+      expect(result.map((doc) => doc.id)).toEqual(['doc-1']);
+    });
+
+    it('answers a single read with a 404 for a member the meeting leaves out, and with no file links for one it invites', async () => {
+      invited(false);
+      await expect(
+        service.findById('doc-minutes', 'ch-1', 'user-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      invited(true);
+      const opened = await service.findById('doc-minutes', 'ch-1', 'user-1');
+      expect(opened.downloadUrl).toBeNull();
+      expect(opened.forcedDownloadUrl).toBeNull();
+      expect(opened.minutes).toEqual(facts);
+      expect(
+        mockStorageProvider.getSignedInlineAndAttachmentUrls,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('answers star, pin, move and who-can-see with a 404 for a member the meeting leaves out', async () => {
+      invited(false);
+      mockRbac.memberHasAnyPermission.mockResolvedValue(true);
+      await expect(
+        service.setDocumentStarred('user-1', 'ch-1', 'doc-minutes', true),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.setDocumentPinned('doc-minutes', 'ch-1', 'user-1', true),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.updateDocument('doc-minutes', 'ch-1', 'user-1', {
+          folder: 'Governance',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.moveDocuments(['doc-minutes'], 'ch-1', 'user-1', null),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.setDocumentAccess('doc-minutes', 'ch-1', 'user-1', null),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        service.delete('doc-minutes', 'ch-1', 'user-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockStarRepo.add).not.toHaveBeenCalled();
+      expect(mockDocumentRepo.setPinnedAt).not.toHaveBeenCalled();
+    });
+
+    it("drops a member's star on minutes they can no longer read", async () => {
+      invited(false);
+      mockStarRepo.findByUser.mockResolvedValue([
+        {
+          id: 'star-1',
+          user_id: 'user-1',
+          chapter_id: 'ch-1',
+          folder_id: null,
+          document_id: 'doc-minutes',
+          created_at: '2026-11-20T00:00:00.000Z',
+        },
+      ]);
+      await expect(service.listStars('user-1', 'ch-1')).resolves.toEqual({
+        folder_ids: [],
+        document_ids: [],
+      });
+    });
+
+    it('signs no preview link for it', async () => {
+      invited(true);
+      await expect(
+        service.previewUrls(['doc-minutes'], 'ch-1', 'user-1'),
+      ).resolves.toEqual([]);
+      expect(mockStorageProvider.getSignedDownloadUrls).not.toHaveBeenCalled();
+    });
+
+    it('is never among the files every reader of a channel can open', async () => {
+      await expect(
+        service.visibleToAll(
+          'ch-1',
+          ['doc-minutes'],
+          [{ user_id: 'user-1', channel_access: holder([], true) }],
+        ),
+      ).resolves.toEqual(new Set());
+    });
+
+    it("is the minutes' own to rename, delete and say who sees: Documents refuses each", async () => {
+      invited(true);
+      mockRbac.memberHasAnyPermission.mockResolvedValue(true);
+      await expect(
+        service.delete('doc-minutes', 'ch-1', 'user-1'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(mockStorageProvider.deleteFile).not.toHaveBeenCalled();
+      expect(mockDocumentRepo.delete).not.toHaveBeenCalled();
+      await expect(
+        service.updateDocument('doc-minutes', 'ch-1', 'user-1', {
+          title: 'Something else',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(
+        service.setDocumentAccess('doc-minutes', 'ch-1', 'user-1', [
+          'tier:exec',
+        ]),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(mockDocumentRepo.setWhoCanSee).not.toHaveBeenCalled();
+    });
+
+    it('can be starred and pinned by a member the meeting invites', async () => {
+      invited(true);
+      mockDocumentRepo.setPinnedAt.mockResolvedValue({
+        ...minutesRow,
+        pinned_at: '2026-11-24T00:00:00.000Z',
+      });
+      await service.setDocumentStarred('user-1', 'ch-1', 'doc-minutes', true);
+      expect(mockStarRepo.add).toHaveBeenCalledWith('user-1', 'ch-1', {
+        document_id: 'doc-minutes',
+      });
+      await expect(
+        service.setDocumentPinned('doc-minutes', 'ch-1', 'user-1', true),
+      ).resolves.toMatchObject({ id: 'doc-minutes' });
+    });
+
+    describe("a repeating meeting's own folder", () => {
+      it('shows only to a member who sees something in it, so its name never reaches one the meetings leave out', async () => {
+        invited(false);
+        const hidden = await service.listFolders('ch-1', 'user-1');
+        expect(hidden.map((folder) => folder.name)).toEqual([
+          'Governance',
+          'Minutes',
+        ]);
+        expect(mockDocumentRepo.findInFolders).toHaveBeenCalledWith('ch-1', [
+          'Minutes / Exec Board',
+        ]);
+
+        invited(true);
+        const shown = await service.listFolders('ch-1', 'user-1');
+        expect(shown.map((folder) => folder.name)).toEqual([
+          'Governance',
+          'Minutes',
+          'Minutes / Exec Board',
+        ]);
+      });
+
+      it("answers a star or pin on it with a 404, and refuses an upload filed into it, for a member who can't see it", async () => {
+        invited(false);
+        mockFolderRepo.findById.mockResolvedValue(seriesFolder);
+        mockFolderRepo.findByName.mockResolvedValue(seriesFolder);
+        await expect(
+          service.setFolderStarred('user-1', 'ch-1', 'folder-series', true),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        await expect(
+          service.setFolderPinned('folder-series', 'ch-1', 'user-1', true),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        await expect(
+          service.checkedFiling(
+            'ch-1',
+            'user-1',
+            'Minutes / Exec Board',
+            undefined,
+          ),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+
+      it("keeps the chapter's Minutes folder in view for everyone: its name says nothing", async () => {
+        invited(false);
+        mockDocumentRepo.findInFolders.mockResolvedValue([]);
+        const folders = await service.listFolders('ch-1', 'user-1');
+        expect(folders.map((folder) => folder.id)).toContain('folder-minutes');
+      });
+    });
+  });
+
   describe('renaming and moving', () => {
     const driveCopy: ChapterDocument = {
       ...baseDocument,

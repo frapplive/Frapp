@@ -19,6 +19,7 @@ import {
   MAX_PRESENCE_CHANNELS,
   PRESENCE_JOIN_GRACE_MS,
 } from './chat-push-worker.service';
+import { profilePhotoProviders } from '#test/helpers/profile-photo-url.stub';
 import { CHAT_NOTIFICATION_PREFERENCE_REPOSITORY } from '#domain/repositories/chat-notification-preference.repository.interface';
 import { CHAT_PUSH_DISPATCH_REPOSITORY } from '#domain/repositories/chat-push-dispatch.repository.interface';
 import { CHAT_CHANNEL_REPOSITORY } from '#domain/repositories/chat.repository.interface';
@@ -84,6 +85,7 @@ describe('ChatPushWorkerService — presence channels and the fan-out span', () 
     const mod = await Test.createTestingModule({
       providers: [
         ChatPushWorkerService,
+        ...profilePhotoProviders(),
         ChannelCacheService,
         {
           provide: SUPABASE_CLIENT,

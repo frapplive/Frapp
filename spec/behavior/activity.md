@@ -14,11 +14,12 @@ a row opens chat's own card to act in place) is
 the phone's screen, the Activity tab (#4610), is in
 [`../ui/mobile/screens.md`](../ui/mobile/screens.md) (supporting routes).
 
-Not to be confused with two other things that use the word:
+Not to be confused with the points activity log (#3715): a member's points history, inside Points.
 
-- [`activity-feed.md`](activity-feed.md), `GET /v1/activity-feed`: a feed of what happened in the
-  chapter (new members, announcements, uploads). No screen renders it.
-- The points activity log (#3715): a member's points history, inside Points.
+There was also a chapter activity feed, `GET /v1/activity-feed`: what happened in the chapter (new
+members, announcements, uploads). No screen ever rendered it after the chat-first redesign removed
+the web home it was written for, and it was deleted on 2026-11-24 with its spec
+([#5951](https://github.com/frapplive/Frapp/issues/5951)).
 
 ## What the read returns
 
@@ -107,9 +108,10 @@ member's own answer, not the event's default:
   without it `GET /v1/tasks/:id` refuses them a task they don't hold, and a row that opens to a
   refusal is worse than no row.
 - **Files:** none. The read listed the chapter documents and backwork the caller uploaded
-  (#3897's ask, "documents and backwork you uploaded"). `made_by_you.files` is still served,
-  always empty and marked deprecated, so a client built before the change (an open web tab, a
-  phone's over-the-air bundle) does not fail on its absence; its removal is tracked separately.
+  (#3897's ask, "documents and backwork you uploaded"). `made_by_you.files` was served for a while
+  after, always empty and marked deprecated, for clients built before the change; no shipped phone
+  build read it, and it was removed on 2026-11-24
+  ([#5951](https://github.com/frapplive/Frapp/issues/5951)).
   Changed in [#4291](https://github.com/pdcarlson/Frapp/issues/4291) by `pdcarlson` for Shawn,
   2026-11-11: removed from the page and the read ("I don't think that files uploaded by you
   needs to be a part of the activity page"). No ability went with it: a member's uploads are in
@@ -130,8 +132,13 @@ member's own answer, not the event's default:
 **Reminders:** the reminders the caller set on chat messages, due ones first. See
 [Reminders](#reminders).
 
+**Minutes:** meetings the caller is to write minutes for, their own drafts, and the drafts they
+take notes on. See [Minutes](#minutes).
+
 **`needs_you_count`** is every "Needs you" row plus each event the member can check in to right
-now and hasn't, plus each due reminder, less what the member snoozed ([Snooze](#snooze)). It is counted before the list cap, so a badge built from it does not stop at 25; due reminders are counted from the up to 50 the read serves.
+now and hasn't, plus each due reminder, plus every meeting to write minutes for, every own draft
+and every draft they were added to take notes on and haven't started ([Minutes](#minutes)), less
+what the member snoozed ([Snooze](#snooze)). It is counted before the list cap, so a badge built from it does not stop at 25; due reminders are counted from the up to 50 the read serves.
 It is what the member can act on now, and so is not the week ring's "left", which also counts
 events still ahead ([Week](#week), settled 2026-11-13).
 
@@ -141,7 +148,7 @@ page on both clients. See [Week](#week).
 ## Rules
 
 - **A module that is off contributes nothing.** Each section checks its own module
-  (`tasks`, `hours`, `polls`, `events`) and does not read it while the
+  (`tasks`, `hours`, `polls`, `events`, `meetings`) and does not read it while the
   chapter has it off ([`../product/modules.md`](../product/modules.md)). Links, sign-ups and forms
   come from chat, which has no switch, so they are always read.
 - **Each list carries at most 25 rows**, except Made by you's polls (25 open and 25 closed) and
@@ -454,13 +461,13 @@ opens on the page ([`../ui/web-dashboard/README.md` § Activity](../ui/web-dashb
 
 ## Goals
 
-What a chapter holds its members to, so a bar has an end ([#1062](https://github.com/pdcarlson/Frapp/issues/1062); Paul picked officer-set goals per role, 2026-11-12). Officers set them on the module pages in Chapter settings: a points goal on Points, and a service hours goal and a study hours goal on Service hours. `GET /v1/goals` reads them (`chapter-config:view`) and `PUT /v1/goals/:metric` replaces one measure's (`chapter-config:view` and `chapter-config:manage`); `chapter_goals` stores them, one row per chapter and measure. A member reads only their own: on the standing, or through `GET /v1/goals/mine` (`members:view`), which the phone's Study screen and More row use so they needn't read the whole standing.
+What a chapter holds its members to, so a bar has an end ([#1062](https://github.com/pdcarlson/Frapp/issues/1062); Paul picked officer-set goals per role, 2026-11-12). Officers set them on the module pages in Chapter settings: a points goal on Points, and a service hours goal and a study hours goal on Service hours. `GET /v1/goals` reads them (`chapter-config:view`) and `PUT /v1/goals/:metric` replaces one measure's (`chapter-config:view` and `chapter-config:manage`); `chapter_goals` stores them, one row per chapter and measure. A member reads only their own: on the standing, or through `GET /v1/goals/mine` (`members:view`), which the phone's Study screen uses so it needn't read the whole standing.
 
 - **The window.** Points and service are per semester, the standing's window; study is per week, Sunday at local midnight, the Study screen's week.
 - **One goal for everyone, and roles set apart.** Each measure has an optional goal for every member and any number of roles with their own (pledges owing more study hours, say), up to 50. A role set apart with no number is held to no goal, which is how alumni or an officer role is exempted while everyone else owes hours. A member who holds several roles set apart is held to the goal on their highest-ranked one (lowest display order, then name, as the Roles page ranks them); a member holding none is held to everyone's, or to nothing.
 - **Units.** Points are points. Hours are stored as minutes and typed in whole hours: up to 500 a semester for service and 80 a week for study, and up to 100,000 points (`GOAL_TARGET_MAX` in `@repo/validation`). A save naming a role the chapter doesn't have, or one role twice, is refused.
 - **A deleted role** drops out of the goals when they are next read, and the next save leaves it out.
-- **Where a member sees it.** The "This semester" block on You (web: the profile) draws the ring ([§ Standing](#standing)); on the phone the Study screen's THIS WEEK line reads "4.5 of 6.0 hrs" over a meter and More's Study hours row reads "4.0 / 6.0 hrs" ([`../ui/mobile/screens.md`](../ui/mobile/screens.md)).
+- **Where a member sees it.** The "This semester" block on You (web: the profile) draws the ring ([§ Standing](#standing)); on the phone the Study screen's THIS WEEK line reads "4.5 of 6.0 hrs" over a meter (You's Study hours row, which read "4.0 / 6.0 hrs", went with #5950) ([`../ui/mobile/screens.md`](../ui/mobile/screens.md)).
 - **Audit.** Each save writes a `chapter_goals_updated` row to `chapter_audit_log`, with the measure's goals before and after as its diff.
 
 ## Unread
@@ -512,7 +519,9 @@ A member can snooze a row that waits on them until a time they pick, and it come
 Snooze and Slack's Later ("Remind me") work: the thing isn't done, it just isn't for now.
 
 - **Which rows.** The rows that can be unread ([§ Unread](#unread)): everything in Needs you,
-  Coming up and Links. Nothing in Made by you, which waits on others.
+  Coming up and Links. Nothing in Made by you, which waits on others, and no
+  [Minutes](#minutes) row, whose ids (an event, minutes) a snooze can't name apart from Coming
+  up's event.
 - **Gone until then.** `PUT /v1/activity/snoozes` (the item's kind and id, as a read names it, and
   `until`) takes it off the member's list. The read still serves the row, with `snoozed_until`,
   so a client lists it under Snoozed and brings it back on its own clock; it is not counted in
@@ -624,6 +633,44 @@ reminders beside what they saved. Since #5779 they are rows in To do on the day 
   (`PUT /v1/reminders/messages/:messageId`) and Done clears it (`DELETE`); a row whose channel the
   member lost offers only Done. A row carries no unread dot: the member set it themselves, and a due one is marked by
   its badge.
+
+## Minutes
+
+What the web's Meetings page and the phone's Minutes list asked of a member before they went
+([#5949](https://github.com/frapplive/Frapp/issues/5949); Paul, 2026-11-24: posted minutes are
+filed as documents, so the list pages are gone). Served as `minutes` on `GET /v1/activity`
+(`ActivityMinutesService`) while the chapter has Meetings on, and drawn on both clients as a
+**Minutes** run in To do, after the days and Later and before No deadline, three rows before
+"Show N more", from the same rows in `@repo/hooks` (`activityToDos`), in this order:
+
+- **To write** (`to_write`), only for a holder of `meetings:record`: each event the member can
+  see (the event read rule, as Coming up reads it) that ended in the last 30 days, whose name
+  reads as a meeting (`minutesToWrite`, [`meetings.md` § Meetings, tied to their
+  events](meetings.md#meetings-tied-to-their-events)), with no minutes by anyone, a draft the
+  member can't read included, and not marked "No minutes". Newest first. The row is the
+  meeting's name and its day, and opens the event; **Write minutes** on the row starts minutes on
+  that event with the type its name suggests and opens them, as the event's own Minutes row does
+  (another officer's minutes that started meanwhile answer "already started", and the row leaves
+  on the next read). Its menu (web's `⋯` and right-click, the phone's long press) offers **No
+  minutes for this meeting**, which settles it: web says so in a toast with Undo, the phone in a
+  line with Undo.
+- **Drafts** (`drafts`): the member's own unposted minutes they may still read
+  ([`meetings.md` § Who can read minutes](meetings.md#who-can-read-minutes)), newest meeting
+  first, with where each stands in the minutes' own words ("Drafting", "Not started", "Winston
+  Hewitt is recording"; `minutesDraftStateLabel`), and "No meeting" before the day while none is
+  linked. The row opens the minutes.
+- **Taking notes** (`taking_notes`): another officer's unposted minutes the member takes notes on,
+  added by the author or an editor, or joined by writing ([`meetings.md` § Several
+  note-takers](meetings.md#several-note-takers)), newest meeting first: the meeting, its day and
+  "Minutes by Olive Officer", then **Take notes** for one they were added to and haven't started,
+  else Taking notes. The row opens their notes (web's notes page, the phone's notes sheet). Empty
+  on a server with AI off, where note-taking's routes don't exist.
+
+Each list is at most 25. Every meeting to write, every draft, and each draft the member was added
+to and hasn't started counts in `needs_you_count`; notes they are already taking are their own,
+not an ask. The rows carry no unread dot and no Snooze ([§ Snooze](#snooze)), and narrowing To do
+to a kind by the week ring leaves them out, as it does reminders. A failed read is served empty
+and named `minutes` in `unavailable`. The next meeting coming is the Calendar's, not Activity's.
 
 ## Links
 

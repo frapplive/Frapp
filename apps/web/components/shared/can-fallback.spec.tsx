@@ -374,6 +374,11 @@ describe("the branches this change did not touch", () => {
  * **`polls-page` left both lists by ceasing to exist** (#3871): the `/polls`
  * page and its `polls:view_all` surface gate were retired, not reclassified.
  *
+ * **`points-audit-card` and `service-page` left both lists with #5950.** The
+ * Service hours page is gone, and the audit card became the points ledger on
+ * Chapter settings' Points page, where the tool list (`settings-access.ts`)
+ * decides who sees it, as it does for Reports' form, so it mounts no gate.
+ *
  * **`invoice-admin-card` has since left this list, by ceasing to exist.** The
  * greenfield Finance lane merged it into `components/billing/invoice-list.tsx`,
  * where there is no longer a gate standing in for the invoice surface: the
@@ -387,9 +392,7 @@ describe("the branches this change did not touch", () => {
 const SURFACE_GATES: readonly { file: string; match: string }[] = [
   { file: "components/reports/reports-page.tsx", match: 'permission="reports:export"' },
   { file: "components/geofences/study-zones-manager.tsx", match: 'permission="geofences:manage"' },
-  { file: "components/points/points-audit-card.tsx", match: 'permission="points:view_all"' },
   { file: "components/settings/settings-semester-tab.tsx", match: 'permission="semester:rollover"' },
-  { file: "components/service/service-page.tsx", match: 'permission="service:approve"' },
   { file: "components/chat-admin/chat-admin-page.tsx", match: 'permission="channels:manage"' },
   { file: "components/chat-admin/chat-reports-card.tsx", match: "allOf={CHAT_REPORT_QUEUE_PERMISSIONS}" },
   { file: "components/discord-import/discord-import-page.tsx", match: 'permission="channels:manage"' },
@@ -419,9 +422,7 @@ const CONSUMERS: readonly string[] = [
   "components/events/event-detail-sheet.tsx",
   "components/events/events-page.tsx",
   "components/geofences/study-zones-manager.tsx",
-  "components/points/points-audit-card.tsx",
   "components/reports/reports-page.tsx",
-  "components/service/service-page.tsx",
   "components/settings/settings-semester-tab.tsx",
   "components/shared/subscription-gate.tsx",
   "components/tasks/tasks-board.tsx",

@@ -44,13 +44,13 @@ const ALLOWED: Record<string, string> = {
   "apps/web/components/settings/settings-chapter-mark-card.tsx":
     "the Settings preview, which feeds resolveChapterMark",
   "apps/web/components/layout/crest-tile.tsx":
-    "chapterMarkFor turns show_greek_letters off for an organization that hides its letters (FIJI) before the mark goes through resolveChapterMark; the nav crest and the home view (#3779) both use it",
+    "chapterMarkFor turns show_greek_letters off for an organization that hides its letters (FIJI) before the mark goes through resolveChapterMark; every crest web draws (the sidebar's head, the chapter picker) uses it",
   "apps/mobile/app/(auth)/create-chapter.tsx":
     "the mobile wizard's input for the field",
   "apps/mobile/lib/chapter-branding.ts":
     "turns show_greek_letters off for an organization that hides its letters (FIJI) before Chat home's mark goes through chapterTextMark",
-  "apps/api/src/application/services/invite.service.ts":
-    "turns show_greek_letters off for an organization that hides its letters (FIJI) before the invite preview's mark_text goes through chapterTextMark",
+  "apps/api/src/domain/utils/chapter-card-mark.ts":
+    "turns show_greek_letters off for an organization that hides its letters (FIJI) before the invite card's and the interest form's mark_text goes through chapterTextMark",
 };
 
 /**

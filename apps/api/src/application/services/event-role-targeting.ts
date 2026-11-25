@@ -11,7 +11,8 @@ import { SystemPermissions } from '#domain/constants/permissions';
 /**
  * `spec/behavior/events.md` § Attendance by role. The API's one door to the
  * rule in `@repo/validation` (`event-attendance.ts`): who an event is for,
- * read the same way by the read gate (list, detail, search, feed),
+ * read the same way by the read gate (list, detail, search, Activity, the
+ * calendar feed),
  * check-in, the auto-absent sweep and the pushes, so a change to the rule
  * can't land at one call site and miss another.
  */

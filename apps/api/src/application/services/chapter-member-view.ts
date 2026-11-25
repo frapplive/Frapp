@@ -57,6 +57,10 @@ export const CHAPTER_MEMBER_VIEW_FIELDS = [
   'updated_at',
   // Chunk 02 customization columns the member-facing shell renders from.
   'org_archetype',
+  // Which shell to draw (#5933): a council's reads `kind` and its type.
+  'kind',
+  'council_type',
+  'recruitment_model',
   'enabled_modules',
   'vocabulary',
   'branding',

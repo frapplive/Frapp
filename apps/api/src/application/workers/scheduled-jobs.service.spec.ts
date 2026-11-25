@@ -11,6 +11,7 @@ import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interf
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import { EventExcuseService } from '../services/event-excuse.service';
 import { TaskService } from '../services/task.service';
+import { RbacService } from '../services/rbac.service';
 import { SCHEDULED_JOBS_REPOSITORY } from '#domain/repositories/scheduled-jobs.repository.interface';
 import { SIGNET_ENGINE_VERSION } from '@repo/chapter-theme';
 import { buildChapterPalette } from '../services/chapter-palette';
@@ -75,6 +76,11 @@ describe('ScheduledJobsService', () => {
   let endTaskSeries: jest.Mock;
   let notifyAssigned: jest.Mock;
   let followerRecipients: jest.Mock;
+  let findRushFollowUpsDueBetween: jest.Mock;
+  let findOwnedOpenRushCandidates: jest.Mock;
+  let expireRushBids: jest.Mock;
+  let findRushChapters: jest.Mock;
+  let memberHasAnyPermission: jest.Mock;
 
   const INVOICE = {
     id: 'inv-1',
@@ -147,6 +153,18 @@ describe('ScheduledJobsService', () => {
     endTaskSeries = jest.fn().mockResolvedValue(true);
     notifyAssigned = jest.fn().mockResolvedValue(undefined);
     followerRecipients = jest.fn().mockResolvedValue([]);
+    findRushFollowUpsDueBetween = jest.fn().mockResolvedValue([]);
+    findOwnedOpenRushCandidates = jest.fn().mockResolvedValue([]);
+    expireRushBids = jest.fn().mockResolvedValue(0);
+    // Default: every chapter read has recruitment on and no settings row.
+    findRushChapters = jest.fn((ids: string[]) =>
+      Promise.resolve({
+        enabledModules: new Map(ids.map((id) => [id, null])),
+        staleDays: new Map(),
+      }),
+    );
+    // Default: the member can still work prospects.
+    memberHasAnyPermission = jest.fn().mockResolvedValue(true);
 
     const mod = await Test.createTestingModule({
       providers: [
@@ -168,6 +186,10 @@ describe('ScheduledJobsService', () => {
             findDueTaskSeries,
             materializeTaskSeriesCopy,
             endTaskSeries,
+            findRushFollowUpsDueBetween,
+            findOwnedOpenRushCandidates,
+            expireRushBids,
+            findRushChapters,
           },
         },
         {
@@ -191,6 +213,7 @@ describe('ScheduledJobsService', () => {
           provide: TaskService,
           useValue: { notifyAssigned, followerRecipients },
         },
+        { provide: RbacService, useValue: { memberHasAnyPermission } },
       ],
     }).compile();
 
@@ -1885,6 +1908,254 @@ describe('ScheduledJobsService', () => {
       await expect(service.handleStalePaletteSweep()).resolves.toBeUndefined();
       expect(writeRecomputedPalette).toHaveBeenCalled();
       warn.mockRestore();
+    });
+  });
+
+  describe('recruitment follow-ups and the stale alert (#5934)', () => {
+    const FOLLOW_UP = {
+      id: 'cand-1',
+      chapter_id: 'chap-1',
+      display_name: 'Alex Kim',
+      follow_up_on: TODAY,
+      follow_up_note: 'Invite to house dinner',
+      follow_up_user_id: 'user-1',
+    };
+    const OWNED = {
+      id: 'cand-2',
+      chapter_id: 'chap-1',
+      display_name: 'Sam Lee',
+      owner_id: 'user-2',
+      closed_reason: null,
+      last_contact_on: '2026-07-29',
+      created_at: '2026-07-01T00:00:00Z',
+    };
+
+    it('pushes a follow-up to its member on the morning it is due', async () => {
+      findRushFollowUpsDueBetween.mockResolvedValue([FOLLOW_UP]);
+
+      const result = await service.sweepRushFollowUps(MORNING);
+
+      expect(result).toEqual({ sent: 1 });
+      expect(claimDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-1',
+        'FOLLOW_UP',
+        TODAY,
+      );
+      expect(notifyUser).toHaveBeenCalledWith(
+        'user-1',
+        'chap-1',
+        expect.objectContaining({
+          title: 'Follow up with Alex Kim today',
+          // Never what to do: no push carries the chapter's words about a
+          // prospect.
+          body: 'Your follow-up is due today.',
+          category: 'rush',
+          data: { target: { screen: 'rush', candidateId: 'cand-1' } },
+        }),
+      );
+    });
+
+    it('waits for the member’s own morning, and skips another day', async () => {
+      findRushFollowUpsDueBetween.mockResolvedValue([
+        FOLLOW_UP,
+        { ...FOLLOW_UP, id: 'cand-3', follow_up_on: TOMORROW },
+      ]);
+      // 10:00 UTC is 3 AM in Los Angeles.
+      timeZonesFor.mockResolvedValue(
+        new Map([['user-1', 'America/Los_Angeles']]),
+      );
+
+      expect(await service.sweepRushFollowUps(MORNING)).toEqual({ sent: 0 });
+
+      timeZonesFor.mockResolvedValue(new Map([['user-1', 'UTC']]));
+      expect(await service.sweepRushFollowUps(MORNING)).toEqual({ sent: 1 });
+      expect(claimDispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends nothing where recruitment is off, and releases for a member who lost the key', async () => {
+      findRushFollowUpsDueBetween.mockResolvedValue([
+        FOLLOW_UP,
+        { ...FOLLOW_UP, id: 'cand-off', chapter_id: 'chap-off' },
+      ]);
+      findRushChapters.mockResolvedValue({
+        enabledModules: new Map<string, Record<string, boolean> | null>([
+          ['chap-1', null],
+          ['chap-off', { rush: false }],
+        ]),
+        staleDays: new Map(),
+      });
+      memberHasAnyPermission.mockResolvedValue(false);
+
+      expect(await service.sweepRushFollowUps(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).toHaveBeenCalledTimes(1);
+      expect(memberHasAnyPermission).toHaveBeenCalledWith('chap-1', 'user-1', [
+        'rush:add',
+      ]);
+      expect(releaseDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-1',
+        'FOLLOW_UP',
+        TODAY,
+      );
+      expect(notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('tells an owner once that a prospect went stale, keyed on the day', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([OWNED]);
+
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 1 });
+      // Last contact Jul 29 + the default 7 days.
+      expect(claimDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-2',
+        'STALE',
+        '2026-08-05',
+      );
+      expect(notifyUser).toHaveBeenCalledWith(
+        'user-2',
+        'chap-1',
+        expect.objectContaining({
+          title: 'Sam Lee needs a follow-up',
+          body: 'No contact logged in 7 days.',
+          category: 'rush',
+        }),
+      );
+
+      claimDispatch.mockResolvedValue(false);
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+    });
+
+    it('uses the chapter’s stale days and the day a prospect was added', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([
+        { ...OWNED, last_contact_on: '2026-08-03' },
+        {
+          ...OWNED,
+          id: 'cand-4',
+          last_contact_on: null,
+          created_at: '2026-08-02T18:00:00Z',
+        },
+      ]);
+      findRushChapters.mockResolvedValue({
+        enabledModules: new Map([['chap-1', null]]),
+        staleDays: new Map([['chap-1', 3]]),
+      });
+
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 1 });
+      expect(claimDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-4',
+        'STALE',
+        '2026-08-05',
+      );
+      expect(notifyUser).toHaveBeenCalledWith(
+        'user-2',
+        'chap-1',
+        expect.objectContaining({
+          body: 'Nobody has logged a contact in the 3 days since they were added.',
+        }),
+      );
+    });
+
+    it('says the real gap, not the stale days, for a prospect stale long ago', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([
+        { ...OWNED, last_contact_on: null, created_at: '2026-07-06T12:00:00Z' },
+      ]);
+      await service.sweepRushStale(MORNING);
+      expect(notifyUser).toHaveBeenCalledWith(
+        'user-2',
+        'chap-1',
+        expect.objectContaining({
+          body: 'Nobody has logged a contact in the 30 days since they were added.',
+        }),
+      );
+    });
+
+    it('tells a stale owner only in their morning, where recruitment is on, while they can work prospects', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([
+        OWNED,
+        { ...OWNED, id: 'cand-off', chapter_id: 'chap-off' },
+      ]);
+      findRushChapters.mockResolvedValue({
+        enabledModules: new Map<string, Record<string, boolean> | null>([
+          ['chap-1', null],
+          ['chap-off', { rush: false }],
+        ]),
+        staleDays: new Map(),
+      });
+      timeZonesFor.mockResolvedValue(
+        new Map([['user-2', 'America/Los_Angeles']]),
+      );
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).not.toHaveBeenCalled();
+
+      timeZonesFor.mockResolvedValue(new Map([['user-2', 'UTC']]));
+      memberHasAnyPermission.mockResolvedValue(false);
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).toHaveBeenCalledTimes(1);
+      expect(claimDispatch).toHaveBeenCalledWith(
+        'chap-1',
+        'RUSH_CANDIDATE',
+        'cand-2',
+        'STALE',
+        '2026-08-05',
+      );
+      expect(releaseDispatch).toHaveBeenCalled();
+      expect(notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('runs the stale sweep even when the follow-up sweep fails', async () => {
+      jest.useFakeTimers({ now: MORNING });
+      try {
+        findRushFollowUpsDueBetween.mockResolvedValue([FOLLOW_UP]);
+        timeZonesFor.mockRejectedValueOnce(new Error('down'));
+        findOwnedOpenRushCandidates.mockResolvedValue([OWNED]);
+        const error = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation();
+
+        await service.handleRushFollowUpSweep();
+
+        expect(notifyUser).toHaveBeenCalledWith(
+          'user-2',
+          'chap-1',
+          expect.objectContaining({ title: 'Sam Lee needs a follow-up' }),
+        );
+        error.mockRestore();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('sends nothing when the chapters cannot be read', async () => {
+      findOwnedOpenRushCandidates.mockResolvedValue([OWNED]);
+      findRushChapters.mockRejectedValue(new Error('down'));
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+      expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
+      expect(claimDispatch).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+  });
+
+  describe('recruitment bid expiry (#5973)', () => {
+    it('expires open bids past their day, in one database statement', async () => {
+      expireRushBids.mockResolvedValue(2);
+      const now = new Date('2026-12-02T15:00:00Z');
+      await expect(service.sweepRushBidExpiry(now)).resolves.toEqual({
+        expired: 2,
+      });
+      expect(expireRushBids).toHaveBeenCalledWith('2026-12-02T15:00:00.000Z');
+    });
+
+    it('runs with the hourly recruitment sweeps, whatever they do', async () => {
+      findOwnedOpenRushCandidates.mockRejectedValue(new Error('read failed'));
+      await service.handleRushFollowUpSweep();
+      expect(expireRushBids).toHaveBeenCalledTimes(1);
     });
   });
 });

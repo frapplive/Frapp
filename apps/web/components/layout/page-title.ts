@@ -1,13 +1,17 @@
+import { CHAPTER_AFFILIATIONS_COPY, type TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import type { VocabConfig } from "@repo/org-archetypes";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import {
   DASHBOARD_NAV_ITEMS,
+  navItemHolds,
   navItemLabel,
   type NavItem,
 } from "@/components/layout/nav-config";
 
 /**
- * The open route's title, as the top bar shows it.
+ * The open route's title, as its page's header shows it (the top bar's
+ * copy below `lg`).
  *
  * The title is derived from the route here, in one place, rather than passed
  * up by each page. That is what puts it on every path a route can take:
@@ -17,7 +21,8 @@ import {
  * kept dropping.
  *
  * **Where the words come from.** A nav route's title is its row's label, so the
- * row a member clicked and the heading they land on say the same words.
+ * row a member clicked and the heading they land on say the same words (a row
+ * that opens a page with its own name says so with `title`, `nav-config.ts`).
  * Profile, which has no nav row, is named below. Each route
  * also names its browser tab in its own `metadata.title`; the two are kept to
  * the same words, and `page-title.spec.ts` checks them against each other.
@@ -42,35 +47,56 @@ export type PageTitle = {
 };
 
 /**
- * Routes that are not nav rows. Profile and the personal Settings page hang
- * off the account menu; Chapter settings opens from the chapter menu atop the
- * nav, under the words that menu item uses; Frapp Intelligence from the Ask bar.
+ * Routes that are not nav rows. Profile, the personal Settings page, Chapter
+ * settings and What's new open from the member's menu at the sidebar's foot,
+ * under the words that menu uses; Frapp Intelligence from the New row; and
+ * `/chat` is the open conversation, which the channel list opens.
  */
+/**
+ * Settings' name in each tenant kind, as the chapter menu's item and the top
+ * bar both say it: a council's is "Council settings" (#5933).
+ */
+export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
+  chapter: "Chapter settings",
+  council: "Council settings",
+};
+
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
+  "/chat": "Chat",
   "/profile": "Profile",
   "/preferences": "Settings",
-  "/settings": "Chapter settings",
+  "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
-  // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
+  // Opened from the member's menu (#5974).
+  "/affiliations": CHAPTER_AFFILIATIONS_COPY.title,
+  // The sidebar's New row opens it (#5946).
   [ASK_ROUTE]: "Frapp Intelligence",
 };
 
 /**
- * Pages under a nav row that read as their own step, titled under that row
- * ("Backwork › Bulk upload"), shown only when that row is.
+ * Pages under a nav row that read as their own step, each with the page it
+ * goes back to, titled under that row ("Resources › Bulk upload") and linked
+ * only for a viewer who can open that page: Bulk upload goes back to
+ * Backwork, the view it was opened from (#5949, Resources).
  */
-const SUB_PAGE_TITLES: Readonly<Record<string, string>> = {
-  "/backwork/upload": "Bulk upload",
+const SUB_PAGE_TITLES: Readonly<
+  Record<string, { title: string; back: string }>
+> = {
+  "/backwork/upload": { title: "Bulk upload", back: "/backwork" },
 };
 
 /**
  * Pages one record deep under a nav row, matched by prefix: any
- * `/meetings/<id>` is that meeting's "Minutes", under Meetings.
+ * `/meetings/<id>` is that meeting's "Minutes", under Resources.
  */
-const RECORD_PAGE_TITLES: Readonly<Record<string, string>> = {
-  "/meetings/": "Minutes",
+const RECORD_PAGE_TITLES: Readonly<
+  Record<string, { title: string; back: string }>
+> = {
+  // Back to the chapter's minutes in Documents (#5949).
+  "/meetings/": { title: "Minutes", back: MINUTES_DOCUMENTS_HREF },
 };
 
+/** `matchesRoute` for an off-nav or sub-page route. */
 function matchesRoute(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -81,16 +107,22 @@ function matchesRoute(pathname: string, href: string): boolean {
  *   permissions and modules). Omitted, every parent shows.
  * @param vocabulary the chapter's words, for a row named by them
  *   (`vocabLabel`, Recruitment's Rush / Intake). Omitted, the IFC default.
+ * @param tenantKind the active tenant's kind: a council's Settings reads
+ *   "Council settings".
  */
 export function resolvePageTitle(
   pathname: string | null,
   isNavItemVisible: (item: NavItem) => boolean = () => true,
   vocabulary?: VocabConfig,
+  tenantKind?: TenantKind,
 ): PageTitle | null {
   if (!pathname) return null;
+  if (tenantKind === "council" && matchesRoute(pathname, "/settings")) {
+    return { title: SETTINGS_TITLE.council };
+  }
 
   const navItem = DASHBOARD_NAV_ITEMS.find((item) =>
-    matchesRoute(pathname, item.href),
+    navItemHolds(item, pathname),
   );
   const subPage =
     Object.entries(SUB_PAGE_TITLES).find(([href]) =>
@@ -101,15 +133,25 @@ export function resolvePageTitle(
         pathname.startsWith(prefix) && pathname.length > prefix.length,
     );
   if (navItem && subPage) {
-    return isNavItemVisible(navItem)
+    // The link goes to the view the page came from, so it shows only to a
+    // viewer who can open that view: Bulk upload's crumb leads to Backwork,
+    // which the Resources row's other view (Documents) doesn't vouch for.
+    const backPath = subPage[1].back.split("?")[0] ?? subPage[1].back;
+    const backView = navItem.views?.find((view) =>
+      matchesRoute(backPath, view.href),
+    );
+    const parentShown = isNavItemVisible(
+      backView ? { ...navItem, views: [backView] } : navItem,
+    );
+    return parentShown
       ? {
-          title: subPage[1],
+          title: subPage[1].title,
           parent: {
             label: navItemLabel(navItem, vocabulary),
-            href: navItem.href,
+            href: subPage[1].back,
           },
         }
-      : { title: subPage[1] };
+      : { title: subPage[1].title };
   }
   if (navItem) return { title: navItemLabel(navItem, vocabulary) };
 

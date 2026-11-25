@@ -49,6 +49,7 @@ import { ActivationService } from './activation.service';
 import { LegalAcceptanceService } from './legal-acceptance.service';
 import { EMAIL_PROVIDER } from '#domain/adapters/email.interface';
 import type { IEmailProvider } from '#domain/adapters/email.interface';
+import { EMAIL_SEND_CONCURRENCY, mapWithConcurrency } from './email-send-pool';
 import { logThrowable } from '../../infrastructure/observability/log-throwable';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 import {
@@ -57,13 +58,12 @@ import {
 } from '../../infrastructure/email/invite-link.util';
 import {
   assertHttpsJoinOrigin,
-  chapterTextMark,
   dedupeEmails,
   EVERYONE_ROLE_NAME,
   MEMBER_JOINED_AUDIENCE,
   needsBaseRole,
 } from '@repo/validation';
-import { orgHidingGreekLettersIn } from '@repo/org-archetypes';
+import { chapterCardMarkText } from '#domain/utils/chapter-card-mark';
 
 /**
  * What an invite is for, read without using it up (#3352). Only what the
@@ -73,8 +73,8 @@ export interface InvitePreview {
   chapter_name: string;
   university: string;
   /**
-   * The chapter's text mark, resolved by `chapterTextMark` after the org
-   * override in `preview`. The rule clients read is the `mark_text`
+   * The chapter's text mark, resolved by `chapterCardMarkText`, which
+   * applies the org override first. The rule clients read is the `mark_text`
    * description on `InvitePreviewResponseDto` (invite.dto.ts).
    */
   mark_text: string | null;
@@ -255,35 +255,6 @@ export interface BulkEmailInviteResult {
   invites: InviteListItem[];
   /** Addresses whose invite token was created but the email failed to send. */
   failed: string[];
-}
-
-/**
- * Resend's default rate limit is low (2 requests/second on the standard
- * tier), and a bulk invite can carry up to 50 addresses (`BulkEmailInviteDto`).
- * Firing all of them as one `Promise.all` would send up to 50 concurrent
- * requests and turn a healthy provider into a wall of spurious 429s reported
- * back as address failures. A small worker pool keeps genuine delivery
- * failures distinguishable from self-inflicted rate-limiting.
- */
-const EMAIL_SEND_CONCURRENCY = 2;
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await fn(items[index]);
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, worker),
-  );
-  return results;
 }
 
 /** The emailed-invite ceiling's refusal (429), on top of its sentence. */
@@ -756,6 +727,103 @@ export class InviteService {
   }
 
   /**
+   * The invite a confirmed bid acceptance sends (#5973,
+   * `spec/behavior/ifc-recruitment.md` § Bids): one emailed invite to the
+   * PNM, carrying the chapter's new-member role, through the same token,
+   * email and daily ceilings as any emailed invite.
+   *
+   * It is sent as from the first of `senders` (whoever confirmed it, then
+   * whoever recorded or extended the bid) who may invite someone into the
+   * role now: the redeem checks its sender the same way
+   * ({@link resolveRedeemRoles}), so an invite from anyone else would be
+   * refused when the PNM opens it. With none, nothing is sent. Best-effort,
+   * like every invite email: a refusal at the ceiling or a failed send
+   * answers `false`, and the acceptance stands either way.
+   */
+  async createForAcceptedProspect(input: {
+    chapterId: string;
+    senders: readonly string[];
+    roleId: string;
+    email: string;
+  }): Promise<boolean> {
+    try {
+      const [role] = await this.roleRepo.findByIds(
+        [input.roleId],
+        input.chapterId,
+      );
+      if (!role || role.permissions.includes('*')) return false;
+      const createdBy = await this.firstSenderFor(
+        input.chapterId,
+        input.senders,
+        role.id,
+      );
+      if (!createdBy) return false;
+      const origin = resolveAppOrigin(this.config);
+      assertHttpsJoinOrigin(new URL(origin));
+      const data = this.prepareInviteData(
+        input.chapterId,
+        createdBy,
+        role.name,
+        input.email.trim().toLowerCase(),
+      );
+      const [invites, chapter, inviter] = await Promise.all([
+        this.insertWithinDailyCeilings(input.chapterId, createdBy, [data]),
+        this.chapterRepo.findById(input.chapterId).catch(() => null),
+        this.userRepo.findById(createdBy).catch(() => null),
+      ]);
+      const invite = invites[0];
+      if (!invite) return false;
+      const sent = await this.emailProvider
+        .sendInviteEmail({
+          to: data.email as string,
+          joinUrl: buildJoinUrl(invite.token, origin),
+          role: role.system_key === SystemRoleKeys.EVERYONE ? null : role.name,
+          validDays: INVITE_DAYS,
+          chapterName: chapter?.name ?? null,
+          inviterName: inviter?.display_name ?? null,
+        })
+        .catch(() => false);
+      if (!sent) {
+        await this.inviteRepo
+          .markEmailFailed(input.chapterId, [invite.id])
+          .catch(() => undefined);
+      }
+      return sent;
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Accepted prospect's invite was not sent (chapter ${input.chapterId})`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * The first of `senders` who may invite someone into `roleId` now: holds
+   * `members:invite` (or everything) and reaches the role by rank, as the
+   * redeem requires of an invite's sender.
+   */
+  private async firstSenderFor(
+    chapterId: string,
+    senders: readonly string[],
+    roleId: string,
+  ): Promise<string | null> {
+    for (const sender of [...new Set(senders)]) {
+      const context = await this.rbac.getRankContext(chapterId, sender);
+      const role = context.roles.find((r) => r.id === roleId);
+      const mayInvite =
+        context.reach.wildcard ||
+        context.reach.permissions.has(SystemPermissions.MEMBERS_INVITE);
+      if (role && mayInvite && inviteRefusal(context, role) === null) {
+        return sender;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Inserts the batch only when it fits under the daily emailed-invite
    * ceilings (`daily-send-limits.ts`): the chapter's, and the sender's across
    * all their chapters, each counting the emailed invites of the last 24
@@ -1068,19 +1136,10 @@ export class InviteService {
       this.resolveRedeemRole(invite),
     ]);
     if (!chapter) return null;
-    // An organization that never displays its letters (FIJI) keeps them off
-    // the card even when the chapter's stored switch was never turned off, as
-    // for one created before its org profile knew to (#3421). The match reads
-    // the organization's name inside the chapter's ("Phi Gamma Delta Tau
-    // Nu"), the override web's nav crest and mobile's Chat home also apply.
-    // Done here rather than on the card so every client gets it.
-    const branding = orgHidingGreekLettersIn(chapter.name)
-      ? { ...chapter.branding, show_greek_letters: false }
-      : chapter.branding;
     const preview: InvitePreview = {
       chapter_name: chapter.name,
       university: chapter.university,
-      mark_text: chapterTextMark(branding)?.text ?? null,
+      mark_text: chapterCardMarkText(chapter),
       accent_color: chapter.accent_color,
       invited_by: inviter?.display_name ?? null,
       role: shownInviteRole(role),

@@ -633,12 +633,18 @@ describe("the staging variant (#2511)", () => {
     expect(STAGING_GOOGLE_SIGN_IN.webClientId).toMatch(
       /\.apps\.googleusercontent\.com$/,
     );
-    // An empty iOS client keeps the plugin, and so the native scheme, out.
-    if (!STAGING_GOOGLE_SIGN_IN.iosClientId) {
-      expect(JSON.stringify(result.plugins)).not.toContain(
-        "@react-native-google-signin/google-signin",
-      );
-    }
+    // Its iOS client brings the plugin with the reversed ID as the URL
+    // scheme, which the app also queries before it uses Google's SDK.
+    const scheme =
+      "com.googleusercontent.apps.661618060468-60r0l5n3vck4g04u5n2p7ep3t4h1q67n";
+    expect(result.plugins).toContainEqual([
+      "@react-native-google-signin/google-signin",
+      { iosUrlScheme: scheme },
+    ]);
+    expect(
+      (result as unknown as { ios: { infoPlist: Record<string, unknown> } }).ios
+        .infoPlist.LSApplicationQueriesSchemes,
+    ).toContain(scheme);
     // The rest of extra (the EAS project) is kept.
     expect(
       (result.extra as unknown as { eas: unknown }).eas,

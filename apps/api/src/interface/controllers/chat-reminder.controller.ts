@@ -1,3 +1,4 @@
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   Body,
   Controller,
@@ -41,6 +42,8 @@ import { ChatReminderRefDto, SetChatReminderDto } from '../dtos/activity.dto';
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): the council space reuses the chapter shell.
+@TenantKinds('chapter', 'council')
 @Controller('reminders')
 export class ChatReminderController {
   constructor(private readonly reminderService: ChatReminderService) {}

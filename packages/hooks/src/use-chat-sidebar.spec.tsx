@@ -136,24 +136,9 @@ describe("useSidebarPreferences", () => {
       unreadOnly: false,
       hideMuted: true,
     });
-    expect(result.current.sort).toBe("recent");
-  });
-
-  it("reads a missing or unknown sort as the chapter's order", async () => {
-    // What an API from before the sort answers.
-    const older: Partial<ChatSidebar> = { ...stored };
-    delete older.sort;
-    const GET = vi.fn().mockResolvedValue({ data: older, error: null });
-    const { Wrapper } = setup({ GET });
-
-    const { result } = renderHook(() => useSidebarPreferences(), {
-      wrapper: Wrapper,
-    });
-
-    await waitFor(() =>
-      expect(result.current.pinnedIds.has("general")).toBe(true),
-    );
-    expect(result.current.sort).toBe("chapter");
+    // A stored sort is ignored: channels are always in the chapter's order
+    // (Paul, 2026-11-24, #5947).
+    expect(result.current).not.toHaveProperty("sort");
   });
 });
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  RUSH_BID_COLUMN,
   rushBoardColumns,
+  rushOpenProspectCount,
+  rushPlacedByBid,
   rushCandidatesByColumn,
   rushPipelineAccess,
   rushRatingSummary,
@@ -46,6 +49,7 @@ describe("rushPipelineAccess (#5924)", () => {
     writeNotes: false,
     readNotes: false,
     vote: false,
+    bid: false,
     viewResults: false,
     manage: false,
   };
@@ -70,6 +74,7 @@ describe("rushPipelineAccess (#5924)", () => {
         "rush:notes",
         "rush:read_notes",
         "rush:vote",
+        "rush:bid",
         "rush:view_results",
         "rush:manage",
       ]),
@@ -83,6 +88,7 @@ describe("rushPipelineAccess (#5924)", () => {
         "rush:view",
         "rush:add",
         "rush:read_notes",
+        "rush:bid",
       ]),
     ).toEqual({
       ...none,
@@ -90,7 +96,60 @@ describe("rushPipelineAccess (#5924)", () => {
       add: true,
       move: true,
       readNotes: true,
+      bid: true,
     });
+  });
+});
+
+describe("bids on the board (#5973)", () => {
+  const withBid = (
+    id: string,
+    stageKey: string,
+    bid_state: RushCandidateLike["bid_state"],
+  ): RushCandidateLike => ({
+    ...prospect(id, stageKey, "2026-11-0" + id.slice(-1) + "T00:00:00Z"),
+    bid_state,
+  });
+
+  it("adds Bid extended before Closed while a bid is out, holding it whatever its stage", () => {
+    const candidates = [
+      withBid("p1", "new", "extended"),
+      withBid("p2", "contacted", "none"),
+    ];
+    const columns = rushBoardColumns(STAGES, candidates);
+    expect(columns.map((c) => c.id)).toEqual([
+      "new",
+      "contacted",
+      RUSH_BID_COLUMN,
+      "closed",
+    ]);
+    expect(columns[2]).toMatchObject({ label: "Bid extended", stages: [] });
+    const by = rushCandidatesByColumn(columns, candidates);
+    expect(by.get(RUSH_BID_COLUMN)?.map((c) => c.id)).toEqual(["p1"]);
+    expect(by.get("new")).toEqual([]);
+  });
+
+  it("folds an accepted prospect into Closed, and an answered bid back to its stage", () => {
+    const candidates = [
+      withBid("p1", "contacted", "accepted"),
+      withBid("p2", "contacted", "declined"),
+    ];
+    const columns = rushBoardColumns(STAGES, candidates);
+    expect(columns.map((c) => c.id)).not.toContain(RUSH_BID_COLUMN);
+    const by = rushCandidatesByColumn(columns, candidates);
+    expect(by.get("closed")?.map((c) => c.id)).toEqual(["p1"]);
+    expect(by.get("contacted")?.map((c) => c.id)).toEqual(["p2"]);
+    expect(rushPlacedByBid(candidates[0]!)).toBe(true);
+    expect(rushPlacedByBid(candidates[1]!)).toBe(false);
+  });
+
+  it("counts an accepted prospect out of the open ones, as the board folds it", () => {
+    expect(
+      rushOpenProspectCount(STAGES, [
+        withBid("p1", "contacted", "accepted"),
+        withBid("p2", "contacted", "extended"),
+      ]),
+    ).toBe(1);
   });
 });
 

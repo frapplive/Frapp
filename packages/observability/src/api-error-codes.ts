@@ -38,6 +38,10 @@ export const CLIENT_CONTRACT_ERROR_CODES = [
   // these is a client sending what its own validation should have stopped,
   // or contract drift between a shipped build and the API.
   "request.validation_failed",
+  // A chapter's role or tier write holding a `council:` key (#5933,
+  // `school-layer.md` § 4.2 rule 3). A chapter's catalog never offers one,
+  // so only a client sending a string it typed itself meets it.
+  "roles.permission.reserved",
   // A reason sent with a thumbs up on an Ask answer (#4902), which the
   // shared schema (`AskFeedbackRequestSchema`) refuses before it is sent.
   "ai.ask.feedback.reason_needs_down",
@@ -80,6 +84,25 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // A tenant slug the caller can't open (ADR-27, #5918): unknown, or another
   // tenant's, as an old link to a chapter they left would be.
   "tenant.not_found",
+  // Starting a council (#5933): the school already has one of that type, or
+  // the founder hasn't verified a school email there.
+  "council.type_taken",
+  "council.school_unverified",
+  "council.title_taken",
+  // Affiliations and PNM records (#5974): a link step the other side or a
+  // race already took, a chapter whose school isn't confirmed, a council
+  // with no recruitment, a season or record that isn't there (or isn't
+  // this council's), or a merge the database refuses.
+  "affiliation.no_shared_school",
+  "affiliation.exists",
+  "affiliation.invalid_transition",
+  "affiliation.not_found",
+  "council.recruitment_off",
+  "council.season_not_found",
+  "council.season_exists",
+  "pnm.not_found",
+  "pnm.already_merged",
+  "pnm.two_accounts",
   "chapter.module.disabled",
   "chapter.subscription.required",
   "chapter.subscription.canceled",
@@ -240,6 +263,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // of one already counted.
   "attendance.check_in.window_closed",
   "attendance.already_checked_in",
+  // A picked Drive folder with files in it (#5583): Google lets a picker
+  // sign-in share only the folder, not what's inside, so the officer shares
+  // it with Frapp's address in Drive and the panel connects once they have.
+  "google_drive.share_by_hand",
 ] as const;
 
 export type ClientContractErrorCode =

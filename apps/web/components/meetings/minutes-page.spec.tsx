@@ -140,6 +140,11 @@ vi.mock("@/components/meetings/coming-up-post-review", () => ({
   },
 }));
 
+// Each action item's Create task has its own spec (#6051).
+vi.mock("@/components/meetings/action-item-task", () => ({
+  useActionItemTaskRow: () => undefined,
+}));
+
 vi.mock("@/components/ai/suggested-tasks", () => ({
   SuggestedTasks: ({ source }: { source: { type: string; id: string } }) => (
     <div data-testid="suggested-tasks">{`${source.type}:${source.id}`}</div>
@@ -554,7 +559,7 @@ describe("MinutesPage", () => {
     expect(mine.textContent).toContain("Yours");
     // The reader's own come first, alone, until they ask for all of them.
     expect(screen.queryByText("Send the shirt form")).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "All 2" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All 2" }));
     const theirs = screen.getByText("Send the shirt form").parentElement!;
     expect(theirs.textContent).not.toContain("Yours");
     expect(screen.getByText("Nobody named yet")).toBeTruthy();

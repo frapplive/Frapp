@@ -7,6 +7,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
@@ -216,17 +218,37 @@ function SearchableOptions({
 /**
  * The order chip. Never tinted: an order is always set, so it isn't a filter.
  * Shared by `/documents` and the Directory.
+ *
+ * `detail` is a second pick that only some orders have: the period a
+ * standings order counts over (Directory, #5950). It is listed under the
+ * orders, in the same menu, and named on the chip beside the order ("Most
+ * points · This semester"), so an order and its period are one control and
+ * nothing is added to the row. Leave it out for an order that has none.
  */
 export function SortChip<T extends string>({
   options,
   value,
   onChange,
+  detail,
 }: {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  detail?: {
+    /** What the second pick is, as the menu's group label: "Period". */
+    label: string;
+    options: readonly { value: string; label: string }[];
+    value: string;
+    onChange: (value: string) => void;
+  };
 }) {
   const selected = options.find((option) => option.value === value);
+  const selectedDetail = detail?.options.find(
+    (option) => option.value === detail.value,
+  );
+  const name = [selected?.label ?? value, selectedDetail?.label]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -235,10 +257,10 @@ export function SortChip<T extends string>({
           variant="secondary"
           size="toolbar"
           className={CHIP}
-          aria-label={`Sort: ${selected?.label ?? value}`}
+          aria-label={`Sort: ${name}`}
         >
           <ArrowUpDown className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
-          <span className="truncate">{selected?.label ?? value}</span>
+          <span className="truncate">{name}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[180px]">
@@ -254,6 +276,27 @@ export function SortChip<T extends string>({
             {option.label}
           </DropdownMenuItem>
         ))}
+        {detail ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{detail.label}</DropdownMenuLabel>
+            {detail.options.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                onSelect={() => detail.onChange(option.value)}
+              >
+                <Check
+                  className={cn(
+                    "h-4 w-4",
+                    option.value !== detail.value && "invisible",
+                  )}
+                  aria-hidden="true"
+                />
+                {option.label}
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

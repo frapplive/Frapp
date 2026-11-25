@@ -135,11 +135,14 @@ export function ListRowSkeleton({
   index = 0,
   description = false,
   variant = "default",
+  leading = null,
 }: {
   /** The row's place in its list, which picks its label width. */
   index?: number;
   /** Draw the caption line a row with a `description` carries. */
   description?: boolean;
+  /** The stand-in for the row's `leading` tile, for a row that leads with one. */
+  leading?: ReactNode;
   /** `detail`: a short label on the left and the value on the right. */
   variant?: "default" | "detail";
 }) {
@@ -161,6 +164,7 @@ export function ListRowSkeleton({
 
   return (
     <View style={styles.row}>
+      {leading}
       <View style={styles.rowText}>
         <SkeletonText role={label} width={width} />
         {description ? <SkeletonText role={caption} width="30%" /> : null}
@@ -169,24 +173,42 @@ export function ListRowSkeleton({
   );
 }
 
-/** A rounded container whose children are separated by inset hairlines. */
-export function ListSection({ children }: { children: ReactNode }) {
+/**
+ * A rounded container whose children are separated by inset hairlines, and
+ * at most one muted line under it (`footnote`) saying what its rows have in
+ * common, as Discord's channel settings and iOS Settings' group footers do.
+ * Web's `SettingsGroup` takes the same `footnote`.
+ */
+export function ListSection({
+  children,
+  footnote,
+}: {
+  children: ReactNode;
+  footnote?: string | null;
+}) {
   const { tokens } = useFrappTheme();
   const surfaces = useRaisedSurfaces();
   const styles = createStyles(tokens);
   const items = Array.isArray(children) ? children.flat() : [children];
   const visible = items.filter(Boolean);
 
-  return (
+  const section = (
     <View style={[styles.section, { backgroundColor: surfaces.card }]}>
       {/* Keyed by position: these rows are a fixed, ordered list declared per
-          screen, never reordered at runtime, and carry no id of their own. */}
+            screen, never reordered at runtime, and carry no id of their own. */}
       {visible.map((child, index) => (
         <View key={index}>
           {index > 0 ? <View style={styles.divider} /> : null}
           {child}
         </View>
       ))}
+    </View>
+  );
+  if (!footnote) return section;
+  return (
+    <View>
+      {section}
+      <Text style={styles.footnote}>{footnote}</Text>
     </View>
   );
 }
@@ -665,6 +687,14 @@ function createStyles(tokens: SignetTokens) {
       paddingHorizontal: tokens.spacing.lg,
       paddingVertical: tokens.spacing.md,
       gap: tokens.spacing.xs,
+    },
+    // A group footer: caption in the muted tone, under the section, inset to
+    // the rows' text, as web's `SettingsGroup` footnote is.
+    footnote: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.text.mutedForeground,
+      marginTop: tokens.spacing.sm,
+      paddingHorizontal: tokens.spacing.xs,
     },
     divider: {
       height: StyleSheet.hairlineWidth,

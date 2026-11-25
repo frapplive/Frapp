@@ -11,6 +11,7 @@
  * events a member owed. Two true numbers beat three with one invented.
  */
 import { can } from "@repo/validation";
+import { useCurrentChapter } from "./use-chapters";
 import { useActiveChapterId } from "./use-frapp-client";
 import { useMyPoints } from "./use-points";
 import { useServiceEntries } from "./use-service-entries";
@@ -148,16 +149,36 @@ export interface ProfileStats {
  * `data` through a failed background refetch, and a number drawn above
  * "couldn't load" contradicts itself.
  */
-export function useMyProfileStats(): ProfileStats {
+export function useMyProfileStats(
+  /**
+   * Which numbers the screen draws. One it leaves out (its module is off)
+   * sends no read: the screen hides that number (P5.8), so reading it would
+   * only spend a request on a figure nobody sees.
+   */
+  wanted: { points?: boolean; service?: boolean } = {},
+): ProfileStats {
+  const wantPoints = wanted.points ?? true;
+  const wantService = wanted.service ?? true;
   const chapterId = useActiveChapterId();
   const viewerUserId = useViewerUserId();
   const permissionsQuery = useMyPermissions();
   const permissions = permissionsQuery.data?.permissions;
   const permissionsKnown = Array.isArray(permissions);
-  const canView = permissionsKnown && can("members:view", permissions);
-  const pointsQuery = useMyPoints(undefined, undefined, { enabled: canView });
+  // A council has no points or service hours (#5933): those routes refuse
+  // it. The reads wait for the tenant's kind, so a council never sends one;
+  // a failed tenant read leaves them to run, as before councils.
+  const current = useCurrentChapter();
+  const kind = current.data?.kind;
+  const isCouncil = kind === "council";
+  const kindSettled = current.data !== undefined || current.isError;
+  const canView =
+    permissionsKnown && can("members:view", permissions) && !isCouncil;
+  const canRead = canView && kindSettled;
+  const pointsQuery = useMyPoints(undefined, undefined, {
+    enabled: canRead && wantPoints,
+  });
   const serviceQuery = useServiceEntries(viewerUserId ?? undefined, undefined, {
-    enabled: canView && !!viewerUserId,
+    enabled: canRead && wantService && !!viewerUserId,
   });
   const minutes = sumApprovedServiceMinutes(serviceQuery.data);
   return {

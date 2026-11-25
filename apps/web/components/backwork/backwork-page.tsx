@@ -104,6 +104,7 @@ import {
 import { asArray, cn, getErrorMessage } from "@/lib/utils";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
 import { pausedRead } from "@/components/shared/async-states";
+import { ResourcesViews } from "@/components/documents/resources-views";
 
 /**
  * `/backwork`, rebuilt 2026-11-05 around the files instead of a filter form
@@ -666,6 +667,8 @@ export function BackworkPage() {
         </div>
       </section>
 
+      {/* Documents and Backwork, the two views of Resources (#5949). */}
+      <ResourcesViews />
       {/*
         The page's actions, in its header (`page-actions.tsx`): Upload, and
         one More menu for the rest (Bulk upload, and an admin's clean-up), so

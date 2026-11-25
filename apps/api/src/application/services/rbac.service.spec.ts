@@ -37,6 +37,12 @@ import type { Role, RoleTier } from '#domain/entities/role.entity';
 import type { Member } from '#domain/entities/member.entity';
 import type { Chapter } from '#domain/entities/chapter.entity';
 import {
+  CHAPTER_ID as TIERED_CHAPTER_ID,
+  USER as TIERED_USER,
+  ROLE as TIERED_ROLE,
+  tieredRankContext,
+} from '#test/helpers/tiered-chapter.fixture';
+import {
   chapterFixture,
   memberFixture,
   roleFixture,
@@ -103,6 +109,8 @@ describe('RbacService', () => {
       findByCustomerId: jest.fn(),
       claimSubscriptionId: jest.fn(),
       updatePaletteIfSeedUnchanged: jest.fn(),
+      findCouncilBySchoolAndType: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       applySubscriptionWebhook: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -1587,6 +1595,207 @@ describe('RbacService', () => {
     });
   });
 
+  /** The catalog a tenant of `kind` (and, for a council, `model`) is served. */
+  const catalogFor = (
+    kind: 'chapter' | 'council',
+    model: 'open_bidding' | 'none' = 'open_bidding',
+  ) => {
+    mockChapterRepo.findById.mockResolvedValue(
+      chapterFixture({
+        id: 'chapter-1',
+        kind,
+        ...(kind === 'council'
+          ? { council_type: 'ifc', recruitment_model: model }
+          : {}),
+      }),
+    );
+    return service.getPermissionsCatalog('chapter-1');
+  };
+  /** Every system key a chapter's catalog offers: all but the council's. */
+  const CHAPTER_KEYS = Object.entries(SystemPermissions).filter(
+    ([, permission]) => !permission.startsWith('council:'),
+  );
+
+  // `school-layer.md` § 5.1 (#5933): the catalog filters by tenant kind.
+  describe('the catalog by tenant kind', () => {
+    it('gives a chapter no council key', async () => {
+      const permissions = (await catalogFor('chapter')).map(
+        (r) => r.permission,
+      );
+      expect(permissions.some((p) => p.startsWith('council:'))).toBe(false);
+      expect(permissions).toContain('points:adjust');
+    });
+
+    it('gives a council its own keys and the chapter keys it shares, nothing else', async () => {
+      const rows = await catalogFor('council');
+      const permissions = rows.map((r) => r.permission);
+      expect(permissions).toContain('council:recruitment_view');
+      expect(permissions).toContain('council:announce');
+      expect(permissions).toContain('roles:manage');
+      expect(permissions).toContain('members:invite');
+      expect(permissions).not.toContain('points:adjust');
+      expect(permissions).not.toContain('rush:view');
+      expect(
+        rows.find((r) => r.permission === 'council:announce'),
+      ).toMatchObject({
+        scope: 'council',
+        module: 'council',
+        module_label: 'Council',
+      });
+    });
+
+    it('gives a council whose model is none no council-recruitment key', async () => {
+      const permissions = (await catalogFor('council', 'none')).map(
+        (r) => r.permission,
+      );
+      expect(permissions).not.toContain('council:recruitment_view');
+      expect(permissions).not.toContain('council:recruitment_manage');
+      expect(permissions).toContain('council:announce');
+    });
+  });
+
+  // `school-layer.md` § 4.2 rule 3 and § 4.3 test 4 (#5933).
+  describe('reserved council keys', () => {
+    const asChapter = () =>
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: 'chapter-1', kind: 'chapter' }),
+      );
+    const expectReserved = (error: unknown) => {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: 'roles.permission.reserved',
+      });
+    };
+
+    // The reserved check runs before the held check, so an officer without
+    // `*` reads the reserved code too, not "you don't hold this".
+    it('refuses a reserved key to a Vice President as reserved, on create and update', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: TIERED_CHAPTER_ID, kind: 'chapter' }),
+      );
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: TIERED_ROLE.brother, chapter_id: TIERED_CHAPTER_ID }),
+      );
+      jest
+        .spyOn(service, 'getRankContext')
+        .mockResolvedValue(tieredRankContext(TIERED_USER.vicePresident));
+      expectReserved(
+        await service
+          .createAsMember(TIERED_CHAPTER_ID, TIERED_USER.vicePresident, {
+            name: 'Liaison',
+            permissions: ['council:recruitment_view'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .updateAsMember(
+            TIERED_ROLE.brother,
+            TIERED_CHAPTER_ID,
+            TIERED_USER.vicePresident,
+            {
+              permission_overrides: { 'council:announce': true },
+            },
+          )
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.create).not.toHaveBeenCalled();
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an update that lists a reserved key, or switches one on', async () => {
+      asChapter();
+      mockRoleRepo.findById.mockResolvedValue(
+        roleFixture({ id: 'role-1', chapter_id: 'chapter-1', permissions: [] }),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permissions: ['council:announce'],
+          })
+          .catch((e: unknown) => e),
+      );
+      expectReserved(
+        await service
+          .update('role-1', 'chapter-1', 'user-1', {
+            permission_overrides: { 'council:recruitment_view': true },
+          })
+          .catch((e: unknown) => e),
+      );
+      expect(mockRoleRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses recruitment keys in a council whose model is none, and keeps its other keys', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({
+          id: 'chapter-1',
+          kind: 'council',
+          council_type: 'nphc',
+          recruitment_model: 'none',
+        }),
+      );
+      expectReserved(
+        await service
+          .assertNoReservedPermissions('chapter-1', [
+            'council:recruitment_manage',
+          ])
+          .catch((e: unknown) => e),
+      );
+      await expect(
+        service.assertNoReservedPermissions('chapter-1', ['council:announce']),
+      ).resolves.toBeUndefined();
+    });
+
+    beforeEach(() => {
+      mockRoleRepo.findByChapterAndName.mockResolvedValue(null);
+      mockRoleRepo.create.mockImplementation(async (role) =>
+        roleFixture({ ...role, id: 'role-new' }),
+      );
+    });
+
+    it('refuses council:recruitment_view on a chapter role, and writes nothing', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({ id: 'chapter-1', kind: 'chapter' }),
+      );
+      const error = await service
+        .create('chapter-1', 'user-1', {
+          name: 'Liaison',
+          permissions: ['members:view', 'council:recruitment_view'],
+        })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: 'roles.permission.reserved',
+      });
+      expect(mockRoleRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('lets a council role hold a council key', async () => {
+      mockChapterRepo.findById.mockResolvedValue(
+        chapterFixture({
+          id: 'chapter-1',
+          kind: 'council',
+          council_type: 'ifc',
+          recruitment_model: 'open_bidding',
+        }),
+      );
+      await expect(
+        service.create('chapter-1', 'user-1', {
+          name: 'Liaison',
+          permissions: ['members:view', 'council:announce'],
+        }),
+      ).resolves.toMatchObject({ id: 'role-new' });
+    });
+
+    it('reads no chapter for a list without council keys', async () => {
+      await service.create('chapter-1', 'user-1', {
+        name: 'Liaison',
+        permissions: ['members:view'],
+      });
+      expect(mockChapterRepo.findById).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the AI permissions in the catalog', () => {
     const original = process.env.AI_ENABLED;
     afterEach(() => {
@@ -1594,23 +1803,21 @@ describe('RbacService', () => {
       else process.env.AI_ENABLED = original;
     });
 
-    it('are left out while the server AI switch is off', () => {
+    it('are left out while the server AI switch is off', async () => {
       delete process.env.AI_ENABLED;
-      const permissions = service
-        .getPermissionsCatalog()
-        .map((row) => row.permission);
+      const permissions = (await catalogFor('chapter')).map(
+        (row) => row.permission,
+      );
       expect(permissions).not.toContain('ai:use');
       expect(permissions).not.toContain('ai:act');
-      expect(permissions).toHaveLength(
-        Object.keys(SystemPermissions).length - 2,
-      );
+      expect(permissions).toHaveLength(CHAPTER_KEYS.length - 2);
     });
 
-    it('are offered once it is on', () => {
+    it('are offered once it is on', async () => {
       process.env.AI_ENABLED = 'true';
-      const catalog = service.getPermissionsCatalog();
+      const catalog = await catalogFor('chapter');
       expect(catalog.map(({ key, permission }) => [key, permission])).toEqual(
-        Object.entries(SystemPermissions),
+        CHAPTER_KEYS,
       );
       expect(catalog.find((row) => row.permission === 'ai:use')).toMatchObject({
         key: 'AI_USE',
@@ -1620,17 +1827,15 @@ describe('RbacService', () => {
     });
   });
 
-  it('should return permissions catalog', () => {
+  it('should return permissions catalog', async () => {
     // The catalog depends on the AI switch; pin it off whatever the shell has.
     const aiEnabled = process.env.AI_ENABLED;
     delete process.env.AI_ENABLED;
-    const result = service.getPermissionsCatalog();
+    const result = await catalogFor('chapter');
     if (aiEnabled !== undefined) process.env.AI_ENABLED = aiEnabled;
 
     expect(result.map(({ key, permission }) => [key, permission])).toEqual(
-      Object.entries(SystemPermissions).filter(
-        ([, permission]) => !AI_PERMISSIONS.has(permission),
-      ),
+      CHAPTER_KEYS.filter(([, permission]) => !AI_PERMISSIONS.has(permission)),
     );
     expect(
       result.some((r) => r.key === 'WILDCARD' && r.permission === '*'),

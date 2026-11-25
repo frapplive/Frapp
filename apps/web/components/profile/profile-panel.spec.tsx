@@ -27,14 +27,9 @@ const mocks = vi.hoisted(() => {
       fetchStatus: "idle" as string,
       refetch: vi.fn(),
     },
-    stats: {
-      points: 1240 as number | null,
-      serviceHours: "18.5" as string | null,
-      hasChapter: true,
-      visible: true,
-      pointsFailed: false,
-      serviceFailed: false,
-    },
+    chapterId: "c-1" as string | null,
+    open: null as string | null,
+    replace: vi.fn(),
     permissions: ["members:view"] as string[],
     majors: ["Mechanical Engineering", "Music", "Computer Science"],
     memberByUserId: vi.fn<(userId: string) => { data: unknown }>(() => ({
@@ -57,15 +52,22 @@ vi.mock("@/components/profile/profile-photo-control", () => ({
     mocks.photoControl(props),
 }));
 
+// The active tenant is a chapter here; councils have their own cases (#5933).
+vi.mock("@/lib/hooks/use-tenant-kind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hooks/use-tenant-kind")>()),
+  useTenantKind: () => "chapter",
+  useIsCouncil: () => false,
+  useTenantIdentity: () => ({ kind: "chapter", councilType: null }),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
   return {
     profileIdentityLine: actual.profileIdentityLine,
-    profileStatsErrorNote: actual.profileStatsErrorNote,
+    useActiveChapterId: () => mocks.chapterId,
     useMemberDisplayNames: () => ({ avatarTintFor: () => null }),
     useCurrentUser: () => mocks.userQuery,
     useUpdateUser: () => mocks.updateUser,
-    useMyProfileStats: () => mocks.stats,
     usePermissionList: () => mocks.permissions,
     useChapterMajors: () => mocks.majors,
     useMemberByUserId: (userId: string) => mocks.memberByUserId(userId),
@@ -83,6 +85,32 @@ vi.mock("@/components/members/member-pledge-class-section", () => ({
 // job is whether it draws them.
 vi.mock("@/components/activity/standing-cards", () => ({
   StandingCards: () => <div data-testid="standing-cards" />,
+}));
+
+// The doors and the three panels have their own specs
+// (`standing-stats.spec.tsx`, `my-points-panel.spec.tsx`,
+// `my-service-panel.spec.tsx`, `my-study-panel.spec.tsx`); the profile's job
+// is where they sit and which is open.
+vi.mock("@/components/standing/standing-stats", () => ({
+  StandingStats: () => <div data-testid="standing-stats" />,
+}));
+vi.mock("@/components/standing/standing-panels", () => ({
+  StandingPanels: ({
+    open,
+    onClose,
+  }: {
+    open: string | null;
+    onClose: () => void;
+  }) =>
+    open ? (
+      <button type="button" data-testid={`panel-${open}`} onClick={onClose}>
+        Close panel
+      </button>
+    ) : null,
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mocks.replace }),
+  useSearchParams: () => new URLSearchParams(mocks.open ? `open=${mocks.open}` : ""),
 }));
 
 // More details is its own spec's business (#581); the panel's job is the gate.
@@ -638,36 +666,27 @@ describe("ProfilePanel — profile details (2026-11-06 form fixes)", () => {
 describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
   beforeEach(() => {
     resetQueries();
-    mocks.stats.points = 1240;
-    mocks.stats.serviceHours = "18.5";
-    mocks.stats.pointsFailed = false;
-    mocks.stats.serviceFailed = false;
-    mocks.stats.hasChapter = true;
-    mocks.stats.visible = true;
+    mocks.chapterId = "c-1";
+    mocks.open = null;
+    mocks.replace.mockClear();
     mocks.permissions = ["members:view"];
     mocks.memberByUserId.mockClear();
     mocks.classSection.mockClear();
   });
 
-  it("shows your points and approved service hours", () => {
+  it("draws your numbers as doors, and opens the one the address names (#5950)", async () => {
+    mocks.open = "service";
     render(<ProfilePanel />);
-    expect(screen.getByText("Points").nextElementSibling).toHaveTextContent(
-      "1,240",
-    );
-    expect(
-      screen.getByText("Service hours").nextElementSibling,
-    ).toHaveTextContent("18.5");
+    expect(screen.getByTestId("standing-stats")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("panel-service"));
+    // Closing returns to the profile under it.
+    expect(mocks.replace).toHaveBeenCalledWith("/profile", { scroll: false });
   });
 
-  it("draws a dash, not a zero, for a number not read yet, and says which read failed", () => {
-    mocks.stats.points = null;
-    mocks.stats.serviceHours = null;
-    mocks.stats.serviceFailed = true;
+  it("opens no panel for an address that names none, or one that isn't a door", () => {
+    mocks.open = "dues";
     render(<ProfilePanel />);
-    expect(screen.getAllByText("—")).toHaveLength(2);
-    expect(
-      screen.getByText("Service hours couldn't load just now."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Close panel")).toBeNull();
   });
 
   it("puts major · company · year under the name, from what is saved", () => {
@@ -699,32 +718,15 @@ describe("ProfilePanel — what the phone's Profile shows (#4137)", () => {
     expect(screen.queryByText("History · '27")).toBeNull();
   });
 
-  it("says to choose a chapter when there is none to read points in", () => {
-    mocks.stats.hasChapter = false;
-    mocks.stats.points = null;
-    mocks.stats.serviceHours = null;
-    render(<ProfilePanel />);
-    expect(
-      screen.getByText("Choose a chapter to see your points."),
-    ).toBeInTheDocument();
-  });
-
   it("shows Last week and This semester beside your numbers (#5779)", () => {
     render(<ProfilePanel />);
     expect(screen.getByTestId("standing-cards")).toBeInTheDocument();
   });
 
   it("draws no standing without a chapter to read it in (#5779)", () => {
-    mocks.stats.hasChapter = false;
+    mocks.chapterId = null;
     render(<ProfilePanel />);
     expect(screen.queryByTestId("standing-cards")).toBeNull();
-  });
-
-  it("leaves the numbers out for a role that can't read them", () => {
-    mocks.stats.visible = false;
-    render(<ProfilePanel />);
-    expect(screen.queryByText("Points")).toBeNull();
-    expect(screen.queryByText("Service hours")).toBeNull();
   });
 
   it("hands your class and number to read-only rows", () => {

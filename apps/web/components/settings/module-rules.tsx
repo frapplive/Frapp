@@ -396,7 +396,7 @@ export function PointsRules({
           />
           <NumberRule
             label="Flag adjustments of"
-            hint="An adjustment this size or bigger, up or down, is flagged in Points under Audit for another officer to look at. It still goes through."
+            hint="An adjustment this size or bigger, up or down, is flagged in the ledger below for another officer to look at. It still goes through."
             suffix="points"
             draft={flagDraft}
             onDraft={setFlagDraft}

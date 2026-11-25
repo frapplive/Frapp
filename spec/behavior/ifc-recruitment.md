@@ -2,6 +2,8 @@
 
 > **Status: Approved; being built.** Paul reviewed it on 2026-11-11 and made the calls in [§ Decisions](#decisions-for-paul), and approved the build on 2026-11-23, due 2027-01-11. The plan and record are [#5833](https://github.com/frapplive/Frapp/issues/5833), one sub-issue per slice of [§ Phasing](#phasing).
 >
+> _(Updated 2026-11-24, [#5974](https://github.com/frapplive/Frapp/issues/5974); Winston, `gampheadband`.)_ Paul approved the IFC recruitment work on 2026-11-23, due 2027-01-11 ([#5833](https://github.com/frapplive/Frapp/issues/5833)). **Built so far:** [§ The council master list](#the-council-master-list)'s identity, duplicates and merge queue, the in-season counts and the logged phone reveal (API only, no screens yet), and [§ Retention and deletion](#retention-and-deletion)'s 180-day clock for PNM records. Where they differ from this text is recorded in [`school-layer.md`](../architecture/school-layer.md) § 2.5 and § 3.3, each as "#5974". The rest is still proposed, and the lines below about nothing being scheduled predate the approval.
+>
 > Part of [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Asked by: Winston (`whewitt-frapp`), 2026-11-11.
 > GitHub hides that account's issues and PRs (#4192, epic #4226 and its sub-issues) since 2026-11-11; the visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 >
@@ -188,6 +190,7 @@ An IFC officer is usually a brother in one of the chapters the council covers. I
 
 - **Interests and bids show as counts per PNM.** For example, "interested in 3 chapters" or "2 bids outstanding".
 - **Per-chapter aggregates show as totals.** For example, "Chapter A: 40 interested, 12 bids".
+  - Changed by Winston, 2026-11-24 (#5977): per-chapter interest totals wait for the close too. While a season is open or planned, the master list shows each PNM's count only, because totals beside the counts could tell where a PNM signed up.
 - **Which chapter a PNM chose shows only for acceptances.** An acceptance is public to the chapters anyway, as "Accepted elsewhere".
 - **Held bid-day bids show only as counts per chapter** before release.
 - **Per-PNM, per-chapter detail** (who is interested where, who bid on whom) opens to the council when the season closes, for reports.
@@ -300,15 +303,31 @@ All in one transaction, written server-side (ADR-27):
 
      If the PNM deletes their information ([below](#the-pnms-own-view)), their name on the card is rewritten to "Withdrawn prospect". That's the same in-place rewrite the account-deletion name scrub does to cards ([`data-retention.md`](data-retention.md#individual-account-deletion)).
 
+_(Built 2026-11-24, #5977.)_ What the build does, and where it differs from the sections above:
+- **Tables and functions:** `20261125005308_chapter_interest_forms.sql`. The whole submission is `submit_interest_form`, one transaction; telling the chapter and the emails follow it and never fail it. A form exists, closed, from the first read of its settings once Rush is on.
+- **Verify first:** the form has its own one-time codes (`interest_form_verifications`), because #5929's need an account. Same six digits, salted hash and attempt count; ceilings per address (6 an hour) and per IP (200 an hour, for 30 to 50 PNMs on one campus Wi-Fi at a table), counted by the database under locks. A matched code mints a proof the submission spends once, so each submission is one verified address's own and the code ceilings are the submission ceilings. **The bot challenge before a code is sent isn't built:** it needs a provider account (a credential, so Paul's), filed as a follow-up.
+- **Chapters with no school** keep no `pnms` row: the chapter's own submissions are the match (by email), and the candidate has no `pnm_id`. When the chapter joins a school, its next submission from that address links the candidate to the school-wide record.
+- **Push-up** registers the PNM for the council's open season when the chapter's link is accepted, the council verified and recruiting. With no open season, the form feeds the chapter only. Accepting the link, or opening a season, pushes the chapter's earlier form PNMs up and emails each one newly on the list.
+- **A hand-added namesake** is stored on the submission for the chapter to confirm, and the referrer text names a member only when exactly one matches. Confirming either, and the optional channel card, aren't built yet (the follow-up).
+- **Not on the page yet:** the chapter's events open to PNMs (the "Open to PNMs" switch comes with § Events and attendance), the council registration link (no council form exists yet), and "Get the app".
+- **The withdraw link** the consent text promises is in every confirmation email (Winston, 2026-11-24): "Withdraw or delete my info" opens `/withdraw`, with a single-purpose token in the URL fragment (never a server log). It expires after a year, is stored only as a hash on the submission, and is spent by its one use. The page offers one choice of two, then a confirmation: **Withdraw from {Chapter}** (the interest withdrawn, the candidate to Closed, "Withdrew", and the chapter's copy of the form answers deleted) or **Delete my information everywhere** (the PNM record with its interests and registrations, and every form answer from the address, deleted; each chapter's candidate to Closed, "Deleted their information", unlinked, and renamed "Withdrawn prospect" when the form made it). `withdraw_interest_form` does either in one transaction. The routes are rate-limited per IP (120 previews and 5 withdrawals a minute). No interest-form chat card exists yet to rewrite (the card is #5985); a hand-added candidate's card keeps the name a member typed. The rest of [§ The PNM's own view](#the-pnms-own-view) is still to come.
+- **The phone** opens and closes the form, shares its link and switches the referrer question; the blurb, questions, QR codes and replacing the form are on web's Recruitment page, beside the recruitment contacts Group (#5973). A candidate's page on both apps shows what their form gave.
+- **Name lookup:** two candidates with one name answer `409 rush.candidate.several_match` with their ids ([§ Name lookup](#name-lookup)). The slash command says "Several prospects have that name. Open Recruitment to pick one."; the picker isn't built yet.
+- **Where the name rule differs:** the index is unique among hand-added candidates (`origin = 'manual'`, as `school-layer.md` § 2.5 has it), not among unlinked ones as [§ Name lookup](#name-lookup) says. The two differ only at a chapter with no school, where a form candidate has no `pnm_id`: a hand add of the same name there is allowed, not 409. _For Paul or Winston:_ which rule is meant.
+- **A phone given on one chapter's form stays that chapter's:** it is on the submission, which the chapter reads, and the form never sets `pnms.phone_shared`, so it never reaches another chapter linked to the PNM.
+- **A council verified after the fact:** form PNMs reach the master list when the link is accepted or a season opens, but only for a verified council. Nothing in the API verifies a council yet (staff set `council_verified_at` by hand), so whoever does must also run `push_up_chapter_form_interests` for its accepted chapters until that step is built.
+
 ### Consent and privacy text
 
-The text sits above the submit button, never behind a link. **It's a draft.** Legal and privacy copy is Paul's ([AGENTS.md § ADR discipline](../../AGENTS.md#adr-discipline)).
+The text sits above the submit button, never behind a link. Legal and privacy copy is Paul's ([AGENTS.md § ADR discipline](../../AGENTS.md#adr-discipline)). _(Approved by Paul on [#5932](https://github.com/frapplive/Frapp/issues/5932), 2026-11-24, as drafted here; a lawyer's review is still to come. The no-school variant below is not yet settled.)_
 
 > By submitting, you share this information with **{Chapter}**{ at {School}} so they can contact you about joining. {At a school:} Your name, email, class year and phone also go to **{Council}**, the council {Chapter} belongs to on Frapp (or, if it has none yet, the council it joins), which keeps one recruitment list for {School}. The council sees how many chapters you've signed up with, and which one you join. Other chapters don't see that you signed up here. {Under option B or C, say exactly what other chapters see.} Frapp stores this for them. You can withdraw from this chapter, or delete your recruitment information entirely, at any time from the link we email you. We don't ask for your grades here. If the council checks eligibility, you'll be asked to sign a separate release in Frapp, unless you've already signed one with {School}. Either way, we'll tell you when your eligibility is checked, and you can revoke at any time.
 
 **The boxes:**
 - **Required:** "I agree, and I'm 18 or older." The Terms require 18 ([`legal.md`](legal.md)), and some first-year PNMs are 17. That's [decision 4](#decisions-for-paul).
 - **Optional, under option B only:** "Let every IFC chapter at {School} see that I'm interested in recruitment."
+
+**How the placeholders fill** (built 2026-11-24, #5977, `interestFormConsentText` in `@repo/validation`, pinned word for word by its spec): `{ at {School}}` and the council and eligibility sentences appear only at a school; `{Council}` is the council's name, or the draft's own alternative, "the council it joins", when there is none yet; under option A, `{Under option B or C, …}` adds nothing. _For Paul:_ at a chapter with no school, the build leaves out every sentence about the council and eligibility, since there is neither; the draft doesn't say which sentences `{At a school:}` covers.
 
 **What is stored with each submission:**
 - the consent text version;
@@ -318,7 +337,7 @@ The text sits above the submit button, never behind a link. **It's a draft.** Le
 
 ## The chapter Rush module
 
-Today recruitment runs through chat only: the slash commands and the candidate card ([`rush.md`](rush.md)). This adds:
+Before #5924, recruitment ran through chat only: the slash commands and the candidate card ([`rush.md`](rush.md)). This adds (the pipeline, candidate page and dashboard are built as of #5973, 2026-11-24):
 - a **pipeline** (a board and a list);
 - a candidate page;
 - a dashboard.
@@ -340,7 +359,7 @@ Chat keeps working, and the card links to the candidate's page.
 | Category | Moves here automatically | Slice |
 | --- | --- | --- |
 | `new` | On creation from a form or an import (an add already lands here) | Interest forms, the master list |
-| `contacted` | On the first logged contact | Slice 2 (#5833) |
+| `contacted` | On the first logged contact | **Built in #5934** |
 | `met` | When marked present at a chapter event | Step 2, PNM attendance |
 | `closed` | With the reasons below | Bids; the PNM's own view |
 
@@ -355,6 +374,8 @@ Chat keeps working, and the card links to the candidate's page.
 **Built in #5924:** [`rush.md` § Tags](rush.md#tags), [§ Ratings](rush.md#ratings) and [§ Notes](rush.md#notes), including `rush:read_notes` and its opt-in for existing chapters. The reasoning for the separate read key is kept there. Still to build here: deleting notes and ratings 30 days after the season closes ([§ Retention](#retention-and-deletion)), once seasons exist.
 
 ### Contact tracking and follow-ups
+
+**Built in #5934:** the rules are in [`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups). What follows is the design they came from; phone and email below wait for interest forms.
 
 - **Log a contact.** Pick the kind (text, call, in person, social DM, email, event) and the date; a note is optional. Who logged it is recorded.
   - This needs `rush:add`, which this design widens to "add and work prospects", so it also covers moving stages.
@@ -397,6 +418,13 @@ Chat keeps working, and the card links to the candidate's page.
 
 ### Bids
 
+**Built in #5973:** extend, record a decline or an acceptance, confirm, rescind and expire, with the shipped-client compatibility below ([`rush.md` § Bids](rush.md#bids)). The PNM accepting or declining in their own view, the eligibility check, the bid window, bid-day release and the push-ups wait for their slices (§ Phasing); the eligibility check and the push-ups are hooks that do nothing yet.
+
+**Decided for this slice** (Winston, 2026-11-24, before councils and interest forms exist):
+- **The PNM's email.** Record an acceptance asks the recorder for the PNM's email, filled from the account when the prospect is a linked member. It is stored only to send the one-tap confirmation and the accepted PNM's invite, members can't see it, and it is deleted once the bid is answered. With no email, only a holder of `rush:manage` confirms.
+- **How long a bid lasts.** A chapter setting on the Recruitment settings page, "Bids expire after N days", default 7, from 1 to 30. Once councils land, the council's bid window becomes its ceiling.
+- **Where an accepted PNM shows.** On the board only: the card leaves Bid extended and shows under an "Accepted" group in the folded Closed column. The stage itself doesn't change.
+
 | Action | Who | Rules |
 | --- | --- | --- |
 | **Extend** | `rush:bid` | Allowed only from `none` or `expired`. Any other state returns 409, so an old card can't undo an acceptance ([below](#compatibility-with-shipped-clients)). Blocked outside the council's bid window. For **Not eligible**, blocked or warned, as the council chooses. For **Pending**, warned. Stores the verdict at the time and gets an expiry (the council default, which the chapter can shorten). Pushed up as *bid extended*. Under bid-day release, held until release ([§ Bid day](#bid-day)) |
@@ -421,7 +449,7 @@ Chat keeps working, and the card links to the candidate's page.
 
 #### Compatibility with shipped clients
 
-Today:
+Before #5973 (built as below in #5973, 2026-11-24):
 - `bid_status` allows `none` and `extended`.
 - The response DTOs declare that enum.
 - `RushService.bid` overwrites any state that isn't `extended`.
@@ -436,14 +464,18 @@ A shipped card then shows a sensible state, and its Extend button can't change a
 
 ### Name lookup
 
-Today `GET /v1/rush/candidates?name=` and `/rush vote|bid <name>` rely on names being unique in a chapter (`rush_candidates_chapter_name_key`, and `findByNameKey`'s single-row read). Form submissions can bring in two different "Jake Smith"s, so:
+**Built in #5973:** the lookup's 409 and web's picker ([`rush.md` § Voting and Bids](rush.md#voting-and-bids)). The unique index changes to unlinked candidates only with the slice that adds `pnm_id`, since until then every candidate is unlinked and the rule is already the one below.
+
+Before #5973, `GET /v1/rush/candidates?name=` and `/rush vote|bid <name>` relied on names being unique in a chapter (`rush_candidates_chapter_name_key`, and `findByNameKey`'s single-row read). Form submissions can bring in two different "Jake Smith"s, so:
 
 - **The unique name rule applies only among unlinked candidates.** A manual add still gets today's 409 when an unlinked candidate already has the name.
-- **When a name matches several candidates,** the lookup returns 409, "Several prospects match", with their ids. The slash command then shows a picker. It never returns a 500 or picks one silently.
+- **When a name matches several candidates,** the lookup returns 409, "Several prospects match", and `GET /v1/rush/candidates/matches?name=` lists them with their ids (corrected 2026-11-24: the API's error body carries a code and a message only, so the matches can't ride on the 409). The slash command then shows a picker. It never returns a 500 or picks one silently.
 
 ### Dashboard
 
-The funnel that [`rush.md` § Funnel](rush.md#funnel) describes but was never built. It shows:
+**Built in #5973:** the counts by stage, open, mine, needs follow-up, follow-ups due, the bids by state, and the gated ratings and votes ([`rush.md` § Funnel](rush.md#funnel)). The rest joins with the slices that record it.
+
+The funnel [`rush.md` § Funnel](rush.md#funnel) describes. It shows:
 - counts by stage, in the chapter's order;
 - bids: extended, outstanding, accepted, declined, expired;
 - eligibility counts;
@@ -455,6 +487,8 @@ The funnel that [`rush.md` § Funnel](rush.md#funnel) describes but was never bu
 All of it needs `rush:view`, except vote counts and rating averages, which need `rush:view_results`.
 
 ### Where the chapter's settings live
+
+**Built in #5973:** the recruitment contacts Group, the card channel, the new-member role, and how long a bid lasts until councils land ([`rush.md` § Settings](rush.md#settings)). The interest form's own settings came with #5977, which reads that contacts Group rather than keeping its own.
 
 Every chapter-side setting in this design goes on the **Recruitment module page** in Chapter settings, the one-page-per-module layout from #4073 (switch, rules that save, who can). Nothing here adds a second recruitment settings screen. The page holds:
 
@@ -734,11 +768,11 @@ This builds on the URL and data-model phases 1 and 2 of the concept.
 
 1. **The chapter pipeline.**
    - Stage categories with default stages; notes, tags and ratings. **Built in #5924** ([`rush.md` § Pipeline](rush.md#pipeline)).
-   - Contacts, owner, follow-ups and the stale alert.
-   - Bid extend, accept, decline, record and expire, with the shipped-client compatibility above. A recorded acceptance waits for confirmation.
-   - The Recruitment module settings page, including the `rush:read_notes` opt-in for existing chapters and the new-member role.
+   - Contacts, owner, follow-ups and the stale alert. **Built in #5934** ([`rush.md` § Contacts, owner and follow-ups](rush.md#contacts-owner-and-follow-ups)).
+   - Bid extend, accept, decline, record and expire, with the shipped-client compatibility above. A recorded acceptance waits for confirmation. **Built in #5973** ([`rush.md` § Bids](rush.md#bids)).
+   - The Recruitment module settings page, including the `rush:read_notes` opt-in for existing chapters and the new-member role. **Built in #5924, #5934 and #5973** ([`rush.md` § Settings](rush.md#settings)).
    - The [phone-first actions](#a-recruitment-week-at-real-scale) on mobile.
-   - Name-lookup disambiguation; the dashboard.
+   - Name-lookup disambiguation; the dashboard. **Built in #5973.**
    - Every `rush:*` key wired on the API **and** the clients (#4084), plus `rush:read_notes`.
 2. **PNM attendance, marked from the roster,** because the automatic move to Met needs it.
 3. **Chapter interest forms.**

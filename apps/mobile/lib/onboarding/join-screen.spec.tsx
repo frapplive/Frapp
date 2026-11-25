@@ -174,6 +174,7 @@ import {
 import { ChapterMarkTile } from "@/components/onboarding/chapter-mark-tile";
 import { JoinWithInvite } from "@/components/onboarding/join-with-invite";
 import JoinChapter, { JOIN_CHOICE_TITLE } from "@/app/(auth)/join";
+import { COUNCIL_FORM_COPY } from "@/lib/onboarding/council-form";
 
 type Node = ReactTestRenderer["root"];
 type AlertButton = { text: string; style?: string; onPress?: () => void };
@@ -469,6 +470,7 @@ describe("join screen — account deletion (5.1.1(v))", () => {
       "Account",
       "Paste",
       INVITE_PASTE_COPY.startingAction,
+      COUNCIL_FORM_COPY.start,
     ]) {
       expect(control(tree.root, label)?.props.disabled).toBe(true);
     }
@@ -691,6 +693,17 @@ describe("join screen — the question (#3350)", () => {
       control(tree.root, INVITE_PASTE_COPY.startingAction)?.props.onPress();
     });
     expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith("/create-chapter");
+  });
+
+  it("sends a council's founder to council setup (#5933)", () => {
+    const tree = render();
+    act(() => {
+      control(tree.root, COUNCIL_FORM_COPY.start)?.props.onPress();
+    });
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith({
+      pathname: "/create-chapter",
+      params: { kind: "council" },
+    });
   });
 
   it("goes straight to the invite card when an invite link opened the app", async () => {

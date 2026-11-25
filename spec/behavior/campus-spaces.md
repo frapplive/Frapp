@@ -1,6 +1,6 @@
 # Campus spaces: school-wide social features and their moderation
 
-**Status: Proposed, pending Paul.** Nothing here is built. Asked by Winston (`whewitt-frapp`), 2026-11-11, for [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Until Paul accepts it, the specs listed in [§ 10](#10-specs-this-would-change) describe the system, and this doc changes none of them.
+**Status: Proposed, pending Paul, and parked: not on the roadmap for the beta** (Paul, 2026-11-24, [#5951](https://github.com/frapplive/Frapp/issues/5951); baseline first, 2026-11-10). Nothing here is built, nothing in it is drift to file or a rule to build against, and no build issue is filed from it until Paul accepts it and sets a date. Asked by Winston (`whewitt-frapp`), 2026-11-11, for [#4192](https://github.com/pdcarlson/Frapp/issues/4192). Until Paul accepts it, the specs listed in [§ 10](#10-specs-this-would-change) describe the system, and this doc changes none of them.
 
 GitHub hides `whewitt-frapp`'s issues and PRs since 2026-11-11, including #4192 and this doc's first PR, #4276. The visible record is [#5833](https://github.com/frapplive/Frapp/issues/5833) (2026-11-21, Winston as `gampheadband`).
 

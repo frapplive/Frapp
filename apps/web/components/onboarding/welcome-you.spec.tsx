@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   /** What the fields read holds when the screen draws; `load` answers with `customFields`. */
   customFieldsLoaded: true,
   updateCustom: vi.fn(),
+  /** The member's verified schools (#5929): one, so chat is next. */
+  schools: [{ school: { id: "s-1" } }] as unknown[],
 }));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
@@ -37,8 +39,29 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useUpdateUser: () => ({ mutateAsync: mocks.updateUser }),
   useUpdateOnboarding: () => ({ mutateAsync: mocks.completeOnboarding }),
   useActiveChapterId: () => "ch-1",
+  useMySchools: () => ({ data: mocks.schools }),
+  useCurrentChapter: () => ({
+    data: { university: "Rensselaer Polytechnic Institute" },
+  }),
   usePermissionList: () => ["members:view"],
   useChapterMajors: () => [],
+}));
+/** The school step has its own spec; here it only has to be reached. */
+vi.mock("@/components/onboarding/school-step", () => ({
+  SchoolStep: ({
+    initialQuery,
+    onLeave,
+  }: {
+    initialQuery: string;
+    onLeave: () => void;
+  }) => (
+    <div>
+      <p>school step: {initialQuery}</p>
+      <button type="button" onClick={onLeave}>
+        Not a student? Skip for now
+      </button>
+    </div>
+  ),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
@@ -81,7 +104,41 @@ describe("WelcomeYou", () => {
     mocks.offline = false;
     mocks.updateUser.mockResolvedValue({});
     mocks.completeOnboarding.mockResolvedValue({});
+    mocks.schools = [{ school: { id: "s-1" } }];
     window.localStorage.clear();
+  });
+
+  describe("the school step (#5929)", () => {
+    it("asks a member with no verified school, from the chapter's school", async () => {
+      mocks.schools = [];
+      render(<WelcomeYou />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+      expect(
+        await screen.findByText(
+          "school step: Rensselaer Polytechnic Institute",
+        ),
+      ).toBeTruthy();
+      expect(mocks.completeOnboarding).toHaveBeenCalledWith({
+        has_completed_onboarding: true,
+      });
+      expect(mocks.replace).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Not a student? Skip for now" }),
+      );
+      expect(mocks.replace).toHaveBeenCalledWith("/chat");
+    });
+
+    it("goes straight to chat for a member already verified at a school", async () => {
+      render(<WelcomeYou />);
+
+      fireEvent.click(goToChat());
+
+      await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/chat"));
+      expect(screen.queryByText(/school step/)).toBeNull();
+    });
   });
 
   it("says the phone's words, with a real name pre-filled and a photo to add", () => {

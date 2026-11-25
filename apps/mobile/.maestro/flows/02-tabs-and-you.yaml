@@ -1,6 +1,6 @@
 # Device pass: every tab opens, and each You row every member sees opens its
 # screen and comes back (the smoke checklist's dead-end rule, §§ 2-3). Rows
-# drawn only for some chapters or roles (Documents, Study hours, Dues, Minutes,
+# drawn only for some chapters or roles (Documents, Dues, Minutes,
 # Invite members, Host check-in, Chapter settings) are left to the hand pass.
 appId: live.frapp.mobile
 name: "Every tab and You row opens and comes back"
@@ -40,10 +40,6 @@ tags:
 - takeScreenshot: tab-you
 # Your profile is the top of the You tab (#3839): no screen of its own.
 - assertVisible: "points"
-- runFlow:
-    file: ../subflows/open-you-row.yaml
-    env:
-      ROW: "Service hours"
 - runFlow:
     file: ../subflows/open-you-row.yaml
     env:

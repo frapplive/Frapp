@@ -117,7 +117,6 @@ const {
       pinnedIds: new Set<string>(),
       collapsed: new Set<string>(),
       filters: { unreadOnly: false, hideMuted: false },
-      sort: "chapter" as "chapter" | "recent" | "alpha",
     },
   },
   leaveMutateAsync: vi.fn(),
@@ -189,6 +188,13 @@ const allThreads = vi.hoisted(() => ({ data: [] as unknown[] }));
 const homeEventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
 }));
+// The open tenant's kind (#5933): a chapter unless a case makes it a council.
+const tenant = vi.hoisted(() => ({ council: false }));
+vi.mock("@/lib/tenant-kind", () => ({
+  useTenantKind: () => (tenant.council ? "council" : "chapter"),
+  useIsCouncil: () => tenant.council,
+  useServesChapterFeatures: () => !tenant.council,
+}));
 vi.mock("@repo/hooks", async () => {
   // The pure helpers run for real: the point is to catch the screen using
   // them wrongly, and a stub would decide the answer itself.
@@ -227,6 +233,17 @@ vi.mock("@repo/hooks", async () => {
     lastChannelStorageKey: actual.lastChannelStorageKey,
     useActiveChapterId: () => "chapter-1",
     groupChannelsByCategory: actual.groupChannelsByCategory,
+    // New unreads pills (#6045): the rule and its words run for real.
+    unreadJumpTargets: actual.unreadJumpTargets,
+    unreadJumpRowKey: actual.unreadJumpRowKey,
+    unreadJumpHeadKey: actual.unreadJumpHeadKey,
+    unreadJumpEdgeOf: actual.unreadJumpEdgeOf,
+    unreadJumpState: actual.unreadJumpState,
+    sameUnreadJumpState: actual.sameUnreadJumpState,
+    unreadJumpLabel: actual.unreadJumpLabel,
+    NO_UNREAD_JUMP: actual.NO_UNREAD_JUMP,
+    NEW_UNREADS_LABEL: actual.NEW_UNREADS_LABEL,
+    UNREAD_JUMP_HIGHLIGHT_MS: actual.UNREAD_JUMP_HIGHLIGHT_MS,
     otherMemberId: actual.otherMemberId,
     directChannelDisplayName: actual.directChannelDisplayName,
     HIDDEN_CONVERSATIONS_LABEL: actual.HIDDEN_CONVERSATIONS_LABEL,
@@ -255,8 +272,6 @@ vi.mock("@repo/hooks", async () => {
     SIDEBAR_SAVE_FAILED_TITLE: actual.SIDEBAR_SAVE_FAILED_TITLE,
     UNPIN_FROM_TOP_LABEL: actual.UNPIN_FROM_TOP_LABEL,
     UNREAD_ONLY_LABEL: actual.UNREAD_ONLY_LABEL,
-    SORT_CHANNELS_LABEL: actual.SORT_CHANNELS_LABEL,
-    SIDEBAR_SORT_OPTIONS: actual.SIDEBAR_SORT_OPTIONS,
     useChapterRoster: () => query([], refetches.roster),
     useSidebarPreferencesRefetch: () => ({ refetch: refetches.sidebar }),
     useSidebarPreferences: () => sidebarPrefs.value,
@@ -380,6 +395,34 @@ vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => branding.current,
 }));
 
+// New unreads pills (#6045): the hook's own measuring needs a laid-out scroll
+// view, which a test renderer has none of (`lib/chat/use-unread-jump.spec.ts`
+// covers it). Here it records what the screen hands it and answers with the
+// pills a test sets, so the screen's wiring is what is under test.
+const unreadJumpHook = vi.hoisted(() => ({
+  calls: [] as { targets: { key: string; addressed: boolean }[] }[],
+  refKeys: new Set<string>(),
+  state: { above: null, below: null } as {
+    above: unknown;
+    below: unknown;
+  },
+  jump: vi.fn(),
+}));
+vi.mock("@/lib/chat/use-unread-jump", () => ({
+  useUnreadJump: (args: { targets: { key: string; addressed: boolean }[] }) => {
+    unreadJumpHook.calls.push(args);
+    return {
+      state: unreadJumpHook.state,
+      jump: unreadJumpHook.jump,
+      refFor: (key: string) => (node: unknown) => {
+        if (node) unreadJumpHook.refKeys.add(key);
+      },
+      onScroll: () => undefined,
+      litKey: null,
+    };
+  },
+}));
+
 import ChatHomeScreen from "@/app/(app)/(tabs)/index";
 import * as Sentry from "@sentry/react-native";
 import { resetChannelsRefusedReport } from "@/lib/chat/channels-error";
@@ -482,6 +525,10 @@ beforeEach(() => {
   // behind the skeleton while one may still happen.
   settleChatLaunch();
   vi.clearAllMocks();
+  unreadJumpHook.calls = [];
+  unreadJumpHook.refKeys.clear();
+  unreadJumpHook.state = { above: null, below: null };
+  tenant.council = false;
   chapterScope.value = "chapter";
   latestData.value = [];
   latestData.answered = true;
@@ -505,7 +552,6 @@ beforeEach(() => {
     pinnedIds: new Set(),
     collapsed: new Set(),
     filters: { unreadOnly: false, hideMuted: false },
-    sort: "chapter",
   };
 });
 
@@ -550,7 +596,7 @@ describe("Chat home lists channels only (2026-11-07)", () => {
     expect(hiddenToggleTexts(tree)).toHaveLength(0);
   });
 
-  it("reads no latest messages unless the member sorts by Recent: a channel row carries no preview", () => {
+  it("reads no latest messages: channels are in the chapter's order and a row carries no preview (#5947)", () => {
     render();
 
     expect(latestCalls).toHaveBeenCalled();
@@ -797,9 +843,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       ),
     ).toHaveLength(0);
 
-    act(() =>
-      pressableLabelled(tree, "Sort and filter channels").props.onPress(),
-    );
+    act(() => pressableLabelled(tree, "Filter channels").props.onPress());
     const toggle = (label: string) =>
       tree.root
         .findByType(ChannelFilterMenu)
@@ -812,50 +856,12 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     expect(setFilter).toHaveBeenNthCalledWith(2, { hide_muted: true });
   });
 
-  it("offers the sort on top of the menu and sends the one picked (#2877)", () => {
+  it("offers the two filters and no sort: channels are in the chapter's order (Paul, 2026-11-24, #5947)", () => {
     const tree = render();
-    act(() =>
-      pressableLabelled(tree, "Sort and filter channels").props.onPress(),
-    );
-    const sort = tree.root.findByType(ChannelFilterMenu).findByType(Segmented);
-    expect(sort.props.value).toBe("chapter");
-    expect(
-      sort.props.options.map((option: { label: string }) => option.label),
-    ).toEqual(["Chapter order", "Recent", "A–Z"]);
-
-    act(() => sort.props.onChange("alpha"));
-    expect(setFilter).toHaveBeenCalledWith({ sort: "alpha" });
-  });
-
-  it("orders channels by their latest message under Recent (#2877)", () => {
-    const alumni = { id: "c-alumni", name: "alumni", type: "PUBLIC" };
-    channelsData.value = [general, alumni];
-    sidebarPrefs.value = { ...sidebarPrefs.value, sort: "recent" };
-    const latestAt = (channelId: string, createdAt: string) => ({
-      channel_id: channelId,
-      message_id: `m-${channelId}`,
-      sender_id: ALICE,
-      author_name: null,
-      content: "see you at 6",
-      kind: "text",
-      payload: null,
-      attachment_count: 0,
-      created_at: createdAt,
-    });
-    const rowNames = () =>
-      render()
-        .root.findAllByType(ChannelRow)
-        .map((row) => row.props.name);
-
-    // The chapter's order (A to Z here) until the times are known.
-    latestData.value = undefined as never;
-    expect(rowNames()).toEqual(["alumni", "general"]);
-
-    latestData.value = [
-      latestAt(general.id, "2026-11-14T12:00:00.000Z"),
-      latestAt(alumni.id, "2026-11-13T09:00:00.000Z"),
-    ];
-    expect(rowNames()).toEqual(["general", "alumni"]);
+    act(() => pressableLabelled(tree, "Filter channels").props.onPress());
+    const menu = tree.root.findByType(ChannelFilterMenu);
+    expect(menu.findAllByType(Segmented)).toHaveLength(0);
+    expect(menu.props).not.toHaveProperty("sort");
   });
 
   it("says a filter is on, on the button and under the heading, and Show all clears both", () => {
@@ -868,7 +874,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     ];
     const tree = render();
 
-    pressableLabelled(tree, "Sort and filter channels, filters on");
+    pressableLabelled(tree, "Filter channels, filters on");
     expect(screenText(tree)).toContain("Showing unread only.");
     act(() =>
       tree.root
@@ -1388,7 +1394,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     // A member: the chevron, and the filter at the edge of the first heading.
     const member = render();
     expect(drawn(member)).toEqual([
-      ["chevron", "Sort and filter channels"],
+      ["chevron", "Filter channels"],
       ["chevron"],
     ]);
     expect(member.root.findByType(ChannelFilterButton).props.atEdge).toBe(true);
@@ -1397,7 +1403,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     permissionList.value = ["channels:create", "channels:manage"];
     const officer = render();
     expect(drawn(officer)).toEqual([
-      ["chevron", "Sort and filter channels", "New channel"],
+      ["chevron", "Filter channels", "New channel"],
       ["chevron", "New channel in Committees"],
     ]);
     expect(officer.root.findByType(ChannelFilterButton).props.atEdge).toBe(
@@ -1444,7 +1450,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     channelsData.value = [general];
     const triggerStyle = (tree: ReactTestRenderer) =>
       StyleSheet.flatten(
-        pressableLabelled(tree, "Sort and filter channels").props.style({
+        pressableLabelled(tree, "Filter channels").props.style({
           pressed: false,
         }),
       );
@@ -1924,6 +1930,20 @@ describe("Chat home header: Search and the bell (#3839, #5310)", () => {
     expect(labels).toEqual(["Search", "Notifications"]);
   });
 
+  it("draws only the bell in a council, whose search route refuses it (#5933)", () => {
+    tenant.council = true;
+    const tree = render();
+    const labels = tree.root
+      .findAll(
+        (node) =>
+          (node.type as unknown) === "Pressable" &&
+          (node.props.accessibilityLabel === "Search" ||
+            node.props.accessibilityLabel === "Notifications"),
+      )
+      .map((node) => node.props.accessibilityLabel);
+    expect(labels).toEqual(["Notifications"]);
+  });
+
   describe("bell", () => {
     it("draws no badge while nothing is unread", () => {
       const tree = render();
@@ -2360,6 +2380,12 @@ describe("Chat home setup checklist (spec/product/modules.md § Setup checklist)
     ]);
   });
 
+  it("draws none in a council, whose home holds its first steps (#5933)", () => {
+    tenant.council = true;
+    setupChecklist.value = ONE_LINE;
+    expect(render().root.findAllByType(SetupChecklistView)).toHaveLength(0);
+  });
+
   it("asks the shared hook to leave dues off the phone", () => {
     render();
     expect(setupChecklistOptions.value).toEqual({ omit: ["dues"] });
@@ -2495,7 +2521,7 @@ describe("Chat home section headings draw a disclosure glyph", () => {
         (node.type as unknown) === "Pressable" &&
         node.props.accessibilityRole === "header",
     );
-    const filter = pressableLabelled(tree, "Sort and filter channels");
+    const filter = pressableLabelled(tree, "Filter channels");
 
     expect(header.findAll((n) => n === filter)).toHaveLength(0);
     // They share one heading row, the filter button last.
@@ -2701,5 +2727,87 @@ describe("Chat home Now card (#5777)", () => {
     } finally {
       homeEventsNow.value = { events: [], now: Date.now() };
     }
+  });
+});
+
+describe("Chat home's New unreads pills (#6045)", () => {
+  const social = { id: "c-social", name: "social", type: "PUBLIC" };
+  const lastTargets = () =>
+    unreadJumpHook.calls[unreadJumpHook.calls.length - 1]!.targets;
+
+  it("hands the hook the unread rows, red for a mention, and measures each one", () => {
+    channelsData.value = [general, social];
+    unreadData.value = [
+      { channel_id: general.id, unread_count: 2, mention_count: 1 },
+    ];
+    // A host view for every ref, as a device has.
+    render({ createNodeMock: () => ({}) });
+    expect(lastTargets()).toEqual([
+      { key: `row:${general.id}`, addressed: true },
+    ]);
+    expect(unreadJumpHook.refKeys.has(`row:${general.id}`)).toBe(true);
+    expect(unreadJumpHook.refKeys.has(`row:${social.id}`)).toBe(true);
+  });
+
+  it("points at a folded heading for its unread rows", () => {
+    channelsData.value = [general, social];
+    unreadData.value = [
+      { channel_id: social.id, unread_count: 3, mention_count: 0 },
+    ];
+    sidebarPrefs.value = {
+      ...sidebarPrefs.value,
+      collapsed: new Set(["channels"]),
+    };
+    render({ createNodeMock: () => ({}) });
+    expect(lastTargets()).toEqual([{ key: "head:channels", addressed: false }]);
+    expect(unreadJumpHook.refKeys.has("head:channels")).toBe(true);
+  });
+
+  it("has nothing to point at on counts the phone saved (#4006)", async () => {
+    const { holdUnreadFirstPaint, resetUnreadFirstPaintForTests } =
+      await import("@/lib/chat/unread-first-paint");
+    channelsData.value = [general, social];
+    unreadData.value = undefined as never;
+    holdUnreadFirstPaint({
+      saved: [{ channel_id: general.id, unread_count: 4, mention_count: 0 }],
+      tray: { channelIds: new Set(), since: Date.now() },
+    });
+    try {
+      render();
+      expect(lastTargets()).toEqual([]);
+    } finally {
+      resetUnreadFirstPaintForTests();
+    }
+  });
+
+  it("draws the pills the hook reports, and a press jumps", () => {
+    channelsData.value = [general, social];
+    unreadJumpHook.state = {
+      above: null,
+      below: {
+        next: { key: `row:${social.id}`, addressed: true },
+        addressed: true,
+      },
+    };
+    const tree = render();
+    expect(
+      tree.root.findAllByProps({ testID: "unread-jump-above" }),
+    ).toHaveLength(0);
+    const pill = tree.root.findByProps({ testID: "unread-jump-below" });
+    expect(pill.props.accessibilityLabel).toBe("Jump to unread channels below");
+    act(() => pill.props.onPress());
+    expect(unreadJumpHook.jump).toHaveBeenCalledWith("below");
+  });
+
+  it("draws no pill with no list on screen", () => {
+    channelsData.value = [];
+    unreadJumpHook.state = {
+      above: null,
+      below: { next: { key: "row:x", addressed: false }, addressed: false },
+    };
+    const tree = render();
+    expect(
+      tree.root.findAllByProps({ testID: "unread-jump-below" }),
+    ).toHaveLength(0);
   });
 });

@@ -154,7 +154,7 @@ export function SkeletonField({
   );
 }
 
-type RowLead = "none" | "avatar" | "checkbox" | "glyph" | "rank";
+type RowLead = "none" | "avatar" | "checkbox" | "glyph" | "rank" | "tile";
 
 /**
  * Rows in a dense list, on the loaded list's own hairlines.
@@ -238,6 +238,9 @@ function RowLeadBlock({ lead }: { lead: RowLead }) {
       return <Skeleton className="h-4 w-4 shrink-0 rounded-[4px]" />;
     case "rank":
       return <Skeleton className="h-[13px] w-6 shrink-0" />;
+    case "tile":
+      // `CrestTile`'s 28px nav size: a chapter in a council's list (#5974).
+      return <Skeleton className="h-7 w-7 shrink-0 rounded-[8px]" />;
     default:
       return null;
   }

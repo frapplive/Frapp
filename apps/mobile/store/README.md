@@ -225,9 +225,8 @@ The questionnaire **calculated 4+**; it was **overridden to 13+**. Answers given
 **Social Media = No** is defensible on Apple's own wording — "redistribution,
 amplification, or interaction with user-generated content through a social feed or
 similar discovery method that visibly spreads content to many users." Frapp has
-no followers, no discovery and no resharing, and the activity feed has no client
-surface at all (see the surface note at the top of
-[`spec/behavior/activity-feed.md`](../../../spec/behavior/activity-feed.md)).
+no followers, no discovery and no resharing, and no chapter activity feed (the
+API had one that no client rendered; it was deleted on 2026-11-24, #5951).
 
 **Contests = None** despite points and leaderboards: Apple's descriptor means
 prize competitions and sweepstakes. [`spec/behavior/points.md`](../../../spec/behavior/points.md)

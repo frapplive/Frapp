@@ -22,6 +22,8 @@ import {
   CHANNEL_ACCESS_LIST_MAX,
   DOCUMENT_TITLE_MAX_LENGTH,
   DOCUMENT_TYPE_NAME_MAX_LENGTH,
+  MEETING_TYPES,
+  type MeetingType,
 } from '@repo/validation';
 import { ChannelAccessOptionDto } from './chat.dto';
 
@@ -385,6 +387,28 @@ export class DocumentStarsDto {
   document_ids: string[];
 }
 
+/** What a minutes row shows of its minutes (#5949). */
+export class DocumentMinutesDto {
+  @ApiProperty() meeting_id: string;
+  @ApiProperty({ description: "The meeting's name as the minutes hold it" })
+  event_name: string;
+  @ApiProperty({ format: 'date-time' }) event_start_time: string;
+  @ApiProperty({ enum: MEETING_TYPES }) meeting_type: MeetingType;
+  @ApiProperty({ type: String, nullable: true }) other_label: string | null;
+  @ApiProperty() decision_count: number;
+  @ApiProperty() action_item_count: number;
+  @ApiProperty({
+    description: "Whether a recording's transcript is kept with the minutes",
+  })
+  recorded: boolean;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "The TL;DR's first line",
+  })
+  gist: string | null;
+}
+
 /**
  * A document row as the list and pin routes return it. Declared so the SDK
  * types `pinned_at` (#3934) rather than leaving the body untyped.
@@ -395,8 +419,20 @@ export class ChapterDocumentDto {
   @ApiProperty() title: string;
   @ApiProperty({ type: String, nullable: true }) description: string | null;
   @ApiProperty({ type: String, nullable: true }) folder: string | null;
-  @ApiProperty() storage_path: string;
-  @ApiProperty() uploaded_by: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "The stored file's path. Null only on a row that files a meeting's minutes (`meeting_id`), which the list returns only when asked with `minutes=true`.",
+  })
+  storage_path: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "Who uploaded the file. Null only on a row that files a meeting's minutes.",
+  })
+  uploaded_by: string | null;
   @ApiProperty() created_at: string;
   @ApiProperty({ type: String, nullable: true }) content_type: string | null;
   @ApiProperty({ type: Number, nullable: true }) byte_size: number | null;
@@ -456,6 +492,20 @@ export class ChapterDocumentDto {
       "Who can see it (#3642): null for the same as its folder, else its own list, which narrows the folder's",
   })
   who_can_see: string[] | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "Set on the row that files a meeting's posted minutes (#5949): the minutes' id, which the row opens instead of a file. Seen only by members who may read those minutes.",
+  })
+  meeting_id: string | null;
+  @ApiPropertyOptional({
+    type: () => DocumentMinutesDto,
+    nullable: true,
+    description:
+      'On the list and a single read: what a minutes row shows of its minutes. Null on a file.',
+  })
+  minutes?: DocumentMinutesDto | null;
 }
 
 /** A folder as the folder list and pin routes return it (#3934). */
@@ -485,6 +535,13 @@ export class DocumentFolderDto {
       'The Google Drive folder it mirrors, or null (#5220). Its name follows Drive, so it is renamed and deleted there, not here.',
   })
   drive_folder_id: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "Set on a folder the minutes flow files into (#5949): `root` for the chapter's Minutes folder, or a repeating meeting's series for that series' folder.",
+  })
+  minutes_series_key: string | null;
 }
 
 /** One grid preview link (#4647): the document and its inline signed URL. */

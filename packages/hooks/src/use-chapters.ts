@@ -4,7 +4,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
 import { markLegalAcceptanceRecorded } from "./legal-acceptance";
 import { putSignedUpload } from "./put-signed-upload";
-import { readSignedUpload, type SubscriptionStatus } from "@repo/validation";
+import {
+  readSignedUpload,
+  type CouncilType,
+  type SubscriptionStatus,
+  type TenantKind,
+} from "@repo/validation";
 
 export interface ChapterMembershipSummary {
   chapter_id: string;
@@ -49,7 +54,15 @@ export interface ChapterMembershipSummary {
     branding?: Record<string, unknown>;
     theme_palette?: Record<string, unknown>;
     analytics_opt_out?: boolean;
+    /** The tenant kind (ADR-27); `council` draws the council shell (#5933). */
+    kind?: TenantKind;
+    /** A council's type; null on a chapter (#5933). */
+    council_type?: CouncilType | null;
   };
+  /** The tenant's kind, as the row's top level carries it too (#5918). */
+  kind?: TenantKind;
+  /** The tenant's current URL slug (ADR-27). */
+  slug?: string | null;
 }
 
 function chapterQueryKey(...parts: Array<string | null | undefined>) {

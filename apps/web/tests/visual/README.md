@@ -7,10 +7,10 @@ suites, all in the **required** `web-responsive-floor` job:
 | --- | --- |
 | `responsive-floor.spec.ts` | every `DASHBOARD_ROUTES` entry at 375px |
 | `pre-auth-floor.spec.ts` | every `PRE_AUTH_ROUTES` entry at 375px, plus one guard |
-| `nav-fit.spec.ts` | the sidebar fits a 1024×768 window with every row showing (#2946) |
+| `nav-fit.spec.ts` | the sidebar's channel list keeps room for eight rows at 1024×768 with every row showing (#5946; until then, that the twelve-row nav fit, #2946) |
 | `pre-auth-fit.spec.ts` | `/sign-in` and `/sign-up` fit a 1280×650 window without scrolling |
 | `document-fit.spec.ts` | no `DASHBOARD_ROUTES` entry scrolls the document at 1280×420 (#4000) |
-| `beside-chat-floor.spec.ts` | every tool page (the dashboard routes but `/chat` and `/settings`, which takes the whole width and hides chat, plus Chat admin and the Alumni tab) holds 375px beside chat in a 1440px window (#4033); its header says how to run it signed in against the demo seed |
+| `beside-chat-floor.spec.ts` | every tool page (the dashboard routes but `/chat` and `/messages`, which are chat's own, and `/settings`, which takes the whole width and hides chat, plus Chat admin and the Alumni tab) holds 375px beside chat in a 1440px window (#4033); its header says how to run it signed in against the demo seed |
 
 The floor suites and `document-fit.spec.ts` read `routes.ts`. Add a screen
 there and those specs pick it up. `nav-fit.spec.ts` measures one route, because the sidebar is the
@@ -133,9 +133,7 @@ a fresh context with empty `localStorage`, so the persisted
 `frapp-active-chapter` key is missing and `useChapterStore.activeChapterId` is
 `null` (`apps/web/lib/stores/chapter-store.ts`). Several routes therefore render
 an empty state or a "Select an active chapter" card rather than their populated
-content — `/backwork` early-returns before its real surface mounts, and `/points`
-is the one route whose fix for #1142 lives inside `<main>` and does render for
-real.
+content — `/backwork` early-returns before its real surface mounts.
 
 `/chat` stopped being one of them in [#2145](https://github.com/pdcarlson/Frapp/issues/2145):
 its whole-route early return was folded into a `no-chapter` state the frame

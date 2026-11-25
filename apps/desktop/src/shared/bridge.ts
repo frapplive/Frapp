@@ -15,6 +15,7 @@
 export const IPC = {
   setBadgeCount: "frapp-desktop:set-badge-count",
   openExternal: "frapp-desktop:open-external",
+  showWindow: "frapp-desktop:show-window",
 } as const;
 
 export type FrappDesktopBridge = {
@@ -29,6 +30,11 @@ export type FrappDesktopBridge = {
    * address that isn't a sign-in returning to this app.
    */
   openExternal(url: string): Promise<boolean>;
+  /**
+   * Bring the window forward, from the tray if it is hidden there. The page
+   * calls it when the member clicks one of its notifications (#4842).
+   */
+  showWindow(): void;
 };
 
 /** The badge stops counting where the dock does: macOS shows up to 99999. */

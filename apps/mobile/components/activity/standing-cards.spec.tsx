@@ -208,7 +208,7 @@ describe("This semester (the gauges)", () => {
     ]);
   });
 
-  it("leaves out a zero with nothing to aim at, and the whole strip with none left", () => {
+  it("leaves out a zero with nothing to aim at, but keeps the points and service doors", () => {
     standing.value = { ...standing.value, data: standingRead };
     const tree = render();
     // No study this week and no study goal: no gauge, not a zero.
@@ -231,6 +231,33 @@ describe("This semester (the gauges)", () => {
         unavailable: [],
       },
     };
+    // The points and service gauges are the only doors on You to the
+    // member's own Points and Service hours screens (#5950), so they stay
+    // at zero; required events and study, at zero, don't.
+    const zero = render();
+    for (const id of ["points", "service"]) {
+      expect(gauge(zero, id)).toBeTruthy();
+    }
+    for (const id of ["required_events", "study"]) {
+      expect(
+        zero.root.findAll(
+          (node) => node.props.testID === `activity-standing-${id}`,
+        ),
+      ).toHaveLength(0);
+    }
+  });
+
+  it("draws no strip when nothing is left, as with Points and Hours off", () => {
+    standing.value = {
+      ...standing.value,
+      data: {
+        points: null,
+        required_events: { required: 0, attended: 0, excused: 0 },
+        service: null,
+        study: standingRead.study,
+        unavailable: [],
+      },
+    };
     expect(screenText(render())).not.toContain("This semester");
   });
 
@@ -244,7 +271,8 @@ describe("This semester (the gauges)", () => {
     act(() => gauge(tree, "service").props.onPress());
     expect(push).toHaveBeenLastCalledWith("/service-hours");
     act(() => gauge(tree, "points").props.onPress());
-    expect(push).toHaveBeenLastCalledWith("/tasks");
+    // The member's own points (#5950; the task board until then).
+    expect(push).toHaveBeenLastCalledWith("/points");
   });
 
   it("holds its place while it loads, and draws nothing when its read fails", () => {

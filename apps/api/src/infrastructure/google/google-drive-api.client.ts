@@ -187,7 +187,7 @@ export class GoogleDriveApiClient implements IGoogleDriveApi {
   async getItemAs(accessToken: string, id: string): Promise<GoogleDriveItem> {
     const body = await this.json(
       `/files/${encodeURIComponent(id)}?${new URLSearchParams({
-        fields: `${GET_ITEM_FIELDS},capabilities/canEdit`,
+        fields: `${GET_ITEM_FIELDS},driveId,capabilities/canEdit,capabilities/canShare`,
         supportsAllDrives: 'true',
       }).toString()}`,
       {},
@@ -524,6 +524,13 @@ function toItem(raw: unknown): GoogleDriveItem {
     trashed: file.trashed === true,
     ...(isRecord(file.capabilities)
       ? { canEdit: file.capabilities.canEdit === true }
+      : {}),
+    ...(isRecord(file.capabilities) &&
+    typeof file.capabilities.canShare === 'boolean'
+      ? { canShare: file.capabilities.canShare }
+      : {}),
+    ...(typeof file.driveId === 'string' && file.driveId !== ''
+      ? { driveId: file.driveId }
       : {}),
     resourceKey:
       typeof file.resourceKey === 'string' && file.resourceKey !== ''

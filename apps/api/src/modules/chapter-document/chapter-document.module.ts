@@ -15,7 +15,10 @@ import { SupabaseStorageService } from '../../infrastructure/storage/supabase-st
 import { ChannelAccessListService } from '../../application/services/channel-access-list.service';
 import { SupabaseChatCategoryRepository } from '../../infrastructure/supabase/repositories/supabase-chat-category.repository';
 import { CHAT_CATEGORY_REPOSITORY } from '#domain/repositories/chat.repository.interface';
+import { MinutesDocumentService } from '../../application/services/minutes-document.service';
+import { MinutesDocumentSweepService } from '../../application/workers/minutes-document-sweep.service';
 import { ChapterModule } from '../chapter/chapter.module';
+import { MeetingModule } from '../meeting/meeting.module';
 import { RbacModule } from '../rbac/rbac.module';
 
 @Module({
@@ -24,11 +27,16 @@ import { RbacModule } from '../rbac/rbac.module';
   // ChannelAccessListService reads; RbacModule → RbacService for the viewer's
   // entries and rank. The category repository is only for that service's
   // channel-category check, which Documents never calls.
-  imports: [ChapterModule, RbacModule],
+  // MeetingModule → MeetingService: a row that files a meeting's minutes
+  // (#5949) is seen by the meeting's own rule, and filed when they post.
+  // MeetingModule imports nothing of Documents, so there is no cycle.
+  imports: [ChapterModule, RbacModule, MeetingModule],
   controllers: [ChapterDocumentController],
   providers: [
     ChapterDocumentService,
     ChapterDocumentTypeService,
+    MinutesDocumentService,
+    MinutesDocumentSweepService,
     {
       provide: CHAPTER_DOCUMENT_REPOSITORY,
       useClass: SupabaseChapterDocumentRepository,

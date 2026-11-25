@@ -15,11 +15,17 @@ import type {
   ICorpusRepository,
   MatchCorpusInput,
 } from '#domain/repositories/corpus.repository.interface';
+import { AI_MODEL_CATALOG } from '#domain/constants/ai-model-catalog';
 
 /** A vector as pgvector reads it from text. */
 function vectorLiteral(values: readonly number[]): string {
   return `[${values.join(',')}]`;
 }
+
+/** What `match_corpus_chunks` is handed when a search has no embedding. */
+const NO_EMBEDDING = vectorLiteral(
+  new Array<number>(AI_MODEL_CATALOG['corpus.embed'].dimensions).fill(0),
+);
 
 /** The search's narrowing as the function's arguments; none when unnarrowed. */
 function matchFilterArgs(filter: CorpusMatchFilter | undefined): {
@@ -183,8 +189,15 @@ export class SupabaseCorpusRepository implements ICorpusRepository {
       p_chapter_id: input.chapterId,
       p_user_id: input.userId,
       p_query: input.query,
-      p_embedding: vectorLiteral(input.embedding),
-      p_embedding_model: input.embeddingModel,
+      // Words only: no passage carries the empty model name, so the
+      // function's nearest half is empty and its words half answers alone.
+      // The vector is never compared; it is there because the argument is
+      // required and must parse at the column's width.
+      p_embedding:
+        input.embedding === null
+          ? NO_EMBEDDING
+          : vectorLiteral(input.embedding.vector),
+      p_embedding_model: input.embedding === null ? '' : input.embedding.model,
       p_limit: input.limit,
       // Sent only when the search is narrowed, so an unnarrowed search is
       // the call it always was, against a database with or without

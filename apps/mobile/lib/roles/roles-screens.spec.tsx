@@ -41,6 +41,7 @@ const h = vi.hoisted(() => ({
   groups: [] as unknown[],
   vocabulary: {} as Record<string, string>,
   updateRole: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
+  updateGroup: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   updateTier: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
   accentPresent: vi.fn(),
   backgroundPresent: vi.fn(),
@@ -92,6 +93,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useChapterChatBackground: () =>
       ok({ background: "midnight", photo_url: null }),
     useUpdateRole: () => ({ mutateAsync: h.updateRole, isPending: false }),
+    useUpdateGroup: () => ({ mutateAsync: h.updateGroup, isPending: false }),
+    useChapterRoleColors: () => [],
+    useViewerDisplayName: () => "Marcus Ellison",
     useUpdateRoleTier: () => ({ mutateAsync: h.updateTier, isPending: false }),
     useAiChapterSettings: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.aiSettings),
@@ -99,6 +103,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
       ok(options?.enabled === false ? undefined : h.config),
     usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
     useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
       mutateAsync: h.createChannel,
@@ -264,6 +271,7 @@ beforeEach(() => {
   ];
   h.updateRole.mockClear().mockResolvedValue({});
   h.updateTier.mockClear().mockResolvedValue({});
+  h.updateGroup.mockClear().mockResolvedValue({});
   h.aiConsent = null;
   h.rolesUpdatedAt = 0;
   h.groups = [
@@ -1061,4 +1069,105 @@ describe("Switches for features not offered here (#4504)", () => {
       for (const label of AI_LABELS) expect(text).toContain(label);
     });
   }
+});
+
+describe("Role and group colors on the phone (#5966, #5791)", () => {
+  /** The color sheet's prop-holding node: the one with `previewName`. */
+  const colorSheet = (tree: ReturnType<typeof render>) =>
+    tree.root.find(
+      (node) =>
+        typeof node.props.previewName === "string" &&
+        typeof node.props.onChange === "function",
+    );
+
+  it("saves a role's color from its page, and says so when it fails", async () => {
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
+    const tree = render(<RoleScreen />);
+    expect(screenText(tree)).toContain("No color");
+    await act(async () => {
+      colorSheet(tree).props.onChange("#00B2E0");
+    });
+    expect(h.updateRole).toHaveBeenLastCalledWith({
+      id: "r-tres",
+      body: { color: "#00B2E0" },
+    });
+    expect(screenText(tree)).toContain("Bright sky");
+    h.updateRole.mockRejectedValueOnce(new Error("boom"));
+    await act(async () => {
+      colorSheet(tree).props.onChange(null);
+    });
+    expect(screenText(tree)).toContain(
+      "Couldn't update Treasurer. The color was not changed.",
+    );
+  });
+
+  it("leaves a role's color read-only to someone who can't edit roles", () => {
+    h.permissions = ["chapter-config:view"];
+    vi.mocked(useLocalSearchParams).mockReturnValue({ roleId: "r-tres" });
+    const tree = render(<RoleScreen />);
+    const row = tree.root.find(
+      (node) => node.props.label === "Color" && node.props.value === "No color",
+    );
+    expect(row.props.onPress).toBeUndefined();
+  });
+
+  it("leaves the color of a role at or above the officer's own rank read-only", () => {
+    // `me` holds Treasurer (Officers): a roles manager edits only roles
+    // ranked below their own.
+    h.permissions = ["roles:manage", "members:view", "chapter-config:view"];
+    const colorRow = (roleId: string) => {
+      vi.mocked(useLocalSearchParams).mockReturnValue({ roleId });
+      const tree = render(<RoleScreen />);
+      return tree.root.find(
+        (node) =>
+          node.props.label === "Color" && node.props.value === "No color",
+      );
+    };
+    expect(colorRow("r-tres").props.onPress).toBeUndefined();
+    expect(colorRow("r-bro").props.onPress).toBeTypeOf("function");
+  });
+
+  it("puts a failed group color save on the group's row", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    h.updateGroup.mockRejectedValueOnce(new Error("boom"));
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "In house" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    await act(async () => {
+      colorSheet(tree).props.onChange("#3DD6C4");
+    });
+    expect(screenText(tree)).toContain(
+      "Couldn't update In house. The color was not changed.",
+    );
+  });
+
+  it("lets a groups manager set a group's color from its row", async () => {
+    h.permissions = ["groups:manage", "members:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find(
+      (node) =>
+        node.props.label === "In house" &&
+        typeof node.props.onPress === "function",
+    );
+    act(() => row.props.onPress());
+    expect(colorSheet(tree).props.previewName).toBe("In house");
+    await act(async () => {
+      colorSheet(tree).props.onChange("#3DD6C4");
+    });
+    expect(h.updateGroup).toHaveBeenLastCalledWith({
+      id: "g-house",
+      body: { color: "#3DD6C4" },
+    });
+  });
+
+  it("gives no color control on a group to someone without groups:manage", () => {
+    h.permissions = ["members:view", "chapter-config:view"];
+    const tree = render(<ChapterRolesScreen />);
+    const row = tree.root.find((node) => node.props.label === "In house");
+    expect(row.props.onPress).toBeUndefined();
+  });
 });

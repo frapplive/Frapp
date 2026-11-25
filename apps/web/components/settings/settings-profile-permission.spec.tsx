@@ -13,7 +13,8 @@ import { chapterSubscription } from "@/tests/chapter-subscription";
  * the prop from, and the other page-level specs grant permission sets that
  * would pass whichever gate it read. So this renders the real page per
  * permission set and asserts both saves the constant gates: Save profile on
- * the Chapter tab, and Save accent color on the Accent tab.
+ * the Chapter tab, and Save accent color on the Accent color page its row
+ * opens.
  */
 
 const { mockCurrentChapter, permissions } = vi.hoisted(() => ({
@@ -35,8 +36,11 @@ vi.mock("@/lib/stores/chapter-store", async () =>
   (await import("@/tests/settings-harness")).chapterStore(),
 );
 
+// The address bar, so a Chapter tab row opens its page as it does live.
 vi.mock("next/navigation", async () =>
-  (await import("@/tests/settings-harness")).navigation(),
+  (await import("@/tests/settings-harness")).navigation(
+    () => new URLSearchParams(window.location.search),
+  ),
 );
 
 vi.mock("@/components/shared/can", async () =>
@@ -48,19 +52,26 @@ vi.mock("@/lib/hooks/use-toast", async () =>
 );
 
 const { SettingsPage } = await import("./settings-page");
+const { followLink } = await import("@/tests/settings-harness");
 
 const chapter = chapterSubscription(mockCurrentChapter);
 
 /** Both saves `CHAPTER_PROFILE_PERMISSIONS` gates, read off the real page. */
 async function profileSaves() {
   const user = userEvent.setup();
-  render(<SettingsPage />);
+  const { rerender } = render(<SettingsPage />);
 
   await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+  // A changed field first: an unchanged profile disables Save for its own
+  // reason.
+  await user.type(screen.getByLabelText("Chapter name"), " II");
   const profile = screen.getByRole("button", { name: /save profile/i });
   const profileEnabled = !(profile as HTMLButtonElement).disabled;
 
-  await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+  // The accent has its own page, opened from its row on the Chapter tab.
+  followLink(screen.getByRole("link", { name: /^accent color/i }), () =>
+    rerender(<SettingsPage />),
+  );
   // A savable draft first: an empty one disables Save for its own reason.
   await user.type(screen.getByLabelText(/accent color hex value/i), "#8B0000");
   const accent = screen.getByRole("button", { name: /save accent color/i });
@@ -73,6 +84,7 @@ describe("the Settings page gates profile and accent saves on CHAPTER_PROFILE_PE
   beforeEach(() => {
     vi.clearAllMocks();
     chapter.active();
+    window.history.replaceState(null, "", "/settings");
   });
 
   it.each([
@@ -126,6 +138,7 @@ describe("the Settings page seeds the chapter profile from the contract payload"
   beforeEach(() => {
     vi.clearAllMocks();
     permissions.current = ["*"];
+    window.history.replaceState(null, "", "/settings");
   });
 
   it("fills the profile and accent fields when the chapter's branding is malformed", async () => {
@@ -143,7 +156,7 @@ describe("the Settings page seeds the chapter profile from the contract payload"
       isError: false,
     });
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    const { rerender } = render(<SettingsPage />);
 
     await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
     expect(screen.getByLabelText("Chapter name")).toHaveValue("Tau Nu");
@@ -152,7 +165,9 @@ describe("the Settings page seeds the chapter profile from the contract payload"
       "https://donate.example/tau-nu",
     );
 
-    await user.click(screen.getByRole("tab", { name: /^chapter$/i }));
+    followLink(screen.getByRole("link", { name: /^accent color/i }), () =>
+      rerender(<SettingsPage />),
+    );
     expect(screen.getByLabelText(/accent color hex value/i)).toHaveValue(
       "#8B0000",
     );

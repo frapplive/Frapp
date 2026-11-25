@@ -144,14 +144,23 @@ const SelectContent = React.forwardRef<
 ));
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
+/*
+ * `description` is a muted second line under an option that needs one to be
+ * told apart (a council type's "The council of a school's NPC sororities").
+ * It sits outside `ItemText`, so the field shows the option's label alone
+ * once picked.
+ */
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    description?: React.ReactNode;
+  }
+>(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex min-h-8 w-full cursor-default select-none items-center rounded-xs px-2 py-1.5 pr-8 text-sm outline-none pointer-coarse:min-h-11 pointer-coarse:text-base transition-colors focus:bg-card-hover focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:text-disabled",
+      description ? "flex-col items-start gap-0.5" : null,
       className,
     )}
     {...props}
@@ -162,6 +171,9 @@ const SelectItem = React.forwardRef<
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {description ? (
+      <span className="text-caption text-muted-foreground">{description}</span>
+    ) : null}
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;

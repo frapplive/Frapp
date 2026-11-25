@@ -33,7 +33,7 @@ import { ReportAiButton } from "@/components/ai/report-ai";
 import { Button } from "@/components/ui/button";
 import { FOCUS_RING, FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { IconButton } from "@/components/ui/icon-button";
-import { SegmentedChoice } from "@/components/ui/segmented";
+import { ViewLabels } from "@/components/shared/view-labels";
 import { EYEBROW } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -253,12 +253,14 @@ export function useCatchUp({
                 : CHAT_CATCH_UP_COPY.name}
             </h2>
             {scope.kind === "channel" ? (
-              <SegmentedChoice
+              <ViewLabels
                 label={CHAT_CATCH_UP_COPY.range_label}
-                dense
-                // Never disabled while it works: a disabled control drops
-                // focus out of the block, and picking another range
-                // replaces the request in flight.
+                // Each range asks for a new summary, so the arrow keys move
+                // focus and Enter picks (the ARIA tabs pattern's manual
+                // activation). Never disabled while it works: a disabled
+                // control drops focus out of the block, and picking another
+                // range replaces the request in flight.
+                activation="manual"
                 value={range}
                 onChange={(next) => {
                   setRange(next);

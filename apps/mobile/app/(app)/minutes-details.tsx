@@ -30,6 +30,7 @@ import {
   useDeleteMeeting,
   useMeeting,
   useMeetingActionItemTasks,
+  useMeetings,
   useMeetingDraft,
   useMeetingRecording,
   useMemberDisplayNames,
@@ -66,7 +67,7 @@ import {
   type MeetingType,
   isBetaOffModule,
 } from "@repo/validation";
-import type { BackTarget } from "@/components/back-row";
+import { BACK_TO_MINUTES } from "@/components/back-row";
 import { InlineNote } from "@/components/inline-note";
 import { ListRow, ListSection } from "@/components/list-section";
 import {
@@ -92,6 +93,7 @@ import {
 import { MarkAttendanceSheet } from "@/components/minutes/mark-attendance-sheet";
 import { MinutesBody, MinutesJumpBar } from "@/components/minutes/minutes-body";
 import { ComingUpDates } from "@/components/minutes/coming-up-dates";
+import { useActionItemTaskMenu } from "@/components/minutes/action-item-task";
 import { ComingUpPostReview } from "@/components/minutes/coming-up-post-review";
 import { LinkMeetingSheet } from "@/components/minutes/link-meeting-sheet";
 import { MinutesDetailsSheet } from "@/components/minutes/minutes-details-sheet";
@@ -130,6 +132,7 @@ import {
   recorderBusy,
   recordingPipeline,
 } from "@/lib/minutes/recorder/row-view";
+import { seriesRows } from "@/lib/minutes/series";
 import { useMeetingRecorder } from "@/lib/minutes/recorder/session";
 import { useMinutesEditor } from "@/lib/minutes/use-minutes-editor";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -137,7 +140,9 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 /**
  * One meeting's minutes (`spec/behavior/meetings.md`; #4312): what a member
  * opens from the "minutes posted" notification, an event, an Ask source, or
- * the Minutes list.
+ * its row in Documents, where posted minutes are filed (#5949; the Minutes
+ * list until then, which its way back still leads to: Documents on the
+ * Minutes file type).
  *
  * **Everyone reads.** The page is the minutes as a document: the event's
  * name, one line saying what kind of meeting and when, a jump bar to each
@@ -166,8 +171,6 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * Posting asks nothing first, as on the web (Paul, 2026-11-16), though it
  * tells every invited member once.
  */
-const BACK_TO_MINUTES: BackTarget = { label: "Minutes", href: "/minutes" };
-
 export default function MinutesDetailsScreen() {
   // More, the event row and the push all hide while `meetings` is off for the
   // beta; this catches a way in that skips them (a typed link), where the
@@ -186,8 +189,9 @@ function MinutesDetailsScreenBody() {
   const record =
     (Array.isArray(params.record) ? params.record[0] : params.record) === "1";
   const meetingQuery = useMeeting(id || null);
-  // Named from the Minutes list while the minutes load, so a tap from the
-  // list never opens on a blank screen (Paul, 2026-11-19).
+  // Named from a minutes list already read (an event's row, a series) while
+  // the minutes load, so a tap never opens on a blank screen (Paul,
+  // 2026-11-19).
   const cached = useCachedMeetingRow(id || null);
 
   if (!id) {
@@ -242,6 +246,9 @@ function MinutesDetailsScreenBody() {
     />
   );
 }
+
+/** No suggestions read yet, kept one array so the matching stays memoized. */
+const EMPTY_SUGGESTIONS: never[] = [];
 
 function LoadedMinutes({
   meeting,
@@ -358,6 +365,17 @@ function LoadedMinutes({
     (item) => item.kind === "task" && item.task !== null,
   ).length;
 
+  // A repeating meeting's series screen: its minutes and their open action
+  // items. This row is its way in since the Minutes list, whose Series row
+  // it was, went into Documents (#5949, #5984). Posted minutes only, and
+  // only once the series holds more than these.
+  const minutesList = useMeetings({ enabled: !isDraft });
+  const seriesKey =
+    minutesList.data?.find((row) => row.id === meeting.id)?.series_key ?? null;
+  const seriesCount = seriesKey
+    ? seriesRows(minutesList.data ?? [], seriesKey).length
+    : 0;
+
   const content = useMemo(
     () => readMeetingContent(meeting.content),
     [meeting.content],
@@ -373,6 +391,13 @@ function LoadedMinutes({
       ),
     [actionTasksQuery.data],
   );
+  // An action item's long-press: Create task from its waiting suggestion,
+  // or Open task once it is one (#6051).
+  const actionItemTask = useActionItemTaskMenu({
+    items: content.action_items,
+    suggestions: suggestions.data?.items ?? EMPTY_SUGGESTIONS,
+    handleFor: menu.handleFor,
+  });
   // Without drafting the note is the minutes' Summary, typed and posted here
   // (#5288); Edit minutes writes the other sections. Only once the AI
   // reads have answered that drafting is off: while they load, or when one
@@ -888,6 +913,7 @@ function LoadedMinutes({
         nameFor={names.nameFor}
         viewerId={viewerId}
         tasks={actionTasks}
+        actionItemMenu={editing ? undefined : actionItemTask.menuFor}
         onSectionLayout={(key, y) => sectionY.current.set(key, y)}
         renderDates={(dates) => (
           <ComingUpDates
@@ -1131,6 +1157,22 @@ function LoadedMinutes({
           </View>
         ) : null}
 
+        {!editing && seriesKey && seriesCount > 1 ? (
+          <ListSection>
+            <ListRow
+              label={MEETING_LIST_COPY.series}
+              value={MEETING_LIST_COPY.minutesCount(seriesCount)}
+              accessibilityHint="Opens this meeting's other minutes and their open action items."
+              onPress={() =>
+                router.push({
+                  pathname: "/minutes-series",
+                  params: { key: seriesKey },
+                })
+              }
+            />
+          </ListSection>
+        ) : null}
+
         {/* Under the minutes, so its arrival after the read moves nothing
             the member is reading. */}
         {!editing && suggested > 0 ? (
@@ -1152,6 +1194,7 @@ function LoadedMinutes({
       {recorder.sheets}
       {consentSheet}
       {menu.element}
+      {actionItemTask.sheet}
       {meeting.can_edit ? (
         <MinutesDetailsSheet
           ref={detailsSheetRef}

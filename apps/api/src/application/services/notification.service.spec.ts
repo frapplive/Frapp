@@ -527,7 +527,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'New Announcement',
         body: 'Chapter meeting moved to 6pm',
-        data: {},
+        data: { priority: 'URGENT' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -554,6 +554,31 @@ describe('NotificationService', () => {
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
         expect.objectContaining({ threadId: 'chat:channel-1' }),
+      );
+    });
+
+    it('forwards who a chat push is from and keeps it off the in-app row (#6024)', async () => {
+      mockPreferenceRepo.findByUserChapterCategory.mockResolvedValue(null);
+      mockSettingsRepo.findByUser.mockResolvedValue(null);
+      mockNotificationRepo.create.mockResolvedValue(baseNotification);
+      mockPushTokenRepo.findByUser.mockResolvedValue([basePushToken]);
+      const communication = { senderId: 'u-sam', senderName: 'Sam Rivera' };
+
+      await service.notifyUser('u-1', 'ch-1', {
+        title: 'Sam Rivera',
+        body: 'hi',
+        category: 'chat',
+        communication,
+      });
+
+      const [row] = mockNotificationRepo.create.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(row).not.toHaveProperty('communication');
+      expect(row.data).not.toHaveProperty('communication');
+      expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
+        [basePushToken.token],
+        expect.objectContaining({ communication }),
       );
     });
 
@@ -621,7 +646,7 @@ describe('NotificationService', () => {
         user_id: 'u-1',
         title: 'Test',
         body: 'Body',
-        data: {},
+        data: { priority: 'NORMAL' },
       });
       expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
         [basePushToken.token],
@@ -652,9 +677,20 @@ describe('NotificationService', () => {
         title: 'Test',
         body: 'Body',
         priority: 'NORMAL',
+        data: { target: { screen: 'events' } },
       });
 
       expectSilentPush();
+      // The row says so too, for a client that raises its own banner (#4842).
+      expect(mockNotificationRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            target: { screen: 'events' },
+            priority: 'SILENT',
+            quieted: true,
+          },
+        }),
+      );
 
       jest.useRealTimers();
     });
@@ -1102,6 +1138,8 @@ describe('NotificationService', () => {
           user_id: 'u-1',
           title: 'for u-1',
           body: 'zone America/Chicago',
+          // Its sender's own SILENT, not the member's quiet hours (#4842).
+          data: { priority: 'SILENT' },
         }),
         expect.objectContaining({
           user_id: 'u-2',
@@ -1302,6 +1340,11 @@ describe('NotificationService', () => {
       });
 
       expectSilentPush();
+      expect(mockNotificationRepo.createMany).toHaveBeenCalledWith([
+        expect.objectContaining({
+          data: { priority: 'SILENT', quieted: true },
+        }),
+      ]);
 
       jest.useRealTimers();
     });

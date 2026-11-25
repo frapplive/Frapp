@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   IEmailProvider,
+  SendInterestFormCodeEmailParams,
+  SendInterestFormPushedUpEmailParams,
+  SendInterestFormReceiptEmailParams,
   SendInviteEmailParams,
+  SendBidConfirmEmailParams,
+  SendSchoolCodeEmailParams,
 } from '#domain/adapters/email.interface';
 import { logThrowable } from '../observability/log-throwable';
 
@@ -84,6 +89,195 @@ function inviteEmailText(params: SendInviteEmailParams): string {
   return `${chapter}\n\n${inviteLine(params)}\n\nOpen the invite: ${params.joinUrl}\n\n${inviteFootnote(params)}`;
 }
 
+/** "123456 is your Frapp code for Rensselaer Polytechnic Institute". */
+function schoolCodeSubject(params: SendSchoolCodeEmailParams): string {
+  return `${params.code} is your Frapp code for ${clipName(params.schoolName) ?? 'your school'}`;
+}
+
+/** "It works for 10 minutes. If you didn't ask for it, …" */
+function schoolCodeFootnote(params: SendSchoolCodeEmailParams): string {
+  return `It works for ${params.validMinutes} minutes. If you didn't ask for it, you can ignore this email; nothing changes until the code is typed in Frapp.`;
+}
+
+/**
+ * The school name, the code large enough to read off a phone, and one line on
+ * what it's for. No link: the code is typed into the screen that asked for
+ * it, as sign-in's code is.
+ */
+function schoolCodeEmailHtml(params: SendSchoolCodeEmailParams): string {
+  const school = clipName(params.schoolName) ?? 'Your school';
+  return (
+    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5">` +
+    `<p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>` +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">${escapeHtml(school)}</h1>` +
+    `<p style="margin:0 0 16px;font-size:16px">Your code to verify this school email on Frapp:</p>` +
+    `<p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px">${escapeHtml(params.code)}</p>` +
+    `<p style="margin:0;font-size:13px;color:#5d5a6b">${escapeHtml(schoolCodeFootnote(params))}</p>` +
+    `</div>`
+  );
+}
+
+function schoolCodeEmailText(params: SendSchoolCodeEmailParams): string {
+  const school = clipName(params.schoolName) ?? 'Your school';
+  return `${school}\n\nYour code to verify this school email on Frapp: ${params.code}\n\n${schoolCodeFootnote(params)}`;
+}
+
+const EMAIL_WRAP_OPEN = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5"><p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>`;
+
+/**
+ * "123456 is your Frapp code". No chapter name: a chapter names itself, and
+ * the form sends to any address a stranger types, so its free text stays
+ * out of the subject a phishing attempt would borrow (as the invite's does).
+ */
+function interestFormCodeSubject(
+  params: SendInterestFormCodeEmailParams,
+): string {
+  return `${params.code} is your Frapp code`;
+}
+
+function interestFormCodeFootnote(
+  params: SendInterestFormCodeEmailParams,
+): string {
+  return `It works for ${params.validMinutes} minutes. If you didn't ask for it, you can ignore this email; nothing is sent to anyone until the code is typed on the form.`;
+}
+
+function interestFormCodeEmailHtml(
+  params: SendInterestFormCodeEmailParams,
+): string {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  return (
+    EMAIL_WRAP_OPEN +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">${escapeHtml(chapter)}</h1>` +
+    `<p style="margin:0 0 16px;font-size:16px">Your code to check your email on the interest form:</p>` +
+    `<p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px">${escapeHtml(params.code)}</p>` +
+    `<p style="margin:0;font-size:13px;color:#5d5a6b">${escapeHtml(interestFormCodeFootnote(params))}</p>` +
+    `</div>`
+  );
+}
+
+function interestFormCodeEmailText(
+  params: SendInterestFormCodeEmailParams,
+): string {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  return `${chapter}\n\nYour code to check your email on the interest form: ${params.code}\n\n${interestFormCodeFootnote(params)}`;
+}
+
+function interestFormReceiptLines(
+  params: SendInterestFormReceiptEmailParams,
+): string[] {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  const council = clipName(params.councilName);
+  return [
+    `${chapter} has your details and will be in touch about recruitment.`,
+    council
+      ? `Your name, email, class year and phone also went to ${council}, which keeps one recruitment list for your school.`
+      : null,
+  ].filter((line): line is string => !!line);
+}
+
+function interestFormReceiptEmailHtml(
+  params: SendInterestFormReceiptEmailParams,
+): string {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  return (
+    EMAIL_WRAP_OPEN +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">You're on ${escapeHtml(chapter)}'s list</h1>` +
+    interestFormReceiptLines(params)
+      .map(
+        (line) =>
+          `<p style="margin:0 0 12px;font-size:16px">${escapeHtml(line)}</p>`,
+      )
+      .join('') +
+    `<p style="margin:0 0 12px;font-size:16px"><a href="${escapeHtml(params.withdrawUrl)}">Withdraw or delete my info</a></p>` +
+    `<p style="margin:12px 0 0;font-size:13px;color:#5d5a6b">The form: <a href="${escapeHtml(params.formUrl)}">${escapeHtml(params.formUrl)}</a></p>` +
+    `</div>`
+  );
+}
+
+function interestFormReceiptEmailText(
+  params: SendInterestFormReceiptEmailParams,
+): string {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  return `You're on ${chapter}'s list\n\n${interestFormReceiptLines(params).join('\n\n')}\n\nWithdraw or delete my info: ${params.withdrawUrl}\n\nThe form: ${params.formUrl}`;
+}
+
+function interestFormPushedUpLines(
+  params: SendInterestFormPushedUpEmailParams,
+): string[] {
+  const chapter = clipName(params.chapterName) ?? 'The chapter';
+  const council = clipName(params.councilName) ?? 'its council';
+  return [
+    `${chapter} has joined ${council} on Frapp. As the form you filled in said, your name, email, class year and phone now also go to ${council}, which keeps one recruitment list for your school.`,
+    `The council sees how many chapters you've signed up with, and which one you join. Other chapters don't see that you signed up with ${chapter}.`,
+    `To withdraw or delete your recruitment information, use the "Withdraw or delete my info" link in the confirmation email ${chapter}'s form sent you.`,
+  ];
+}
+
+function interestFormPushedUpEmailHtml(
+  params: SendInterestFormPushedUpEmailParams,
+): string {
+  const council = clipName(params.councilName) ?? 'The council';
+  return (
+    EMAIL_WRAP_OPEN +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">Your details went to ${escapeHtml(council)}</h1>` +
+    interestFormPushedUpLines(params)
+      .map(
+        (line) =>
+          `<p style="margin:0 0 12px;font-size:16px">${escapeHtml(line)}</p>`,
+      )
+      .join('') +
+    `</div>`
+  );
+}
+
+function interestFormPushedUpEmailText(
+  params: SendInterestFormPushedUpEmailParams,
+): string {
+  const council = clipName(params.councilName) ?? 'The council';
+  return `Your details went to ${council}\n\n${interestFormPushedUpLines(params).join('\n\n')}`;
+}
+
+/**
+ * "Confirm you accepted FIJI's bid" (Winston's UI design v8 § 3b). PNM-facing,
+ * so it says "bid" and the chapter's name, never the chapter's own word for
+ * recruitment (`ifc-recruitment.md` § Words used here).
+ */
+function bidConfirmSubject(params: SendBidConfirmEmailParams): string {
+  return `Confirm you accepted ${clipName(params.chapterName) ?? 'a chapter'}'s bid`;
+}
+
+/** "Chris from FIJI recorded that you accepted their bid. …" */
+function bidConfirmLine(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'A chapter';
+  const recorder = clipName(params.recorderName);
+  const who = recorder ? `${recorder} from ${chapter}` : chapter;
+  return `${who} recorded that you accepted their bid. If that's right, confirm it with one tap. If it isn't, ignore this email and nothing changes.`;
+}
+
+function bidConfirmFootnote(params: SendBidConfirmEmailParams): string {
+  const days = params.expiresInDays;
+  if (days === null) return "If you didn't accept, you can ignore this email.";
+  return `The bid expires in ${days === 1 ? '1 day' : `${days} days`} if it isn't confirmed.`;
+}
+
+function bidConfirmEmailHtml(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'Your bid';
+  return (
+    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5">` +
+    `<p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>` +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">${escapeHtml(chapter)}</h1>` +
+    `<p style="margin:0 0 24px;font-size:16px">${escapeHtml(bidConfirmLine(params))}</p>` +
+    `<p style="margin:0 0 24px"><a href="${escapeHtml(params.confirmUrl)}" style="display:inline-block;background:#1b1a22;color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Confirm my acceptance</a></p>` +
+    `<p style="margin:0;font-size:13px;color:#5d5a6b">${escapeHtml(bidConfirmFootnote(params))}</p>` +
+    `</div>`
+  );
+}
+
+function bidConfirmEmailText(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'Your bid';
+  return `${chapter}\n\n${bidConfirmLine(params)}\n\nConfirm my acceptance: ${params.confirmUrl}\n\n${bidConfirmFootnote(params)}`;
+}
+
 /**
  * Resend's own words for a refused send (`{ name, message }`), for the log:
  * a bare 403 doesn't say whether the key, the domain or the recipient was
@@ -137,28 +331,91 @@ export class ResendEmailProvider implements IEmailProvider {
     this.fromAddress = options.fromAddress;
   }
 
-  async sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
+  sendInviteEmail(params: SendInviteEmailParams): Promise<boolean> {
+    return this.send('invite', () => ({
+      to: params.to,
+      subject: inviteSubject(params),
+      html: inviteEmailHtml(params),
+      text: inviteEmailText(params),
+    }));
+  }
+
+  sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean> {
+    return this.send('school code', () => ({
+      to: params.to,
+      subject: schoolCodeSubject(params),
+      html: schoolCodeEmailHtml(params),
+      text: schoolCodeEmailText(params),
+    }));
+  }
+
+  sendInterestFormCodeEmail(
+    params: SendInterestFormCodeEmailParams,
+  ): Promise<boolean> {
+    return this.send('interest form code', () => ({
+      to: params.to,
+      subject: interestFormCodeSubject(params),
+      html: interestFormCodeEmailHtml(params),
+      text: interestFormCodeEmailText(params),
+    }));
+  }
+
+  sendInterestFormReceiptEmail(
+    params: SendInterestFormReceiptEmailParams,
+  ): Promise<boolean> {
+    return this.send('interest form receipt', () => ({
+      to: params.to,
+      subject: `You're on ${clipName(params.chapterName) ?? 'the chapter'}'s recruitment list`,
+      html: interestFormReceiptEmailHtml(params),
+      text: interestFormReceiptEmailText(params),
+    }));
+  }
+
+  sendInterestFormPushedUpEmail(
+    params: SendInterestFormPushedUpEmailParams,
+  ): Promise<boolean> {
+    return this.send('interest form push-up', () => ({
+      to: params.to,
+      subject: `Your recruitment details went to ${clipName(params.councilName) ?? 'the council'}`,
+      html: interestFormPushedUpEmailHtml(params),
+      text: interestFormPushedUpEmailText(params),
+    }));
+  }
+
+  sendBidConfirmEmail(params: SendBidConfirmEmailParams): Promise<boolean> {
+    return this.send('bid confirmation', () => ({
+      to: params.to,
+      subject: bidConfirmSubject(params),
+      html: bidConfirmEmailHtml(params),
+      text: bidConfirmEmailText(params),
+    }));
+  }
+
+  /**
+   * One POST to Resend. The message is built inside the `try`, so a throw
+   * while building it is a `false` like any other failure, never an escape
+   * from the provider's never-throw contract.
+   */
+  private async send(
+    kind: string,
+    build: () => { to: string; subject: string; html: string; text: string },
+  ): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
+      const message = build();
       const response = await fetch(RESEND_API_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from: this.fromAddress,
-          to: params.to,
-          subject: inviteSubject(params),
-          html: inviteEmailHtml(params),
-          text: inviteEmailText(params),
-        }),
+        body: JSON.stringify({ from: this.fromAddress, ...message }),
         signal: controller.signal,
       });
       if (!response.ok) {
         this.logger.warn(
-          `Resend invite email send returned ${response.status} ${response.statusText}${await refusalReason(response)}`,
+          `Resend ${kind} email send returned ${response.status} ${response.statusText}${await refusalReason(response)}`,
         );
         return false;
       }
@@ -167,7 +424,7 @@ export class ResendEmailProvider implements IEmailProvider {
       logThrowable(
         this.logger,
         'warn',
-        'Resend invite email send failed',
+        `Resend ${kind} email send failed`,
         error,
       );
       return false;

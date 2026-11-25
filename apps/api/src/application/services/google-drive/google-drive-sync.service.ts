@@ -44,21 +44,29 @@ import { toReportableError } from '../../../infrastructure/observability/reporta
  * counted in `folders_left_out` rather than read.
  */
 export const DRIVE_MAX_DEPTH = 10;
-/** Files a folder brings into Documents at most; the rest are skipped. */
-export const DRIVE_MAX_FILES = 500;
+/**
+ * Files a folder brings into Documents at most; the rest are skipped and
+ * counted. 500 until 2026-11-25, when a real chapter drive (Tau Nu FIJI on
+ * staging) skipped 753 past it.
+ */
+export const DRIVE_MAX_FILES = 5000;
 /**
  * Files copied (new or changed) per pass; a bigger change takes a few passes.
  * Each pass lists the whole tree again first, so this is large enough that a
- * full first connect (`DRIVE_MAX_FILES`) takes five passes, not twenty-five.
+ * full first connect (`DRIVE_MAX_FILES`) takes about seventeen passes. New
+ * copies also stop at `DRIVE_COPY_TIME_MS`, which bounds a pass whatever this
+ * is.
  */
-export const DRIVE_COPY_BUDGET = 100;
+export const DRIVE_COPY_BUDGET = 300;
 /**
  * Folders listed per pass, so a folder of folders can't stall a pass. Each is
  * one Drive list call, plus one per further 1,000 items in it. Folders past it
  * are left out of Documents and counted, the same on every pass (the listing
- * order is Drive's by name).
+ * order is Drive's by name). 300 until 2026-11-25, when the same drive left 209
+ * folders out; at a few hundred milliseconds a call, 1,000 lists well inside
+ * `DRIVE_LIST_TIME_MS`.
  */
-export const DRIVE_MAX_FOLDERS = 300;
+export const DRIVE_MAX_FOLDERS = 1000;
 /**
  * How long a pass lists folders before it stops and copies what it found. A
  * listing cut short by time keeps every copy and folder it didn't reach (a
@@ -609,13 +617,17 @@ export class GoogleDriveSyncService {
         drive_modified_at: file.item.modifiedTime,
         drive_url: file.item.webViewLink,
       });
-      await this.storage
-        .deleteFile(DOCUMENTS_BUCKET, previous.storage_path)
-        .catch((error: unknown) =>
-          this.logger.warn(
-            `Could not remove a replaced Drive copy's old file: ${toReportableError(error).message}`,
-          ),
-        );
+      // A Drive copy always has a stored file; only a meeting's minutes row
+      // has none (#5949).
+      if (previous.storage_path !== null) {
+        await this.storage
+          .deleteFile(DOCUMENTS_BUCKET, previous.storage_path)
+          .catch((error: unknown) =>
+            this.logger.warn(
+              `Could not remove a replaced Drive copy's old file: ${toReportableError(error).message}`,
+            ),
+          );
+      }
       return true;
     }
     try {
@@ -665,7 +677,9 @@ export class GoogleDriveSyncService {
     await this.storage
       .deleteFiles(
         DOCUMENTS_BUCKET,
-        copies.map((copy) => copy.storage_path),
+        copies.flatMap((copy) =>
+          copy.storage_path !== null ? [copy.storage_path] : [],
+        ),
       )
       .catch((error: unknown) =>
         this.logger.warn(

@@ -37,6 +37,9 @@ import { SystemPermissions } from '#domain/constants/permissions';
  *   `PermissionsGuard`): any member of the chapter. Listed below with why.
  * - **User-scoped** (`SupabaseAuthGuard`, no `ChapterGuard`) and **public**
  *   (no `SupabaseAuthGuard`): listed below with why.
+ * - **School-scoped** (`SupabaseAuthGuard` → `SchoolGuard`, never with
+ *   `ChapterGuard`): a campus page's routes, served to the school's live
+ *   members only (ADR-27 decision 3, #5929). Listed below with why.
  *
  * A new route in a listed tier is a line here, which is the point: it is a
  * decision someone wrote down, in the diff a reviewer reads.
@@ -75,6 +78,22 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'The card an invite link opens on, before anyone signs in (#5625); the unguessable invite token in the body is the credential, and it shows only the chapter, sender, role and whether the link works.',
   'InviteDetailsController.funnelStep':
     "A step of the invite card's funnel (#5663), before anyone signs in; the invite token in the body proves the chapter whose analytics opt-out applies, and the route returns nothing.",
+  'RushBidConfirmationController.preview':
+    "The page a recorded bid acceptance's email opens on (#5973), for a PNM who may have no account; the 256-bit token in the body is the credential (only its hash is stored), and it shows only the chapter, who recorded it and whether it waits.",
+  'RushBidConfirmationController.confirm':
+    "The PNM's one tap confirming an acceptance a member recorded (#5973); the same token is the credential, it accepts only a waiting acceptance on an open bid, and a used token matches nothing.",
+  'PublicInterestFormController.get':
+    "A chapter's interest form at /f/<form-slug> (ADR-27, #5977); the slug names one form, and it answers only the form's public fields.",
+  'PublicInterestFormController.startCode':
+    "Sends the form's one-time code before anything else shows (#5977); ceilings per address and per IP in start_interest_form_code.",
+  'PublicInterestFormController.verify':
+    "Checks the form code (#5977); a match answers a proof and the address's own last details, nothing else.",
+  'PublicInterestFormController.submit':
+    'Submits the form (#5977); the single-use proof a matched code minted is the credential, checked in submit_interest_form.',
+  'PublicInterestFormController.previewWithdrawal':
+    'What a "Withdraw or delete my info" link is for (#5977); the single-purpose emailed token is the credential, and it answers only the chapter\'s name.',
+  'PublicInterestFormController.withdraw':
+    'Withdraws from a chapter or deletes the recruitment information (#5977); the single-purpose emailed token is the credential, spent by the call.',
   'DevLogController.post':
     'Posts to the dev-log channel; guarded by DevLogTokenGuard (a shared secret), not a user session.',
 };
@@ -89,9 +108,18 @@ const USER_ROUTES: Record<string, string> = {
   'ChapterDirectoryController.search':
     'The public chapter directory, searched before the caller belongs to a chapter.',
   'ChapterController.onboard': 'Creates a chapter; the caller is in none yet.',
+  'CouncilsController.create':
+    "Starts a council (#5933); the caller is in none yet, and the service checks they're verified at its school.",
   'ChapterController.listForCurrentUser': "The caller's own chapters.",
   'ChapterController.activate':
     'Activates a chapter the caller is creating; the service checks ownership.',
+  'SchoolController.search':
+    'Schools are global reference data, searched before the caller has verified anywhere (#5929).',
+  'SchoolController.listMine': "The caller's own school memberships (#5929).",
+  'SchoolController.startVerification':
+    "Sends a code to the caller's own school address; ceilings per address, IP and account are counted by the database (#5929).",
+  'SchoolController.confirmVerification':
+    "Checks the caller's own code and writes only the caller's membership (#5929).",
   'TenantController.resolve':
     "One of the caller's own tenants by its slug; the service answers 404 for anyone else's (ADR-27, #5918).",
   'InviteController.preview':
@@ -119,6 +147,12 @@ const USER_ROUTES: Record<string, string> = {
   'UserController.updateMe': 'The caller.',
   'UserController.deleteMe': "The caller's own account deletion.",
   'UserController.removeAvatar': "The caller's own photo.",
+};
+
+/** Campus routes behind `SchoolGuard`: any live member of the named school. */
+const SCHOOL_ROUTES: Record<string, string> = {
+  'SchoolPageController.get':
+    "The school in x-school-id and the caller's own membership there (#5929).",
 };
 
 /** Chapter routes any member may call, with no permission beyond membership. */
@@ -254,11 +288,36 @@ describe('API route access ledger', () => {
 
   it('every signed-in route outside a chapter is a listed user route', () => {
     const unlisted = routes
-      .filter((r) => has(r, 'SupabaseAuthGuard') && !has(r, 'ChapterGuard'))
+      .filter(
+        (r) =>
+          has(r, 'SupabaseAuthGuard') &&
+          !has(r, 'ChapterGuard') &&
+          !has(r, 'SchoolGuard'),
+      )
       .map((r) => r.key)
       .filter((key) => !(key in USER_ROUTES));
 
     expect(unlisted).toEqual([]);
+  });
+
+  it('every route behind SchoolGuard is a listed school route, after auth and never with ChapterGuard', () => {
+    // SchoolGuard reads the user SupabaseAuthGuard attached; beside
+    // ChapterGuard a request would act in a school and a chapter at once.
+    const school = routes.filter((r) => has(r, 'SchoolGuard'));
+    const wrong = school
+      .filter(
+        (r) =>
+          !(r.key in SCHOOL_ROUTES) ||
+          has(r, 'ChapterGuard') ||
+          has(r, 'PermissionsGuard') ||
+          r.guards.indexOf('SupabaseAuthGuard') < 0 ||
+          r.guards.indexOf('SupabaseAuthGuard') >
+            r.guards.indexOf('SchoolGuard'),
+      )
+      .map((r) => `${r.key}: ${r.guards.join(' → ')}`);
+
+    expect(school.length).toBeGreaterThan(0);
+    expect(wrong).toEqual([]);
   });
 
   it('every chapter route checks permissions, or is listed as membership only', () => {
@@ -347,6 +406,10 @@ describe('API route access ledger', () => {
       ...Object.keys(USER_ROUTES).filter((key) => {
         const r = byKey.get(key);
         return !r || !has(r, 'SupabaseAuthGuard') || has(r, 'ChapterGuard');
+      }),
+      ...Object.keys(SCHOOL_ROUTES).filter((key) => {
+        const r = byKey.get(key);
+        return !r || !has(r, 'SchoolGuard');
       }),
       ...Object.keys(MEMBERSHIP_ONLY_ROUTES).filter((key) => {
         const r = byKey.get(key);

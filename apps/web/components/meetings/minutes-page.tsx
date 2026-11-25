@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
@@ -125,6 +126,7 @@ import { LinkEventPanel } from "@/components/meetings/link-event";
 import { NotesDraftPanel } from "@/components/meetings/notes-draft-panel";
 import { AttendanceBackfill } from "@/components/meetings/attendance-backfill";
 import { SuggestedTasks } from "@/components/ai/suggested-tasks";
+import { useActionItemTaskRow } from "@/components/meetings/action-item-task";
 import { ComingUpDates } from "@/components/meetings/coming-up-dates";
 import { ComingUpPostReview } from "@/components/meetings/coming-up-post-review";
 import { MinutesPageSkeleton } from "@/components/meetings/meetings-skeleton";
@@ -198,8 +200,11 @@ export function MinutesPage({ id }: { id: string }) {
           onRetry={missing ? undefined : () => void query.refetch()}
         />
         <p className="text-center text-sm">
-          <Link href="/meetings" className={inlineNoteActionClassName}>
-            Back to Meetings
+          <Link
+            href={MINUTES_DOCUMENTS_HREF}
+            className={inlineNoteActionClassName}
+          >
+            Back to minutes
           </Link>
         </p>
       </div>
@@ -510,7 +515,7 @@ function Minutes({
     try {
       await remove.mutateAsync(meeting.id);
       toast({ title: "Minutes deleted" });
-      router.push("/meetings");
+      router.push(MINUTES_DOCUMENTS_HREF);
     } catch (error) {
       toast({
         title: "Couldn't delete the minutes",
@@ -611,6 +616,14 @@ function Minutes({
     view.content,
   );
   const jumps = editing ? [] : minutesJumps(readKeys, view.content);
+  // Each action item's own Create task, or Open task once it is one
+  // (#6051): on posted minutes being read, for whoever could create it.
+  const taskRow = useActionItemTaskRow({
+    meetingId: meeting.id,
+    items: view.content.action_items,
+    meetingStart: meeting.event_start_time,
+    enabled: !isDraft && !editing && !posting,
+  });
   const showsAttendance =
     !editing &&
     (hasAttendees(meeting) ||
@@ -1061,6 +1074,7 @@ function Minutes({
                     nameFor={names.nameFor}
                     viewerId={viewer?.id ?? null}
                     tasks={actionItemTasks}
+                    taskRow={taskRow}
                   />
                 ) : key === "tabled" ? (
                   <TabledView items={view.content.tabled} />

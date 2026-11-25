@@ -55,7 +55,7 @@ import {
   getArchetype,
   MODULE_CATALOG,
 } from '@repo/org-archetypes';
-import { isModuleEnabled } from '@repo/validation';
+import { COUNCIL_ARCHETYPE, isModuleEnabled } from '@repo/validation';
 import {
   buildChapterPalette,
   chapterPaletteColumns,
@@ -526,6 +526,15 @@ export class ChapterConfigService {
     const diff: AuditDiff = {};
     const update: Partial<Chapter> = {};
 
+    // The council archetype is a council's marker, never a chapter's
+    // (`school-layer.md` § 2.3, #5933); `chapters_council_fields_kind` would
+    // refuse it as a 500. This route serves chapters only.
+    if (dto.org_archetype === COUNCIL_ARCHETYPE) {
+      throw new BadRequestException({
+        code: 'request.validation_failed',
+        message: 'A chapter can’t use the council archetype.',
+      });
+    }
     if (
       dto.org_archetype !== undefined &&
       dto.org_archetype !== existing.org_archetype
