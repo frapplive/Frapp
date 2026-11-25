@@ -159,6 +159,15 @@ export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = [
     "Remove members",
     "Remove a member from the chapter.",
   ),
+  // Chat timeouts (#6006; Paul's go, relayed by Shawn, 2026-11-25): a
+  // permission of its own rather than `channels:manage`, so a chapter can
+  // hand moderation to someone who shouldn't edit channels.
+  chapterPermission(
+    "members:timeout",
+    "members",
+    "Time out members",
+    "Stop a member ranked below them from posting or reacting in channels for up to a week. DMs aren't affected.",
+  ),
   // Groups (#4076) carry no permissions, so keeping one current needs less
   // trust than `roles:manage`: a house manager can keep "Third floor" right.
   chapterPermission(
@@ -475,6 +484,8 @@ export const COUNCIL_SHARED_PERMISSIONS: ReadonlySet<string> = new Set([
   "members:view",
   "members:invite",
   "members:remove",
+  // Chat timeouts (#6006): a council's channels are chat like a chapter's.
+  "members:timeout",
   "groups:manage",
   "channels:create",
   "channels:manage",

@@ -2697,6 +2697,29 @@ describe("Composer in the audit log", () => {
   });
 });
 
+// #6006: a timed-out member reads until when, and the reason, where the
+// editor would be; the server refuses their post either way.
+describe("Composer while timed out", () => {
+  it("shows the timeout in place of the editor", () => {
+    render(
+      <Composer
+        {...baseProps({
+          canPost: true,
+          timeoutNotice: {
+            title: "You're timed out until 3:40 PM",
+            detail: "Reason: spamming",
+          },
+        })}
+      />,
+    );
+    expect(
+      screen.getByText("You're timed out until 3:40 PM"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Reason: spamming")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+});
+
 /**
  * Frapp Intelligence has no control in the composer (#4904, Paul's pick of
  * 2026-11-13): it was a button here for a day (#4702) and read as out of

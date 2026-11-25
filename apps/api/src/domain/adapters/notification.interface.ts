@@ -28,6 +28,32 @@ export interface PushPayload {
    * buttons.
    */
   categoryId?: string;
+  /**
+   * The person a chat push comes from, so the phone draws it as a message
+   * from them with their photo, the way iMessage and WhatsApp do (#6024).
+   * Set only on chat pushes with a named sender. iOS draws it through the
+   * app's Notification Service Extension
+   * (`apps/mobile/targets/notification-service`), which reads this from
+   * `data.communication`; a build without the extension shows the push as
+   * before. Android shows the push as before until #6035.
+   */
+  communication?: PushCommunication;
+}
+
+/** Who a chat push is from, and the conversation it belongs to. */
+export interface PushCommunication {
+  senderId: string;
+  senderName: string;
+  /**
+   * A signed, short-lived URL to the sender's profile photo, or absent when
+   * they have none (the phone then draws their initials).
+   */
+  senderImageUrl?: string;
+  /**
+   * The conversation's name when it has more than two people (`#general`, a
+   * named group DM). Absent for a DM, which the phone draws as one-to-one.
+   */
+  groupName?: string;
 }
 
 export interface SendToUserResult {

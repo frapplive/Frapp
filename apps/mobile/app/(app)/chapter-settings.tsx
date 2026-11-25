@@ -8,24 +8,25 @@ import {
   useCategories,
   useChannelAccessOptions,
   useChapterChatBackground,
-  useCurrentChapter,
   useGeofences,
-  useOrgConfig,
-  usePatchOrgConfig,
-  usePermissionList,
   useUpdateAiChapterSettings,
 } from "@repo/hooks";
+import {
+  CHAPTER_TAB_COPY,
+  chapterIdentityValue,
+  chapterMarkValue,
+  chapterVocabularyValue,
+} from "@repo/hooks/chapter-tab";
 import { selectChannelAccessOptions } from "@repo/hooks/channel-access";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   AI_SETTINGS_COPY,
   AI_SWITCHES,
   aiSwitchState,
-  can,
-  canAll,
   type AiChapterSwitchKey,
+  CHAPTER_ABOUT_FOOTNOTE,
   CHAPTER_LOGS_TITLE,
-  CHAPTER_PROFILE_PERMISSIONS,
+  CHAPTER_LOOK_FOOTNOTE,
   CHAT_BACKGROUND_LABELS,
   isModuleEnabled,
   NAME_LOCK_COPY,
@@ -34,11 +35,16 @@ import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
 import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
 import {
+  BuildingGlyph,
+  ImageGlyph,
+  LandmarkGlyph,
   PaletteGlyph,
   ScrollTextGlyph,
+  TypeGlyph,
   WallpaperGlyph,
 } from "@/components/settings-glyphs";
-import { CHAPTER_LOOK_FOOTNOTE } from "@repo/validation";
+import { BirthdayPostsRow } from "@/components/settings/birthday-posts-row";
+import { ChapterProfileForm } from "@/components/settings/chapter-profile-form";
 import { AccentSheet } from "@/components/settings/accent-sheet";
 import { ChatBackgroundSheet } from "@/components/settings/chat-background-sheet";
 import {
@@ -48,6 +54,7 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
+import { InterestFormSettingsSection } from "@/components/rush/interest-form-settings-section";
 import { PlusGlyph } from "@/components/control-glyphs";
 import {
   ChannelFormSheet,
@@ -60,9 +67,8 @@ import { selectCategories } from "@/lib/chat/channel-list";
 import { newRolePlacements, type NewRolePlacement } from "@/lib/roles/new-role";
 import { useRolesData } from "@/lib/roles/use-roles-data";
 import { useChapterBranding } from "@/lib/chapter-branding";
-import { chapterSettingsAccess } from "@/lib/more/chapter-settings";
+import { useChapterTab } from "@/lib/settings/chapter-tab";
 import { typeRole, useFrappTheme } from "@/lib/theme";
-import { useServesChapterFeatures } from "@/lib/tenant-kind";
 
 /**
  * Chapter settings, on the phone (#4074): the chapter's side of settings, as
@@ -71,11 +77,26 @@ import { useServesChapterFeatures } from "@/lib/tenant-kind";
  * member's own; until this screen it also carried a "Chapter · Admin" group,
  * which moved here whole.
  *
- * - **Chapter**: the accent and the chat background, each a sheet for a
- *   member holding `CHAPTER_PROFILE_PERMISSIONS` and read-only, saying who
- *   sets it, for anyone else; Members can change their own name (#5801), a
- *   switch for `chapter-config:manage`, as web's Chapter tab has it; and
- *   Study zones, read-only, since zones are drawn on the web dashboard.
+ * Its top half is web's Chapter tab (#5965, #6027), in web's order and
+ * words, its rules shared through `@repo/hooks/chapter-tab`:
+ *
+ * - **The profile** on top: Chapter name, University and Donation link, then
+ *   Save profile, which waits for an edit (`ChapterProfileForm`).
+ * - **Look**: Chapter mark (a pushed page: the logo from the photo library,
+ *   the short name and Show Greek letters), Chapter accent and Chat
+ *   background (each a sheet).
+ * - **About the chapter**: Identity & founding, Organization type and
+ *   Vocabulary, each a pushed page.
+ * - **Chapter**: Birthday posts (a channel sheet, Off or a channel), Members
+ *   can change their own name (#5801), Study zones (read-only; zones are
+ *   drawn on the web dashboard), then Logs.
+ *
+ * A member who can't change something still reads every value: a row that
+ * opens a sheet doesn't open for them and says an officer sets it; a row
+ * that opens a page opens it read-only, saying so where Save would be.
+ *
+ * Then the rest:
+ *
  * - **AI**: the president's three switches (#4789), the same ones and the
  *   same rules as web's AI tab (`settings-ai-tab.tsx`): every member here can
  *   read them, only the president changes them, and Include channel messages
@@ -84,11 +105,12 @@ import { useServesChapterFeatures } from "@/lib/tenant-kind";
  *   `chapter-config:view`, as web's tab is.
  *   Inline switches, as iOS Settings draws a short list of them, rather than
  *   a page of their own. Drawn only where the server has AI.
+ * - **Chat**: New channel.
  * - **People**: Roles and groups, the chapter's tiers and their roles, then
- *   its groups (`app/(app)/chapter-roles.tsx`).
+ *   its groups (`app/(app)/chapter-roles.tsx`), and New role.
  *
- * Web's other pages (Plan and billing, the module pages, vocabulary, member
- * fields) stay on web for now: they are setup an officer does once, at a desk.
+ * Web's other pages (Plan and billing, the module pages, member fields) stay
+ * on web for now: they are setup an officer does once, at a desk.
  * Grouped rows with a chevron, as iOS Settings and Discord mobile's Server
  * Settings draw theirs.
  *
@@ -114,25 +136,32 @@ export default function ChapterSettingsScreen() {
     jumpHere: jump.jump,
   });
 
-  const permissions = usePermissionList();
-  const access = chapterSettingsAccess(permissions);
-  // The guard on `PATCH /v1/chapters/current`, which the accent save calls,
-  // and on the chat background default (#4031).
-  const canEditProfile = canAll(CHAPTER_PROFILE_PERMISSIONS, permissions);
+  // The profile, branding, type and words, and both gates: the profile
+  // PATCH's `CHAPTER_PROFILE_PERMISSIONS` (accent, chat background, logo,
+  // #4031) and the config PATCH's `chapter-config:manage` (the rest). The
+  // config read refuses a council (#5933), so its parts don't draw there.
+  const tab = useChapterTab();
+  const {
+    permissions,
+    access,
+    chapterQuery,
+    orgConfig,
+    patchConfig,
+    canEditProfile,
+    canManage: canManageConfig,
+    branding,
+    archetype,
+    vocabulary,
+  } = tab;
   const chapterBackground = useChapterChatBackground();
-  // Member names (#5801): the config PATCH's guard, as web's switch reads it.
-  const canManageConfig = can("chapter-config:manage", permissions);
-  // `/v1/chapters/:id/config` is a chapter route and refuses a council
-  // (#5933), so a council's settings go without the name switch for now.
-  const chapterFeatures = useServesChapterFeatures();
-  const orgConfig = useOrgConfig({
-    enabled: access.chapter && chapterFeatures,
-  });
-  const patchConfig = usePatchOrgConfig();
   const [namesSaveFailed, setNamesSaveFailed] = useState(false);
+  const [birthdaySaving, setBirthdaySaving] = useState(false);
   const membersCanRename = orgConfig.data?.members_can_change_name === true;
-
-  const chapterQuery = useCurrentChapter();
+  const config = orgConfig.data;
+  const birthdayChannelId =
+    typeof config?.birthday_channel_id === "string"
+      ? config.birthday_channel_id
+      : null;
   const geofencesEnabled =
     access.chapter &&
     isModuleEnabled(chapterQuery.data?.enabled_modules, "geofences");
@@ -161,9 +190,7 @@ export default function ChapterSettingsScreen() {
     null,
   );
 
-  const readOnlyLine = canEditProfile
-    ? null
-    : "Set by an officer with chapter settings access.";
+  const readOnlyLine = canEditProfile ? null : CHAPTER_TAB_COPY.rowReadOnly;
 
   return (
     <ScreenShell
@@ -183,8 +210,32 @@ export default function ChapterSettingsScreen() {
           <>
             {access.chapter ? (
               <>
+                {tab.chapterFeatures ? (
+                  <ChapterProfileForm
+                    stored={tab.profile}
+                    canEdit={canEditProfile}
+                  />
+                ) : null}
                 <SectionHeader>Look</SectionHeader>
                 <ListSection footnote={CHAPTER_LOOK_FOOTNOTE}>
+                  {config ? (
+                    // A page anyone here can open: the mark, the logo and the
+                    // short name read there for a viewer who can't change
+                    // them, with the line saying so.
+                    <SettingAnchor id="chapter-mark">
+                      <ListRow
+                        leading={<ImageGlyph color={glyphColor} />}
+                        label="Chapter mark"
+                        value={chapterMarkValue({
+                          logoUrl: tab.logoUrl,
+                          branding,
+                          name: tab.name,
+                        })}
+                        accessibilityHint="Opens the chapter's logo, short name and letters."
+                        onPress={() => router.push("/chapter-mark")}
+                      />
+                    </SettingAnchor>
+                  ) : null}
                   <SettingAnchor id="accent">
                     <ListRow
                       leading={<PaletteGlyph color={glyphColor} />}
@@ -236,13 +287,68 @@ export default function ChapterSettingsScreen() {
                     />
                   </SettingAnchor>
                 </ListSection>
+                {config ? (
+                  // Each opens its page for anyone here, so a member who
+                  // can't change them still reads every value; the page
+                  // says so where its Save would be.
+                  <>
+                    <SectionHeader>About the chapter</SectionHeader>
+                    <ListSection footnote={CHAPTER_ABOUT_FOOTNOTE}>
+                      <SettingAnchor id="identity">
+                        <ListRow
+                          leading={<LandmarkGlyph color={glyphColor} />}
+                          label="Identity & founding"
+                          value={chapterIdentityValue(branding, tab.name)}
+                          accessibilityHint="Opens the chapter's letters, designation, school and founding year."
+                          onPress={() => router.push("/chapter-identity")}
+                        />
+                      </SettingAnchor>
+                      <SettingAnchor id="organization-type">
+                        <ListRow
+                          leading={<BuildingGlyph color={glyphColor} />}
+                          label="Organization type"
+                          value={archetype.short}
+                          accessibilityHint="Opens the organization types."
+                          onPress={() => router.push("/chapter-type")}
+                        />
+                      </SettingAnchor>
+                      <SettingAnchor id="vocabulary">
+                        <ListRow
+                          leading={<TypeGlyph color={glyphColor} />}
+                          label="Vocabulary"
+                          value={chapterVocabularyValue(
+                            vocabulary,
+                            archetype.key,
+                          )}
+                          accessibilityHint="Opens the chapter's own words."
+                          onPress={() => router.push("/chapter-vocabulary")}
+                        />
+                      </SettingAnchor>
+                    </ListSection>
+                  </>
+                ) : null}
                 {/* Every row below is conditional, so the group draws only
                     when one of them does, never as an empty card. */}
-                {orgConfig.data || geofencesEnabled || access.logs ? (
+                {config || geofencesEnabled || access.logs ? (
                   <>
                     <SectionHeader>Chapter</SectionHeader>
                     <ListSection>
-                      {orgConfig.data ? (
+                      {config ? (
+                        <BirthdayPostsRow
+                          channelId={birthdayChannelId}
+                          canManage={canManageConfig}
+                          saving={birthdaySaving}
+                          glyphColor={glyphColor}
+                          onSave={(diff, { onError }) => {
+                            setBirthdaySaving(true);
+                            patchConfig
+                              .mutateAsync(diff)
+                              .catch(onError)
+                              .finally(() => setBirthdaySaving(false));
+                          }}
+                        />
+                      ) : null}
+                      {config ? (
                         <SettingAnchor id="member-names">
                           <ListRow
                             label={NAME_LOCK_COPY.settingLabel}
@@ -264,10 +370,15 @@ export default function ChapterSettingsScreen() {
                                 }
                                 onValueChange={(next) => {
                                   setNamesSaveFailed(false);
-                                  patchConfig.mutate(
-                                    { members_can_change_name: next },
-                                    { onError: () => setNamesSaveFailed(true) },
-                                  );
+                                  // Awaited, not a `mutate` callback: the
+                                  // birthday pick shares this mutation, and
+                                  // a second `mutate` drops the first's
+                                  // callbacks, failure line and all.
+                                  patchConfig
+                                    .mutateAsync({
+                                      members_can_change_name: next,
+                                    })
+                                    .catch(() => setNamesSaveFailed(true));
                                 }}
                                 accessibilityLabel={NAME_LOCK_COPY.settingLabel}
                               />
@@ -368,6 +479,15 @@ export default function ChapterSettingsScreen() {
         {access.newChannel ? (
           <ChatSection searching={search.searching} />
         ) : null}
+        {search.searching ? null : (
+          <InterestFormSettingsSection
+            permissions={permissions}
+            moduleOn={isModuleEnabled(
+              chapterQuery.data?.enabled_modules,
+              "rush",
+            )}
+          />
+        )}
         {access.roles ? (
           access.newRole ? (
             <PeopleSectionWithNewRole searching={search.searching} />

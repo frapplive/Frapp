@@ -411,6 +411,15 @@ function timedDueLabel(due: Date, now: Date): string {
   return `Due ${dueDayWords(due, now)} at ${formatClockShort(due)}`;
 }
 
+/**
+ * "today", "tomorrow", "Friday" within the week, else "November 14": the day
+ * words a due label and a chat timeout's end (#6006) both say before "at".
+ */
+export function formatDayWords(value: unknown, now: Date = new Date()): string {
+  const at = toDate(value);
+  return at ? dueDayWords(at, now) : "";
+}
+
 /** "today", "tomorrow", "Friday" within the week, else "November 14". */
 function dueDayWords(due: Date, now: Date): string {
   const days = dayDelta(now, due);

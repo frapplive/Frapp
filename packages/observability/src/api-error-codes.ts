@@ -157,6 +157,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   "role.assign_out_of_reach",
   "role.assign_permission_not_held",
   "chat.since_not_found",
+  // A send, reaction or other channel write while an officer has the member
+  // timed out (#6006). A state the member is in, which the composer answers
+  // with its "You're timed out until …" banner.
+  "chat.timed_out",
   // An AI route while `AI_ENABLED` is off on the server (#4310, and
   // `AiEnabledGuard`, ADR-28). A state the deployment is in, and how a
   // client learns to hide its AI entry points.
@@ -263,6 +267,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // of one already counted.
   "attendance.check_in.window_closed",
   "attendance.already_checked_in",
+  // A picked Drive folder with files in it (#5583): Google lets a picker
+  // sign-in share only the folder, not what's inside, so the officer shares
+  // it with Frapp's address in Drive and the panel connects once they have.
+  "google_drive.share_by_hand",
 ] as const;
 
 export type ClientContractErrorCode =

@@ -146,6 +146,6 @@ The Recruitment module page in Chapter settings holds the stages and tags ([§ S
 - **The recruitment contacts Group:** told about each interest-form submission along with the holders of `rush:manage`. A Group holds no permissions, so the page names any member of it who lacks `rush:view`; they are skipped. None is picked until an officer picks one.
 - **The card channel:** where an interest-form submission's candidate card goes; none posts no card. A channel is taken only when everyone who can read it holds `rush:view`, because the card names the prospect to the whole channel; the save is refused otherwise, naming how many can't. A channel the person picking can't read answers as not found. The interest-form slice checks again at every post.
 
-The contacts Group and the card channel are read by the interest-form slice ([`ifc-recruitment.md` § What a submission does](ifc-recruitment.md#what-a-submission-does)); until it lands they are saved and shown, and nothing else reads them.
+The interest form (#5977) reads the contacts Group: its members who hold `rush:view` are told about each submission ([`ifc-recruitment.md` § What a submission does](ifc-recruitment.md#what-a-submission-does)). Nothing reads the card channel yet: the channel card waits on #5985.
 
 Reading these needs `rush:view` (`GET /v1/rush/settings`); changing them needs `rush:manage` (`PUT /v1/rush/settings`, which writes only the fields it is sent).

@@ -146,8 +146,12 @@ export interface RushPipelineCandidate {
   stage: string;
   closed_reason: RushClosedReason | null;
   bid_status: RushBidStatus;
-  created_by: string;
-  created_by_name: string;
+  /** Null for a candidate the PNM's own interest form created. */
+  created_by: string | null;
+  /** The adder's current name; null when `created_by` is. */
+  created_by_name: string | null;
+  /** `manual` (a member added them) or `pnm` (their interest form, #5977). */
+  origin: 'manual' | 'pnm';
   created_at: string;
   tag_ids: string[];
   rating_average?: number | null;

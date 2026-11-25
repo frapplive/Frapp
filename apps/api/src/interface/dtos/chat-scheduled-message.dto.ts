@@ -183,7 +183,7 @@ export class ScheduledMessageDto {
     enum: ['no_access', 'chapter_locked', 'not_sendable', 'send_failed'],
     nullable: true,
     description:
-      'Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message; `send_failed` it kept failing.',
+      'Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message, or the author was timed out when it came due; `send_failed` it kept failing.',
   })
   failure_reason:
     'no_access' | 'chapter_locked' | 'not_sendable' | 'send_failed' | null;

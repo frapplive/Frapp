@@ -381,6 +381,21 @@ describe('ChatScheduledMessageService', () => {
       );
     });
 
+    // A chat timeout (#6006) is not lost access: the member can post there
+    // again once it ends, so the row stays to send again.
+    it('marks a chat timeout not_sendable, not no_access', async () => {
+      chat.sendMessage.mockRejectedValue(
+        new ForbiddenException({
+          code: 'chat.timed_out',
+          message: "You're timed out.",
+        }),
+      );
+      await expect(service.deliver(row())).resolves.toMatchObject({
+        outcome: 'failed',
+        reason: 'not_sendable',
+      });
+    });
+
     it('marks any other refusal not_sendable', async () => {
       chat.sendMessage.mockRejectedValue(new BadRequestException());
       await expect(service.deliver(row())).resolves.toMatchObject({

@@ -83,6 +83,8 @@ describe('RbacService', () => {
 
     mockMemberRepo = {
       completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUserAndChapter: jest.fn(),
       findByChapter: jest.fn(),

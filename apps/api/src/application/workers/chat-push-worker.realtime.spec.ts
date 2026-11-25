@@ -12,6 +12,7 @@ const threadRepoStub = {
 };
 import { NotificationService } from '../services/notification.service';
 import { ChatPushWorkerService } from './chat-push-worker.service';
+import { profilePhotoProviders } from '#test/helpers/profile-photo-url.stub';
 import {
   CHAT_NOTIFICATION_PREFERENCE_REPOSITORY,
   type ChatNotificationPreferenceRow,
@@ -289,6 +290,7 @@ describe('ChatPushWorkerService — recipient filter over the Realtime payload p
     const mod = await Test.createTestingModule({
       providers: [
         ChatPushWorkerService,
+        ...profilePhotoProviders(),
         { provide: CHAT_THREAD_REPOSITORY, useValue: threadRepoStub },
         { provide: USER_REPOSITORY, useValue: { findDisplayIdentitiesByIds } },
         ChannelCacheService,

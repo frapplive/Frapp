@@ -37,7 +37,7 @@ export class GoogleDriveConnectionDto {
   skipped_count: number;
   @ApiProperty({
     description:
-      'The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted.',
+      'The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted.',
   })
   folders_left_out: number;
   @ApiProperty({ description: 'Whether a sync is due or running now' })
@@ -85,7 +85,7 @@ export class GoogleDriveStatusDto {
     type: GoogleDrivePickerDto,
     nullable: true,
     description:
-      "Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself. Null, the folder is connected by its link.",
+      "Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself, or (Google allows that only for an empty folder) the officer shares it by hand. Null, the folder is connected by its link.",
   })
   picker: GoogleDrivePickerDto | null;
   @ApiProperty({ type: GoogleDriveConnectionDto, nullable: true })
@@ -103,7 +103,7 @@ export class ConnectPickedGoogleDriveDto {
 
   @ApiProperty({
     description:
-      "The access token the officer's Google sign-in gave the picker (drive.file). Used once to share the folder with Frapp, never stored.",
+      "The access token the officer's Google sign-in gave the picker (drive.file). Used to share the folder with Frapp, or to connect it once the officer has shared it by hand; never stored.",
   })
   @IsString()
   @MinLength(20)

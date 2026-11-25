@@ -13,10 +13,7 @@ import {
 import { OpenLinkedEvent } from "./open-linked-event";
 import { CalendarSubscribeMenu } from "./calendar-subscribe-menu";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  RolesGlyph,
-  SearchGlyph,
-} from "@/components/events/chapter-ops-glyphs";
+import { RolesGlyph } from "@/components/events/chapter-ops-glyphs";
 import {
   useAutoAbsent,
   useCalendarBirthdays,
@@ -80,8 +77,7 @@ import { Button } from "@/components/ui/button";
 import { NewButton } from "@/components/ui/new-button";
 import { useNewIntent } from "@/components/layout/new-intent";
 import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
+import { HeaderSearch } from "@/components/shared/header-search";
 import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import {
   ActiveFilterChips,
@@ -102,8 +98,6 @@ import {
 import {
   dashboardCheckboxHitAreaClassName,
   dashboardTableCheckboxClassName,
-  dashboardToolbarSearchClassName,
-  dashboardToolbarSearchGlyphClassName,
   denseListClassName,
 } from "@/components/shared/table-controls";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -239,9 +233,6 @@ export function EventsPage() {
     useState<AttendanceFilter>("all");
   const [recurrenceFilter, setRecurrenceFilter] =
     useState<CadenceFilter>("all");
-  // Beside chat the search is a glyph until pressed (#5560); it stays a
-  // field while it holds text.
-  const [searchOpen, setSearchOpen] = useState(false);
   // Bulk actions live behind Select (#3822): the default list has no
   // checkboxes.
   const [selecting, setSelecting] = useState(false);
@@ -1209,40 +1200,15 @@ export function EventsPage() {
         pressed and closes again on Escape or blur while empty.
       */}
       <PageActions className={cn("gap-x-2 gap-y-2", narrow && "flex-nowrap")}>
-        {narrow && !searchOpen && !query ? (
-          <IconButton
-            variant="secondary"
-            className="shrink-0"
-            label="Search events"
-            onClick={() => setSearchOpen(true)}
-          >
-            <SearchGlyph className="h-4 w-4" />
-          </IconButton>
-        ) : (
-          <div
-            className={cn(
-              "relative min-w-0 flex-1",
-              !narrow && "basis-full @xl:max-w-56 @xl:basis-auto",
-            )}
-          >
-            <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
-            <Input
-              type="search"
-              value={query}
-              autoFocus={narrow && searchOpen}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && !query) setSearchOpen(false);
-              }}
-              onBlur={() => {
-                if (!query) setSearchOpen(false);
-              }}
-              placeholder="Search events"
-              aria-label="Search events by name or location"
-              className={dashboardToolbarSearchClassName}
-            />
-          </div>
-        )}
+        <HeaderSearch
+          narrow={narrow}
+          value={query}
+          onChange={setQuery}
+          placeholder="Search events"
+          label="Search events by name or location"
+          glyphLabel="Search events"
+          className="flex-1 basis-full @xl:max-w-56 @xl:basis-auto"
+        />
         <FilterMenu filters={eventFilters} thing="events" narrow={narrow} />
         <CalendarSubscribeMenu iconOnly={narrow} />
         <Can allOf={EVENT_CREATE_PERMISSIONS}>

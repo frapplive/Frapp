@@ -30,6 +30,33 @@ export interface SendSchoolCodeEmailParams {
   validMinutes: number;
 }
 
+export interface SendInterestFormCodeEmailParams {
+  /** The address the PNM typed on the form. */
+  to: string;
+  /** The six-digit code. */
+  code: string;
+  /** The chapter whose form asked for it. */
+  chapterName: string;
+  validMinutes: number;
+}
+
+export interface SendInterestFormReceiptEmailParams {
+  to: string;
+  chapterName: string;
+  /** The public form, so the person can find it again. */
+  formUrl: string;
+  /** The council their details also went to, or null for none. */
+  councilName: string | null;
+  /** "Withdraw or delete my info": the single-purpose link (#5977). */
+  withdrawUrl: string;
+}
+
+export interface SendInterestFormPushedUpEmailParams {
+  to: string;
+  chapterName: string;
+  councilName: string;
+}
+
 export interface SendBidConfirmEmailParams {
   /** The PNM's address, as the member who recorded the acceptance gave it. */
   to: string;
@@ -60,6 +87,22 @@ export interface IEmailProvider {
    * `false` when the code didn't go out.
    */
   sendSchoolCodeEmail(params: SendSchoolCodeEmailParams): Promise<boolean>;
+  /** The interest form's one-time code (#5977). Same contract. */
+  sendInterestFormCodeEmail(
+    params: SendInterestFormCodeEmailParams,
+  ): Promise<boolean>;
+  /** The confirmation after an interest-form submission (#5977). */
+  sendInterestFormReceiptEmail(
+    params: SendInterestFormReceiptEmailParams,
+  ): Promise<boolean>;
+  /**
+   * A form submitter's details went to the council once the chapter's link
+   * was accepted (`ifc-recruitment.md` § Before the chapter's council link
+   * is accepted).
+   */
+  sendInterestFormPushedUpEmail(
+    params: SendInterestFormPushedUpEmailParams,
+  ): Promise<boolean>;
   /**
    * A recorded bid acceptance's one-tap confirmation (#5973). Same contract:
    * never throws, `false` when it didn't go out.

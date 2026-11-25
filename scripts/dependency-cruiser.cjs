@@ -282,14 +282,19 @@ module.exports = {
       severity: "error",
       comment:
         "Shipped code must not import a devDependency: it is absent from the production " +
-        "install and fails at runtime, not at build time. The one exception is `electron` " +
-        "in apps/desktop: Electron provides that module itself at runtime, and " +
-        "electron-builder refuses to package an app that lists it under dependencies.",
-      from: { pathNot: NOT_SHIPPED_CODE },
+        "install and fails at runtime, not at build time. The exceptions are in apps/desktop, " +
+        "which ships no node_modules at all. `electron`: Electron provides that module itself " +
+        "at runtime, and electron-builder refuses to package an app that lists it under " +
+        "dependencies. `electron-updater`: scripts/bundle.mjs compiles it into the one file " +
+        "the app ships, so it is needed at build time only (#4843). And scripts/bundle.mjs " +
+        "itself, which is that build step and never ships.",
+      from: {
+        pathNot: NOT_SHIPPED_CODE + (WORKSPACE === "apps/desktop" ? "|(^|/)scripts/bundle\\.mjs$" : ""),
+      },
       to: {
         dependencyTypes: ["npm-dev"],
         dependencyTypesNot: ["type-only"],
-        ...(WORKSPACE === "apps/desktop" ? { pathNot: "(^|/)node_modules/electron/" } : {}),
+        ...(WORKSPACE === "apps/desktop" ? { pathNot: "(^|/)node_modules/(electron|electron-updater)/" } : {}),
       },
     },
     {

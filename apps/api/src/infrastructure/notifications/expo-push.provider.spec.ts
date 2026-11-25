@@ -167,6 +167,49 @@ describe('ExpoPushProvider', () => {
       expect(actionable[0]).toMatchObject({ categoryId: 'event-excuse' });
       expect(plain[0]).not.toHaveProperty('categoryId');
     });
+
+    it('sends who a chat push is from so the phone draws their photo (#6024)', async () => {
+      mockSendPushNotificationsAsync.mockResolvedValue([
+        { status: 'ok', id: 'r-1' },
+      ]);
+      const communication = {
+        senderId: 'u-sam',
+        senderName: 'Sam Rivera',
+        senderImageUrl: 'https://storage.example/signed/sam.jpg',
+        groupName: '#general',
+      };
+
+      await provider.sendToUser([VALID_A], {
+        title: 'Sam Rivera in #general',
+        body: 'hi',
+        data: { target: { screen: 'chat', channelId: 'ch-1' } },
+        communication,
+      });
+      await provider.sendToUser([VALID_A], {
+        title: 'Sam Rivera',
+        body: 'hi',
+        communication: { senderId: 'u-sam', senderName: 'Sam Rivera' },
+      });
+      await provider.sendToUser([VALID_A], { title: 'Hi', body: 'There' });
+
+      const [[withPhoto], [noPhoto], [plain]] = mockSendPushNotificationsAsync
+        .mock.calls as [Record<string, unknown>[]][];
+      // The iOS extension reads `data.communication`. No image goes to
+      // Android, where Firebase would draw it as a big picture (#6035).
+      expect(withPhoto[0]).toMatchObject({
+        mutableContent: true,
+        data: {
+          target: { screen: 'chat', channelId: 'ch-1' },
+          communication,
+        },
+      });
+      expect(withPhoto[0]).not.toHaveProperty('richContent');
+      expect(noPhoto[0]).toMatchObject({ mutableContent: true });
+      for (const key of ['mutableContent', 'richContent']) {
+        expect(plain[0]).not.toHaveProperty(key);
+      }
+      expect(plain[0].data).toBeUndefined();
+    });
   });
 
   // #3846: a push with no text tells the reader nothing on a lock screen.
