@@ -129,8 +129,116 @@ describe('GcsSignedUrlClient', () => {
     expect(calls.filter((url) => url.includes(':signBlob'))).toHaveLength(2);
   });
 
+  it('fetches a new token once the held one is within five minutes of expiring', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-25T03:00:00.000Z') });
+    const fetchMock = respond(healthy);
+    const client = new GcsSignedUrlClient();
+    const tokenCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/token'))
+        .length;
+
+    await client.signedReadUrl('desktop/latest.yml');
+    jest.setSystemTime(new Date('2026-11-25T03:54:59.000Z'));
+    await client.signedReadUrl('desktop/latest.yml');
+    expect(tokenCalls()).toBe(1);
+
+    jest.setSystemTime(new Date('2026-11-25T03:55:00.000Z'));
+    await client.signedReadUrl('desktop/latest.yml');
+    expect(tokenCalls()).toBe(2);
+  });
+
+  it('never keeps a token whose lifetime the metadata server did not state', async () => {
+    const fetchMock = respond({
+      ...healthy,
+      '/default/token': () => Response.json({ access_token: 'runtime-token' }),
+    });
+    const client = new GcsSignedUrlClient();
+
+    await client.signedReadUrl('desktop/latest.yml');
+    await client.signedReadUrl('desktop/latest.yml');
+
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/token')),
+    ).toHaveLength(2);
+  });
+
+  it('shares one token request between calls that arrive together', async () => {
+    const fetchMock = respond(healthy);
+    const client = new GcsSignedUrlClient();
+
+    await Promise.all([
+      client.publishedObjects().catch(() => null),
+      client.publishedObjects().catch(() => null),
+      client.publishedObjects().catch(() => null),
+    ]);
+
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/token')),
+    ).toHaveLength(1);
+  });
+
+  it("lists the release prefix's own objects, following pages", async () => {
+    const pages = [
+      {
+        items: [{ name: 'desktop/latest.yml' }, { name: 'desktop/beta.yml' }],
+        nextPageToken: 'next',
+      },
+      { items: [{ name: 'desktop/Frapp-Setup-0.2.0.exe' }] },
+    ];
+    const fetchMock = respond({
+      ...healthy,
+      '/storage/v1/b/': () => Response.json(pages.shift()),
+    });
+
+    const names = await new GcsSignedUrlClient().publishedObjects();
+
+    expect([...names]).toEqual([
+      'desktop/latest.yml',
+      'desktop/beta.yml',
+      'desktop/Frapp-Setup-0.2.0.exe',
+    ]);
+    const lists = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes('/storage/v1/b/'),
+    );
+    expect(String(lists[0][0])).toBe(
+      'https://storage.googleapis.com/storage/v1/b/frapp-live-downloads/o?prefix=desktop%2F&delimiter=%2F&fields=items%28name%29%2CnextPageToken',
+    );
+    expect(String(lists[1][0])).toContain('&pageToken=next');
+    expect((lists[0][1] as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer runtime-token',
+    });
+  });
+
+  it('answers an empty set for a bucket no release has reached', async () => {
+    respond({ ...healthy, '/storage/v1/b/': () => Response.json({}) });
+    await expect(new GcsSignedUrlClient().publishedObjects()).resolves.toEqual(
+      new Set(),
+    );
+  });
+
+  it('fails the listing with a named reason when Google refuses it', async () => {
+    respond({
+      ...healthy,
+      '/storage/v1/b/': () => new Response('{}', { status: 403 }),
+    });
+    const failure = await new GcsSignedUrlClient()
+      .publishedObjects()
+      .catch((error: unknown) => error);
+    expect((failure as DesktopReleaseStoreError).reason).toBe('list_403');
+  });
+
   it.each([
     ['there is no metadata server', {}, 'no_runtime_identity'],
+    [
+      'the token reply is cut off',
+      { ...healthy, '/default/token': () => new Response('{"access_to') },
+      'no_runtime_token',
+    ],
+    [
+      'the signing reply is not JSON',
+      { ...healthy, ':signBlob': () => new Response('<html>') },
+      'sign_unreadable',
+    ],
     [
       'the metadata server gives no token',
       { ...healthy, '/default/token': () => new Response('', { status: 404 }) },

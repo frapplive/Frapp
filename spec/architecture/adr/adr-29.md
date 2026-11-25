@@ -128,6 +128,9 @@ channels that both use production, Developer ID plus Azure signing.
 - **R2 for the update feeds,** as #2512 first planned. It needs a Cloudflare account, a bucket and
   keys that GitHub Releases does not. It stays the fallback if GitHub Releases can't do something
   the rollout needs.
+  *Updated 2026-11-25 ([#4843](https://github.com/frapplive/Frapp/issues/4843)):* GitHub Releases
+  could not do it (decision 8's note), and the fallback Paul picked was a Google Cloud bucket
+  behind the API, not R2: Frapp already runs in Google Cloud, so it needs no new account or keys.
 
 **Consequences.**
 

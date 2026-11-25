@@ -21,10 +21,10 @@ import { DesktopReleaseStoreError } from '#domain/adapters/desktop-release-store
 
 /**
  * Where an installed desktop app looks for updates (#4843, ADR-29 decision
- * 8; `apps/desktop/electron-builder.yml` names this address). Each file
- * answers with a redirect to a time-limited link into the private releases
- * bucket, so the bucket is never public and the app never holds a Google
- * address.
+ * 8; the `Desktop release` workflow builds this address into each signed
+ * app). Each file a release has published answers with a redirect to a
+ * time-limited link into the private releases bucket, so the bucket is never
+ * public and the app never holds a Google address.
  *
  * No auth guard, deliberately: the updater runs before anyone signs in, and
  * what it fetches is the installer anyone may download. The per-address read

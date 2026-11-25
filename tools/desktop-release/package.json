@@ -1,0 +1,8 @@
+{
+  "name": "desktop-release-tools",
+  "private": true,
+  "description": "electron-builder and its whole dependency tree, pinned by this folder's lockfile, for the Desktop release workflow's signing job (docs/ops/deployment/desktop-releases.md). Not a workspace: the signing job installs only this.",
+  "devDependencies": {
+    "electron-builder": "26.18.1"
+  }
+}

@@ -16,7 +16,8 @@ name: Desktop release
 #   - `build` installs the lockfile and compiles, with no secret in reach.
 #   - `sign` holds the Apple and Azure signing secrets, which live in the
 #     `automation` environment (main only, no reviewers, so signing needs no
-#     click), and installs nothing from the lockfile.
+#     click). It installs only electron-builder, from its own lockfile
+#     (tools/desktop-release), with no install scripts.
 #   - `publish` and `point` run in `production`, for its reviewer gate and
 #     because Google accepts this repository's sign-in only from a job in it
 #     (scripts/gcp/bootstrap.sh). The signing secrets never reach them.
@@ -54,8 +55,12 @@ permissions:
   contents: read
 
 env:
-  # The bucket scripts/gcp/desktop-downloads.sh makes (DESKTOP_BUCKET in scripts/gcp/lib.sh).
+  # The bucket scripts/gcp/desktop-downloads.sh makes (DESKTOP_RELEASES_BUCKET in scripts/gcp/lib.sh).
   DESKTOP_BUCKET: frapp-live-downloads
+  # Where a released app asks for updates: the API route in front of that
+  # bucket. Only this workflow gives a build the address (electron-builder.yml
+  # sets `publish: null`), so only a signed build ever updates itself.
+  DESKTOP_UPDATE_URL: https://api.frapp.live/v1/desktop/updates
 
 jobs:
   # Compiles the shell with the full install, and holds no secret: `npm ci`
@@ -86,9 +91,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Packages and signs with nothing installed from the lockfile: the app ships
-  # no node_modules (electron-builder.yml), so packaging needs only the
-  # compiled shell and electron-builder itself.
+  # Packages and signs without the workspace install: the app ships no
+  # node_modules (electron-builder.yml), so packaging needs only the compiled
+  # shell and electron-builder itself.
   sign:
     name: package and sign (${{ matrix.os }})
     needs: build
@@ -128,7 +133,7 @@ jobs:
           [ "$HAS_API_KEY_ID" = "true" ] || missing+=(APPLE_API_KEY_ID)
           [ "$HAS_API_ISSUER" = "true" ] || missing+=(APPLE_API_ISSUER)
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::The automation environment lacks: ${missing[*]} (docs/ops/deployment/desktop-releases.md § Secrets)."
+            echo "::error::The automation environment lacks: ${missing[*]} (docs/ops/deployment/desktop-releases.md, 2. Signing secrets)."
             exit 1
           fi
 
@@ -153,7 +158,7 @@ jobs:
           [ "$HAS_ACCOUNT" = "true" ] || missing+=(AZURE_SIGNING_ACCOUNT)
           [ "$HAS_PROFILE" = "true" ] || missing+=(AZURE_SIGNING_PROFILE)
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::The automation environment lacks: ${missing[*]} (docs/ops/deployment/desktop-releases.md § Secrets)."
+            echo "::error::The automation environment lacks: ${missing[*]} (docs/ops/deployment/desktop-releases.md, 2. Signing secrets)."
             exit 1
           fi
 
@@ -167,6 +172,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name desktop-dist --dir apps/desktop/dist
+
+      # electron-builder and its whole dependency tree, at the versions and
+      # checksums tools/desktop-release/package-lock.json pins, with no
+      # install scripts run. `npx electron-builder@x` would pin one package and
+      # resolve the other two hundred fresh, in the job that holds the
+      # certificates. No secret is in this step's environment.
+      - name: Install the pinned packaging tools
+        shell: bash
+        working-directory: tools/desktop-release
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       # With no node_modules to read it from, electron-builder is told which
       # Electron to package: the exact version apps/desktop/package.json pins.
@@ -193,8 +208,10 @@ jobs:
           key="$RUNNER_TEMP/apple-api-key.p8"
           trap 'rm -f "$key"' EXIT
           printf '%s' "$APPLE_API_KEY_P8" > "$key"
-          APPLE_API_KEY="$key" npx --yes electron-builder@26.18.1 --mac --publish never \
-            "-c.electronVersion=$ELECTRON_VERSION"
+          APPLE_API_KEY="$key" node ../../tools/desktop-release/node_modules/electron-builder/cli.js \
+            --mac --publish never \
+            "-c.electronVersion=$ELECTRON_VERSION" \
+            -c.publish.provider=generic "-c.publish.url=$DESKTOP_UPDATE_URL"
 
       # Gatekeeper's own verdict, so a build that was quietly left unsigned
       # or un-notarized fails here and not on a member's Mac.
@@ -205,6 +222,8 @@ jobs:
         run: |
           app="$(find release -maxdepth 2 -name 'Frapp.app' -print -quit)"
           test -n "$app"
+          # The update address, without which this build would never update.
+          grep -q "^url: $DESKTOP_UPDATE_URL\$" "$app/Contents/Resources/app-update.yml"
           codesign --verify --deep --strict --verbose=2 "$app"
           spctl --assess --type execute --verbose=2 "$app"
           xcrun stapler validate "$app"
@@ -226,24 +245,43 @@ jobs:
           SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
           ELECTRON_VERSION: ${{ steps.electron.outputs.version }}
         run: |
-          npx --yes electron-builder@26.18.1 --win --publish never \
+          node ../../tools/desktop-release/node_modules/electron-builder/cli.js \
+            --win --publish never \
             "-c.electronVersion=$ELECTRON_VERSION" \
+            -c.publish.provider=generic "-c.publish.url=$DESKTOP_UPDATE_URL" \
             "-c.win.azureSignOptions.publisherName=$PUBLISHER_NAME" \
             "-c.win.azureSignOptions.endpoint=$SIGNING_ENDPOINT" \
             "-c.win.azureSignOptions.codeSigningAccountName=$SIGNING_ACCOUNT" \
             "-c.win.azureSignOptions.certificateProfileName=$SIGNING_PROFILE"
 
-      - name: Verify the signature (Windows)
+      # An installed copy takes an update only when the update's signer is
+      # the publisher name written into it, compared exactly. A name that is
+      # one character off signs fine and then strands every install, so the
+      # two are compared here, before anything is published.
+      - name: Verify the signature and the publisher name (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         working-directory: apps/desktop
+        env:
+          PUBLISHER_NAME: ${{ secrets.AZURE_SIGNING_PUBLISHER_NAME }}
         run: |
           $installers = Get-ChildItem release -Filter 'Frapp-Setup-*.exe'
           if ($installers.Count -eq 0) { throw 'No installer was built.' }
           foreach ($installer in $installers) {
             $signature = Get-AuthenticodeSignature $installer.FullName
             if ($signature.Status -ne 'Valid') { throw "$($installer.Name) is not validly signed: $($signature.Status)" }
-            Write-Host "$($installer.Name): signed by $($signature.SignerCertificate.Subject)"
+            $signer = $signature.SignerCertificate.GetNameInfo('SimpleName', $false)
+            if ($signer -cne $env:PUBLISHER_NAME) {
+              throw "$($installer.Name) is signed by a certificate whose name is not AZURE_SIGNING_PUBLISHER_NAME. Set the secret to the certificate's subject name exactly."
+            }
+            Write-Host "$($installer.Name): signed, and the signer is the publisher name."
+          }
+          $configs = Get-ChildItem release -Recurse -Filter 'app-update.yml'
+          if ($configs.Count -eq 0) { throw 'The build carries no update address (app-update.yml).' }
+          foreach ($config in $configs) {
+            $text = Get-Content $config.FullName -Raw
+            if ($text -notmatch "(?m)^url: $([regex]::Escape($env:DESKTOP_UPDATE_URL))\s*$") { throw "$($config.FullName) names another update address." }
+            if ($text -notmatch '(?m)^publisherName:') { throw "$($config.FullName) names no publisher, so installs would skip the publisher check." }
           }
 
       - name: Upload the signed files
@@ -254,7 +292,6 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
             apps/desktop/release/*.exe
-            apps/desktop/release/*.blockmap
             apps/desktop/release/latest*.yml
           if-no-files-found: error
           retention-days: 30

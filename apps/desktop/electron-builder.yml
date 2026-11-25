@@ -11,15 +11,15 @@ copyright: Copyright © Frapp
 directories:
   output: release
 
-# Where an installed app looks for updates (src/main/updater.ts): the API's
-# `GET /v1/desktop/updates/:file`, which redirects each feed and file to a
-# time-limited link into the private releases bucket. Nothing here uploads:
-# every build runs with `--publish never`, and scripts/ci/desktop-publish.mjs
-# puts the files in the bucket. A plain version always writes the `latest`
-# feeds; which channel reads them is decided at publish.
-publish:
-  - provider: generic
-    url: https://api.frapp.live/v1/desktop/updates
+# No `publish` here, on purpose. The update address is given only by the
+# `Desktop release` workflow (`-c.publish.*`), which is what writes
+# `app-update.yml` into a signed build. A build without that file, which is
+# every `npm run dist` and every `Desktop build` run, never looks for updates
+# (src/main/updater.ts): an unsigned Windows build would otherwise install
+# whatever the feed names with no publisher check. `null` and not simply
+# absent: left out, electron-builder invents a GitHub address from
+# package.json's `repository`.
+publish: null
 
 # The compiled shell, bundled into one file by scripts/bundle.mjs.
 # Nothing from node_modules: its one runtime library is compiled into the

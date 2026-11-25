@@ -12,10 +12,12 @@ export const DESKTOP_RELEASES_PREFIX = 'desktop';
 const FEED = /^(latest|beta)(-mac)?\.yml$/;
 /**
  * A release's own files, as `apps/desktop/electron-builder.yml` names them:
- * `Frapp-Setup-0.2.0.exe`, `Frapp-0.2.0-universal.dmg`,
- * `Frapp-0.2.0-universal-mac.zip`, and each one's `.blockmap`.
+ * `Frapp-Setup-0.2.0.exe`, `Frapp-0.2.0-universal.dmg` and
+ * `Frapp-0.2.0-universal-mac.zip`. A release whose files are named otherwise
+ * is refused before it uploads (`SERVED_FILE` in
+ * `scripts/ci/desktop-publish.mjs`, which a test holds equal to this).
  */
-const RELEASE_FILE = /^Frapp-[A-Za-z0-9.-]{1,60}\.(exe|dmg|zip)(\.blockmap)?$/;
+const RELEASE_FILE = /^Frapp-[A-Za-z0-9.-]{1,60}\.(exe|dmg|zip)$/;
 
 /**
  * The bucket object a requested file name stands for, or null when the name

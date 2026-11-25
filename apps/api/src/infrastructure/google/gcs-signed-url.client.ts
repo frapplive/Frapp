@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { DESKTOP_RELEASES_BUCKET } from '#domain/constants/desktop-updates';
+import {
+  DESKTOP_RELEASES_BUCKET,
+  DESKTOP_RELEASES_PREFIX,
+} from '#domain/constants/desktop-updates';
 import {
   DesktopReleaseStoreError,
   type IDesktopReleaseStore,
@@ -10,6 +13,9 @@ const METADATA_ACCOUNT =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default';
 const IAM_CREDENTIALS_API = 'https://iamcredentials.googleapis.com/v1';
 const STORAGE_HOST = 'storage.googleapis.com';
+const STORAGE_API = `https://${STORAGE_HOST}/storage/v1`;
+/** A listing is read at most this many pages deep (1,000 objects a page). */
+const LIST_PAGES = 10;
 const TIMEOUT_MS = 10_000;
 /** How long a link works: long enough to start a download, never to share. */
 export const SIGNED_URL_TTL_SECONDS = 3600;
@@ -84,6 +90,41 @@ export function signedUrlParts(input: {
 export class GcsSignedUrlClient implements IDesktopReleaseStore {
   private account: string | null = null;
   private token: { value: string; expiresAt: number } | null = null;
+  /** The token request in flight, shared by every caller waiting on it. */
+  private renewing: Promise<string> | null = null;
+
+  async publishedObjects(): Promise<Set<string>> {
+    const names = new Set<string>();
+    let pageToken: string | undefined;
+    for (let page = 0; page < LIST_PAGES; page += 1) {
+      // The delimiter keeps the listing to the prefix's own files: the kept
+      // per-version feeds under `feeds/` are never served and never listed.
+      const query = new URLSearchParams({
+        prefix: `${DESKTOP_RELEASES_PREFIX}/`,
+        delimiter: '/',
+        fields: 'items(name),nextPageToken',
+      });
+      if (pageToken) query.set('pageToken', pageToken);
+      const response = await this.send(
+        `${STORAGE_API}/b/${DESKTOP_RELEASES_BUCKET}/o?${query.toString()}`,
+        { headers: { Authorization: `Bearer ${await this.runtimeToken()}` } },
+        'list',
+      );
+      if (!response.ok) {
+        throw new DesktopReleaseStoreError(`list_${response.status}`);
+      }
+      const body = await this.json<{
+        items?: { name?: unknown }[];
+        nextPageToken?: unknown;
+      }>(response, 'list_unreadable');
+      for (const item of body.items ?? []) {
+        if (typeof item.name === 'string') names.add(item.name);
+      }
+      if (typeof body.nextPageToken !== 'string') return names;
+      pageToken = body.nextPageToken;
+    }
+    return names;
+  }
 
   async signedReadUrl(
     object: string,
@@ -114,7 +155,10 @@ export class GcsSignedUrlClient implements IDesktopReleaseStore {
     if (!response.ok) {
       throw new DesktopReleaseStoreError(`sign_${response.status}`);
     }
-    const body = (await response.json()) as { signedBlob?: unknown };
+    const body = await this.json<{ signedBlob?: unknown }>(
+      response,
+      'sign_unreadable',
+    );
     if (typeof body.signedBlob !== 'string') {
       throw new DesktopReleaseStoreError('sign_no_signature');
     }
@@ -133,33 +177,61 @@ export class GcsSignedUrlClient implements IDesktopReleaseStore {
       'no_runtime_identity',
     );
     if (!response.ok) throw new DesktopReleaseStoreError('no_runtime_identity');
-    this.account = (await response.text()).trim();
-    return this.account;
+    let account: string;
+    try {
+      account = (await response.text()).trim();
+    } catch {
+      throw new DesktopReleaseStoreError('no_runtime_identity');
+    }
+    if (!account) throw new DesktopReleaseStoreError('no_runtime_identity');
+    this.account = account;
+    return account;
   }
 
-  private async runtimeToken(): Promise<string> {
+  private runtimeToken(): Promise<string> {
     if (this.token && this.token.expiresAt - TOKEN_MARGIN_MS > Date.now()) {
-      return this.token.value;
+      return Promise.resolve(this.token.value);
     }
+    // Requests that arrive while a token is being fetched wait on that one
+    // fetch instead of each asking the metadata server.
+    this.renewing ??= this.fetchToken().finally(() => {
+      this.renewing = null;
+    });
+    return this.renewing;
+  }
+
+  private async fetchToken(): Promise<string> {
     const response = await this.send(
       `${METADATA_ACCOUNT}/token`,
       { headers: { 'Metadata-Flavor': 'Google' } },
       'no_runtime_token',
     );
     if (!response.ok) throw new DesktopReleaseStoreError('no_runtime_token');
-    const body = (await response.json()) as {
+    const body = await this.json<{
       access_token?: unknown;
       expires_in?: unknown;
-    };
+    }>(response, 'no_runtime_token');
     if (typeof body.access_token !== 'string') {
       throw new DesktopReleaseStoreError('no_runtime_token');
     }
+    // A reply that doesn't say how long the token lasts is used once and
+    // never kept: asking again is cheap, and a kept dead token fails every
+    // request until the process restarts.
     const seconds = typeof body.expires_in === 'number' ? body.expires_in : 0;
     this.token = {
       value: body.access_token,
       expiresAt: Date.now() + seconds * 1000,
     };
     return this.token.value;
+  }
+
+  /** A reply's JSON, with a cut-off or malformed body turned into the store's error. */
+  private async json<T>(response: Response, failure: string): Promise<T> {
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new DesktopReleaseStoreError(failure);
+    }
   }
 
   /** One call, bounded, with a network failure turned into the store's error. */

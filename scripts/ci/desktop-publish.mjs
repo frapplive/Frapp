@@ -70,7 +70,7 @@ const VERSION = /^\d+\.\d+\.\d+$/;
  * together). A file named any other way would upload fine and then answer
  * 404 to every installed app, so a release that has one stops here.
  */
-export const SERVED_FILE = /^Frapp-[A-Za-z0-9.-]{1,60}\.(exe|dmg|zip)(\.blockmap)?$/;
+export const SERVED_FILE = /^Frapp-[A-Za-z0-9.-]{1,60}\.(exe|dmg|zip)$/;
 
 /** A plain `1.2.3`: channels are feeds here, never version suffixes. */
 export function assertVersion(version) {
@@ -136,9 +136,10 @@ export function releasePlan({ dir, files, read }) {
   for (const text of texts.values()) for (const name of feedFiles(text)) needed.add(name);
   const missing = [...needed].filter((name) => !files.includes(name));
   if (missing.length > 0) throw new Error(`The feeds name files the release folder lacks: ${missing.join(", ")}.`);
-  // Blockmaps let an update download only what changed; installers people
-  // download by hand (the dmg) ride along though no feed names them.
-  const extras = files.filter((name) => /\.(dmg|blockmap)$/.test(name) && !needed.has(name));
+  // The installer people download by hand (the dmg) rides along though no
+  // feed names it. Blockmaps are left behind: they serve partial downloads,
+  // which the app has turned off (apps/desktop/src/main/updater.ts).
+  const extras = files.filter((name) => name.endsWith(".dmg") && !needed.has(name));
 
   const unserved = [...needed, ...extras].filter((name) => !SERVED_FILE.test(name));
   if (unserved.length > 0) {
@@ -202,15 +203,47 @@ async function upload(gcloud, bucket, step, log) {
   ]);
 }
 
+/**
+ * Every object already under the prefix. An empty prefix is gcloud's "matched
+ * no objects" error and means none; any other failure (sign-in, network) is
+ * thrown, because "couldn't look" must never read as "nothing there".
+ */
+async function published(gcloud, bucket) {
+  const root = `gs://${bucket}/`;
+  try {
+    const listing = await gcloud(["ls", `${root}${PREFIX}/**`]);
+    return new Set(
+      listing
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith(root))
+        .map((line) => line.slice(root.length)),
+    );
+  } catch (error) {
+    if (/matched no objects/i.test(`${error.stderr ?? ""} ${error.message ?? ""}`)) return new Set();
+    throw error;
+  }
+}
+
 /** Uploads a release folder and points the beta channel at it. */
 export async function release({ bucket, dir, gcloud, log = console.log, list = readdirSync, read = readText }) {
   const { version, steps } = releasePlan({ dir, files: list(dir), read });
+  const existing = await published(gcloud, bucket);
   // A version is published once: a second run must not swap files under
   // installs that already hold the first run's checksums.
-  const kept = await gcloud(["ls", `gs://${bucket}/${PREFIX}/feeds/${version}/`]).catch(() => "");
-  if (kept.trim()) {
+  if ([...existing].some((object) => object.startsWith(`${PREFIX}/feeds/${version}/`))) {
     throw new Error(
       `Frapp ${version} is already published. Raise the version in apps/desktop/package.json and release that.`,
+    );
+  }
+  // An earlier run that died partway left some of this version's files. A
+  // new build of the same version is signed again, so its bytes and checksums
+  // differ: keeping the old files under new feeds would fail every download.
+  const leftover = steps.filter((step) => step.noClobber && existing.has(step.to)).map((step) => step.to);
+  if (leftover.length > 0) {
+    throw new Error(
+      `An earlier run left part of Frapp ${version} in the bucket (${leftover.join(", ")}) and never finished. ` +
+        "Raise the version in apps/desktop/package.json and release that.",
     );
   }
   for (const step of steps) await upload(gcloud, bucket, step, log);
@@ -223,18 +256,22 @@ export async function point({ bucket, channel, version, staging, gcloud, log = c
   assertVersion(version);
   const dir = temp();
   try {
+    // Both feeds are read and checked before either is written, so a version
+    // missing one never leaves Windows and Mac installs on different versions.
+    const steps = [];
     for (const name of FEED_FILES) {
       const text = await gcloud(["cat", `gs://${bucket}/${PREFIX}/feeds/${version}/${name}`]);
       if (feedVersion(text) !== version) throw new Error(`The kept ${name} for ${version} names another version.`);
       const file = path.join(dir, name);
       writeFileSync(file, withStaging(text, staging));
-      await upload(
-        gcloud,
-        bucket,
-        { from: file, to: `${PREFIX}/${channelFeedName(name, channel)}`, cacheControl: FEED_CACHE, noClobber: false },
-        log,
-      );
+      steps.push({
+        from: file,
+        to: `${PREFIX}/${channelFeedName(name, channel)}`,
+        cacheControl: FEED_CACHE,
+        noClobber: false,
+      });
     }
+    for (const step of steps) await upload(gcloud, bucket, step, log);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

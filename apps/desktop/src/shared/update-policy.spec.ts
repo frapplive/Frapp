@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseUpdateChannel, updateMenuItem, updatesSupported } from "./update-policy";
+import {
+  parseUpdateChannel,
+  setUpdateChannel,
+  updateMenuItem,
+  updatesSupported,
+} from "./update-policy";
 
 describe("parseUpdateChannel", () => {
   it("reads a saved beta opt-in", () => {
@@ -23,7 +28,10 @@ describe("updateMenuItem", () => {
   });
 
   it("shows progress without a second click to make", () => {
-    expect(updateMenuItem({ kind: "checking" })).toMatchObject({ enabled: false, action: null });
+    expect(updateMenuItem({ kind: "checking" })).toMatchObject({
+      enabled: false,
+      action: null,
+    });
     expect(updateMenuItem({ kind: "downloading", version: "0.2.0" })).toEqual({
       label: "Downloading Frapp 0.2.0…",
       enabled: false,
@@ -41,10 +49,54 @@ describe("updateMenuItem", () => {
 });
 
 describe("updatesSupported", () => {
-  it("is the packaged Mac and Windows apps only", () => {
-    expect(updatesSupported({ isPackaged: true, platform: "darwin" })).toBe(true);
-    expect(updatesSupported({ isPackaged: true, platform: "win32" })).toBe(true);
-    expect(updatesSupported({ isPackaged: true, platform: "linux" })).toBe(false);
-    expect(updatesSupported({ isPackaged: false, platform: "darwin" })).toBe(false);
+  const release = { isPackaged: true, hasUpdateConfig: true };
+
+  it("is the released Mac and Windows apps only", () => {
+    expect(updatesSupported({ ...release, platform: "darwin" })).toBe(true);
+    expect(updatesSupported({ ...release, platform: "win32" })).toBe(true);
+    expect(updatesSupported({ ...release, platform: "linux" })).toBe(false);
+    expect(
+      updatesSupported({ ...release, isPackaged: false, platform: "darwin" }),
+    ).toBe(false);
+  });
+
+  it("is never a build with no update address, which is every unsigned one", () => {
+    expect(
+      updatesSupported({
+        ...release,
+        hasUpdateConfig: false,
+        platform: "win32",
+      }),
+    ).toBe(false);
+    expect(
+      updatesSupported({
+        ...release,
+        hasUpdateConfig: false,
+        platform: "darwin",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("setUpdateChannel", () => {
+  it("leaves downgrades off, though the library turns them on with every channel change", () => {
+    // electron-updater's own behaviour: setting a channel allows downgrades.
+    const updater = {
+      allowDowngrade: false,
+      current: null as string | null,
+      get channel(): string | null {
+        return this.current;
+      },
+      set channel(value: string | null) {
+        this.current = value;
+        this.allowDowngrade = true;
+      },
+    };
+    setUpdateChannel(updater, "beta");
+    expect(updater.channel).toBe("beta");
+    expect(updater.allowDowngrade).toBe(false);
+    setUpdateChannel(updater, "latest");
+    expect(updater.channel).toBe("latest");
+    expect(updater.allowDowngrade).toBe(false);
   });
 });

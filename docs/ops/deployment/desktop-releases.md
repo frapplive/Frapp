@@ -9,11 +9,12 @@ How the desktop app (`apps/desktop`, [ADR-29](../../../spec/architecture/adr/adr
 ```text
 Desktop release (workflow_dispatch, main only)
   build     ubuntu, no secrets     npm ci, compile apps/desktop/dist
-  sign      macOS + Windows        `automation` environment: package, sign, notarize, verify
+  sign      macOS + Windows        `automation` environment: package, sign, notarize, verify;
+                                   installs only the pinned packaging tools (tools/desktop-release)
   publish   ubuntu                 `production` environment (Paul approves): upload, point beta
 
 gs://frapp-live-downloads/desktop/        private bucket, production project
-  Frapp-Setup-<v>.exe, Frapp-<v>-universal.dmg, Frapp-<v>-universal-mac.zip, *.blockmap
+  Frapp-Setup-<v>.exe, Frapp-<v>-universal.dmg, Frapp-<v>-universal-mac.zip
   feeds/<v>/latest.yml, latest-mac.yml    that version's feeds, kept
   beta.yml, beta-mac.yml                  what apps on "Get Updates Early (Beta)" read
   latest.yml, latest-mac.yml              what every other app reads
@@ -23,8 +24,10 @@ installed app -> GET https://api.frapp.live/v1/desktop/updates/<file>
 ```
 
 - **Versions are plain** (`0.2.0`). A channel is a feed file, never a version suffix, so promoting a release moves a feed and rebuilds nothing.
-- **The bucket is private**, as the organization requires ([`google-cloud.md`](google-cloud.md): no public buckets). The API signs each link as its own identity with no key file (`apps/api/src/infrastructure/google/gcs-signed-url.client.ts`), and only for the file names a release publishes (`apps/api/src/domain/constants/desktop-updates.ts`).
-- **Updates download whole files.** Partial downloads are off (`apps/desktop/src/main/updater.ts`), because each byte range would be its own trip through the redirect.
+- **The bucket is private**, as the organization requires ([`google-cloud.md`](google-cloud.md): no public buckets). The API signs each link as its own identity with no key file (`apps/api/src/infrastructure/google/gcs-signed-url.client.ts`), and only for a file the bucket holds: the route is public, so a name that merely looks right gets a 404 and costs no signature. The API re-reads the bucket's file list every minute, and ten seconds after a miss (`apps/api/src/application/services/desktop-update/desktop-update.service.ts`; name rules in `apps/api/src/domain/constants/desktop-updates.ts`).
+- **Updates download whole files.** Partial downloads are off (`apps/desktop/src/main/updater.ts`), because each byte range would be its own trip through the redirect, so a release uploads no `.blockmap` files.
+- **Only a signed release updates itself.** `apps/desktop/electron-builder.yml` sets `publish: null`; the `sign` job alone passes the update address, which electron-builder writes into the app as `app-update.yml`. A build without that file (a `Desktop build` artifact, a local `npm run dist`) never checks for updates, so an unsigned copy can't pull a release it would then fail to verify. Don't hand `Desktop build` installers to testers: they stay on that build forever.
+- **The packaging tools are pinned.** The `sign` job holds the certificates, so it runs `npm ci --ignore-scripts` in `tools/desktop-release` (electron-builder and its whole tree, from that folder's own lockfile) and nothing from the repo's lockfile. Raise electron-builder there and in `apps/desktop/package.json` together. One piece is not pinned: electron-builder installs Microsoft's `TrustedSigning` PowerShell module at whatever version is newest ([#6082](https://github.com/frapplive/Frapp/issues/6082)).
 - **An installed app never moves to an older version.** Pointing a channel back stops new installs of a bad release; installs that already took it stay until a higher version is published.
 - **Staging has no desktop feed.** The app has one update address. Staging's API answers 503 on the route because nothing grants it the bucket.
 
@@ -42,7 +45,7 @@ bash scripts/gcp/desktop-downloads.sh cs-project-nyit2x59
 
 It makes the private bucket and three grants (the deployer writes, the API reads and signs), and ends with a `Done` block. Nothing in the API's configuration changes, but production must be running a build that has the route: run **Deploy production** on a commit at or after the one that added it.
 
-To check: `curl -sI https://api.frapp.live/v1/desktop/updates/latest.yml` answers `302` with a `storage.googleapis.com` address in `location` (following it is a 404 until the first promotion). A `503` means the API could not sign; its log line `Desktop update link unavailable: <reason>` says why (`sign_403` is the missing sign-as-itself grant, `no_runtime_identity` is an API not on Cloud Run).
+To check: `curl -sI https://api.frapp.live/v1/desktop/updates/latest.yml` answers `302` with a `storage.googleapis.com` address in `location` once a release has been promoted; before that it answers `404`, as it does for any file the bucket doesn't hold. A `503` means the API could not read the bucket or sign; its log line `Desktop update link unavailable: <reason>` says why (`list_403` is the missing read grant, `sign_403` the missing sign-as-itself grant, `no_runtime_token` an API not on Cloud Run).
 
 ### 2. Signing secrets
 
@@ -69,9 +72,9 @@ The app registration needs the **Artifact Signing Certificate Profile Signer** r
 
 ## Releasing a version
 
-1. Raise `version` in `apps/desktop/package.json` in a PR and merge it. A version is published once: the workflow refuses one whose feeds are already in the bucket.
+1. Raise `version` in `apps/desktop/package.json` in a PR and merge it. A version is published once: the workflow refuses one whose feeds are already in the bucket. It also refuses one that an earlier run left half uploaded (a `publish` job that died partway), because a second build is signed again and its files no longer match the ones already there. Either way the fix is the same: raise the version and release that.
 2. Actions, **Desktop release**, Run workflow on `main`, action `release`.
-3. `build` and `sign` need no click. The macOS job fails if Gatekeeper would reject the app (`spctl`, `stapler validate`); the Windows job fails unless the installer's signature is valid, and prints the signer.
+3. `build` and `sign` need no click. The macOS job fails if Gatekeeper would reject the app (`spctl`, `stapler validate`); the Windows job fails unless the installer's signature is valid and its signer is exactly `AZURE_SIGNING_PUBLISHER_NAME`, the name installed copies will check. Both fail if the packaged app doesn't carry the update address.
 4. Approve the `production` gate on `publish`. It uploads the files, keeps the version's feeds, and points **beta** at it. No ordinary install moves.
 5. Try it: install the previous version, tick **Get Updates Early (Beta)** in the app's menu, and wait for "Frapp X is ready".
 
@@ -85,7 +88,10 @@ All three are the same run: Actions, **Desktop release**, action `point`, then t
 | Give it to a share of installs first | `latest` | the version | a percent, such as `20`; run again with a higher number, then blank |
 | Stop offering a bad release | the channel it is on | the version before it | blank |
 
+A release that was promoted is on both channels: pull it from `latest` and from `beta`, one run each. A run reads and checks both of the version's feeds before it writes either, so Windows and Mac never end up on different versions.
+
 ## What is verified and what is not
 
-- **Checked against the tools (2026-11-25):** `gcloud storage` flags and `CLOUDSDK_AUTH_ACCESS_TOKEN` (gcloud's own source); `azureSignOptions`, the `AZURE_*` sign-in variables, `CSC_LINK` and the `APPLE_API_*` notarization variables (electron-builder 26.18.1's source); the updater following redirects, reading `<channel>.yml`, and checking the Windows publisher (electron-updater 6.8.11's source); packaging from a checkout with no `node_modules`; the link's signing text against `@google-cloud/storage`.
-- **Derived, not run:** that GitHub's macOS and Windows runners carry `gh`, and its Ubuntu runner `gcloud`; `spctl` and `stapler` accepting the notarized app; the first sign-as-itself call on Cloud Run.
+- **Checked against the tools (2026-11-25):** `gcloud storage` flags and `CLOUDSDK_AUTH_ACCESS_TOKEN` (gcloud's own source); `azureSignOptions`, the `AZURE_*` sign-in variables, `CSC_LINK` and the `APPLE_API_*` notarization variables (electron-builder 26.18.1's source); the updater following redirects, reading `<channel>.yml`, and checking the Windows publisher (electron-updater 6.8.11's source); packaging from a checkout with no `node_modules`; `publish: null` leaving `app-update.yml` out and `-c.publish.provider=generic -c.publish.url=...` writing it; the link's signing text against `@google-cloud/storage`.
+- **Derived, not run:** that GitHub's macOS and Windows runners carry `gh`, and its Ubuntu runner `gcloud`; `spctl` and `stapler` accepting the notarized app; the first sign-as-itself call on Cloud Run, and the bucket listing it makes first (`roles/storage.objectViewer` carries `storage.objects.list` per Google's role reference); the Windows signer's `SimpleName` equalling the certificate's subject name.
+- **Reviewed once (2026-11-25):** five review agents read the change before its PR; their findings were fixed without a second, independent check of each.

@@ -23,4 +23,10 @@ export interface IDesktopReleaseStore {
    * an object that does not exist answers 404 when followed.
    */
   signedReadUrl(object: string): Promise<{ url: string; expiresAt: number }>;
+
+  /**
+   * The names of the objects a release has published, feeds included: what
+   * sits directly under the releases prefix, and nothing kept deeper.
+   */
+  publishedObjects(): Promise<Set<string>>;
 }
