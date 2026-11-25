@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -31,6 +32,7 @@ import {
   deleteDocumentTitle,
   documentFolderHues,
   isActiveDateFilter,
+  driveLink,
   isDriveCopy,
   isMinutesDocument,
   limitedDocumentCheck,
@@ -70,7 +72,11 @@ import {
   DocumentActionsSheet,
   type DocumentActionsTarget,
 } from "@/components/documents/document-actions-sheet";
-import { PinGlyph, StarGlyph } from "@/components/documents/document-glyphs";
+import {
+  DriveGlyph,
+  PinGlyph,
+  StarGlyph,
+} from "@/components/documents/document-glyphs";
 import {
   LIMITED_LABEL,
   LimitedMark,
@@ -575,6 +581,7 @@ export default function DocumentsScreen() {
       pinned: !!doc.pinned_at,
       starred: starredDocuments.has(doc.id),
       fromDrive: isDriveCopy(doc),
+      driveUrl: driveLink(doc),
       minutes: isMinutesDocument(doc),
     };
   }
@@ -848,7 +855,9 @@ export default function DocumentsScreen() {
         !markFilter.starred
       ) {
         return (
-          <InlineNote>No minutes yet. Posted minutes are filed here.</InlineNote>
+          <InlineNote>
+            No minutes yet. Posted minutes are filed here.
+          </InlineNote>
         );
       }
       if (filtering) {
@@ -938,11 +947,15 @@ export default function DocumentsScreen() {
             trailing={
               row.doc.pinned_at ||
               starredDocuments.has(row.doc.id) ||
-              isLimited(row.doc) ? (
+              isLimited(row.doc) ||
+              isDriveCopy(row.doc) ? (
                 <View style={styles.marks}>
                   {isLimited(row.doc) ? (
                     <LimitedMark color={tokens.color.text.mutedForeground} />
                   ) : null}
+                  {/* Drive's mark (#6055): the working copy is in Drive.
+                      The row's description says "From Google Drive". */}
+                  {isDriveCopy(row.doc) ? <DriveGlyph size={14} /> : null}
                   {row.doc.pinned_at ? (
                     <PinGlyph color={accent} on size={14} />
                   ) : null}
@@ -1211,6 +1224,13 @@ export default function DocumentsScreen() {
         onToggleStar={(target) => void toggleStar(target)}
         onTogglePin={(target) => void togglePin(target)}
         onDelete={(target) => confirmDelete(target.id, target.name)}
+        // The Drive app when it's installed (its links are universal
+        // links), the browser otherwise.
+        onOpenInDrive={(url) =>
+          void Linking.openURL(url).catch(() =>
+            Alert.alert("Couldn't open Google Drive."),
+          )
+        }
       />
 
       {canUpload ? (

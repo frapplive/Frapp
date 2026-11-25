@@ -856,6 +856,16 @@ export function isDriveCopy(doc: { drive_file_id?: string | null }): boolean {
   return typeof doc.drive_file_id === "string" && doc.drive_file_id !== "";
 }
 
+/**
+ * A Drive file's page in Google Drive (#6055), where its working copy is, or
+ * null. Only an https link: the address goes in a link both apps open, and
+ * Drive's `webViewLink` is always one.
+ */
+export function driveLink(doc: { drive_url?: string | null }): string | null {
+  const url = doc.drive_url;
+  return typeof url === "string" && url.startsWith("https://") ? url : null;
+}
+
 /** Under a folder's Who can see list: who passes it anyway (#3642 piece 1). */
 export const FOLDER_ALWAYS_LINE = "The President can always see it.";
 

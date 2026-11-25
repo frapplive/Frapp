@@ -3191,6 +3191,27 @@ describe("DocumentsPage who can see (#3642 piece 1)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens a Drive file in Drive from its row, and offers it on no upload (#6055)", () => {
+    documentsQuery.data = [
+      BYLAWS,
+      {
+        ...BYLAWS,
+        id: "doc-3",
+        title: "Synced minutes",
+        drive_file_id: "drive-1",
+        drive_url: "https://drive.google.com/file/d/drive-1/view",
+      },
+    ];
+    render(<DocumentsPage />);
+
+    expect(
+      screen.getByRole("link", { name: "Open Synced minutes in Google Drive" }),
+    ).toHaveAttribute("href", "https://drive.google.com/file/d/drive-1/view");
+    expect(
+      screen.queryByRole("link", { name: "Open Chapter bylaws in Google Drive" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("sets a file's own list and puts it back to Same as folder", async () => {
     manageGate.granted = true;
     documentsQuery.data = [{ ...BYLAWS, who_can_see: ["tier:t-exec"] }];

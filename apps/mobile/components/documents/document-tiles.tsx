@@ -3,6 +3,7 @@ import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   classifyFile,
+  isDriveCopy,
   isMinutesDocument,
   type LibraryDocument,
 } from "@repo/hooks/document-library";
@@ -18,7 +19,7 @@ import {
   documentOpenHint,
   type MobileDocument,
 } from "@/lib/more/documents";
-import { PinGlyph, StarGlyph } from "./document-glyphs";
+import { DriveGlyph, PinGlyph, StarGlyph } from "./document-glyphs";
 import { LIMITED_LABEL, LimitedMark } from "./limited-mark";
 
 type DocumentRowData = LibraryDocument<MobileDocument>;
@@ -74,6 +75,7 @@ export function DocumentTiles({
             const pinned = !!doc.pinned_at;
             const starred = isStarred(doc.id);
             const limited = isLimited(doc);
+            const fromDrive = isDriveCopy(doc);
             const busy = busyIds.has(doc.id);
             const actionable = !busy && !deletingIds.has(doc.id);
             const meta = documentMeta(row);
@@ -137,13 +139,15 @@ export function DocumentTiles({
                   <Text style={styles.type} numberOfLines={1}>
                     {classifyFile(doc).label}
                   </Text>
-                  {pinned || starred || limited ? (
+                  {pinned || starred || limited || fromDrive ? (
                     <View style={styles.marks}>
                       {limited ? (
                         <LimitedMark
                           color={tokens.color.text.mutedForeground}
                         />
                       ) : null}
+                      {/* Drive's mark (#6055), as the list row draws it. */}
+                      {fromDrive ? <DriveGlyph size={14} /> : null}
                       {pinned ? <PinGlyph color={accent} on size={14} /> : null}
                       {starred ? (
                         <StarGlyph color={accent} on size={14} />

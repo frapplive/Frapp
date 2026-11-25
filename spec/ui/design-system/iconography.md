@@ -585,10 +585,11 @@ button, and the PDF a report exports to.
 | Search, in the `/documents` and `/backwork` toolbars | `SearchGlyph` (re-export) |
 | A folder or file pinned for the whole chapter, and the Pin control (#3934), solid while pinned (#4289, §1 rule 1's exception) | `PinGlyph` (chat's pin shape, §6.2.2) |
 | A folder or file the member starred for themselves, and the Star control (#3934), solid while starred (#4289) | `StarGlyph` |
+| A file synced from the chapter's Google Drive folder, and Open in Google Drive (#6055), in Drive's own three colours, not a token: it names Drive (`DRIVE_MARK_PIECES`, `@repo/theme/nav-glyphs`; mobile's `DriveGlyph` in `document-glyphs.tsx` draws the same pieces) | `DriveGlyph` |
 
 **Backwork's copy markers are Lucide, on purpose (2026-11-05).** A backwork row marks which copy a file is with one icon per copy type, from one set and in the row's muted text tone (Paul: "with the copy, keep the icons consistent"): `FileCheck` a student copy, `File` a blank copy, `KeyRound` an answer key, and `Lock` beside any of them for a redacted file (`apps/web/components/backwork/backwork-row-parts.tsx`). They are small inline markers beside a text label, not domain glyphs that stand for a screen, so they stay in the control-furniture set rather than the duotone family; a later pass that draws them in the Signet set changes this paragraph and that file together.
 
-Three of the six are re-exports from
+Three of the seven are re-exports from
 [`apps/web/components/layout/nav-glyphs.tsx`](../../../apps/web/components/layout/nav-glyphs.tsx),
 which is §1 rule 1's rule and the two preceding families' practice, and a
 fourth, `PinGlyph`, re-exports chat's (#4292).

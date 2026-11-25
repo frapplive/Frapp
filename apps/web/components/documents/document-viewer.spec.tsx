@@ -215,6 +215,38 @@ describe("DocumentViewer", () => {
     expect(useDocumentSpy).toHaveBeenCalledWith("d-3", { enabled: false });
   });
 
+  // #6055: a Drive file's working copy is in Drive, so that comes first.
+  it("offers a Drive file Open in Google Drive first, beside Download", () => {
+    const sheet = {
+      ...doc("d-8", "Brother info", null, "c/documents/d-8/info.xlsx"),
+      drive_file_id: "g-1",
+      drive_url: "https://drive.google.com/file/d/g-1/view",
+    };
+    render(<Harness initial="d-8" documents={[sheet] as never[]} />);
+
+    const viewer = screen.getByRole("dialog", { name: "Brother info" });
+    const links = within(viewer).getAllByRole("link", { name: "Open in Google Drive" });
+    // The header control and the notice's primary button.
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", sheet.drive_url);
+      expect(link).toHaveAttribute("target", "_blank");
+    }
+    expect(within(viewer).getAllByRole("button", { name: "Download" })).toHaveLength(2);
+    expect(within(viewer).queryByText("Download it to open it on your device.")).toBeNull();
+  });
+
+  it("links no Drive page that isn't https", () => {
+    const odd = {
+      ...doc("d-7", "Odd", null, "c/documents/d-7/info.xlsx"),
+      drive_file_id: "g-2",
+      drive_url: "javascript:alert(1)",
+    };
+    render(<Harness initial="d-7" documents={[odd] as never[]} />);
+    const viewer = screen.getByRole("dialog", { name: "Odd" });
+    expect(within(viewer).queryByRole("link", { name: "Open in Google Drive" })).toBeNull();
+  });
+
   // #3959: the label comes from the classifier the filter uses, so an older
   // row the filter calls a Spreadsheet isn't a bare "File" here.
   it("names an untyped file by its stored extension, as the File type filter does", () => {

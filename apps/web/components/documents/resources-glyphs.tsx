@@ -38,7 +38,11 @@
  *   page labelling the PDF. Both now name what the control produces.
  */
 
-import { MARK_GLYPH_PATHS, NAV_GLYPHS } from "@repo/theme/nav-glyphs";
+import {
+  DRIVE_MARK_PIECES,
+  MARK_GLYPH_PATHS,
+  NAV_GLYPHS,
+} from "@repo/theme/nav-glyphs";
 import { Svg, markFillProps, stroke } from "@/components/ui/duotone";
 import type { DuotoneGlyphProps } from "@/components/ui/duotone";
 import { NavGlyph } from "@/components/layout/nav-glyphs";
@@ -92,6 +96,22 @@ export function StarGlyph({ className, active }: ResourcesGlyphProps) {
         {...stroke}
         {...markFillProps(active)}
       />
+    </Svg>
+  );
+}
+
+/**
+ * Google Drive's mark (#6055), in Drive's own colours: beside the name of a
+ * file synced from the chapter's Drive folder, and on Open in Google Drive.
+ * It says where the working copy lives, so members edit it there and the
+ * sync brings the change back.
+ */
+export function DriveGlyph({ className }: { className?: string }) {
+  return (
+    <Svg className={className}>
+      {DRIVE_MARK_PIECES.map((piece) => (
+        <path key={piece.d} d={piece.d} fill={piece.fill} />
+      ))}
     </Svg>
   );
 }

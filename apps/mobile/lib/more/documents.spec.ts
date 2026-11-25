@@ -78,6 +78,7 @@ describe("selectDocuments", () => {
         storage_path: "chapters/c/documents/x/bylaws.pdf",
         pinned_at: "2026-11-11T00:00:00.000Z",
         drive_file_id: null,
+        drive_url: null,
         meeting_id: null,
         minutes: null,
       },
