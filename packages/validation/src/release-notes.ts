@@ -131,6 +131,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
       "A connected Google Drive folder now says how it's syncing right in Documents, with how many files and folders it left out and why, and officers can sync or disconnect it from there.",
       "Officers can time out a member who's spamming, so they can't post or react in chapter channels for a few minutes up to a week, and they're told until when.",
       "Officers can make a task straight from an action item in posted minutes and pick who it's for right there, without paging through the suggestions.",
+      "After you join, About you has a See more section for the details your chapter keeps, like an emergency contact or T-shirt size, and says who can read each one.",
+      "Documents opens faster in a chapter with a lot of files: the first files show right away and the rest load as you scroll.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
