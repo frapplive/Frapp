@@ -52,13 +52,10 @@ export function ChapterIdentityPage() {
   const stored = tab.orgConfig.data
     ? chapterIdentityDraftOf(branding)
     : undefined;
-  const { draft, setDraft, kept } = useChapterFormDraft<ChapterIdentityDraft>(
-    "chapter-identity",
-    stored,
-  );
+  const { draft, setDraft, save, saving } =
+    useChapterFormDraft<ChapterIdentityDraft>("chapter-identity", stored);
   const status = useFormSaveStatus();
   const [yearShown, setYearShown] = useState(false);
-  const saving = tab.patchConfig.isPending;
 
   const founded = draft
     ? checkFoundedYear(draft.foundedYear, branding.founded_at)
@@ -74,26 +71,18 @@ export function ChapterIdentityPage() {
     setDraft({ ...draft, [field]: text });
   };
 
-  const save = () => {
+  const submit = async () => {
     if (!draft || !founded) return;
     if (!founded.valid) {
       setYearShown(true);
       return;
     }
-    kept.hold();
-    tab.patchConfig.mutate(
-      { branding: chapterIdentityBrandingDiff(draft, branding) },
-      {
-        onSuccess: () => {
-          kept.drop();
-          status.saved();
-        },
-        onError: (error) => {
-          kept.release();
-          status.failed(error, "Couldn't save the identity. Try again.");
-        },
-      },
+    const diff = chapterIdentityBrandingDiff(draft, branding);
+    const result = await save(() =>
+      tab.patchConfig.mutateAsync({ branding: diff }),
     );
+    if (result.ok) status.saved();
+    else status.failed(result.error, "Couldn't save the identity. Try again.");
   };
 
   return (
@@ -112,7 +101,7 @@ export function ChapterIdentityPage() {
             disabled={!chapterIdentityChanged(draft, branding)}
             busy={saving}
             status={status.status}
-            onPress={save}
+            onPress={() => void submit()}
           />
         ) : undefined
       }

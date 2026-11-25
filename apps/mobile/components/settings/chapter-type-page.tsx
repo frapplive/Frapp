@@ -39,7 +39,7 @@ export function ChapterTypePage() {
   const [switching, setSwitching] = useState<ArchetypeKey | null>(null);
 
   async function pick(key: ArchetypeKey) {
-    if (key === current.key || tab.patchConfig.isPending) return;
+    if (key === current.key || switching !== null) return;
     const next = ARCHETYPES[key];
     const yes = await confirmAlert({
       title: CHAPTER_TAB_COPY.typeConfirmTitle(next),
@@ -49,14 +49,16 @@ export function ChapterTypePage() {
     if (!yes) return;
     setFailed(null);
     setSwitching(key);
-    tab.patchConfig.mutate(chapterArchetypeSwitchPatch(key), {
-      onSettled: () => setSwitching(null),
-      onError: (error) =>
-        setFailed({
-          key,
-          message: errorCopy(error, "Couldn't switch the type. Try again."),
-        }),
-    });
+    try {
+      await tab.patchConfig.mutateAsync(chapterArchetypeSwitchPatch(key));
+    } catch (error) {
+      setFailed({
+        key,
+        message: errorCopy(error, "Couldn't switch the type. Try again."),
+      });
+    } finally {
+      setSwitching(null);
+    }
   }
 
   return (

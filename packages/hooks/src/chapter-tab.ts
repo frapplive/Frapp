@@ -435,8 +435,12 @@ export function birthdayPostChoices(
   loaded: boolean;
   channels: (BirthdayChannelRow & { id: string; name: string })[];
   paused: boolean;
-  /** The picked channel's name, `#general`, "A removed channel", or "Off". */
-  value: string;
+  /**
+   * The picked channel's name, `#general`, "A removed channel", or "Off";
+   * `null` while a picked channel's name isn't known yet (the list loading,
+   * or failed), never a guess.
+   */
+  value: string | null;
 } {
   const loaded = rows !== undefined;
   const list = rows ?? [];
@@ -449,7 +453,9 @@ export function birthdayPostChoices(
       ? BIRTHDAY_POSTS_COPY.off
       : name
         ? `#${name}`
-        : BIRTHDAY_POSTS_COPY.removedChannel;
+        : loaded
+          ? BIRTHDAY_POSTS_COPY.removedChannel
+          : null;
   return { loaded, channels, paused, value };
 }
 
@@ -465,6 +471,8 @@ export const BIRTHDAY_POSTS_COPY = {
     "Paused: that channel can't take them now. Pick another, or turn them off.",
   when: "Posts go out from 9 AM in each member's own time zone, once.",
   saveFailed: "Couldn't change birthday posts. Try again.",
+  /** On the phone's row, which retries on a tap. */
+  loadFailed: "Couldn't load the channels. Tap to try again.",
 } as const;
 
 // ── Copy ────────────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@ export function ChapterProfileForm({
   stored: ChapterProfileFields | undefined;
   canEdit: boolean;
 }) {
-  const { draft, setDraft, kept } = useChapterFormDraft(
+  const { draft, setDraft, reset, save, saving } = useChapterFormDraft(
     "chapter-profile",
     stored,
   );
@@ -51,28 +51,23 @@ export function ChapterProfileForm({
     status.clear();
     setDraft({ ...draft, [field]: text });
   };
-  const editable = canEdit && !update.isPending;
+  const editable = canEdit && !saving;
 
-  const save = () => {
+  const submit = async () => {
     const body = chapterProfileSaveBody(stored, draft);
     if (Object.keys(body).length === 0) {
       // Only spaces changed: nothing to send, and nothing left to keep.
-      kept.drop();
-      setDraft(stored);
+      reset();
       status.saved();
       return;
     }
-    kept.hold();
-    update.mutate(body, {
-      onSuccess: () => {
-        kept.drop();
-        status.saved();
-      },
-      onError: (error) => {
-        kept.release();
-        status.failed(error, "Couldn't save the chapter profile. Try again.");
-      },
-    });
+    const result = await save(() => update.mutateAsync(body));
+    if (result.ok) status.saved();
+    else
+      status.failed(
+        result.error,
+        "Couldn't save the chapter profile. Try again.",
+      );
   };
 
   return (
@@ -113,9 +108,9 @@ export function ChapterProfileForm({
         canSave={canEdit}
         readOnlyLine={CHAPTER_TAB_COPY.readOnly}
         disabled={!chapterProfileChanged(stored, draft)}
-        busy={update.isPending}
+        busy={saving}
         status={status.status}
-        onPress={save}
+        onPress={() => void submit()}
       />
     </FormFields>
   );

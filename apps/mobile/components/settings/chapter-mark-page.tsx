@@ -71,7 +71,10 @@ export function ChapterMarkPage() {
   const tab = useChapterTab();
   const { branding, lettersHidden, name, logoUrl, canManage } = tab;
   const stored = tab.orgConfig.data ? chapterMarkDraftOf(branding) : undefined;
-  const { draft, setDraft, kept } = useChapterFormDraft("chapter-mark", stored);
+  const { draft, setDraft, save, saving } = useChapterFormDraft(
+    "chapter-mark",
+    stored,
+  );
   const status = useFormSaveStatus();
 
   const requestLogoUrl = useRequestChapterLogoUploadUrl();
@@ -120,32 +123,21 @@ export function ChapterMarkPage() {
     });
   }
 
-  const saveMark = () => {
+  const saveMark = async () => {
     if (!draft) return;
-    kept.hold();
-    tab.patchConfig.mutate(
-      {
-        branding: chapterMarkBrandingDiff({
-          shortName: draft.shortName,
-          showLetters: draft.showLetters,
-          lettersHidden,
-          stored: branding,
-        }),
-      },
-      {
-        onSuccess: () => {
-          kept.drop();
-          status.saved();
-        },
-        onError: (error) => {
-          kept.release();
-          status.failed(error, "Couldn't save the mark. Try again.");
-        },
-      },
+    const diff = chapterMarkBrandingDiff({
+      shortName: draft.shortName,
+      showLetters: draft.showLetters,
+      lettersHidden,
+      stored: branding,
+    });
+    const result = await save(() =>
+      tab.patchConfig.mutateAsync({ branding: diff }),
     );
+    if (result.ok) status.saved();
+    else status.failed(result.error, "Couldn't save the mark. Try again.");
   };
 
-  const saving = tab.patchConfig.isPending;
   const logoWorking = logoBusy || removeLogo.isPending;
 
   return (
@@ -164,7 +156,7 @@ export function ChapterMarkPage() {
             disabled={!chapterMarkChanged(draft, branding)}
             busy={saving}
             status={status.status}
-            onPress={saveMark}
+            onPress={() => void saveMark()}
           />
         ) : undefined
       }

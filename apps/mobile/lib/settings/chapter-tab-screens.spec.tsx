@@ -11,6 +11,9 @@ import {
   chapterArchetypeSwitchPatch,
 } from "@repo/hooks/chapter-tab";
 import { CHAPTER_PROFILE_PERMISSIONS } from "@repo/validation";
+import { ARCHETYPES } from "@repo/org-archetypes";
+import { SETTINGS_INDEX } from "@repo/hooks";
+import { SettingAnchor } from "@/components/settings/setting-anchor";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
 
@@ -29,8 +32,10 @@ const h = vi.hoisted(() => ({
   chapter: {} as Record<string, unknown>,
   config: {} as Record<string, unknown>,
   channels: [] as unknown[],
-  patchConfig: vi.fn(),
-  updateChapter: vi.fn(),
+  // The config PATCH's and the profile PATCH's `mutateAsync`: every Chapter
+  // form awaits its save, so a failure after leaving still keeps the draft.
+  patchConfig: vi.fn<(diff: unknown) => Promise<unknown>>(),
+  updateChapter: vi.fn<(body: unknown) => Promise<unknown>>(),
   removeLogo: vi.fn(),
   birthdaySheet: null as null | {
     options: { value: string | null; label: string }[];
@@ -60,8 +65,16 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useCurrentChapter: () => ok(h.chapter),
   useOrgConfig: (options?: { enabled?: boolean }) =>
     ok(options?.enabled === false ? undefined : h.config),
-  usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
-  useUpdateChapter: () => ({ mutate: h.updateChapter, isPending: false }),
+  usePatchOrgConfig: () => ({
+    mutate: vi.fn(),
+    mutateAsync: h.patchConfig,
+    isPending: false,
+  }),
+  useUpdateChapter: () => ({
+    mutate: vi.fn(),
+    mutateAsync: h.updateChapter,
+    isPending: false,
+  }),
   useChannels: () => ok(h.channels),
   useChapterChatBackground: () =>
     ok({ background: "midnight", photo_url: null }),
@@ -168,6 +181,8 @@ const at = (text: string, needle: string) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.patchConfig.mockReset().mockResolvedValue({});
+  h.updateChapter.mockReset().mockResolvedValue({});
   vi.mocked(useLocalSearchParams).mockReturnValue({});
   h.permissions = OFFICER;
   h.chapter = {
@@ -205,6 +220,8 @@ afterEach(() => {
 
 describe("Chapter settings → Chapter (#6027)", () => {
   it("draws web's Chapter tab in web's order, each row with its value", () => {
+    h.permissions = [...OFFICER, "members:view"];
+    h.chapter = { ...h.chapter, enabled_modules: { geofences: true } };
     const text = screenText(render(<ChapterSettingsScreen />));
     const order = [
       "Chapter name",
@@ -220,6 +237,9 @@ describe("Chapter settings → Chapter (#6027)", () => {
       "Vocabulary",
       "Birthday posts",
       "Members can change their own name",
+      "Study zones",
+      // The row, not the About footnote's mention of it.
+      "\nLogs",
     ].map((needle) => at(text, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(text).toContain("Chapter mark\nSig Ep");
@@ -229,6 +249,20 @@ describe("Chapter settings → Chapter (#6027)", () => {
     expect(text).toContain("Birthday posts\n#general");
   });
 
+  it("opens each row's page", () => {
+    const tree = render(<ChapterSettingsScreen />);
+    const push = vi.mocked(useRouter)().push;
+    for (const [label, route] of [
+      ["Chapter mark", "/chapter-mark"],
+      ["Identity & founding", "/chapter-identity"],
+      ["Organization type", "/chapter-type"],
+      ["Vocabulary", "/chapter-vocabulary"],
+    ] as const) {
+      act(() => pressable(tree, label).props.onPress());
+      expect(push).toHaveBeenLastCalledWith(route);
+    }
+  });
+
   it("waits for an edit, then saves only the changed field, trimmed", () => {
     const tree = render(<ChapterSettingsScreen />);
     expect(pressable(tree, "Save profile").props.disabled).toBe(true);
@@ -236,17 +270,13 @@ describe("Chapter settings → Chapter (#6027)", () => {
     const save = pressable(tree, "Save profile");
     expect(save.props.disabled).toBe(false);
     act(() => save.props.onPress());
-    expect(h.updateChapter).toHaveBeenCalledWith(
-      { university: "Rensselaer" },
-      expect.anything(),
-    );
+    expect(h.updateChapter).toHaveBeenCalledWith({ university: "Rensselaer" });
   });
 
-  it("says Saved once the profile lands", () => {
-    h.updateChapter.mockImplementation((_body, { onSuccess }) => onSuccess());
+  it("says Saved once the profile lands", async () => {
     const tree = render(<ChapterSettingsScreen />);
     type(tree, "Chapter name", "Sigma Phi Epsilon Cal Eta");
-    act(() => pressable(tree, "Save profile").props.onPress());
+    await act(async () => pressable(tree, "Save profile").props.onPress());
     expect(screenText(tree)).toContain("Saved");
   });
 
@@ -278,10 +308,13 @@ describe("Chapter settings → Chapter (#6027)", () => {
       "#general",
     ]);
     act(() => h.birthdaySheet?.onSelect(null));
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      { birthday_channel_id: null },
-      expect.anything(),
-    );
+    expect(h.patchConfig).toHaveBeenCalledWith({ birthday_channel_id: null });
+  });
+
+  it("never calls a saved channel removed before the list loads", () => {
+    h.channels = undefined as unknown as unknown[];
+    const text = screenText(render(<ChapterSettingsScreen />));
+    expect(text).not.toContain("A removed channel");
   });
 
   it("reads a channel that can't take the posts as paused", () => {
@@ -298,17 +331,14 @@ describe("Chapter settings → Identity & founding (#6027)", () => {
     expect(pressable(tree, "Save identity").props.disabled).toBe(true);
     type(tree, "School (short)", "UCLA");
     act(() => pressable(tree, "Save identity").props.onPress());
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      {
-        branding: {
-          greek_letters: "ΣΦΕ",
-          designation: "California Eta",
-          school_short: "UCLA",
-          founded_at: 1901,
-        },
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      branding: {
+        greek_letters: "ΣΦΕ",
+        designation: "California Eta",
+        school_short: "UCLA",
+        founded_at: 1901,
       },
-      expect.anything(),
-    );
+    });
   });
 
   it("won't remove a saved founded year, and says why", () => {
@@ -338,7 +368,7 @@ describe("Chapter settings → Identity & founding (#6027)", () => {
 });
 
 describe("Chapter settings → Organization type (#6027)", () => {
-  it("asks before switching, then resets to the type's defaults", () => {
+  it("asks before switching, then resets to the type's defaults", async () => {
     const tree = render(<ChapterTypeScreen />);
     act(() => pressable(tree, "NPHC / Divine Nine").props.onPress());
     const [title, , buttons] = vi.mocked(Alert.alert).mock.calls[0]!;
@@ -347,13 +377,24 @@ describe("Chapter settings → Organization type (#6027)", () => {
       (b) => b.text === CHAPTER_TAB_COPY.typeConfirmAction,
     );
     expect(h.patchConfig).not.toHaveBeenCalled();
-    act(() => confirm!.onPress());
-    return Promise.resolve().then(() => {
-      expect(h.patchConfig).toHaveBeenCalledWith(
-        chapterArchetypeSwitchPatch("nphc"),
-        expect.anything(),
-      );
-    });
+    await act(async () => confirm!.onPress());
+    expect(h.patchConfig).toHaveBeenCalledWith(
+      chapterArchetypeSwitchPatch("nphc"),
+    );
+  });
+
+  it("lists all eight types, the current one marked", () => {
+    const tree = render(<ChapterTypeScreen />);
+    const text = screenText(tree);
+    const labels = Object.values(ARCHETYPES).map((a) => a.label);
+    expect(labels).toHaveLength(8);
+    for (const label of labels) expect(text).toContain(label);
+    const current = tree.root.find(
+      (node) =>
+        node.props.accessibilityValue === "Current" &&
+        node.props.label === "IFC Fraternity",
+    );
+    expect(current).toBeTruthy();
   });
 
   it("lists the eight types read-only for a member who can't switch", () => {
@@ -373,18 +414,15 @@ describe("Chapter settings → Vocabulary (#6027)", () => {
     expect(field(tree, "New member term").props.placeholder).toBe("New member");
     type(tree, "Role tier", " Board ");
     act(() => pressable(tree, "Save vocabulary").props.onPress());
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      {
-        vocabulary: {
-          recruitment: "",
-          pledge: "",
-          class: "",
-          order: "",
-          tier: "Board",
-        },
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      vocabulary: {
+        recruitment: "",
+        pledge: "",
+        class: "",
+        order: "",
+        tier: "Board",
       },
-      expect.anything(),
-    );
+    });
   });
 
   it("keeps an unsaved word when the officer goes back and returns", () => {
@@ -403,10 +441,9 @@ describe("Chapter settings → Chapter mark (#6027)", () => {
     expect(pressable(tree, "Save mark").props.disabled).toBe(true);
     type(tree, "Short name", "SigEp");
     act(() => pressable(tree, "Save mark").props.onPress());
-    expect(h.patchConfig).toHaveBeenCalledWith(
-      { branding: { show_greek_letters: true, short_name: "SigEp" } },
-      expect.anything(),
-    );
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      branding: { show_greek_letters: true, short_name: "SigEp" },
+    });
   });
 
   it("gives FIJI no letters switch", () => {
@@ -431,5 +468,107 @@ describe("Chapter settings → Chapter mark (#6027)", () => {
       `Logo\n${CHAPTER_TAB_COPY.rowReadOnly}\nNone`,
     );
     expect(hasPressable(tree, "Upload logo")).toBe(false);
+  });
+});
+
+describe("Chapter settings drafts (#6027)", () => {
+  const rerender = (tree: ReactTestRenderer, element: React.ReactElement) =>
+    act(() => tree.update(<FrappThemeProvider>{element}</FrappThemeProvider>));
+
+  it("keeps the edit when a save fails, through the optimistic write and its rollback", async () => {
+    const tree = render(<ChapterIdentityScreen />);
+    type(tree, "School (short)", "UCLA");
+    h.patchConfig.mockImplementation(async (diff) => {
+      const before = h.config;
+      // usePatchOrgConfig writes the merged config before the server answers
+      // and puts the old one back when it refuses.
+      h.config = {
+        ...before,
+        branding: {
+          ...(before.branding as object),
+          ...(diff as { branding: object }).branding,
+        },
+      };
+      rerender(tree, <ChapterIdentityScreen />);
+      h.config = before;
+      rerender(tree, <ChapterIdentityScreen />);
+      throw new Error("offline");
+    });
+    await act(async () => pressable(tree, "Save identity").props.onPress());
+    expect(field(tree, "School (short)").props.value).toBe("UCLA");
+    expect(pressable(tree, "Save identity").props.disabled).toBe(false);
+  });
+
+  it("keeps the edit when the save fails after the officer has left", async () => {
+    let fail!: (error: Error) => void;
+    h.patchConfig.mockImplementation(
+      () => new Promise((_resolve, reject) => (fail = reject)),
+    );
+    const first = render(<ChapterVocabularyScreen />);
+    type(first, "Cohort label", "Line");
+    act(() => pressable(first, "Save vocabulary").props.onPress());
+    act(() => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    await act(async () => fail(new Error("offline")));
+    const again = render(<ChapterVocabularyScreen />);
+    expect(field(again, "Cohort label").props.value).toBe("Line");
+  });
+
+  it("keeps a draft made before the settings load, once they arrive", () => {
+    const first = render(<ChapterVocabularyScreen />);
+    type(first, "Cohort label", "Line");
+    act(() => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    const config = h.config;
+    h.config = undefined as unknown as Record<string, unknown>;
+    const again = render(<ChapterVocabularyScreen />);
+    h.config = config;
+    rerender(again, <ChapterVocabularyScreen />);
+    expect(field(again, "Cohort label").props.value).toBe("Line");
+  });
+
+  it("lays a kept draft over another officer's later save, never reverting it", () => {
+    const first = render(<ChapterVocabularyScreen />);
+    type(first, "New member term", "Associate");
+    act(() => first.unmount());
+    mounted.splice(mounted.indexOf(first), 1);
+    // Another officer sets the tier word on web meanwhile.
+    h.config = { ...h.config, vocabulary: { tier: "Council" } };
+    const again = render(<ChapterVocabularyScreen />);
+    expect(field(again, "New member term").props.value).toBe("Associate");
+    expect(field(again, "Role tier").props.value).toBe("Council");
+    act(() => pressable(again, "Save vocabulary").props.onPress());
+    expect(h.patchConfig).toHaveBeenCalledWith({
+      vocabulary: {
+        recruitment: "",
+        pledge: "Associate",
+        class: "",
+        order: "",
+        tier: "Council",
+      },
+    });
+  });
+});
+
+describe("Settings search lands on the Chapter tab's rows (#6027)", () => {
+  const SCREENS = {
+    "/chapter-settings": ChapterSettingsScreen,
+    "/chapter-mark": ChapterMarkScreen,
+    "/chapter-identity": ChapterIdentityScreen,
+    "/chapter-vocabulary": ChapterVocabularyScreen,
+  } as const;
+
+  it("finds every chapter-only entry's anchor on its screen", () => {
+    const entries = SETTINGS_INDEX.filter((e) => e.phone?.chapterOnly);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      const Screen = SCREENS[entry.phone!.screen as keyof typeof SCREENS];
+      expect(Screen, entry.id).toBeDefined();
+      const tree = render(<Screen />);
+      const anchors = tree.root
+        .findAllByType(SettingAnchor)
+        .map((node) => node.props.id);
+      expect(anchors, entry.id).toContain(entry.phone!.anchor);
+    }
   });
 });

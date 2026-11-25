@@ -71,10 +71,12 @@ export function BirthdayPostsRow({
   else if (!canManage) description = CHAPTER_TAB_COPY.rowReadOnly;
   else if (paused) description = BIRTHDAY_POSTS_COPY.paused;
   else if (channelsQuery.isError && !loaded)
-    description = "Couldn't load the channels. Pull down to try again.";
+    description = BIRTHDAY_POSTS_COPY.loadFailed;
   else description = null;
 
   const opens = canManage && loaded && !saving;
+  // A failed read retries from the row itself: the screen has no pull.
+  const retries = canManage && channelsQuery.isError && !loaded;
 
   return (
     <>
@@ -83,7 +85,11 @@ export function BirthdayPostsRow({
           leading={<CakeGlyph color={glyphColor} />}
           label={BIRTHDAY_POSTS_COPY.title}
           value={
-            paused ? `${value} ${BIRTHDAY_POSTS_COPY.pausedSuffix}` : value
+            value === null
+              ? undefined
+              : paused
+                ? `${value} ${BIRTHDAY_POSTS_COPY.pausedSuffix}`
+                : value
           }
           description={description}
           descriptionTone={failed ? "destructive" : "default"}
@@ -91,9 +97,17 @@ export function BirthdayPostsRow({
           accessibilityHint={
             opens
               ? `${BIRTHDAY_POSTS_COPY.hint} Opens the channel choices.`
-              : BIRTHDAY_POSTS_COPY.hint
+              : retries
+                ? "Loads the channels again."
+                : BIRTHDAY_POSTS_COPY.hint
           }
-          onPress={opens ? () => sheetRef.current?.present() : undefined}
+          onPress={
+            opens
+              ? () => sheetRef.current?.present()
+              : retries
+                ? () => void channelsQuery.refetch()
+                : undefined
+          }
         />
       </SettingAnchor>
       {canManage ? (

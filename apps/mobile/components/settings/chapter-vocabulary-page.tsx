@@ -44,26 +44,17 @@ export function ChapterVocabularyPage() {
   const stored = tab.orgConfig.data
     ? chapterVocabularyDraftOf(vocabulary)
     : undefined;
-  const { draft, setDraft, kept } = useChapterFormDraft<ChapterVocabularyDraft>(
-    "chapter-vocabulary",
-    stored,
-  );
+  const { draft, setDraft, save, saving } =
+    useChapterFormDraft<ChapterVocabularyDraft>("chapter-vocabulary", stored);
   const status = useFormSaveStatus();
-  const saving = tab.patchConfig.isPending;
 
-  const save = () => {
+  const submit = async () => {
     if (!draft) return;
-    kept.hold();
-    tab.patchConfig.mutate(chapterVocabularyPatch(draft), {
-      onSuccess: () => {
-        kept.drop();
-        status.saved();
-      },
-      onError: (error) => {
-        kept.release();
-        status.failed(error, "Couldn't save the vocabulary. Try again.");
-      },
-    });
+    const patch = chapterVocabularyPatch(draft);
+    const result = await save(() => tab.patchConfig.mutateAsync(patch));
+    if (result.ok) status.saved();
+    else
+      status.failed(result.error, "Couldn't save the vocabulary. Try again.");
   };
 
   return (
@@ -82,7 +73,7 @@ export function ChapterVocabularyPage() {
             disabled={!chapterVocabularyChanged(draft, vocabulary)}
             busy={saving}
             status={status.status}
-            onPress={save}
+            onPress={() => void submit()}
           />
         ) : undefined
       }

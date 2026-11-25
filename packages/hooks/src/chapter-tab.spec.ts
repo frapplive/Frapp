@@ -323,6 +323,8 @@ describe("Birthday posts", () => {
     expect(birthdayPostChoices(undefined, "general")).toMatchObject({
       loaded: false,
       paused: false,
+      // Not known yet: never "A removed channel" for a channel still there.
+      value: null,
     });
   });
 });

@@ -339,10 +339,10 @@ export default function ChapterSettingsScreen() {
                           glyphColor={glyphColor}
                           onSave={(diff, { onError }) => {
                             setBirthdaySaving(true);
-                            patchConfig.mutate(diff, {
-                              onError,
-                              onSettled: () => setBirthdaySaving(false),
-                            });
+                            patchConfig
+                              .mutateAsync(diff)
+                              .catch(onError)
+                              .finally(() => setBirthdaySaving(false));
                           }}
                         />
                       ) : null}
@@ -368,10 +368,15 @@ export default function ChapterSettingsScreen() {
                                 }
                                 onValueChange={(next) => {
                                   setNamesSaveFailed(false);
-                                  patchConfig.mutate(
-                                    { members_can_change_name: next },
-                                    { onError: () => setNamesSaveFailed(true) },
-                                  );
+                                  // Awaited, not a `mutate` callback: the
+                                  // birthday pick shares this mutation, and
+                                  // a second `mutate` drops the first's
+                                  // callbacks, failure line and all.
+                                  patchConfig
+                                    .mutateAsync({
+                                      members_can_change_name: next,
+                                    })
+                                    .catch(() => setNamesSaveFailed(true));
                                 }}
                                 accessibilityLabel={NAME_LOCK_COPY.settingLabel}
                               />
