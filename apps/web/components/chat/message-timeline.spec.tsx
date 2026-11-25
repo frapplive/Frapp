@@ -30,6 +30,7 @@ const virtuosoProps = vi.hoisted(() => ({
     totalListHeightChanged?: (height: number) => void;
     rangeChanged?: (range: { startIndex: number; endIndex: number }) => void;
     initialTopMostItemIndex?: unknown;
+    atBottomStateChange?: (atBottom: boolean) => void;
   },
   // The handle's one method the timeline calls, for the cases that assert
   // where it scrolls.
@@ -77,6 +78,7 @@ vi.mock("react-virtuoso", async () => {
         totalListHeightChanged,
         rangeChanged,
         initialTopMostItemIndex,
+        atBottomStateChange,
         components,
         context,
       }: {
@@ -92,6 +94,7 @@ vi.mock("react-virtuoso", async () => {
           endIndex: number;
         }) => void;
         initialTopMostItemIndex?: unknown;
+        atBottomStateChange?: (atBottom: boolean) => void;
         components?: {
           Header?: (props: { context?: unknown }) => React.ReactNode;
         };
@@ -119,6 +122,7 @@ vi.mock("react-virtuoso", async () => {
         totalListHeightChanged,
         rangeChanged,
         initialTopMostItemIndex,
+        atBottomStateChange,
       };
       const Header = components?.Header;
       return (
@@ -2499,6 +2503,9 @@ describe("MessageTimeline New messages divider and pill (#6052)", () => {
     render(view(thread));
     showRows(2, 3);
     showRows(3, 3);
+    // Not at the bottom yet: the divider is above, and the pill says so.
+    expect(pill()).not.toBeNull();
+    act(() => virtuosoProps.current.atBottomStateChange?.(true));
     expect(pill()).toBeNull();
     // Scrolling back above it brings nothing back: they have read it all.
     showRows(0, 1);

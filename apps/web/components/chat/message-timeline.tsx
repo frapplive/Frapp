@@ -904,6 +904,18 @@ export const MessageTimeline = forwardRef<
     },
     [measureJump],
   );
+  /*
+    Whether the list is at its newest row, by Virtuoso's own report, for the
+    "New messages" pill: it retires once the member has seen the divider and
+    then reached the newest message. The jump control's zone starts every
+    channel at `newest` and leaves it only on a scroll up, which a landing on
+    the divider is not, so it can't say this until it is measured.
+  */
+  const [atBottom, setAtBottom] = useState<{
+    channelId: string | undefined;
+    value: boolean;
+  }>({ channelId, value: false });
+  const listAtBottom = atBottom.channelId === channelId && atBottom.value;
   const unread = useNewMessages({
     channelKey: channelId ?? null,
     mark: newMessages,
@@ -911,7 +923,7 @@ export const MessageTimeline = forwardRef<
     hasOlder,
     isLoadingOlder,
     olderError,
-    atNewest: jump.atNewest,
+    atNewest: listAtBottom,
     scrollToRow: scrollRowToTop,
     loadOlder: onLoadOlder,
     onMarkRead,
@@ -1169,6 +1181,20 @@ export const MessageTimeline = forwardRef<
     else if (channelId) setArmedFor(channelId);
   };
 
+  // Virtuoso's first report after a list opened on the divider says where it
+  // settled: the bottom pin may follow from here, and the jump control reads
+  // where the member is (a landing scrolls down, which its zone ignores).
+  const handleAtBottom = useCallback(
+    (value: boolean) => {
+      setAtBottom({ channelId, value });
+      if (landing) {
+        setLandingOn(null);
+        measureJump();
+      }
+    },
+    [channelId, landing, measureJump],
+  );
+
   const headerContext = useMemo<TimelineHeaderContext>(
     () => ({
       olderStatus: isLoadingOlder ? "loading" : olderError ? "error" : "idle",
@@ -1195,14 +1221,17 @@ export const MessageTimeline = forwardRef<
     },
     [stickScrollerRef, jumpScrollerRef],
   );
+  const reportUnreadRange = unread.reportRange;
   const reportVisible = useCallback(() => {
     const range = visibleRange.current;
-    if (!onVisibleMessagesChange || !range) return;
+    if (!range) return;
     const view = scroller.current?.getBoundingClientRect();
     const ids: string[] = [];
+    let first = -1;
+    let last = -1;
     for (let i = range.startIndex; i <= range.endIndex; i++) {
       const entry = decorated[i - firstItemIndex];
-      if (!entry || entry.visibility === "tombstone") continue;
+      if (!entry) continue;
       // Virtuoso's range includes a row with one pixel showing. A row
       // counts once half of it is on screen (or it fills half the screen),
       // as mobile's viewability threshold does.
@@ -1217,33 +1246,20 @@ export const MessageTimeline = forwardRef<
           continue;
         }
       }
-      ids.push(entry.message.id);
+      if (first < 0) first = i - firstItemIndex;
+      last = i - firstItemIndex;
+      if (entry.visibility !== "tombstone") ids.push(entry.message.id);
     }
-    onVisibleMessagesChange(ids);
-  }, [decorated, firstItemIndex, onVisibleMessagesChange]);
-  const reportUnreadRange = unread.reportRange;
+    onVisibleMessagesChange?.(ids);
+    // The "New messages" pill (#6052) reads the same rows, by the same rule.
+    if (first >= 0) reportUnreadRange(first, last);
+  }, [decorated, firstItemIndex, onVisibleMessagesChange, reportUnreadRange]);
   const handleRangeChanged = useCallback(
     (range: ListRange) => {
       visibleRange.current = range;
       reportVisible();
-      const first = range.startIndex - firstItemIndex;
-      const last = range.endIndex - firstItemIndex;
-      reportUnreadRange(first, last);
-      // Settled on the divider the channel opened on: the pin may follow the
-      // member again from here, and the jump control reads where they are.
-      if (landing && dividerIndex >= first && dividerIndex <= last) {
-        setLandingOn(null);
-        measureJump();
-      }
     },
-    [
-      reportVisible,
-      reportUnreadRange,
-      firstItemIndex,
-      landing,
-      dividerIndex,
-      measureJump,
-    ],
+    [reportVisible],
   );
   // A channel switch keeps this component and its index space, so the last
   // channel's range would map onto the new channel's rows: forget it until
@@ -1440,6 +1456,7 @@ export const MessageTimeline = forwardRef<
           followOutput={holdFollow || (prepended && armed) ? false : "smooth"}
           initialTopMostItemIndex={openingIndex}
           atTopStateChange={handleAtTop}
+          atBottomStateChange={handleAtBottom}
           rangeChanged={handleRangeChanged}
           // Holds the open on its newest row while rows above it grow: a photo
           // loading after the list settled (#3863).
