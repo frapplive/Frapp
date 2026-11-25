@@ -60,6 +60,7 @@ const doc = (over: Partial<ChapterDocument> = {}): ChapterDocument => ({
   drive_link_status: 'active',
   drive_synced_at: NOW.toISOString(),
   who_can_see: null,
+  meeting_id: null,
   ...over,
 });
 

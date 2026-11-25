@@ -7334,7 +7334,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The events this officer can see that are marked "No minutes", so the Meetings list stops asking for them */
+        /**
+         * The events this officer can see that are marked "No minutes"
+         * @description Read by the phone Minutes list of builds from before #5949, which stops asking for these. A current client reads Activity's Minutes run instead, where the server leaves marked meetings out.
+         */
         get: operations["MeetingNoMinutesController_list_v1"];
         put?: never;
         post?: never;
@@ -12617,14 +12620,32 @@ export interface components {
             /** @description One to 25 uploads to file, each as the single confirm route takes it */
             documents: components["schemas"]["ConfirmDocumentUploadDto"][];
         };
+        DocumentMinutesDto: {
+            meeting_id: string;
+            /** @description The meeting's name as the minutes hold it */
+            event_name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @enum {string} */
+            meeting_type: "chapter" | "exec" | "committee" | "other";
+            other_label: string | null;
+            decision_count: number;
+            action_item_count: number;
+            /** @description Whether a recording's transcript is kept with the minutes */
+            recorded: boolean;
+            /** @description The TL;DR's first line */
+            gist: string | null;
+        };
         ChapterDocumentDto: {
             id: string;
             chapter_id: string;
             title: string;
             description: string | null;
             folder: string | null;
-            storage_path: string;
-            uploaded_by: string;
+            /** @description The stored file's path. Null only on a row that files a meeting's minutes (`meeting_id`), which the list returns only when asked with `minutes=true`. */
+            storage_path: string | null;
+            /** @description Who uploaded the file. Null only on a row that files a meeting's minutes. */
+            uploaded_by: string | null;
             created_at: string;
             content_type: string | null;
             byte_size: number | null;
@@ -12652,6 +12673,10 @@ export interface components {
             drive_synced_at: string | null;
             /** @description Who can see it (#3642): null for the same as its folder, else its own list, which narrows the folder's */
             who_can_see: string[] | null;
+            /** @description Set on the row that files a meeting's posted minutes (#5949): the minutes' id, which the row opens instead of a file. Seen only by members who may read those minutes. */
+            meeting_id: string | null;
+            /** @description On the list and a single read: what a minutes row shows of its minutes. Null on a file. */
+            minutes?: components["schemas"]["DocumentMinutesDto"] | null;
         };
         DocumentConfirmResultDto: {
             /** @description The storage path this result is for */
@@ -12706,6 +12731,8 @@ export interface components {
             who_can_see: string[] | null;
             /** @description The Google Drive folder it mirrors, or null (#5220). Its name follows Drive, so it is renamed and deleted there, not here. */
             drive_folder_id: string | null;
+            /** @description Set on a folder the minutes flow files into (#5949): `root` for the chapter's Minutes folder, or a repeating meeting's series for that series' folder. */
+            minutes_series_key: string | null;
         };
         DocumentAccessOptionsDto: {
             options: components["schemas"]["ChannelAccessOptionDto"][];
@@ -13417,6 +13444,68 @@ export interface components {
             /** @description Whether `remind_at` has passed. A due reminder waits on the caller and is counted in `needs_you_count` until they clear it. */
             due: boolean;
         };
+        ActivityMinutesToWriteDto: {
+            /**
+             * Format: uuid
+             * @description The meeting’s event: `POST /v1/meetings` with it starts the minutes, and `PUT /v1/events/{id}/no-minutes` marks it as having none.
+             */
+            event_id: string;
+            /** @description The event’s name. */
+            name: string;
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+        };
+        ActivityMinutesDraftDto: {
+            /** Format: uuid */
+            meeting_id: string;
+            /**
+             * Format: uuid
+             * @description Null for minutes started with no meeting, until one is linked.
+             */
+            event_id: string | null;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Whether anything is in them yet: a written section, someone’s notes, or a recording. Without, they read "Not started". */
+            started: boolean;
+            /**
+             * Format: uuid
+             * @description Who is recording them on their phone right now, else null.
+             */
+            recording_by: string | null;
+            /** @description The name of whoever is recording, when it isn’t the caller; else null. */
+            recording_by_name: string | null;
+        };
+        ActivityNoteTakingDto: {
+            /**
+             * Format: uuid
+             * @description Their notes are `GET /v1/meetings/{id}/notes`.
+             */
+            meeting_id: string;
+            /** Format: uuid */
+            event_id: string;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Who is writing the minutes. */
+            author_name: string;
+            /** @description The caller has notes on it already. */
+            joined: boolean;
+            /** @description The author or an editor added the caller. */
+            added: boolean;
+        };
+        ActivityMinutesDto: {
+            /** @description For a holder of `meetings:record`: events the caller can see that ended in the last 30 days, whose name reads as a meeting, with no minutes by anyone (a draft the caller can’t read included) and not marked "No minutes". Newest first, at most 25. Counted in `needs_you_count`. */
+            to_write: components["schemas"]["ActivityMinutesToWriteDto"][];
+            /** @description The caller’s own unposted minutes they may still read, newest meeting first, at most 25. Counted in `needs_you_count`. */
+            drafts: components["schemas"]["ActivityMinutesDraftDto"][];
+            /** @description Other officers’ unposted minutes the caller takes notes on, added or joined, newest meeting first, at most 25. Empty on a server with AI off. Those with `joined` false are counted in `needs_you_count`. */
+            taking_notes: components["schemas"]["ActivityNoteTakingDto"][];
+        };
         ActivityMadeByYouDto: {
             /** @description Poll cards the caller posted, newest first: up to 25 open and the 25 most recently posted closed ones, so closed polls never push an open one out of the read. A current client lists the open ones and finds the closed in `GET /v1/activity/archive` (#5127); the closed ones are served for phone builds from before it, which draw them as Archived polls (#4258). */
             polls: components["schemas"]["ActivityPollDto"][];
@@ -13463,11 +13552,13 @@ export interface components {
             links: components["schemas"]["ActivityLinkDto"][];
             /** @description Reminders the caller set on chat messages (#4957): those due that they haven’t cleared, newest first, then those still waiting, soonest first; at most 50 of each. Private to the caller. Due ones are counted in `needs_you_count` (so at most 50). */
             reminders: components["schemas"]["ActivityReminderDto"][];
+            /** @description Minutes waiting on the caller (#5949): meetings to write minutes for, their own drafts, and drafts they take notes on. Empty lists while the chapter has Meetings off. No `unread` or `snoozed_until`: these rows have neither. */
+            minutes: components["schemas"]["ActivityMinutesDto"];
             made_by_you: components["schemas"]["ActivityMadeByYouDto"];
-            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, less what the caller snoozed (`snoozed_until`). */
+            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, plus every `minutes.to_write` and `minutes.drafts` row and each `minutes.taking_notes` row not yet `joined`, less what the caller snoozed (`snoozed_until`). */
             needs_you_count: number;
             /** @description Sections that could not be read this time. Each is served empty; the others are unaffected. */
-            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders")[];
+            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders" | "minutes")[];
             /** @description How the caller’s week is going, for the ring at the top of the page (`spec/behavior/activity.md` § Week): what they finished since the week began and what is still theirs to do in it, by kind. Their own things only; what waits on their review is not counted. */
             week: components["schemas"]["ActivityWeekDto"];
             /**
@@ -26720,6 +26811,8 @@ export interface operations {
                 folder?: string;
                 /** @description Case-insensitive substring match on the document title */
                 search?: string;
+                /** @description Send `true` to also get the rows that file meetings' posted minutes (#5949): rows with `meeting_id` set and no file, which open the minutes. Left out unless asked for, so a client from before them never gets a row with no file. */
+                minutes?: "true";
             };
             header?: never;
             path?: never;
@@ -28238,6 +28331,8 @@ export interface operations {
             query?: {
                 /** @description Where the caller’s week begins, in their own time zone (the Study screen’s week: Sunday at midnight). Between eight days ago and a day from now: outside that, the standing answers 400 and `GET /v1/activity` counts the default week. Omitted: last Sunday at midnight UTC. */
                 week_start?: string;
+                /** @description `true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949). */
+                minutes?: "true";
             };
             header?: never;
             path?: never;

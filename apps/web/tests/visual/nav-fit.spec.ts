@@ -78,9 +78,11 @@ test("the sidebar keeps eight channel rows in view at 1024×768 with every row s
   await expect(nav).toBeVisible();
   // If either stub above ever stops reaching the sidebar, rows go missing and
   // the test says so instead of passing on a shorter list. Directory needs
-  // the permissions stub; More holds module rows, which a failed chapter
-  // read would switch off.
+  // the permissions stub; Resources (one row for Documents, minutes and
+  // Backwork, #5949) and More hold module rows, which a failed chapter read
+  // would switch off.
   await expect(nav.getByRole("link", { name: "Directory" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Resources" })).toBeVisible();
   await expect(nav.getByRole("button", { name: /More/ })).toBeVisible();
 
   const room = await page

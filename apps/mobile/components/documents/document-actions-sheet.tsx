@@ -27,6 +27,12 @@ export interface DocumentActionsTarget {
   starred: boolean;
   /** A copy of a file in the chapter's Google Drive folder (#5157): no Delete. */
   fromDrive?: boolean;
+  /**
+   * A meeting's posted minutes, filed as a document (#5949): no Delete. They
+   * are deleted as minutes, from their own screen, and the API refuses a
+   * delete here.
+   */
+  minutes?: boolean;
 }
 
 export interface DocumentActionsSheetProps {
@@ -130,7 +136,10 @@ export const DocumentActionsSheet = forwardRef<
                 styles={styles}
               />
             ) : null}
-            {canManage && target.kind === "document" && !target.fromDrive ? (
+            {canManage &&
+            target.kind === "document" &&
+            !target.fromDrive &&
+            !target.minutes ? (
               <ActionRow
                 label="Delete document"
                 // An empty slot the glyphs' width, so the three labels align.

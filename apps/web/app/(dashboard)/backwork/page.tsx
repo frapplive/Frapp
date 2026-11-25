@@ -1,7 +1,7 @@
 import { BackworkPage } from "@/components/backwork/backwork-page";
 
 export const metadata = {
-  title: "Backwork",
+  title: "Resources",
 };
 
 export default function Backwork() {

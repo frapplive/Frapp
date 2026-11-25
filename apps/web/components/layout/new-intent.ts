@@ -25,17 +25,24 @@ import { useEffect, useRef } from "react";
 export const NEW_INTENT_PARAM = "new";
 
 /**
+ * Which form the mark asks for, where a page holds more than one: Documents
+ * holds Upload (`"1"`, its own button's) and New minutes (`"minutes"`), since
+ * minutes are filed there (#5949).
+ */
+export type NewIntent = "1" | "minutes";
+
+/**
  * The address that opens `href`'s create form. `href` may carry a query of
  * its own (`/profile?open=service`, a panel that holds the form, #5950).
  */
-export function newIntentHref(href: string): string {
-  return `${href}${href.includes("?") ? "&" : "?"}${NEW_INTENT_PARAM}=1`;
+export function newIntentHref(href: string, intent: NewIntent = "1"): string {
+  return `${href}${href.includes("?") ? "&" : "?"}${NEW_INTENT_PARAM}=${intent}`;
 }
 
-function addressAsks(): boolean {
+function addressAsks(intent: NewIntent): boolean {
   if (typeof window === "undefined") return false;
   return (
-    new URLSearchParams(window.location.search).get(NEW_INTENT_PARAM) === "1"
+    new URLSearchParams(window.location.search).get(NEW_INTENT_PARAM) === intent
   );
 }
 
@@ -53,6 +60,7 @@ export function useNewIntent(
   open: () => void,
   ready: boolean,
   asked?: boolean,
+  intent: NewIntent = "1",
 ): void {
   // Read once, after the page's first commit: Next writes the new address in
   // its own commit, so a read during the first render can still see the page
@@ -66,12 +74,14 @@ export function useNewIntent(
   }, [open]);
   const done = useRef(false);
   useEffect(() => {
-    if (askedAtMount.current === null) askedAtMount.current = addressAsks();
+    if (askedAtMount.current === null) {
+      askedAtMount.current = addressAsks(intent);
+    }
     const wanted = asked ?? askedAtMount.current;
     if (asked !== undefined && !asked) done.current = false;
     if (!wanted || !ready || done.current) return;
     done.current = true;
     clearAddress();
     openRef.current();
-  }, [ready, asked]);
+  }, [ready, asked, intent]);
 }

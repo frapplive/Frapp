@@ -155,3 +155,36 @@ GET /v1/activity-feed api path removed without deprecation
 # apps/mobile/lib/minutes/recorder/controller.spec.ts (a test harness Map). So a binary whose
 # contract lists the field never reads it.
 GET /v1/activity removed the required property 'made_by_you/files' from the response with the '200' status
+
+# #5949 files a meeting's posted minutes as a `chapter_documents` row with no file and no uploader,
+# so the document DTO's `storage_path` and `uploaded_by` became nullable. No shipped binary is ever
+# served such a row: GET /v1/documents returns minutes rows only with `?minutes=true`, which no
+# shipped build sends (at every shipped SHA, 0426149e through 2d929f32, `git grep 'minutes: "true"'
+# <sha> -- apps/mobile packages/hooks/src/use-documents.ts` finds nothing), and those builds pin only
+# rows from that list (`useSetDocumentPin`, called only in apps/mobile/app/(app)/documents.tsx at
+# 2d929f32), so PUT and DELETE /v1/documents/{id}/pin answer them for files alone. The rest answer
+# files alone too: GET /v1/bootstrap's documents section is read without `minutes` (files only);
+# POST /v1/documents/batch confirms uploads, POST /v1/google-drive-links makes a linked file and
+# POST /v1/google-drive/copies/{id}/open-up opens a Drive copy, all files; PATCH /v1/documents/{id}
+# and POST /v1/documents/move answer the rows a build sends, which come from its files-only list;
+# and PUT /v1/documents/{id}/access refuses a minutes row (409).
+GET /v1/bootstrap the response property 'documents/items/storage_path' became nullable for the status '200'
+GET /v1/bootstrap the response property 'documents/items/uploaded_by' became nullable for the status '200'
+PATCH /v1/documents/{id} the response property 'storage_path' became nullable for the status '200'
+PATCH /v1/documents/{id} the response property 'uploaded_by' became nullable for the status '200'
+POST /v1/documents/batch the response property 'results/items/document/allOf[#/components/schemas/ChapterDocumentDto]/storage_path' became nullable for the status '201'
+POST /v1/documents/batch the response property 'results/items/document/allOf[#/components/schemas/ChapterDocumentDto]/uploaded_by' became nullable for the status '201'
+POST /v1/documents/move the response property '/items/storage_path' became nullable for the status '200'
+POST /v1/documents/move the response property '/items/uploaded_by' became nullable for the status '200'
+POST /v1/google-drive-links the response property 'storage_path' became nullable for the status '201'
+POST /v1/google-drive-links the response property 'uploaded_by' became nullable for the status '201'
+POST /v1/google-drive/copies/{id}/open-up the response property 'storage_path' became nullable for the status '200'
+POST /v1/google-drive/copies/{id}/open-up the response property 'uploaded_by' became nullable for the status '200'
+PUT /v1/documents/{id}/access the response property 'storage_path' became nullable for the status '200'
+PUT /v1/documents/{id}/access the response property 'uploaded_by' became nullable for the status '200'
+GET /v1/documents the response property '/items/storage_path' became nullable for the status '200'
+GET /v1/documents the response property '/items/uploaded_by' became nullable for the status '200'
+PUT /v1/documents/{id}/pin the response property 'storage_path' became nullable for the status '200'
+PUT /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'
+DELETE /v1/documents/{id}/pin the response property 'storage_path' became nullable for the status '200'
+DELETE /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'

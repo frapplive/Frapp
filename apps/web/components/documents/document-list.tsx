@@ -57,6 +57,8 @@ export function DocumentList({
   onDelete,
   onShowAllFiles,
   onUpload,
+  minutesOnly = false,
+  onNewMinutes,
   marks,
   onHoldRow,
   isLimited,
@@ -99,6 +101,13 @@ export function DocumentList({
   onShowAllFiles: () => void;
   /** Opens the upload panel; absent for a viewer who can't upload. */
   onUpload?: () => void;
+  /**
+   * The Minutes filter alone is on (where `/meetings` lands, #5949): an empty
+   * list there says no minutes are filed yet, not that a filter missed.
+   */
+  minutesOnly?: boolean;
+  /** Opens New minutes, for whoever records them (#5949). */
+  onNewMinutes?: () => void;
   /** Pins and the member's own stars (#3934). */
   marks: DocumentMarks;
   /**
@@ -262,7 +271,25 @@ export function DocumentList({
             someone who can, here where the first row will land; the whole
             page is a drop target too.
           */
-          filtering ? (
+          minutesOnly ? (
+            /*
+              The Minutes filter alone, where `/meetings` and a minutes
+              page's back link land (#5949): a chapter that has posted none
+              has nothing filtered out, so the line says what goes here and,
+              to whoever records minutes, how to start them.
+            */
+            <InlineNote>
+              No minutes yet. Posted minutes are filed here.
+              {onNewMinutes ? (
+                <>
+                  {" "}
+                  <InlineNoteAction onClick={onNewMinutes}>
+                    New minutes
+                  </InlineNoteAction>
+                </>
+              ) : null}
+            </InlineNote>
+          ) : filtering ? (
             <InlineNote>
               {activeFolder === null ? (
                 <>

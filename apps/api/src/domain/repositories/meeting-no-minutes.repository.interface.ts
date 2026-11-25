@@ -9,6 +9,11 @@ export const MEETING_NO_MINUTES_REPOSITORY = 'MEETING_NO_MINUTES_REPOSITORY';
 export interface IMeetingNoMinutesRepository {
   /** The chapter's marks, one per meeting that ended with none. A mark leaves with its event, its minutes, or an undo. */
   list(chapterId: string): Promise<MeetingNoMinutes[]>;
+  /** Of `eventIds`, the ones marked: a few meetings' marks, not the chapter's whole history. */
+  listFor(
+    chapterId: string,
+    eventIds: readonly string[],
+  ): Promise<MeetingNoMinutes[]>;
   /** Marks the event; marking it again keeps the first mark. */
   mark(chapterId: string, eventId: string, userId: string): Promise<void>;
   /** Takes the mark off; one that isn't there is no error. */

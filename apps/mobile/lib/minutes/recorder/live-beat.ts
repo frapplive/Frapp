@@ -17,8 +17,8 @@ export function liveRecordingMeetingId(state: RecorderState): string | null {
  * Tells the server who is recording (Paul, 2026-11-20: "Winston Hewitt is
  * recording"; `spec/behavior/meetings.md` § Where a draft stands): once when
  * the phone starts recording a meeting and every minute while it records,
- * and once more when it stops, so the Minutes list and the event's Minutes
- * row can say so. Each call is best effort: a missed beat only lets
+ * and once more when it stops, so the event's Minutes row and a series'
+ * rows can say so (the Minutes list did too, until #5949). Each call is best effort: a missed beat only lets
  * the line lapse after three minutes, and a recording never waits on one.
  * Nothing about the recording goes with it, only which minutes.
  */

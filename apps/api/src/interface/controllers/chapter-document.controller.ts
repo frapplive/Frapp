@@ -259,13 +259,21 @@ export class ChapterDocumentController {
     required: false,
     description: 'Case-insensitive substring match on the document title',
   })
+  @ApiQuery({
+    name: 'minutes',
+    required: false,
+    enum: ['true'],
+    description:
+      "Send `true` to also get the rows that file meetings' posted minutes (#5949): rows with `meeting_id` set and no file, which open the minutes. Left out unless asked for, so a client from before them never gets a row with no file.",
+  })
   @ApiOkResponse({ type: ChapterDocumentDto, isArray: true })
   async list(
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
     @Query('folder') folder?: string,
     @Query('search') search?: string,
-  ) {
+    @Query('minutes') minutes?: string,
+  ): Promise<ChapterDocumentDto[]> {
     const folderFilter =
       folder !== undefined
         ? { folder: folder === '' || folder === 'null' ? null : folder }
@@ -275,7 +283,12 @@ export class ChapterDocumentController {
       folderFilter || searchFilter
         ? { ...folderFilter, ...searchFilter }
         : undefined;
-    return this.chapterDocumentService.findByChapter(chapterId, userId, filter);
+    return this.chapterDocumentService.findByChapter(
+      chapterId,
+      userId,
+      filter,
+      { minutes: minutes === 'true' },
+    );
   }
 
   // Type routes, like the folder routes below, are declared before `:id` so

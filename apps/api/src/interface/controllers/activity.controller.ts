@@ -55,6 +55,7 @@ import {
   ActivityStandingDto,
   ActivityTaskItemGroupDto,
   ActivityTaskItemTaskDto,
+  ActivityQueryDto,
   ActivityWeekQueryDto,
   MarkActivityReadDto,
   SetActivityLinkStateDto,
@@ -110,7 +111,7 @@ export class ActivityController {
     @CurrentChapterId() chapterId: string,
     @CurrentUser('id') userId: string,
     @CurrentEnabledModules() enabledModules: Record<string, boolean> | null,
-    @Query() query: ActivityWeekQueryDto,
+    @Query() query: ActivityQueryDto,
   ): Promise<ActivityView> {
     // A week the standing would refuse is not refused here: the service
     // counts the default week instead. This read is the whole page and the
@@ -120,6 +121,7 @@ export class ActivityController {
     return this.activityService.getActivity(chapterId, userId, enabledModules, {
       weekStart: query.week_start ? new Date(query.week_start) : undefined,
       now: new Date(),
+      minutes: query.minutes === 'true',
     });
   }
 

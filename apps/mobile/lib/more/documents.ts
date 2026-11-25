@@ -6,14 +6,17 @@
  * officer's pin is `pinned_at` on a folder or a document, so the slot shows a
  * chapter decision, not a guess.
  */
-import { formatDay } from "@repo/formatting";
+import { formatDay, formatWeekdayDay } from "@repo/formatting";
 import {
   effectiveLine,
   isDriveCopy,
+  isMinutesDocument,
+  minutesDocumentFacts,
   uploadedLine,
+  type DocumentMinutes,
   type LibraryDocument,
 } from "@repo/hooks/document-library";
-import { metaLine, num, records, str } from "./narrow";
+import { isRecord, metaLine, num, records, str } from "./narrow";
 
 /**
  * A `GET /v1/documents` row narrowed to what s12 draws and the shared library
@@ -45,6 +48,14 @@ export interface MobileDocument {
    * ever drawn as a lock.
    */
   who_can_see?: string[];
+  /**
+   * Set on the row that files a meeting's posted minutes (#5949): the
+   * minutes' id. The row has no file, so a tap opens the minutes, never the
+   * share sheet, and it has no Delete.
+   */
+  meeting_id: string | null;
+  /** What a minutes row shows of its minutes; null on a file. */
+  minutes: DocumentMinutes | null;
 }
 
 export interface DocumentFolder {
@@ -62,6 +73,26 @@ function accessList(row: Record<string, unknown>): string[] | undefined {
   return Array.isArray(list)
     ? list.filter((entry): entry is string => typeof entry === "string")
     : undefined;
+}
+
+/** A minutes row's `minutes`, or `null` when it is missing or malformed. */
+function selectMinutes(raw: unknown): DocumentMinutes | null {
+  if (!isRecord(raw)) return null;
+  const meetingId = str(raw, "meeting_id");
+  const eventName = str(raw, "event_name");
+  const start = str(raw, "event_start_time");
+  if (!meetingId || !eventName || !start) return null;
+  return {
+    meeting_id: meetingId,
+    event_name: eventName,
+    event_start_time: start,
+    meeting_type: str(raw, "meeting_type") ?? "other",
+    other_label: str(raw, "other_label"),
+    decision_count: num(raw, "decision_count") ?? 0,
+    action_item_count: num(raw, "action_item_count") ?? 0,
+    recorded: raw.recorded === true,
+    gist: str(raw, "gist"),
+  };
 }
 
 /**
@@ -89,6 +120,8 @@ export function selectDocuments(data: unknown): MobileDocument[] {
         pinned_at: str(row, "pinned_at"),
         drive_file_id: str(row, "drive_file_id"),
         ...(accessList(row) ? { who_can_see: accessList(row) } : {}),
+        meeting_id: str(row, "meeting_id"),
+        minutes: selectMinutes(row.minutes),
       };
     })
     .filter((row): row is MobileDocument => !!row);
@@ -106,6 +139,7 @@ export function documentMeta(
   row: LibraryDocument<MobileDocument>,
   now: Date = new Date(),
 ): string | null {
+  if (row.doc.minutes) return minutesMeta(row.doc, row.doc.minutes, now);
   const uploadedDay = formatDay(row.doc.created_at || null, now);
   return metaLine([
     uploadedLine(uploadedDay, row.uploader, isDriveCopy(row.doc)),
@@ -114,6 +148,52 @@ export function documentMeta(
     effectiveLine(formatDay(row.doc.effective_date, now), uploadedDay),
   ]);
 }
+
+/**
+ * A meeting's minutes' line (#5949): the day the meeting met, then where
+ * they are filed and what they hold, in web's words and order
+ * (`documentFacts`, web's `document-row.tsx`): "Tuesday, November 18 ·
+ * Minutes / Chapter meeting · Recorded · 3 decisions". Web draws the TL;DR's
+ * first line where a file has its description; a phone row has no room for
+ * that line either, so it is spoken instead ({@link documentOpenHint}).
+ */
+export function minutesMeta(
+  doc: Pick<MobileDocument, "folder">,
+  minutes: DocumentMinutes,
+  now: Date = new Date(),
+): string | null {
+  return metaLine([
+    formatWeekdayDay(minutes.event_start_time, now),
+    doc.folder,
+    ...minutesDocumentFacts(minutes),
+  ]);
+}
+
+/** What a file row says a tap does, to a screen reader. */
+const OPEN_FILE_HINT =
+  "Opens the share sheet to save it or open it in another app.";
+
+/**
+ * What a document's row, tile or card says a tap does, to a screen reader.
+ * A meeting's minutes (#5949) open the minutes, and say the TL;DR's first
+ * line first, since the row has no room to draw it (rulebook § 3: a fact too
+ * wide to draw is still spoken).
+ */
+export function documentOpenHint(
+  doc: Pick<MobileDocument, "meeting_id" | "minutes">,
+): string {
+  if (!isMinutesDocument(doc)) return OPEN_FILE_HINT;
+  return [doc.minutes?.gist, "Opens the minutes."]
+    .filter((part): part is string => !!part)
+    .map((part) => (/[.!?…]$/.test(part) ? part : `${part}.`))
+    .join(" ");
+}
+
+/**
+ * What a screen reader hears before a minutes row's marks, so it reads as a
+ * meeting's minutes rather than a file (#5949).
+ */
+export const MINUTES_SPOKEN_KIND = "Meeting minutes";
 
 /**
  * The chapter's folders in display order.

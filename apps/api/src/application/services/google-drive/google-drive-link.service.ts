@@ -331,7 +331,9 @@ export class GoogleDriveLinkService {
         await this.dropObject(storagePath);
         return 'gone';
       }
-      await this.dropObject(document.storage_path);
+      if (document.storage_path !== null) {
+        await this.dropObject(document.storage_path);
+      }
       await this.links.finish(link.id, { last_error: null });
       return 'updated';
     } catch (error) {

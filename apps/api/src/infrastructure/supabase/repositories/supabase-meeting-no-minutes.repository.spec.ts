@@ -52,6 +52,14 @@ describe('SupabaseMeetingNoMinutesRepository — tenant scope', () => {
     expect(rows.map((r) => r.chapter_id)).toEqual([CHAPTER_A]);
   });
 
+  it('lists only this chapter’s marks among the events asked about', async () => {
+    const rows = await harness.expectTenantScoped(CHAPTER_A, () =>
+      repo.listFor(CHAPTER_A, [EVENT, EVENT_NEW]),
+    );
+    expect(rows.map((r) => r.chapter_id)).toEqual([CHAPTER_A]);
+    await expect(repo.listFor(CHAPTER_A, [])).resolves.toEqual([]);
+  });
+
   it('writes a mark under the caller’s chapter', async () => {
     await harness.expectTenantScoped(CHAPTER_A, () =>
       repo.mark(CHAPTER_A, EVENT_NEW, USER_SHARED),

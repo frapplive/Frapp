@@ -34,7 +34,6 @@ import {
   DuesGlyph,
   HostCheckInGlyph,
   InviteGlyph,
-  MinutesGlyph,
   RecruitmentGlyph,
   SettingsGlyph,
 } from "@/components/more/more-glyphs";
@@ -146,11 +145,12 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * ## Rows nobody has set up
  *
- * Documents with nothing in it leaves the list for a viewer who can't
- * upload; an officer who
- * can keeps the row, because the upload is on that screen
- * (`useHiddenUnsetFeatures` in `@repo/hooks`; `spec/product/modules.md`
- * § Not-set-up features). Nothing hides until the viewer's permissions, the
+ * Resources (Documents, with posted minutes filed in it since #5949) with
+ * nothing in it leaves the list for a viewer who can't upload, unless the
+ * chapter keeps minutes in Frapp; an officer who can upload keeps the row,
+ * because the upload is on that screen (`useHiddenUnsetFeatures` in
+ * `@repo/hooks`; `spec/product/modules.md` § Not-set-up features). Nothing
+ * hides until the viewer's permissions, the
  * chapter's modules and the list have all answered, so a row never vanishes
  * on a slow or failed read.
  *
@@ -218,6 +218,9 @@ function YouScreen() {
     permissionsQuery.data?.permissions,
     moduleGate,
   );
+  // Resources (#5949): the Documents row's condition or the Minutes row's.
+  const showResources =
+    !hiddenFeatures.has("documents") || !!moduleGate?.("meetings");
 
   // s22 takes an `eventId`, so the row resolves one rather than leading
   // nowhere. `selectEventRows` already returns upcoming-plus-still-checkable-in,
@@ -315,21 +318,17 @@ function YouScreen() {
             onPress={() => router.push("/dues")}
           />
         ) : null}
-        {hiddenFeatures.has("documents") ? null : (
+        {/* One row for what the chapter keeps (#5949), as web's sidebar has
+            one: Documents, where a meeting's posted minutes are filed. Drawn
+            while Documents is shown or the chapter keeps minutes in Frapp,
+            the two rows' conditions until then. Backwork, web's other view
+            there, isn't on the phone (#2258). */}
+        {showResources ? (
           <ListRow
-            label="Documents"
-            leading={tile(DocumentsGlyph, "documents")}
-            accessibilityHint="Opens the chapter's documents."
+            label={SECTION_NAMES.resources}
+            leading={tile(DocumentsGlyph, "resources")}
+            accessibilityHint="Opens the chapter's documents and meeting minutes."
             onPress={() => router.push("/documents")}
-          />
-        )}
-        {/* Only on a chapter that keeps minutes in Frapp. */}
-        {moduleGate?.("meetings") ? (
-          <ListRow
-            label="Minutes"
-            leading={tile(MinutesGlyph, "minutes")}
-            accessibilityHint="Opens your chapter's meeting minutes."
-            onPress={() => router.push("/minutes")}
           />
         ) : null}
         <ListRow

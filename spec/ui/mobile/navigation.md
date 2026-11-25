@@ -88,8 +88,7 @@ The board's Notifications row is not here: the inbox opens from the bell on Chat
 | ----------------------------------------- | -------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | —                                         | Status         | the status sheet                                           | the picked status's name, with its end time or custom line under the label                                                                                       |
 | Chapter tools                             | Dues           | `dues.tsx` (s11)                                           | the next bill's chip: warning hue for "Due Sept 15", destructive for "Past due Sept 15"                                                                          |
-|                                           | Documents      | `documents.tsx` (s12)                                      | —                                                                                                                                                                |
-|                                           | Minutes        | `minutes.tsx`                                              | —. The row is drawn only while the chapter has Meetings (`meetings`) on                                                                                          |
+|                                           | Resources      | `documents.tsx` (s12), where posted minutes are filed       | —                                                                                                                                                                |
 |                                           | Directory      | `directory.tsx` (s13)                                      | —                                                                                                                                                                |
 |                                           | Recruitment    | `rush.tsx` ([Recruitment](screens.md#recruitment))         | —; named with the chapter's own word (Rush, Recruitment, Intake); drawn only while the module is on and the role holds `members:view` and `rush:view` (#5924)   |
 | You                                       | Settings       | `preferences.tsx` (s16)                                    | —. When `GET /v1/chapters` is empty a **Create a chapter** row follows it, opening `(auth)/create-chapter.tsx` (#1084)                                           |
@@ -99,7 +98,10 @@ The board's Notifications row is not here: the inbox opens from the bell on Chat
 
 Activity led the chapter tools from 2026-11-11 ([#3897](https://github.com/pdcarlson/Frapp/issues/3897)) until it became tab 2 on 2026-11-12 ([#4610](https://github.com/pdcarlson/Frapp/issues/4610)), and its count moved to the tab with it.
 
-Documents leaves the list for a viewer who can't upload while there are no documents, and comes back once the first one exists ([`modules.md` § Not-set-up features](../../product/modules.md#not-set-up-features)). Study hours left it in the same way, while the chapter had no active study zone, until its row went (#5950).
+Resources leaves the list for a viewer who can't upload while there are no documents, unless the chapter keeps minutes in Frapp (`meetings` on), and comes back once the first one exists ([`modules.md` § Not-set-up features](../../product/modules.md#not-set-up-features)). Study hours left it in the same way, while the chapter had no active study zone, until its row went (#5950).
+
+**Resources is one row for Documents and the minutes filed in it** (#5949, Paul 2026-11-24: "resources could be consolidated into one tab"), labelled `SECTION_NAMES.resources` as web's sidebar row is, and opening s12, titled Resources too. It is drawn on either of the two rows' conditions it replaced. Backwork, web's other view under Resources, isn't on the phone for the beta (#2258).
+Changed in #5949 by pdcarlson, 2026-11-24: the group held a Documents row and, while the chapter had `meetings` on, a Minutes row opening the Minutes list ([`screens.md` § Minutes](screens.md#minutes)).
 
 The admin section renders only for members whose role grants the underlying permissions; ordinary members never see it. The board captions it with the viewer's role ("ADMIN · PRESIDENT") and draws a role chip on the profile; neither is drawn, because no role name is readable on mobile (`/v1/users/me/permissions` returns permissions only).
 
@@ -204,6 +206,9 @@ The row names the screen it pops to, so these are the rows a member sees arrivin
 | s14 Notifications                                                                    | The bell on Chat home         | `‹ Chat`                              |
 | s06 Calendar | Activity's Calendar link | `‹ Activity` (#5310) |
 | Day (one day's hour grid)                                                            | The Calendar's day heading    | `‹ Calendar` (#5310)                  |
+| A meeting's minutes (`minutes-details`)                                              | Its row in s12                | `‹ Resources` (`‹ Minutes`, the list, until #5949) |
+
+With nothing under it, a meeting's minutes, or a series' (`minutes-series`), goes back to s12 opened on the Minutes file type (`BACK_TO_MINUTES`).
 
 - **It pops the stack, as the swipe does, and names what it pops to** (2026-11-06, [§ Going back](#going-back)). The label is the title of the screen under it (`useScreenBelow` in `apps/mobile/lib/back-target.ts`, from `SCREEN_TITLES`), or the tab the tabs are showing. Each screen still passes a fixed label and destination (`BACK_TO_YOU`, `BACK_TO_EVENTS`, `BACK_TO_ACTIVITY`, `BACK_TO_CHAT`), which the row uses only with nothing under it. Until 2026-11-06 the row always went to that fixed destination, because the screens were hidden tabs and `router.back()` could land somewhere the label didn't say; on the stack, going back always lands on what the label names.
 - **s15 has no back row any more**: it is the You tab ([§ You](#you-s09-and-s15)). The board's `‹ More` … `Edit` row went first to tap-to-edit (#3711) and then to the tab.

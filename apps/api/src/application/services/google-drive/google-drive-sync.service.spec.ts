@@ -84,6 +84,7 @@ const copy = (over: Partial<ChapterDocument>): ChapterDocument => ({
   drive_link_status: null,
   drive_synced_at: null,
   who_can_see: null,
+  meeting_id: null,
   ...over,
 });
 
@@ -98,6 +99,7 @@ const frappFolder = (
   pinned_at: null,
   who_can_see: null,
   drive_folder_id: null,
+  minutes_series_key: null,
   ...over,
 });
 
@@ -161,6 +163,9 @@ describe('GoogleDriveSyncService', () => {
       setWhoCanSee: jest.fn(),
       updateFiling: jest.fn(),
       moveMany: jest.fn(),
+      findInFolders: jest.fn().mockResolvedValue([]),
+      fileMinutes: jest.fn(),
+      fileUnfiledMinutes: jest.fn(),
     };
     storage = {
       uploadFile: jest.fn().mockResolvedValue(undefined),

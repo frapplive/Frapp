@@ -19,7 +19,8 @@ const SCREENS_BY_ROUTE: readonly (readonly [string, readonly string[]])[] = [
   ["/events", ["events", "ai_suggestions"]],
   // The board's Suggested list is where suggested tasks are reviewed (#4313).
   ["/tasks", ["tasks", "ai_suggestions"]],
-  // And under the minutes they came from, where the push for them opens.
+  // And under the minutes they came from, where the push for them opens
+  // (`/meetings/<id>`; the Meetings list itself folded into Documents, #5949).
   ["/meetings", ["ai_suggestions"]],
   // A submitted task's review opens here (`?review=`), as do the tasks
   // waiting on the member, so a visit reads task rows too, and the weekly

@@ -3,6 +3,7 @@ import { NAV_GLYPHS } from "@repo/theme/nav-glyphs";
 import { SignetTokens } from "@repo/theme/signet";
 import {
   classifyFile,
+  isMinutesDocument,
   type LibraryDocument,
 } from "@repo/hooks/document-library";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -11,7 +12,12 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { NavGlyph } from "@/components/nav-glyph";
 import { PressableRow } from "@/components/list-section";
 import { GridLine, toGridChunks } from "@/components/grid-line";
-import { documentMeta, type MobileDocument } from "@/lib/more/documents";
+import {
+  MINUTES_SPOKEN_KIND,
+  documentMeta,
+  documentOpenHint,
+  type MobileDocument,
+} from "@/lib/more/documents";
 import { PinGlyph, StarGlyph } from "./document-glyphs";
 import { LIMITED_LABEL, LimitedMark } from "./limited-mark";
 
@@ -27,7 +33,8 @@ type DocumentRowData = LibraryDocument<MobileDocument>;
  * The preview is the type `classifyFile` gives the File type filter, not the
  * file's pages, which would mean fetching every file on screen. A pinned
  * file's glyph takes the accent duotone, as its PINNED card does; a pinned or
- * starred tile wears the marks its row wears.
+ * starred tile wears the marks its row wears. A meeting's posted minutes
+ * (#5949) wear the minutes glyph over "Minutes", and a tap opens them.
  *
  * Lines and their padding are every grid's (`components/grid-line.tsx`), so
  * this screen and the Directory lay out alike.
@@ -70,7 +77,12 @@ export function DocumentTiles({
             const busy = busyIds.has(doc.id);
             const actionable = !busy && !deletingIds.has(doc.id);
             const meta = documentMeta(row);
+            // A meeting's minutes (#5949) wear the minutes glyph and read as
+            // minutes, so a tile that opens a record reads apart from one
+            // that opens a file.
+            const minutes = isMinutesDocument(doc);
             const marks = [
+              minutes ? MINUTES_SPOKEN_KIND : null,
               limited ? LIMITED_LABEL : null,
               pinned ? "Pinned for the chapter" : null,
               starred ? "Starred" : null,
@@ -83,10 +95,7 @@ export function DocumentTiles({
                 onCard
                 accessibilityRole="button"
                 accessibilityLabel={doc.title}
-                accessibilityHint={[
-                  meta,
-                  "Opens the share sheet to save it or open it in another app.",
-                ]
+                accessibilityHint={[meta, documentOpenHint(doc)]
                   .filter(Boolean)
                   .join(". ")}
                 accessibilityValue={marks ? { text: marks } : undefined}
@@ -117,7 +126,9 @@ export function DocumentTiles({
                     />
                   ) : (
                     <NavGlyph
-                      paths={NAV_GLYPHS.documents}
+                      paths={
+                        minutes ? NAV_GLYPHS.meetings : NAV_GLYPHS.documents
+                      }
                       color={pinned ? accent : tokens.color.text.muted}
                       size={28}
                       active={pinned}

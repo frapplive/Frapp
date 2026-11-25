@@ -28,6 +28,7 @@ export const SECTION_NAMES = {
   calendar: "Calendar",
   directory: "Directory",
   messages: "Messages",
+  /** Documents, with meetings' minutes filed inside, and Backwork (#5949). */
   resources: "Resources",
   search: "Search",
 } as const;

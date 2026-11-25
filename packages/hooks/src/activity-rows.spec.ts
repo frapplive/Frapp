@@ -21,11 +21,13 @@ import {
   activityReviewQueue,
   activityReviewRows,
   activityToDos,
+  activityMinutesMeeting,
   findActivityTaskRow,
   type Activity,
   type ActivityArchive,
   type ActivityRow,
 } from "./activity-rows";
+import { activityAgenda, activityCouldNotLoad } from "./activity-agenda";
 import { taskAwaitsReview, type TaskReviewer } from "./task-review";
 
 /**
@@ -1296,6 +1298,175 @@ describe("reminders (#4957)", () => {
 
   it("reads an API from before reminders as none", () => {
     expect(todoRows(activity(), NOW)).toEqual([]);
+  });
+});
+
+describe("minutes (#5949)", () => {
+  const NOW = new Date("2026-11-24T12:00:00");
+  const minutes = (overrides: Record<string, unknown> = {}) => ({
+    minutes: {
+      to_write: [],
+      drafts: [],
+      taking_notes: [],
+      ...overrides,
+    },
+  });
+  const toWrite = (id: string, start: string) => ({
+    event_id: id,
+    name: id === "exec" ? "Exec meeting" : "Chapter meeting",
+    start_time: start,
+    end_time: start,
+  });
+  const draft = (overrides: Record<string, unknown> = {}) => ({
+    meeting_id: "mtg-1",
+    event_id: "event-1",
+    name: "Exec meeting",
+    event_start_time: "2026-11-20T19:00:00",
+    started: true,
+    recording_by: null,
+    recording_by_name: null,
+    ...overrides,
+  });
+  const notes = (overrides: Record<string, unknown> = {}) => ({
+    meeting_id: "mtg-2",
+    event_id: "event-2",
+    name: "Recruitment Committee",
+    event_start_time: "2026-11-23T19:00:00",
+    author_name: "Olive Officer",
+    joined: false,
+    added: true,
+    ...overrides,
+  });
+
+  it("lists meetings to write, then the member's drafts, then their notes, after their own things", () => {
+    const data = activity({
+      reminders: [],
+      ...minutes({
+        to_write: [
+          toWrite("chapter", "2026-11-23T19:00:00"),
+          toWrite("exec", "2026-11-18T19:00:00"),
+        ],
+        drafts: [
+          draft(),
+          draft({ meeting_id: "untouched", started: false }),
+          draft({
+            meeting_id: "recording",
+            recording_by: "olive",
+            recording_by_name: "Olive Officer",
+          }),
+          draft({ meeting_id: "unlinked", event_id: null, name: "Minutes" }),
+        ],
+        taking_notes: [notes(), notes({ meeting_id: "mtg-3", joined: true })],
+      }),
+    });
+
+    const rows = todoRows(data, NOW);
+
+    expect(rows.map(say)).toEqual([
+      "minutes-to-write:Chapter meeting:Write minutes",
+      "minutes-to-write:Exec meeting:Write minutes",
+      "minutes-draft:Exec meeting:Drafting",
+      "minutes-draft:Exec meeting:Not started",
+      "minutes-draft:Exec meeting:Olive Officer is recording",
+      "minutes-draft:Minutes:Drafting",
+      "minutes-notes:Recruitment Committee:Take notes",
+      "minutes-notes:Recruitment Committee:Taking notes",
+    ]);
+    // The day the meeting met, in words, as the Events lists say it.
+    expect(rows[0]!.detail).toBe("Yesterday");
+    expect(rows[1]!.detail).toBe("November 18");
+    expect(rows[5]!.detail).toBe("No meeting · November 20");
+    expect(rows[6]!.detail).toBe("Yesterday · Minutes by Olive Officer");
+    // Write minutes and Take notes ask; a draft's state never does.
+    expect(rows.map((row) => activityBadgeIsAsk(row))).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+    ]);
+    expect(rows[4]!.badge?.variant).toBe("destructive");
+    // No dot and no Snooze: nothing to name them by.
+    for (const row of rows) {
+      expect(row.readRef).toBeNull();
+      expect(row.unread).toBe(false);
+      expect(row.glyph).toBe("minutes");
+      expect(activityRowAction(row)).toBeNull();
+    }
+  });
+
+  it("files them in a Minutes run of their own, after the days and before No deadline", () => {
+    const data = activity({
+      needs_you: {
+        tasks: [
+          task({ id: "today", due_date: "2026-11-24" }),
+          task({ id: "anytime", title: "Whenever", due_date: null }),
+        ],
+        task_confirmations: [],
+        hours_approvals: [],
+        polls: [],
+      },
+      ...minutes({
+        to_write: [
+          toWrite("a", "2026-11-23T19:00:00"),
+          toWrite("b", "2026-11-22T19:00:00"),
+          toWrite("c", "2026-11-21T19:00:00"),
+          toWrite("d", "2026-11-20T19:00:00"),
+        ],
+      }),
+    });
+
+    const agenda = activityAgenda(data, "all", NOW);
+
+    expect(agenda.days.map((day) => [day.id, day.label, day.limit])).toEqual([
+      ["day:0", "Today", 3],
+      ["minutes", "Minutes", 3],
+      ["anytime", "No deadline", null],
+    ]);
+    expect(agenda.days[1]!.rows.map((row) => row.key)).toEqual([
+      "minutes:write:a",
+      "minutes:write:b",
+      "minutes:write:c",
+      "minutes:write:d",
+    ]);
+    // Narrowed to a kind, the minutes step out, as reminders do.
+    expect(
+      activityAgenda(data, "tasks", NOW).days.map((day) => day.id),
+    ).toEqual(["day:0", "anytime"]);
+  });
+
+  it("names a failed minutes read under To do", () => {
+    const agenda = activityAgenda(
+      activity({ unavailable: ["minutes"] }),
+      "all",
+      NOW,
+    );
+    expect(agenda.unavailable).toEqual(["minutes"]);
+    expect(activityCouldNotLoad(agenda.unavailable)).toBe(
+      "Couldn't load minutes.",
+    );
+  });
+
+  it("reads an API from before minutes as none", () => {
+    expect(todoRows(activity(), NOW)).toEqual([]);
+  });
+
+  it("gives the meeting a Write minutes row starts on", () => {
+    const [row] = todoRows(
+      activity(minutes({ to_write: [toWrite("exec", "2026-11-18T19:00:00")] })),
+      NOW,
+    );
+    expect(row!.kind).toBe("minutes-to-write");
+    if (row!.kind !== "minutes-to-write") return;
+    expect(activityMinutesMeeting(row!)).toEqual({
+      id: "exec",
+      name: "Exec meeting",
+      start_time: "2026-11-18T19:00:00",
+      end_time: "2026-11-18T19:00:00",
+    });
   });
 });
 

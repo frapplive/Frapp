@@ -111,7 +111,7 @@
 - **Excuses:** A member an event requires sends a one-line excuse before it or up to 48 hours after; the event's creator (or an officer who can edit events) approves or declines it, and approval marks them EXCUSED. Admins can also mark members EXCUSED with an optional reason. Excused members are not penalized ([`events.md` § Excuses](../behavior/events.md#excuses)).
 - Admins can view full attendance for any event and mark EXCUSED/ABSENT/LATE after the fact.
 - **Auto-absent:** For mandatory or role-targeted events, required members who did not check in, were not excused and have no pending or approved excuse are auto-marked ABSENT.
-- **Meeting minutes:** Events have an optional notes field (markdown) editable by admins after the event. Visible to all members with access to the event.
+- **Meeting minutes:** their own record, at most one per event, read by the members the event invites ([`meetings.md`](../behavior/meetings.md)); posted minutes are also filed in Documents ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)). An event's notes field is the event's own. *(Corrected 2026-11-24, #5949: this line said minutes were the event's notes field, which stopped being true with #4312.)*
 - Unique constraint: one attendance record per (event, user).
 - **Calendar integration:** a private subscription link per member that Apple Calendar, Google Calendar and Outlook subscribe to (2026-11-12, #3322), replacing the per-event `.ics` download withdrawn on 2026-11-08 (#3708); [`events.md` § Calendar subscription](../behavior/events.md#calendar-subscription). Where the server is set up for it, Google Calendar connects instead: Frapp keeps a calendar of its own in the member's Google account, updated within minutes ([`events.md` § Google Calendar](../behavior/events.md#google-calendar)).
 
@@ -228,7 +228,7 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Polls | `polls` | Chapter votes, anonymous or named — anonymity **not built**, and not a small addition ([`spec/behavior/polls.md` § Anonymous polls](../behavior/polls.md#anonymous-polls)) |
 | Recruitment | `rush` | Candidate funnel, voting, bid management |
 | Backwork | `backwork` | Document library + academic archive |
-| Documents | `documents` | Chapter-level docs (bylaws, minutes, policies) |
+| Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
 | Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |

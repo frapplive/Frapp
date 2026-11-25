@@ -14,7 +14,7 @@ const everyModuleOn = () => true;
 
 function visibleIds(kind: "chapter" | "council" | undefined): string[] {
   return DASHBOARD_NAV_ITEMS.filter((item) =>
-    isNavItemVisible(item, ALL, everyModuleOn, undefined, kind),
+    isNavItemVisible(item, ALL, everyModuleOn, kind),
   ).map((item) => item.id);
 }
 
@@ -44,31 +44,18 @@ describe("the nav in a council", () => {
       (item) => item.id === "chapters",
     )!;
     expect(
-      isNavItemVisible(
-        chapters,
-        ["members:view"],
-        everyModuleOn,
-        undefined,
-        "council",
-      ),
+      isNavItemVisible(chapters, ["members:view"], everyModuleOn, "council"),
     ).toBe(true);
     expect(
       isNavItemVisible(
         chapters,
         ["council:chapters_manage"],
         everyModuleOn,
-        undefined,
         "council",
       ),
     ).toBe(false);
     expect(
-      isNavItemVisible(
-        chapters,
-        undefined,
-        everyModuleOn,
-        undefined,
-        "council",
-      ),
+      isNavItemVisible(chapters, undefined, everyModuleOn, "council"),
     ).toBe(false);
   });
 
