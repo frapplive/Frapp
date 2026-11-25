@@ -1067,6 +1067,7 @@ Two pages, one per side of a link. The phone draws the council's side as a secti
   `apps/web/components/affiliations/school-and-council-page.tsx`, reached from the member's menu at the sidebar's foot, under Chapter settings, by a chapter's holders of `chapter-config:view`.
   School: none offers a school search, whose pick links and confirms it; a proposed school offers Confirm and Not our school; a confirmed one has Unlink school in its menu, whose confirm says it also ends the chapter's council memberships there.
   Councils, once a school is confirmed: each council at it with its status (`councilLinkLabel`) and the step for its state (Ask to join, Cancel request, Accept or Decline an invitation, and Leave council in the row's menu).
+  Its school and council rows lead with the name, short name or status under it: no mark tile, because Frapp holds no real school logo, a school's logo is its trademark, and initials on a colored tile read as one. The council's Chapters page keeps each chapter's crest. _(Paul, 2026-11-25, #6066: the school row's initials tile, "RP" for Rensselaer, is gone.)_
   Without `chapter-config:manage` the page is read-only.
   It is its own page, not a Settings tab, for now; folding it into Chapter settings waits on that screen's open PR.
 - Comparable apps: Slack Connect's invitations between workspaces (either side accepts or declines; a pending invite can be cancelled), GitHub's organization membership requests, and Discord's server settings for partnered servers.

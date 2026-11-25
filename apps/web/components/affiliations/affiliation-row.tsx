@@ -6,11 +6,14 @@ import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { cn } from "@/lib/utils";
 
 /**
- * One chapter, council or school in an affiliation list (#5974): its mark,
- * its name over one muted line, then whatever it ends in (a status, buttons).
- * Both affiliation pages draw this one row, on the dense list's hairlines, so
- * a chapter reads the same on the council's Chapters page as a council does
- * on a chapter's School and council page.
+ * One chapter, council or school in an affiliation list (#5974): its name
+ * over one muted line, then whatever it ends in (a status, buttons). Both
+ * affiliation pages draw this one row, on the dense list's hairlines.
+ *
+ * `crest` leads the row with the chapter's mark, on the council's Chapters
+ * page only. A school or council row leads with its name (#6066, Paul
+ * 2026-11-25): Frapp holds no real school mark, a school's logo is its
+ * trademark, and initials on a colored tile read as one that isn't there.
  *
  * With `menu`, the row's rare and destructive actions sit behind its ⋯ and
  * right-click (`RowMenu`); actions a person takes every time are buttons in
@@ -18,12 +21,15 @@ import { cn } from "@/lib/utils";
  */
 export function AffiliationRow({
   name,
+  crest = false,
   meta,
   trailing,
   menu,
   busy = false,
 }: {
   name: string;
+  /** Lead with the chapter's mark: a chapter row on the council's side. */
+  crest?: boolean;
   meta?: ReactNode;
   trailing?: ReactNode;
   menu?: { entries: readonly RowMenuEntry[]; label: string };
@@ -38,7 +44,7 @@ export function AffiliationRow({
         busy && "opacity-60",
       )}
     >
-      <CrestTile mark={chapterMarkFor({ name })} />
+      {crest ? <CrestTile mark={chapterMarkFor({ name })} /> : null}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-foreground">
           {name}

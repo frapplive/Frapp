@@ -161,6 +161,9 @@ These cause most of the iterations, so they come first.
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
+- **No made-up marks.** A row leads with a mark only when it is the thing's own (a chapter's crest). A
+  school or council row leads with its name: no initials on a colored tile standing in for a logo, and no
+  real school logo, which is the school's trademark. (11-25, #6066)
 
 ## 4. Controls and forms
 
