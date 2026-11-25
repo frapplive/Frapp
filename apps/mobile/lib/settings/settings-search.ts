@@ -48,8 +48,13 @@ export function settingPhoneRoute(
   entry: SettingEntry,
 ): NotificationTarget | null {
   if (!entry.phone) return null;
-  return entry.phone.anchor
-    ? { pathname: entry.phone.screen, params: { setting: entry.id } }
+  const params: Record<string, string> = {};
+  // A page pushed inside the screen (Settings' `?page=`, #6032) opens as its
+  // own stack entry, so back returns to the screen's first page.
+  if (entry.phone.page) params.page = entry.phone.page;
+  if (entry.phone.anchor) params.setting = entry.id;
+  return Object.keys(params).length > 0
+    ? { pathname: entry.phone.screen, params }
     : { pathname: entry.phone.screen };
 }
 
@@ -71,13 +76,19 @@ export function openSetting(
   entry: SettingEntry,
   options: {
     here?: SettingPhoneScreen;
+    /** The page of `here` that is showing, when it is one of its pushed pages. */
+    herePage?: string;
     jumpHere?: (settingId: string) => void;
     onBrowserFailed?: () => void;
   } = {},
 ): void {
   const route = settingPhoneRoute(entry);
   if (route) {
-    if (options.here === entry.phone?.screen && options.jumpHere) {
+    if (
+      options.here === entry.phone?.screen &&
+      options.herePage === entry.phone?.page &&
+      options.jumpHere
+    ) {
       options.jumpHere(entry.id);
       return;
     }

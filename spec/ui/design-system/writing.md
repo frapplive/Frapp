@@ -935,7 +935,7 @@ Copy in `apps/mobile/lib/onboarding/display-step.ts` and `apps/web/components/on
 
 | Surface | Title | Copy |
 |---|---|---|
-| Web | `Pick your chat display` | `Choose how messages look on this browser. You can change it anytime in Settings.` In the setup wizard, the three Chat density cards from Settings → Appearance and chat, then `Continue`. (It said "in your profile" until #5080; the control has lived in Settings since #3856.) |
+| Web | `Pick your chat display` | `Choose how messages look on this browser. You can change it anytime in Settings.` In the setup wizard, the three Chat density cards from Settings → Chat, then `Continue`. (It said "in your profile" until #5080; the control has lived in Settings since #3856.) |
 | Mobile | `Pick your chat display` | `Choose how messages look on this phone. You can change it anytime in Settings.` Then Settings' three cards and a gold `Continue`, in chapter setup. |
 
 ### Pick your roles

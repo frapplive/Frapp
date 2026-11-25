@@ -2,43 +2,46 @@
 
 import {
   useActiveChapterId,
+  useCurrentChapter,
   useNotificationPreferences,
   usePermissionList,
   useUpdateNotificationPreference,
 } from "@repo/hooks";
 import {
-  isNotificationCategoryKey,
+  chapterAlertsFootnote,
+  personalSettingsGroupLabel,
   rowsToNotificationCategoryState,
   shownNotificationCategories,
   type NotificationCategoryKey,
 } from "@repo/validation";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/lib/hooks/use-toast";
-import { ProfileSection } from "@/components/profile/profile-section";
 import { anyReadUncached, pausedRead } from "@/components/shared/async-states";
 import { InlineNote } from "@/components/shared/inline-note";
 import { NestedError, NestedOffline } from "@/components/shared/nested-states";
-import { denseListClassName } from "@/components/shared/table-controls";
+import { SectionLabel } from "@/components/shared/section-label";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import { useNetwork } from "@/lib/providers/network-provider";
 import { getErrorMessage } from "@/lib/utils";
 import { NotificationSettingsSkeleton } from "@/components/personal-settings/personal-settings-skeleton";
-import { ChatLevelControl } from "@/components/personal-settings/chat-level-control";
+import { ChatLevelRow } from "@/components/personal-settings/chat-level-control";
 
 /**
  * The offline note under the notification switches, referenced by every one of
- * them through `aria-describedby` while OFFLINE. Named once so the paragraph
+ * them through `aria-describedby` while OFFLINE. Named once so the footnote
  * and its referrers cannot drift apart into a dangling id.
  */
 const OFFLINE_NOTE_ID = "notification-categories-offline";
 
 /**
- * Settings → Chapter alerts: which of the active chapter's notification
- * categories the member receives. `notification_preferences` is keyed
- * `(user_id, chapter_id, category)`, so this section sits in the rail's
- * "In <chapter>" group. With no active chapter there is nothing to read and
- * the query stays disabled; see the `chapterId` branch below. Moved here from
- * `/profile` (#3856).
+ * Settings → Notifications, the chapter's group: the chat level, then which
+ * of the active chapter's notification categories the member receives
+ * (#6032; its own "Chapter alerts" page until then, #3856).
+ * `notification_preferences` is keyed `(user_id, chapter_id, category)`, so
+ * the group is headed with the chapter's name and changes with the chapter
+ * switcher. With no active chapter there is nothing to read and the query
+ * stays disabled; see the `chapterId` branch below. The phone's
+ * Notifications page draws the same rows in the same order.
  */
 export function ChapterAlertsSection() {
   const { toast } = useToast();
@@ -48,6 +51,10 @@ export function ChapterAlertsSection() {
   const updatePreference = useUpdateNotificationPreference();
   // Decides which audience-gated switches are drawn (the join switch, #4008).
   const permissions = usePermissionList();
+  const heading = personalSettingsGroupLabel(
+    "chapter",
+    useCurrentChapter().data?.name,
+  );
 
   /*
    * ...and a *third* query is a third set, by the same rule (#564).
@@ -175,165 +182,90 @@ export function ChapterAlertsSection() {
       );
   }
 
+  /*
+   * The group's one footnote: offline, the sentence each switch points at;
+   * otherwise where these apply and what is muted elsewhere.
+   */
+  const footnote = isOffline ? (
+    <span id={OFFLINE_NOTE_ID}>
+      You&apos;re offline, so these can&apos;t be changed right now.
+    </span>
+  ) : (
+    chapterAlertsFootnote()
+  );
+
+  if (!chapterId || categoriesState) {
+    return (
+      <section id="chapter-alerts" className="scroll-mt-16 space-y-2">
+        <SectionLabel id="chapter-alerts-label">{heading}</SectionLabel>
+        {chapterId ? (
+          // The chat level has its own read, so it stays usable while the
+          // switches load or fail.
+          <SettingsGroup label="Chat messages">
+            <ChatLevelRow key={chapterId} />
+          </SettingsGroup>
+        ) : null}
+        {categoriesState}
+      </section>
+    );
+  }
+
   return (
-    <ProfileSection
-      id="chapter-alerts"
-      title="Chapter alerts"
-      hint="For this chapter, on every device you use."
-    >
-      {/* The chapter-wide chat level (#4124) has its own read and its own
-          states, so it is drawn whenever there is a chapter to set it for,
-          even while the switches below are still loading. Keyed by the
-          chapter: a switch made in another tab moves the active chapter in
-          place (`use-claim-chapter-sync.ts`), and a save still in flight for
-          the old chapter must not show, or fail, under the new one. */}
-      {chapterId ? (
-        <div className="mb-4">
-          <ChatLevelControl key={chapterId} />
-        </div>
-      ) : null}
-      {categoriesState ?? (
-        <div className="space-y-4">
-          <ul className={denseListClassName}>
-            {shownNotificationCategories(permissions).map((category) => {
-              const switchId = `notification-category-${category.key}`;
-              const descriptionId = `${switchId}-description`;
-              return (
-                <li
-                  key={category.key}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <div className="grid gap-1">
-                    <Label htmlFor={switchId}>{category.label}</Label>
-                    <p
-                      id={descriptionId}
-                      className="text-sm text-muted-foreground"
-                    >
-                      {category.description}
-                    </p>
-                  </div>
-                  <Switch
-                    id={switchId}
-                    checked={categories[category.key]}
-                    // The offline reason belongs on the control, not only in
-                    // the paragraph after the last row — `spec/ui/resilience/connection-state.md`'s
-                    // queueless rule is explicit that it wires to the control
-                    // itself. Without this a screen-reader member offline
-                    // hears "Points, switch, on, unavailable" and nothing
-                    // about why, with the explanation sitting rows below
-                    // and the toast arriving only after they activate a
-                    // control their AT has just called unavailable.
-                    aria-describedby={
-                      isOffline
-                        ? `${descriptionId} ${OFFLINE_NOTE_ID}`
-                        : descriptionId
-                    }
-                    /*
-                     * Soft-disabled offline, NOT `disabled`.
-                     *
-                     * The write is refused up front rather than attempted.
-                     * Since #1754 the query client sets `networkMode:
-                     * "always"`, so an offline mutation no longer parks — it
-                     * starts, exhausts its two retries, and rejects in ~3s. That
-                     * is a real improvement over the pause-forever it
-                     * replaced, but it is still the wrong experience on a
-                     * *switch*: the optimistic `onMutate` moves it, it sits
-                     * wrong for three seconds while retries burn, then snaps
-                     * back under an error toast. Refusing costs the member
-                     * nothing and tells them immediately, and the switch
-                     * never shows a value the server was never told about.
-                     *
-                     * This is § 2's "disabled with 'Reconnect to make
-                     * changes'" on a control whose appearance carries
-                     * state. Queueless dashboard *buttons* go through
-                     * `useSubscriptionGate` (#1753) and take the real
-                     * `disabled` attribute; these switches cannot, for
-                     * the colour / tab-order reasons below. #1754's note
-                     * that an ungated offline member would get an error
-                     * toast is the backstop, not the intended path.
-                     *
-                     * But the real `disabled` attribute cost more than it
-                     * bought. `switch.tsx` scopes every state colour to
-                     * `enabled:`, and its thumb takes `group-data-[disabled]`
-                     * which outranks the `data-[state]` rules — so all the
-                     * switches render an identical track and thumb, and the
-                     * only surviving on/off cue is the thumb offset at about
-                     * 2.24:1, under WCAG 1.4.11's 3:1 for non-text. Reading
-                     * which categories are muted is the *more* common offline
-                     * need, and `disabled` also drops every one out of the tab
-                     * order. `aria-disabled` keeps the colours, the tab order
-                     * and the announced state while still refusing the write.
-                     */
-                    aria-disabled={isOffline || undefined}
-                    onCheckedChange={(checked) =>
-                      handleCategoryToggle(
-                        category.key,
-                        category.label,
-                        checked,
-                      )
-                    }
-                  />
-                </li>
-              );
-            })}
-          </ul>
-          {isOffline ? (
-            // Says only what is true. An earlier draft added "your current
-            // settings are still in force", which is false in exactly the
-            // case the refusal exists for: a toggle fired just before the
-            // connection dropped is mid-retry, so a switch can be showing a
-            // value the server has not accepted — and since #1754 it will
-            // reject a few seconds later and revert under the reader's
-            // eyes. Claiming the displayed state is authoritative would be
-            // most wrong precisely when it matters.
-            <p id={OFFLINE_NOTE_ID} className="text-sm text-muted-foreground">
-              You&apos;re offline, so these can&apos;t be changed right now.
-            </p>
-          ) : null}
-          {/*
-            Rendered only while `announcements` is genuinely absent from the
-            catalog, rather than hard-coded as mobile's copy is. When #1323
-            lands and adds the key, this card would otherwise show an
-            "Announcements" switch and, directly beneath it, a sentence
-            denying that switch exists — a control and its own denial in one
-            card. Deriving the condition from the catalog makes that
-            contradiction unrepresentable instead of leaving it to whoever
-            ships #1323 to remember two surfaces' prose.
-
-            Asked through `isNotificationCategoryKey` rather than a literal
-            comparison against `category.key`: the catalog is `as const`, so
-            `key !== "announcements"` is a type error today ("no overlap")
-            and would only start compiling once the key exists. The
-            predicate takes `unknown`, which is what lets the question be
-            asked before the answer changes.
-
-            Why it is absent at all is the catalog's own docblock, not
-            restated here: both emitters send URGENT, which bypasses the
-            preference gate (#1041), so a switch would suppress nothing.
-
-            Deliberately NOT claiming this is the only unswitchable
-            category — `admin` (the chat-report alert and the Discord
-            import notice) is NORMAL priority with no catalog entry either.
-            The member-joined push left it for its own switch (#4008).
-            This names the
-            one a member is most likely to go looking for, and does not
-            pretend the grid is exhaustive.
-          */}
-          {/* Chat has no switch here: a channel or DM is muted where it
-              is read (the catalog's docblock in @repo/validation says why
-              the coarse Chat switch was dropped, 2026-11-06). Chat messages
-              above lowers every channel at once but never silences chat. */}
-          <p className="text-sm text-muted-foreground">
-            Mute a channel or DM from the chat itself.
-          </p>
-          {isNotificationCategoryKey("announcements") ? null : (
-            <p className="text-sm text-muted-foreground">
-              Chapter announcements always arrive. They can carry emergencies,
-              so they are not switchable here.
-            </p>
-          )}
-        </div>
-      )}
-    </ProfileSection>
+    <section id="chapter-alerts" className="scroll-mt-16">
+      <SettingsGroup heading={heading} footnote={footnote}>
+        {/* Keyed by the chapter: a switch made in another tab moves the
+            active chapter in place (`use-claim-chapter-sync.ts`), and a save
+            still in flight for the old chapter must not show, or fail,
+            under the new one. */}
+        <ChatLevelRow key={chapterId} />
+        {shownNotificationCategories(permissions).map((category) => {
+          const switchId = `notification-category-${category.key}`;
+          const descriptionId = `${switchId}-description`;
+          return (
+            <SettingsRow
+              key={category.key}
+              label={category.label}
+              description={
+                <span id={descriptionId}>{category.description}</span>
+              }
+              control={
+                <Switch
+                  id={switchId}
+                  aria-label={category.label}
+                  checked={categories[category.key]}
+                  // The offline reason belongs on the control, not only in
+                  // the footnote after the last row
+                  // (`spec/ui/resilience/connection-state.md`'s queueless
+                  // rule): without it a screen-reader member offline hears
+                  // "Points, switch, on, unavailable" and nothing about why.
+                  aria-describedby={
+                    isOffline
+                      ? `${descriptionId} ${OFFLINE_NOTE_ID}`
+                      : descriptionId
+                  }
+                  /*
+                   * Soft-disabled offline, NOT `disabled`. The write is
+                   * refused up front (`handleCategoryToggle`) rather than
+                   * attempted: an offline mutation would start, burn its
+                   * retries and snap back under an error toast (#1754).
+                   * The real `disabled` attribute would cost more: the
+                   * switch scopes its state colours to `enabled:`, so every
+                   * switch would draw the same track and the on/off cue
+                   * would drop under WCAG 1.4.11's 3:1, and each would leave
+                   * the tab order. Reading which categories are muted is
+                   * the more common offline need, so `aria-disabled` keeps
+                   * the colours, the tab order and the announced state.
+                   */
+                  aria-disabled={isOffline || undefined}
+                  onCheckedChange={(checked) =>
+                    handleCategoryToggle(category.key, category.label, checked)
+                  }
+                />
+              }
+            />
+          );
+        })}
+      </SettingsGroup>
+    </section>
   );
 }

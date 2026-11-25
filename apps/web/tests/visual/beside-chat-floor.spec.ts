@@ -47,11 +47,12 @@ const DEMO_PASSWORD = "DemoShowcase!2026";
 const DEMO_CHAPTER_ID = "c0ffee00-0000-4000-8000-000000000001";
 
 /**
- * Every dashboard route but `/chat` (chat alone, no tool page) and `/settings`,
- * plus the tool surface `routes.ts` reaches only as a tab: Alumni is a
- * Directory tab. Chapter settings never sits beside chat: it takes the whole
- * width and hides chat while it is open (#4068 decision 3,
- * `isFullWidthToolRoute`), so there is no beside-chat floor to hold there;
+ * Every dashboard route but `/chat` (chat alone, no tool page), `/settings`
+ * and `/preferences`, plus the tool surface `routes.ts` reaches only as a tab:
+ * Alumni is a Directory tab. Neither Settings page sits beside chat: each
+ * takes the whole width and hides chat while it is open (#4068 decision 3;
+ * personal Settings since #6032, `isFullWidthToolRoute`), so there is no
+ * beside-chat floor to hold there;
  * `dashboard-shell.spec.tsx` pins that. `/chat-admin` is not listed either:
  * since #3837 it only redirects into Chapter settings' Chat tab, so measuring
  * it raced the redirect, passing only when the poll read the page before it
@@ -60,7 +61,10 @@ const DEMO_CHAPTER_ID = "c0ffee00-0000-4000-8000-000000000001";
 const TOOL_ROUTES = [
   ...DASHBOARD_ROUTES.filter(
     (route) =>
-      route !== "/chat" && route !== "/messages" && route !== "/settings",
+      route !== "/chat" &&
+      route !== "/messages" &&
+      route !== "/settings" &&
+      route !== "/preferences",
   ),
   "/members?tab=alumni",
 ];

@@ -14,11 +14,16 @@ import {
   linkedStatusLabel,
   loadSignInMethods,
   signInMethodsQueryKey,
+  useCurrentChapter,
   type LinkedAppState,
   type LinkedAppTone,
   type SignInMethodKey,
 } from "@repo/hooks";
 import type { SignetTokens } from "@repo/theme/signet";
+import {
+  PERSONAL_SETTINGS_COPY,
+  personalSettingsGroupLabel,
+} from "@repo/validation";
 import { AppleMark, GoogleMark } from "@/components/auth/oauth-brand-icons";
 import { CalendarSubscribeSheet } from "@/components/events/calendar-subscribe-sheet";
 import { openItemMenu, pressAt } from "@/components/item-actions-menu";
@@ -51,7 +56,10 @@ const MARK_SIZE = 18;
  * - Discord (#5414): a tap links, through Discord's sign-in in the system
  *   auth sheet, which comes back to Settings and the row turns green; once
  *   linked, a tap offers Unlink, confirmed.
- * - Sign in: email and password, Google, Apple, as the account has them.
+ *
+ * Headed with the chapter's name, since each link is the chapter's (#6032).
+ * The ways the account signs in are `SignInSection`, on Settings → Account,
+ * as web's Account page holds them.
  */
 export function LinkedAppsSection() {
   const { tokens } = useFrappTheme();
@@ -66,15 +74,7 @@ export function LinkedAppsSection() {
   const discordState = discord.linking
     ? { tone: "off" as const, detail: "Linking…" }
     : discordLinkedState(discord.link.data);
-  const signIn = useQuery({
-    queryKey: signInMethodsQueryKey,
-    queryFn: async () => {
-      // No client is a build without Supabase settings: no account to read.
-      const supabase = getSupabaseClient();
-      return supabase ? loadSignInMethods(supabase.auth) : [];
-    },
-    staleTime: 60_000,
-  });
+  const chapterName = useCurrentChapter().data?.name;
   const calendarSheetRef = useRef<BottomSheetModal>(null);
   const [calendarSheetOpen, setCalendarSheetOpen] = useState(false);
 
@@ -117,7 +117,9 @@ export function LinkedAppsSection() {
 
   return (
     <>
-      <SectionHeader>Linked apps</SectionHeader>
+      <SectionHeader>
+        {personalSettingsGroupLabel("chapter", chapterName)}
+      </SectionHeader>
       <ListSection>
         {google.status.isError ? (
           // A failed read is said, never drawn as "not offered here".
@@ -193,28 +195,6 @@ export function LinkedAppsSection() {
         ) : null}
       </ListSection>
 
-      {signIn.data && signIn.data.length > 0 ? (
-        <>
-          <SectionHeader>Sign in</SectionHeader>
-          <ListSection>
-            {signIn.data.map((method) => (
-              <ListRow
-                key={method.key}
-                label={method.label}
-                leading={
-                  <AppTile tokens={tokens} off={method.tone === "off"}>
-                    <SignInGlyph method={method.key} tokens={tokens} />
-                  </AppTile>
-                }
-                description={method.detail}
-                trailing={<LinkedStatusMark tone={method.tone} />}
-                accessibilityValue={linkedStatusLabel(method.tone)}
-              />
-            ))}
-          </ListSection>
-        </>
-      ) : null}
-
       <CalendarSubscribeSheet
         ref={calendarSheetRef}
         open={calendarSheetOpen}
@@ -226,6 +206,48 @@ export function LinkedAppsSection() {
 }
 
 /** The check, hollow circle or alert at a row's end. */
+/**
+ * Settings → Account → Sign in: email and password, Google, Apple, as the
+ * account has them, each with its state drawn at the end (#5407; on Linked
+ * apps until #6032 moved them beside Sign out, as web's Account page and
+ * Google Account's "Ways you sign in" keep them). Status only: adding a
+ * second method needs Supabase's manual identity linking, a follow-up.
+ */
+export function SignInSection() {
+  const { tokens } = useFrappTheme();
+  const signIn = useQuery({
+    queryKey: signInMethodsQueryKey,
+    queryFn: async () => {
+      // No client is a build without Supabase settings: no account to read.
+      const supabase = getSupabaseClient();
+      return supabase ? loadSignInMethods(supabase.auth) : [];
+    },
+    staleTime: 60_000,
+  });
+  if (!signIn.data || signIn.data.length === 0) return null;
+  return (
+    <>
+      <SectionHeader>{PERSONAL_SETTINGS_COPY.signIn}</SectionHeader>
+      <ListSection>
+        {signIn.data.map((method) => (
+          <ListRow
+            key={method.key}
+            label={method.label}
+            leading={
+              <AppTile tokens={tokens} off={method.tone === "off"}>
+                <SignInGlyph method={method.key} tokens={tokens} />
+              </AppTile>
+            }
+            description={method.detail}
+            trailing={<LinkedStatusMark tone={method.tone} />}
+            accessibilityValue={linkedStatusLabel(method.tone)}
+          />
+        ))}
+      </ListSection>
+    </>
+  );
+}
+
 function LinkedStatusMark({ tone }: { tone: LinkedAppTone }) {
   const { tokens } = useFrappTheme();
   const size = MARK_SIZE;

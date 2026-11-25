@@ -101,7 +101,8 @@ These cause most of the iterations, so they come first.
   #5946). Top-level pages show the title alone, no chapter-name prefix; only Settings pages read
   "Settings › X". (11-05, 11-11)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
-  its tools inside itself, not in drawers. (11-11, 11-12)
+  its tools inside itself, not in drawers. (11-11, 11-12) *Changed 11-25 by Paul (#6032): both Settings
+  pages, Chapter settings and the member's own, take the full width, so a rail stands as a column.*
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a
   form docks in place (`Panel docked`); a short question is a centred dialog; a quick list is a dropdown
   under its button; a name opens a profile popout; the bell is a popover; Catch me up is inline in the

@@ -26,6 +26,7 @@ vi.mock("expo-web-browser", () => ({
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useCurrentChapter: () => ({ data: { name: "Beta Theta Omega" } }),
   useGoogleCalendarStatus: () => ({
     data: state.google,
     isError: state.googleError,
@@ -87,7 +88,8 @@ import {
   pickItemMenuAction,
 } from "@/components/item-actions-menu";
 import { FrappThemeProvider } from "@/lib/theme";
-import { LinkedAppsSection } from "./linked-apps-section";
+import { screenText as screenTextOf } from "@/test/screen-text";
+import { LinkedAppsSection, SignInSection } from "./linked-apps-section";
 
 const OFF = {
   available: true,
@@ -97,14 +99,14 @@ const OFF = {
   last_synced_at: null,
 };
 
-async function render(): Promise<ReactTestRenderer> {
+async function render(
+  section: React.ReactElement = <LinkedAppsSection />,
+): Promise<ReactTestRenderer> {
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = create(
       <QueryClientProvider client={new QueryClient()}>
-        <FrappThemeProvider>
-          <LinkedAppsSection />
-        </FrappThemeProvider>
+        <FrappThemeProvider>{section}</FrappThemeProvider>
       </QueryClientProvider>,
     );
   });
@@ -190,8 +192,15 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     expect(state.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("marks each sign-in method by whether the account has it", async () => {
+  it("heads its rows with the chapter they belong to (#6032)", async () => {
     const tree = await render();
+    expect(screenTextOf(tree)).toContain("In Beta Theta Omega");
+    // The ways the account signs in are on Account now (`SignInSection`).
+    expect(screenTextOf(tree)).not.toContain("Sign in");
+  });
+
+  it("marks each sign-in method by whether the account has it, on Account", async () => {
+    const tree = await render(<SignInSection />);
     // The sign-in methods load through a query that settles a few ticks later.
     for (let i = 0; i < 5; i++) {
       await act(async () => {

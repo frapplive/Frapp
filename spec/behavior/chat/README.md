@@ -1826,7 +1826,7 @@ This follows WhatsApp's ticks; iMessage says the same in words under the bubble.
   iMessage and Slack draw nothing in groups, and Messenger draws each reader's face, which would expose who read what; neither was chosen (Paul, 2026-11-18).
 - **The Read receipts switch** (`user_settings.read_receipts`, on by default) is two-way, as Paul picked: off, a member's reads are never reported to anyone, and they are told about no one's, so their own messages say sent only.
   A member with it off never counts as having read a group's message, so that group stays at sent.
-  It lives in the phone's Settings › Chat and web's Settings › Appearance and chat, and follows the member across devices (`PATCH /v1/settings` `read_receipts`; `useReadReceiptsSetting` in `@repo/hooks`).
+  It lives in Settings › Chat on both apps (web's Appearance and chat until #6032), and follows the member across devices (`PATCH /v1/settings` `read_receipts`; `useReadReceiptsSetting` in `@repo/hooks`).
 - **A member who blocked the sender** never counts as having read it: a block withholds the sender's messages from them, so their cursor passing it says nothing.
 - **What leaves the server** is the one word, on the caller's own last message: `read_status` on `GET /v1/channels/latest`, decided in `get_channel_latest_messages` (`20261118173407`).
   No read time is ever served, and the read is filtered to channels the caller can read like every other preview, so nobody outside a conversation learns anything about it.
