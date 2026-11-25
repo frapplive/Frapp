@@ -85,7 +85,7 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import type { NewEventDraft } from "@/lib/events/create-event";
 import { lastYearTemplate } from "@/lib/events/last-year-template";
 import { selectEventDetail } from "@/lib/events/select";
-import { suggestionEdits } from "@/lib/tasks/suggestion-edits";
+import { suggestionSeed } from "@/components/tasks/suggestion-seed";
 import { useWhoDirectory } from "@/lib/tasks/use-who-directory";
 import { whoLabel } from "@repo/hooks/task-who-picker";
 import { fontFamilyFor, typeRole, useFrappTheme } from "@/lib/theme";
@@ -448,21 +448,7 @@ function SuggestedTasks() {
   }
 
   const seed: TaskSuggestionSeed | undefined = formFor
-    ? {
-        title: formFor.task.title,
-        // One member, several, a role, a group or everyone, each doing it
-        // or one claiming it (2026-11-18).
-        who: taskWhoOf(formFor.task),
-        dueDay: formFor.task.due_date,
-        dueAt: formFor.task.due_at,
-        subtasks: formFor.task.subtasks,
-        accept: async (form) => {
-          await accept.mutateAsync({
-            id: formFor.id,
-            task: suggestionEdits(formFor.task, form),
-          });
-        },
-      }
+    ? suggestionSeed(formFor, accept.mutateAsync)
     : undefined;
 
   /** Who a suggestion names, in the picker's words, or `null` for nobody. */

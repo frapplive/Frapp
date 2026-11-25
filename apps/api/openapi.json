@@ -13821,7 +13821,7 @@
             "bearer": []
           }
         ],
-        "summary": "Which action items of posted minutes became tasks, and whether each is done. Empty for a draft",
+        "summary": "Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051)",
         "tags": [
           "Meetings"
         ]
@@ -37568,6 +37568,56 @@
           "total"
         ]
       },
+      "ActionItemTaskWhoDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "everyone",
+              "people",
+              "role",
+              "group",
+              "tier"
+            ],
+            "nullable": true,
+            "description": "A task for everyone’s audience; null for a task for one member."
+          },
+          "audience_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The role’s, group’s or tier’s name, when it went to one."
+          },
+          "assignee_ids": {
+            "description": "The member, or the named people of a task for several. Empty for a role, group, tier or everyone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "audience",
+          "audience_name",
+          "assignee_ids"
+        ]
+      },
+      "ActionItemTaskRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "who": {
+            "$ref": "#/components/schemas/ActionItemTaskWhoDto"
+          }
+        },
+        "required": [
+          "id",
+          "who"
+        ]
+      },
       "MeetingActionItemTaskDto": {
         "type": "object",
         "properties": {
@@ -37589,12 +37639,23 @@
                 "$ref": "#/components/schemas/ActionItemTaskGroupDto"
               }
             ]
+          },
+          "task": {
+            "nullable": true,
+            "description": "The task and who it went to, for a caller with `tasks:manage`; null for everyone else.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActionItemTaskRefDto"
+              }
+            ]
           }
         },
         "required": [
           "index",
           "done",
-          "group"
+          "group",
+          "task"
         ]
       },
       "OpenActionItemDto": {

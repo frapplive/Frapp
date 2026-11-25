@@ -1224,17 +1224,50 @@ describe('TaskService', () => {
       expect(marks.get('copy-user-1')).toEqual({
         done: true,
         group: { done: 2, total: 2 },
+        // Everyone is said by its name, not by 150 ids (#6051).
+        who: { audience: 'everyone', audience_name: null, assignee_ids: [] },
       });
-      expect(marks.get('solo')).toEqual({ done: true, group: null });
+      expect(marks.get('solo')).toEqual({
+        done: true,
+        group: null,
+        who: { audience: null, audience_name: null, assignee_ids: ['user-1'] },
+      });
 
       mockTaskRepo.findGroupCopies.mockResolvedValue([
         copyOf('user-1', { status: TaskStatus.COMPLETED }),
         copyOf('user-2'),
       ]);
       const partway = await service.doneMarks('ch-1', ['copy-user-1']);
-      expect(partway.get('copy-user-1')).toEqual({
+      expect(partway.get('copy-user-1')).toMatchObject({
         done: false,
         group: { done: 1, total: 2 },
+      });
+    });
+
+    it('names the people of a task for several, for an officer’s minutes row (doneMarks, #6051)', async () => {
+      mockTaskRepo.findByIds.mockResolvedValue([copyOf('user-1')]);
+      mockTaskRepo.findGroups.mockResolvedValue([
+        {
+          id: 'group-1',
+          chapter_id: 'ch-1',
+          created_by: 'admin-1',
+          audience: 'people' as const,
+          target_id: null,
+          target_name: null,
+          created_at: '2026-11-17T00:00:00.000Z',
+        },
+      ]);
+      mockTaskRepo.findGroupCopies.mockResolvedValue([
+        copyOf('user-1'),
+        copyOf('user-2', { status: TaskStatus.COMPLETED }),
+      ]);
+
+      const marks = await service.doneMarks('ch-1', ['copy-user-1']);
+
+      expect(marks.get('copy-user-1')?.who).toEqual({
+        audience: 'people',
+        audience_name: null,
+        assignee_ids: ['user-1', 'user-2'],
       });
     });
 
