@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
  * over one muted line, then whatever it ends in (a status, buttons). Both
  * affiliation pages draw this one row, on the dense list's hairlines.
  *
- * `crest` leads the row with the chapter's mark, on the council's Chapters
- * page only. A school or council row leads with its name (#6066, Paul
- * 2026-11-25): Frapp holds no real school mark, a school's logo is its
- * trademark, and initials on a colored tile read as one that isn't there.
+ * `crest` leads the row with a tile of the chapter's initials, on the
+ * council's Chapters page only: the listing carries no real mark (#6071). A
+ * school or council row has no tile (#6066, Paul 2026-11-25): it has no real
+ * mark to draw either, and a school's logo is its trademark.
  *
  * With `menu`, the row's rare and destructive actions sit behind its ⋯ and
  * right-click (`RowMenu`); actions a person takes every time are buttons in
@@ -28,7 +28,7 @@ export function AffiliationRow({
   busy = false,
 }: {
   name: string;
-  /** Lead with the chapter's mark: a chapter row on the council's side. */
+  /** Lead with the name's initials: a chapter row on the council's side. */
   crest?: boolean;
   meta?: ReactNode;
   trailing?: ReactNode;
