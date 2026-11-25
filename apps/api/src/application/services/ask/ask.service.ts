@@ -100,7 +100,7 @@ import {
   type AskTool,
   type AskToolContext,
 } from './ask-tool';
-import { nameInLine } from './ask-lines';
+import { nameInLine, recordFactsLine } from './ask-lines';
 import {
   passageDetail,
   passageIsChat,
@@ -308,7 +308,12 @@ function passageEntry(
       // (`ai-prompt-injection.md` C8).
       title: chat
         ? `Chat message in ${passage.title}, ${sourceDay(passage.sourceAt, timeZone)}`
-        : [passage.title, detail, sourceDay(passage.sourceAt, timeZone)]
+        : [
+            passage.title,
+            recordFactsLine(passage.facts),
+            detail,
+            sourceDay(passage.sourceAt, timeZone),
+          ]
             .filter(Boolean)
             .join(', '),
       text: passage.text,
@@ -343,7 +348,12 @@ function agentSourceTitle(source: AgentSource, timeZone: string): string {
     ? `Chat message in ${source.title}, ${sourceDay(source.date, timeZone)}`
     : !INDEXED_KINDS.has(source.kind)
       ? `${source.title} (live data, read just now)`
-      : [source.title, source.detail, sourceDay(source.date, timeZone)]
+      : [
+          source.title,
+          source.about,
+          source.detail,
+          sourceDay(source.date, timeZone),
+        ]
           .filter(Boolean)
           .join(', ');
   // Only the server's own blocks say who is asking or where from.

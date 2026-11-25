@@ -1,3 +1,4 @@
+import { addEventDays } from '@repo/validation';
 /**
  * The iCalendar text a calendar subscription link serves (#3322, RFC 5545).
  *
@@ -8,10 +9,14 @@
  * escaped, `DTSTAMP` on every `VEVENT`) are pinned by unit tests.
  */
 
-/** When an item happens: a moment, or a whole day with no time. */
-type IcsWhen =
+/**
+ * When an item happens: a moment, or whole days with no time. `date` is the
+ * first day and `endDate` the last, inclusive (`YYYY-MM-DD`); omitted, the
+ * item is on `date` alone.
+ */
+export type IcsWhen =
   | { kind: 'instant'; start: string; end: string }
-  | { kind: 'day'; date: string };
+  | { kind: 'day'; date: string; endDate?: string };
 
 export interface IcsItem {
   /** Stable across fetches, so a calendar updates the item in place. */
@@ -22,6 +27,8 @@ export interface IcsItem {
   location: string | null;
   /** The item's page in Frapp. */
   url: string;
+  /** It might not happen (#6098): `STATUS:TENTATIVE`. */
+  tentative?: boolean;
 }
 
 export interface IcsCalendar {
@@ -78,9 +85,7 @@ export function icsDate(day: string): string {
 
 /** The day after `day` (`YYYY-MM-DD`), as `YYYYMMDD`: an all-day `DTEND`. */
 function icsNextDate(day: string): string {
-  const [year, month, date] = day.split('-').map(Number);
-  const next = new Date(Date.UTC(year, month - 1, date + 1));
-  return next.toISOString().slice(0, 10).replace(/-/g, '');
+  return (addEventDays(day, 1) ?? day).replace(/-/g, '');
 }
 
 /**
@@ -114,10 +119,11 @@ export function foldIcsLine(line: string): string {
 function itemLines(item: IcsItem, stamp: string): string[] {
   const lines = ['BEGIN:VEVENT', `UID:${item.uid}`, `DTSTAMP:${stamp}`];
   if (item.when.kind === 'day') {
+    // DTEND is exclusive for a date (RFC 5545 § 3.6.1): the day after the last.
     lines.push(
       `DTSTART;VALUE=DATE:${icsDate(item.when.date)}`,
-      `DTEND;VALUE=DATE:${icsNextDate(item.when.date)}`,
-      // A due day is not time the member is busy.
+      `DTEND;VALUE=DATE:${icsNextDate(item.when.endDate ?? item.when.date)}`,
+      // A due day, or an all-day event, is not time the member is busy.
       'TRANSP:TRANSPARENT',
     );
   } else {
@@ -129,6 +135,7 @@ function itemLines(item: IcsItem, stamp: string): string[] {
     // reads as an event that takes up no time.
     if (end > start) lines.push(`DTEND:${end}`);
   }
+  if (item.tentative) lines.push('STATUS:TENTATIVE');
   lines.push(`SUMMARY:${escapeIcsText(item.summary)}`);
   if (item.location) lines.push(`LOCATION:${escapeIcsText(item.location)}`);
   if (item.description) {

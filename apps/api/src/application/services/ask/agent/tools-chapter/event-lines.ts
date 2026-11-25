@@ -2,12 +2,15 @@ import { NotFoundException } from '@nestjs/common';
 import type { Event } from '#domain/entities/event.entity';
 import type { EventAttendanceStatus } from '#domain/entities/event-attendance.entity';
 import { localDateIn } from '#domain/utils/zoned-time';
+import { eventIsDated, eventTiming } from '@repo/validation';
 import type { EventService } from '../../../event.service';
 import type { AgentToolContext } from '../agent-tool';
 import {
   DAY_MS,
+  longDay,
   longRange,
   matchByName,
+  plainName,
   quoted,
   readWindow,
 } from './chapter-tool-kit';
@@ -17,13 +20,25 @@ import {
 /** How far either side of now an event is looked for by name. */
 const FIND_DAYS = 200;
 
+/** How many of the other events that fit a note names. */
+const NAMED_CANDIDATES = 6;
+
 const EVENT_ID =
   /^(?:event:)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export interface FoundEvent {
+  /**
+   * The event, or null when none fits, or when several differently named
+   * events fit and the model must choose (see `others`).
+   */
   event: Event | null;
   /** How many events fit what was asked; more than one means it was ambiguous. */
   candidates: number;
+  /**
+   * The events that fit besides `event`, nearest first: the ones the model
+   * may have meant instead. Every one is from the asker's own calendar.
+   */
+  others: Event[];
 }
 
 /**
@@ -31,9 +46,14 @@ export interface FoundEvent {
  *
  * Every candidate comes from the asker's own calendar (`GET /v1/events`, or
  * `GET /v1/events/:id` for an id), so an event of another chapter, or one
- * whose roles leave the asker out, is simply not found. When several fit,
- * the nearest to now is taken (`prefer` says on which side) and the caller
- * tells the model there were others.
+ * whose roles leave the asker out, is simply not found.
+ *
+ * When several fit and they are one event repeating (the same name, other
+ * days), the nearest to now is taken (`prefer` says on which side), and the
+ * note names the others. When they have different names ("formal" fits
+ * "Spring formal" and "Formal dinner"), none is taken: nearness is no
+ * reason to think the member meant one over another, so the model is shown
+ * the candidates and chooses, or asks (#5180).
  */
 export async function findEvent(
   events: Pick<EventService, 'findByChapter' | 'findById'>,
@@ -49,15 +69,17 @@ export async function findEvent(
         context.chapterId,
         context.userId,
       );
-      return { event, candidates: 1 };
+      return { event, candidates: 1, others: [] };
     } catch (error) {
       if (error instanceof NotFoundException) {
-        return { event: null, candidates: 0 };
+        return { event: null, candidates: 0, others: [] };
       }
       throw error;
     }
   }
-  if (!args.event && !args.on) return { event: null, candidates: 0 };
+  if (!args.event && !args.on) {
+    return { event: null, candidates: 0, others: [] };
+  }
 
   const window = args.on
     ? readWindow({ from: args.on, to: args.on }, context, {
@@ -83,13 +105,16 @@ export async function findEvent(
   if (args.on) {
     // The window catches an event that only runs into the day (it started
     // the night before); one that starts on the day is the better reading.
-    const starting = fits.filter(
-      (event) =>
-        localDateIn(new Date(event.start_time), context.timeZone) === args.on,
+    const on = args.on;
+    const starting = fits.filter((event) =>
+      // A dated event is on each of its days, whatever the zone (#6098).
+      event.start_date && event.end_date
+        ? event.start_date <= on && on <= event.end_date
+        : localDateIn(new Date(event.start_time), context.timeZone) === on,
     );
     if (starting.length > 0) fits = starting;
   }
-  if (fits.length === 0) return { event: null, candidates: 0 };
+  if (fits.length === 0) return { event: null, candidates: 0, others: [] };
 
   const now = context.now.getTime();
   const start = (event: Event) => Date.parse(event.start_time);
@@ -101,14 +126,83 @@ export async function findEvent(
     .sort((a, b) => start(b) - start(a));
   const [first, second] =
     prefer === 'upcoming' ? [ahead, behind] : [behind, ahead];
-  return { event: first[0] ?? second[0], candidates: fits.length };
+  const nearestFirst = [...first, ...second];
+  return isOneEventRepeating(fits)
+    ? {
+        event: nearestFirst[0],
+        candidates: fits.length,
+        others: nearestFirst.slice(1),
+      }
+    : { event: null, candidates: fits.length, others: nearestFirst };
 }
 
-/** The note for a result that took one of several events. */
-export function ambiguityNote(found: FoundEvent): string | null {
-  return found.candidates > 1
-    ? `${found.candidates} events fit that. This is the nearest one; give the day in "on" to pick another.`
-    : null;
+/**
+ * Whether these events are one event repeating: one series
+ * (`parent_event_id`), or names that differ only in their numbers, as a
+ * chapter that writes the date into each meeting's name ("Chapter meeting
+ * 11/13", "Chapter meeting 11/20") does.
+ */
+function isOneEventRepeating(events: readonly Event[]): boolean {
+  const series = new Set(
+    events.map((event) => event.parent_event_id ?? event.id),
+  );
+  if (series.size === 1) return true;
+  const names = new Set(
+    events.map((event) =>
+      plainName(event.name).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim(),
+    ),
+  );
+  return names.size === 1;
+}
+
+/** `"Formal dinner" on Friday, November 20, 2026 (event:<id>)`. */
+function candidateLine(event: Event, timeZone: string): string {
+  return `${quoted(event.name)} on ${longDay(event.start_time, timeZone)} (event:${event.id})`;
+}
+
+/** The candidates a note names, and how many more it leaves out. */
+function candidateList(events: readonly Event[], timeZone: string): string {
+  // Each different event once, nearest first, before more days of any one:
+  // a weekly dinner's next six dates must not push a one-off dinner out of
+  // the list.
+  const seen = new Set<string>();
+  const firstOfEach: Event[] = [];
+  const later: Event[] = [];
+  for (const event of events) {
+    const key = event.parent_event_id ?? plainName(event.name);
+    if (seen.has(key)) later.push(event);
+    else {
+      seen.add(key);
+      firstOfEach.push(event);
+    }
+  }
+  const named = [...firstOfEach, ...later]
+    .slice(0, NAMED_CANDIDATES)
+    .map((event) => candidateLine(event, timeZone));
+  const more = events.length - named.length;
+  return `${named.join('; ')}${more > 0 ? `; and ${more} more` : ''}`;
+}
+
+/**
+ * The note for a result that took one of several events: which others fit,
+ * so the model can read the one the member meant, or ask them.
+ */
+export function ambiguityNote(
+  found: FoundEvent,
+  timeZone: string,
+): string | null {
+  if (!found.event || found.others.length === 0) return null;
+  return `${found.candidates} events fit that. This is the nearest one. The others: ${candidateList(found.others, timeZone)}. If the member meant another, read again with its id or day; if it is not clear which they meant, ask them.`;
+}
+
+/**
+ * The note for a name several different events fit, when none was taken:
+ * the candidates, for the model to choose from or to ask about. Null when
+ * nothing fits at all.
+ */
+export function choiceNote(found: FoundEvent, timeZone: string): string | null {
+  if (found.event || found.others.length === 0) return null;
+  return `${found.candidates} different events fit that: ${candidateList(found.others, timeZone)}. Read again with the id of the one the member meant; if it is not clear which, ask them.`;
 }
 
 /**
@@ -119,7 +213,29 @@ export function ambiguityNote(found: FoundEvent): string | null {
  */
 export function eventHeadline(event: Event, context: AgentToolContext): string {
   const over = Date.parse(event.end_time) < context.now.getTime();
-  return `${quoted(event.name)}${over ? ' (already happened)' : ''}: ${longRange(event.start_time, event.end_time, context.timeZone)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
+  const flags = [
+    over ? 'already happened' : null,
+    event.is_tentative ? 'tentative: it might not happen' : null,
+    event.calendar_only ? 'on the calendar only: no check-in or points' : null,
+  ].filter((flag): flag is string => flag !== null);
+  return `${quoted(event.name)}${flags.length > 0 ? ` (${flags.join('; ')})` : ''}: ${eventWhenWords(event, context.timeZone)}${event.location ? `, at ${quoted(event.location)}` : ''}`;
+}
+
+/**
+ * When the event is, in words: its times, or for a dated event its days
+ * (#6098), whose stored instants are only midnight bounds and never a time.
+ */
+export function eventWhenWords(event: Event, timeZone: string): string {
+  if (eventIsDated(event) && event.start_date) {
+    if (eventTiming(event) === 'time_tbd') {
+      return `${longDay(event.start_date, 'UTC')}, time not set yet`;
+    }
+    const last = event.end_date ?? event.start_date;
+    return last === event.start_date
+      ? `${longDay(event.start_date, 'UTC')}, all day`
+      : `${longDay(event.start_date, 'UTC')} to ${longDay(last, 'UTC')}, all day`;
+  }
+  return longRange(event.start_time, event.end_time, timeZone);
 }
 
 export const ATTENDANCE_WORDS: Record<EventAttendanceStatus, string> = {

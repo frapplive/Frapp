@@ -26,6 +26,8 @@ import {
   wordsArg,
 } from './chapter-tool-kit';
 import {
+  aboutPart,
+  assignedByPart,
   awaitsConfirm,
   dueDay,
   dueFirst,
@@ -148,6 +150,7 @@ export class ChapterTasksAgentTool implements AgentReadTool<Args> {
       const rows = [...kept].sort(latestFinishFirst).map((task) => {
         const parts = [
           `${quoted(task.title)}: done by ${people.name(task.assignee_id)}${task.confirmed_at ? `, finished on ${longDay(task.confirmed_at, timeZone)}` : ''}`,
+          assignedByPart(task, people),
           task.point_reward ? `Worth ${task.point_reward} points` : null,
         ];
         return `${parts.filter(Boolean).join('. ')}.`;
@@ -211,7 +214,9 @@ export class ChapterTasksAgentTool implements AgentReadTool<Args> {
                 ? 'Started'
                 : 'Not started',
           !awaitsConfirm(task) && task.sent_back_at ? 'Sent back once' : null,
+          assignedByPart(task, people),
           task.point_reward ? `Worth ${task.point_reward} points` : null,
+          aboutPart(task),
         ];
         return `${parts.filter(Boolean).join('. ')}.`;
       });

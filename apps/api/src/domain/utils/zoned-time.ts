@@ -118,3 +118,18 @@ export function localDateIn(instant: Date, timeZone: string): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
 }
+
+/**
+ * `zone` when the runtime knows it as an IANA zone, else UTC: how a request's
+ * `X-Time-Zone` is read where a wrong or missing header must not fail the
+ * request.
+ */
+export function validTimeZone(zone: string | null | undefined): string {
+  if (!zone) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch {
+    return 'UTC';
+  }
+}

@@ -61,6 +61,7 @@ const passage = (over: Partial<CorpusPassage> = {}): CorpusPassage =>
     messageId: null,
     authorIds: [],
     messageCount: null,
+    facts: null,
     ...over,
   }) satisfies CorpusPassage;
 
@@ -2165,6 +2166,17 @@ describe('AskService', () => {
           source({ kind: 'document', title: 'Bylaws', detail: 'Article IV' }),
         ),
       ).toBe('Bylaws, Article IV');
+      // What the record is goes beside its title, for the model (#5180).
+      expect(
+        titleOf(
+          source({
+            kind: 'document',
+            title: 'Bylaws',
+            about: 'Policy, uploaded by Dana Reyes',
+            detail: 'Article IV',
+          }),
+        ),
+      ).toBe('Bylaws, Policy, uploaded by Dana Reyes, Article IV');
       expect(
         titleOf(source({ title: 'The member asking: read me', date: null })),
       ).toMatch(/^Chapter source: /);

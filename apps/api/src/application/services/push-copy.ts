@@ -1,8 +1,13 @@
 import { formatPoints } from '@repo/formatting';
 import {
+  EVENT_ALL_DAY_LABEL,
+  EVENT_TIME_TBD_LABEL,
   describeRepeatPattern,
+  eventDayNumber,
+  eventTiming,
   ordinal,
   taskNeedsSignOff,
+  type EventTimingFields,
 } from '@repo/validation';
 
 /**
@@ -114,18 +119,72 @@ export interface EventWhenOptions {
   recurrence?: string | null;
   /** Injected for tests; decides only whether the year is shown. */
   now?: Date;
+  /**
+   * The event's timing and days (#6098). A dated event (all day, or time TBD)
+   * reads as its days, never as a clock time: its `start_time`/`end_time`
+   * are only the saving request's midnights.
+   */
+  dates?: EventTimingFields | null;
+}
+
+/** "Jan 22", "Jan 22, 2027": the year only when it is not this year. */
+function monthDay(parts: ZonedParts, withYear: boolean): string {
+  const base = `${parts.month} ${parts.day}`;
+  return withYear ? `${base}, ${parts.year}` : base;
+}
+
+/** A zone-free `YYYY-MM-DD` as parts, read at noon UTC so the day never shifts. */
+function calendarDayParts(date: string): ZonedParts | null {
+  const n = eventDayNumber(date);
+  if (n === null) return null;
+  return zonedParts(new Date(n * 86_400_000 + 12 * 3_600_000), 'UTC');
+}
+
+/**
+ * A dated event's days as a member reads them, or null for a timed event (or
+ * a dated row whose days don't read): "Mon, Jan 11 · All day",
+ * "Jan 22 – Feb 12 · All day", "Thu, Jan 14 · Time TBD". Zone-free, so the
+ * same days for every recipient, with no zone label.
+ */
+export function formatEventDays(
+  dates: EventTimingFields,
+  now: Date = new Date(),
+): string | null {
+  const timing = eventTiming(dates);
+  if (timing === 'timed' || !dates.start_date) return null;
+  const start = calendarDayParts(dates.start_date);
+  if (!start) return null;
+  const end =
+    timing === 'all_day' && dates.end_date
+      ? calendarDayParts(dates.end_date)
+      : null;
+  const today = zonedParts(now, 'UTC');
+  const label =
+    timing === 'time_tbd' ? EVENT_TIME_TBD_LABEL : EVENT_ALL_DAY_LABEL;
+  if (!end || sameDay(start, end)) {
+    return joinFacts(dayLabel(start, today), label);
+  }
+  const span =
+    `${monthDay(start, start.year !== end.year)} – ` +
+    monthDay(end, end.year !== today.year || start.year !== end.year);
+  return joinFacts(span, label);
 }
 
 /**
  * When an event happens, as a member reads it: "Mon, Nov 9, 8–9 PM",
- * "Sat, Nov 7, 6 PM – Mon, Nov 9, 12 PM" for one that spans days, and
- * "Every Mon, 8–9 PM, from Nov 9" for a series.
+ * "Sat, Nov 7, 6 PM – Mon, Nov 9, 12 PM" for one that spans days,
+ * "Every Mon, 8–9 PM, from Nov 9" for a series, and a dated event's days
+ * ({@link formatEventDays}) when `options.dates` names one.
  */
 export function formatEventWhen(
   startIso: string,
   endIso: string | null | undefined,
   options: EventWhenOptions,
 ): string {
+  const days = options.dates
+    ? formatEventDays(options.dates, options.now)
+    : null;
+  if (days) return days;
   const { timeZone } = options;
   const startAt = new Date(startIso);
   const endAt = endIso ? new Date(endIso) : null;

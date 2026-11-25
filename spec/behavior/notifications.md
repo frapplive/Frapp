@@ -528,7 +528,7 @@ The due-soon and overdue reminders for a task due on a day (not at a time) and f
 
 ## Pre-Event Reminders
 
-`ScheduledJobsService.sweepEventReminders` runs every five minutes and pushes a NORMAL reminder for events starting inside `(now, now + 30min]`.
+`ScheduledJobsService.sweepEventReminders` runs every five minutes and pushes a NORMAL reminder for timed events starting inside `(now, now + 30min]`. An all-day or time-TBD event gets none, since its stored start is a midnight, and neither does an event on the calendar only ([`events.md` § Dates, tentative and on the calendar only](events.md#dates-tentative-and-on-the-calendar-only)).
 
 **Who gets one.** The event's _required_ members, resolved by `AttendanceService.resolveRequiredMembers` — the same call the auto-absent sweep makes, deliberately shared rather than reimplemented:
 
