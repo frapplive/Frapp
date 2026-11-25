@@ -124,9 +124,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     title: "New in this update",
     changes: [
       "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+      "Recruitment has an interest form: open it from the Recruitment settings page, share its link or a QR code, and each person who fills it in lands in your pipeline's first stage.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+    ],
+    phone: [
+      "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
     ],
   },
   {
@@ -1107,6 +1111,29 @@ const MONTHS = [
   "November",
   "December",
 ] as const;
+
+/**
+ * The zone an update's `date` is a day in: the team's, where members are. The
+ * fold bot runs on CI's UTC clock, which dated a US evening's update tomorrow
+ * (#6054), so it reads the day here instead, as does anything comparing a
+ * moment with an entry's date.
+ */
+export const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `at`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteDay(at: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(at)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 /**
  * `"2026-11-07"` → `"November 7, 2026"`. Written out per the product's date

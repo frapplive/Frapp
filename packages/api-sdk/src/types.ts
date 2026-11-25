@@ -4163,7 +4163,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft */
+        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051) */
         get: operations["MeetingActionItemTasksController_list_v1"];
         put?: never;
         post?: never;
@@ -12048,6 +12048,22 @@ export interface components {
             done: number;
             total: number;
         };
+        ActionItemTaskWhoDto: {
+            /**
+             * @description A task for everyone’s audience; null for a task for one member.
+             * @enum {string|null}
+             */
+            audience: "everyone" | "people" | "role" | "group" | "tier" | null;
+            /** @description The role’s, group’s or tier’s name, when it went to one. */
+            audience_name: string | null;
+            /** @description The member, or the named people of a task for several. Empty for a role, group, tier or everyone. */
+            assignee_ids: string[];
+        };
+        ActionItemTaskRefDto: {
+            /** Format: uuid */
+            id: string;
+            who: components["schemas"]["ActionItemTaskWhoDto"];
+        };
         MeetingActionItemTaskDto: {
             /** @description The action item’s place in the minutes’ list, from 0. */
             index: number;
@@ -12055,6 +12071,8 @@ export interface components {
             done: boolean;
             /** @description A task for everyone: how many of its copies are done. */
             group: components["schemas"]["ActionItemTaskGroupDto"] | null;
+            /** @description The task and who it went to, for a caller with `tasks:manage`; null for everyone else. */
+            task: components["schemas"]["ActionItemTaskRefDto"] | null;
         };
         OpenActionItemDto: {
             /** @description The action item’s place in its minutes’ list, from 0. */
@@ -15362,7 +15380,7 @@ export interface components {
             synced_count: number;
             /** @description Files the last sync left out: a type Documents does not take, over 25 MB, or past 500 files */
             skipped_count: number;
-            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
+            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
             folders_left_out: number;
             /** @description Whether a sync is due or running now */
             syncing: boolean;

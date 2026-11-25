@@ -46,6 +46,8 @@ import {
   SHOW_ALL_CHANNELS_LABEL,
   sidebarSections,
   UNREAD_ONLY_LABEL,
+  unreadJumpRowKey,
+  unreadJumpTargets,
   withUnreadThreadChannels,
   type DisplayNameMap,
   type MemberAvatarTint,
@@ -87,6 +89,8 @@ import {
   type RailLift,
 } from "./use-rail-reorder";
 import { useRailFlip } from "./use-rail-flip";
+import { UnreadJumpPill } from "./unread-jump-pill";
+import { useUnreadJump } from "./use-unread-jump";
 import { signetDarkTokens } from "@repo/theme/signet";
 import { isSystemChannel } from "./channel-start";
 import { cn, initials } from "@/lib/utils";
@@ -674,15 +678,21 @@ export function ChannelList({
   // so Unread only keeps it and its threads, and a folded section keeps it in
   // view. The rows' own weight and badges read the server's counts alone.
   const threadsByChannel = threads?.byChannel;
-  const arrangementUnread = useMemo(
+  // One set for the arrangement and the New unreads pills, so a folded
+  // heading and the pill never disagree on what is unread.
+  const unreadThreadChannelIds = useMemo(
     () =>
       threadsByChannel
-        ? withUnreadThreadChannels(
-            unreadByChannelId,
-            channelsWithUnreadThreads(threadsByChannel),
-          )
+        ? channelsWithUnreadThreads(threadsByChannel)
+        : undefined,
+    [threadsByChannel],
+  );
+  const arrangementUnread = useMemo(
+    () =>
+      unreadThreadChannelIds
+        ? withUnreadThreadChannels(unreadByChannelId, unreadThreadChannelIds)
         : unreadByChannelId,
-    [unreadByChannelId, threadsByChannel],
+    [unreadByChannelId, unreadThreadChannelIds],
   );
   const { arranged, hiddenDms, inputSections, sectionOrder } = useMemo(() => {
     // A DM the member hid (#2303) moves to the collapsed group at the end,
@@ -779,6 +789,35 @@ export function ChannelList({
     arrangementUnread,
     mutedChannelIds,
   ]);
+
+  // ── New unreads (#6045) ─────────────────────────────────────────────────
+  // A pill over the list's top or bottom edge while an unread channel is
+  // scrolled out of view that way, as Discord and Slack draw theirs. What
+  // counts is the rows' and folded headings' own rule (`unreadJumpTargets`,
+  // the phone's too). The channel list only: the Direct messages panel runs
+  // newest first, so its unread conversations are already at its top.
+  const jumpTargets = useMemo(
+    () =>
+      kind === "channels" && sidebar
+        ? unreadJumpTargets(arranged, {
+            unreadByChannelId,
+            mutedChannelIds,
+            unreadThreadChannelIds,
+            activeChannelId,
+          })
+        : [],
+    [
+      kind,
+      sidebar,
+      arranged,
+      unreadByChannelId,
+      mutedChannelIds,
+      unreadThreadChannelIds,
+      activeChannelId,
+    ],
+  );
+  const jumpListRef = useRef<HTMLDivElement>(null);
+  const unreadJump = useUnreadJump(jumpListRef, jumpTargets);
 
   // ── Drag to reorder (#4178) ──────────────────────────────────────────────
   // Rows are always drawn in the chapter's order, so a drop saves the order
@@ -989,6 +1028,10 @@ export function ChannelList({
             "group/row",
             !isActive &&
               "[&[data-state=open]>button]:bg-card [&[data-state=open]>button]:text-foreground",
+            // Lit for a moment where the New unreads pill landed (#6045).
+            !isActive &&
+              unreadJump.litKey === unreadJumpRowKey(channel.id) &&
+              "[&>button]:bg-card",
           )}
           data-flip={`row:${channel.id}`}
           data-reorder-row={draggable ? channel.id : undefined}
@@ -1485,119 +1528,133 @@ export function ChannelList({
   )?.section.key;
 
   return (
-    <div
-      ref={railRef}
-      className="space-y-4"
-      data-reorder-rail={reorder ? "" : undefined}
-    >
-      {/* Where a drag or an Alt+Arrow move is announced (#4178). */}
-      {reorder ? (
-        <p className="sr-only" aria-live="polite">
-          {announcement}
-        </p>
+    // The pills ride zero-height bands pinned to the scroller's edges, outside
+    // the spaced list so they add no gap to it.
+    <div ref={jumpListRef}>
+      {/* Not while a row or heading is held: a pill sits in the drag's
+          autoscroll band, outside the rail, where a drop would land nowhere. */}
+      {unreadJump.state.above && !dragging ? (
+        <UnreadJumpPill
+          direction="above"
+          side={unreadJump.state.above}
+          onJump={() => unreadJump.jump("above")}
+        />
       ) : null}
-      {heldCopy}
-      {drawOrder.map((entry) => {
-        if (entry.kind === "slot") return categorySlot;
-        if (entry.kind === "empty") {
-          return renderEmptyCategory(entry.key, entry.label);
-        }
-        const section = entry.section;
-        // Two lists can be on screen at once (the sidebar's channels and
-        // the Messages page's conversations, #5946), and both can have a
-        // Pinned section, so each names its headings for its own kind.
-        const headerId =
-          kind === "direct"
-            ? `conversation-section:${section.key}`
-            : `channel-section:${section.key}`;
-        const orderable = !!reorder && isOrderableSection(section.key);
-        const categoryId = categoryIdOf(section.key);
-        const headerDrag: RailDrag | null =
-          orderable && categoryId ? { kind: "category", id: categoryId } : null;
-        const headerProps = orderable
-          ? {
-              "data-reorder-header": section.key,
-              onPointerDown: headerDrag
-                ? railReorder.pointerDownFor(headerDrag)
-                : undefined,
-              onKeyDown: headerDrag
-                ? railReorder.keyDownFor(headerDrag)
-                : undefined,
-            }
-          : {};
-        // A category drag folds every category to its heading, as Discord
-        // does, so the list being reordered is short enough to see whole.
-        const rows =
-          draggingCategory && categoryId
-            ? []
-            : rowsWithSlot(section.key, section.rows);
-        const sidebarHeading = (foldMenu: ReactNode) => (
-          <div
-            className={cn(
-              "group group/head flex items-center gap-1 pr-2",
-              // Pinned to the top of the rail while its rows scroll under
-              // it, until the next heading pushes it off (owner
-              // 2026-11-07). The rail's own surface, so no row shows
-              // through; the 4px pulled up and padded back keeps the
-              // resting layout and gives the pinned label room. On the
-              // row, not the fold button, so the heading's + stays with it.
-              "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
-            )}
-          >
-            <button
-              type="button"
-              id={headerId}
-              data-flip={`head:${section.key}`}
-              {...headerProps}
-              aria-expanded={!section.collapsed}
-              onClick={() =>
-                sidebar?.onSetCollapsed(section.key, !section.collapsed)
+      <div
+        ref={railRef}
+        className="space-y-4"
+        data-reorder-rail={reorder ? "" : undefined}
+      >
+        {/* Where a drag or an Alt+Arrow move is announced (#4178). */}
+        {reorder ? (
+          <p className="sr-only" aria-live="polite">
+            {announcement}
+          </p>
+        ) : null}
+        {heldCopy}
+        {drawOrder.map((entry) => {
+          if (entry.kind === "slot") return categorySlot;
+          if (entry.kind === "empty") {
+            return renderEmptyCategory(entry.key, entry.label);
+          }
+          const section = entry.section;
+          // Two lists can be on screen at once (the sidebar's channels and
+          // the Messages page's conversations, #5946), and both can have a
+          // Pinned section, so each names its headings for its own kind.
+          const headerId =
+            kind === "direct"
+              ? `conversation-section:${section.key}`
+              : `channel-section:${section.key}`;
+          const orderable = !!reorder && isOrderableSection(section.key);
+          const categoryId = categoryIdOf(section.key);
+          const headerDrag: RailDrag | null =
+            orderable && categoryId
+              ? { kind: "category", id: categoryId }
+              : null;
+          const headerProps = orderable
+            ? {
+                "data-reorder-header": section.key,
+                onPointerDown: headerDrag
+                  ? railReorder.pointerDownFor(headerDrag)
+                  : undefined,
+                onKeyDown: headerDrag
+                  ? railReorder.keyDownFor(headerDrag)
+                  : undefined,
               }
+            : {};
+          // A category drag folds every category to its heading, as Discord
+          // does, so the list being reordered is short enough to see whole.
+          const rows =
+            draggingCategory && categoryId
+              ? []
+              : rowsWithSlot(section.key, section.rows);
+          const sidebarHeading = (foldMenu: ReactNode) => (
+            <div
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
-                EYEBROW,
+                "group group/head flex items-center gap-1 pr-2",
+                // Pinned to the top of the rail while its rows scroll under
+                // it, until the next heading pushes it off (owner
+                // 2026-11-07). The rail's own surface, so no row shows
+                // through; the 4px pulled up and padded back keeps the
+                // resting layout and gives the pinned label room. On the
+                // row, not the fold button, so the heading's + stays with it.
+                "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
               )}
             >
-              {section.collapsed ? (
-                <ChevronRight
-                  className="h-3.5 w-3.5 shrink-0"
-                  aria-hidden="true"
-                />
-              ) : (
-                <ChevronDown
-                  className="h-3.5 w-3.5 shrink-0"
-                  aria-hidden="true"
-                />
-              )}
-              <span className="truncate">{section.label}</span>
-            </button>
-            {/* Gone while anything is held, as the + is, so the heading under
-                the pointer stays the whole drop target. */}
-            {foldMenu && !dragging ? (
-              <span className="mb-1 flex shrink-0 items-center">
-                {foldMenu}
-              </span>
-            ) : null}
-            {headingControl && section.key === firstSectionKey ? (
-              <span
-                data-heading-control=""
+              <button
+                type="button"
+                id={headerId}
+                data-flip={`head:${section.key}`}
+                {...headerProps}
+                aria-expanded={!section.collapsed}
+                onClick={() =>
+                  sidebar?.onSetCollapsed(section.key, !section.collapsed)
+                }
                 className={cn(
-                  // On the label's line, as the + beside it is.
-                  "mb-1 flex shrink-0 items-center",
-                  "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
-                  // Open, or saying a filter is on: it stays.
-                  "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                  "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
+                  EYEBROW,
                 )}
               >
-                {headingControl}
-              </span>
-            ) : null}
-            {createButtonFor(section.key, section.label)}
-          </div>
-        );
-        return (
-          <div key={section.key} {...blockProps(section.key)}>
-            {/*
+                {section.collapsed ? (
+                  <ChevronRight
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ChevronDown
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="truncate">{section.label}</span>
+              </button>
+              {/* Gone while anything is held, as the + is, so the heading under
+                the pointer stays the whole drop target. */}
+              {foldMenu && !dragging ? (
+                <span className="mb-1 flex shrink-0 items-center">
+                  {foldMenu}
+                </span>
+              ) : null}
+              {headingControl && section.key === firstSectionKey ? (
+                <span
+                  data-heading-control=""
+                  className={cn(
+                    // On the label's line, as the + beside it is.
+                    "mb-1 flex shrink-0 items-center",
+                    "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
+                    // Open, or saying a filter is on: it stays.
+                    "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                  )}
+                >
+                  {headingControl}
+                </span>
+              ) : null}
+              {createButtonFor(section.key, section.label)}
+            </div>
+          );
+          return (
+            <div key={section.key} {...blockProps(section.key)}>
+              {/*
               The header names the list rather than just sitting above it: a
               screen-reader member navigating by list or by button would
               otherwise hear "exec-board, button" with no indication of which
@@ -1608,77 +1665,86 @@ export function ChannelList({
               something new in view under it (#6053), so it carries no count
               of its own, and its menu folds or unfolds every section at once.
             */}
-            {kind === "direct" && section.key === "direct" ? null : sidebar ? (
-              kind === "direct" ? (
-                sidebarHeading(null)
+              {kind === "direct" &&
+              section.key === "direct" ? null : sidebar ? (
+                kind === "direct" ? (
+                  sidebarHeading(null)
+                ) : (
+                  <RowMenu
+                    entries={foldEntries(
+                      section.key,
+                      section.label,
+                      section.collapsed,
+                    )}
+                    label={`More for ${section.label}`}
+                    size="heading"
+                  >
+                    {sidebarHeading}
+                  </RowMenu>
+                )
               ) : (
-                <RowMenu
-                  entries={foldEntries(
-                    section.key,
-                    section.label,
-                    section.collapsed,
-                  )}
-                  label={`More for ${section.label}`}
-                  size="heading"
+                <p
+                  id={headerId}
+                  data-flip={`head:${section.key}`}
+                  {...headerProps}
+                  className={cn("px-3 pb-1 text-muted-foreground", EYEBROW)}
                 >
-                  {sidebarHeading}
-                </RowMenu>
-              )
-            ) : (
-              <p
-                id={headerId}
-                data-flip={`head:${section.key}`}
-                {...headerProps}
-                className={cn("px-3 pb-1 text-muted-foreground", EYEBROW)}
-              >
-                {section.label}
-              </p>
-            )}
-            {rows.length === 0 ? null : kind === "direct" &&
-              section.key === "direct" ? (
-              <ul aria-label="Direct messages">{rows}</ul>
-            ) : (
-              <ul aria-labelledby={headerId}>{rows}</ul>
-            )}
-          </div>
-        );
-      })}
-      {arranged.emptiedByFilters && sidebar ? (
-        <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center text-caption text-muted-foreground">
-          <p>{NO_MATCHING_CHANNELS}</p>
-          <button
-            type="button"
-            onClick={sidebar.onClearFilters}
-            className="font-semibold text-foreground underline-offset-2 hover:underline"
-          >
-            {SHOW_ALL_CHANNELS_LABEL}
-          </button>
-        </div>
-      ) : null}
-      {hiddenDms.length > 0 ? (
-        <div data-reorder-none={reorder ? "" : undefined}>
-          <button
-            type="button"
-            data-flip="head:hidden"
-            onClick={() => setShowHidden((open) => !open)}
-            aria-expanded={showHidden}
-            aria-controls="channel-section:hidden"
-            className={cn(
-              "w-full px-3 pb-1 text-left text-muted-foreground hover:text-foreground",
-              EYEBROW,
-            )}
-          >
-            {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
-          </button>
-          {showHidden ? (
-            <ul
-              id="channel-section:hidden"
-              aria-label={HIDDEN_CONVERSATIONS_LABEL}
+                  {section.label}
+                </p>
+              )}
+              {rows.length === 0 ? null : kind === "direct" &&
+                section.key === "direct" ? (
+                <ul aria-label="Direct messages">{rows}</ul>
+              ) : (
+                <ul aria-labelledby={headerId}>{rows}</ul>
+              )}
+            </div>
+          );
+        })}
+        {arranged.emptiedByFilters && sidebar ? (
+          <div className="space-y-2 rounded-lg border border-border px-3 py-4 text-center text-caption text-muted-foreground">
+            <p>{NO_MATCHING_CHANNELS}</p>
+            <button
+              type="button"
+              onClick={sidebar.onClearFilters}
+              className="font-semibold text-foreground underline-offset-2 hover:underline"
             >
-              {hiddenDms.map((row) => renderRow(row))}
-            </ul>
-          ) : null}
-        </div>
+              {SHOW_ALL_CHANNELS_LABEL}
+            </button>
+          </div>
+        ) : null}
+        {hiddenDms.length > 0 ? (
+          <div data-reorder-none={reorder ? "" : undefined}>
+            <button
+              type="button"
+              data-flip="head:hidden"
+              onClick={() => setShowHidden((open) => !open)}
+              aria-expanded={showHidden}
+              aria-controls="channel-section:hidden"
+              className={cn(
+                "w-full px-3 pb-1 text-left text-muted-foreground hover:text-foreground",
+                EYEBROW,
+              )}
+            >
+              {`${HIDDEN_CONVERSATIONS_LABEL} (${hiddenDms.length})`}
+            </button>
+            {showHidden ? (
+              <ul
+                id="channel-section:hidden"
+                aria-label={HIDDEN_CONVERSATIONS_LABEL}
+              >
+                {hiddenDms.map((row) => renderRow(row))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {unreadJump.state.below && !dragging ? (
+        <UnreadJumpPill
+          direction="below"
+          side={unreadJump.state.below}
+          onJump={() => unreadJump.jump("below")}
+        />
       ) : null}
     </div>
   );

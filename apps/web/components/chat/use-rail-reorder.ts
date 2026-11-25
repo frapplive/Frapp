@@ -103,13 +103,20 @@ interface Press {
   rail: HTMLElement | null;
 }
 
-/** The nearest ancestor that scrolls vertically, for the edge autoscroll. */
-function scrollerOf(el: HTMLElement | null): HTMLElement | null {
+/**
+ * The nearest ancestor that scrolls vertically: for the edge autoscroll, one
+ * with something to scroll right now; for the New unreads pills (#6045),
+ * which watch it as the list grows, any that can (`overflowing: false`).
+ */
+export function scrollerOf(
+  el: HTMLElement | null,
+  { overflowing = true }: { overflowing?: boolean } = {},
+): HTMLElement | null {
   for (let node = el; node; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node);
     if (
       (overflowY === "auto" || overflowY === "scroll") &&
-      node.scrollHeight > node.clientHeight
+      (!overflowing || node.scrollHeight > node.clientHeight)
     ) {
       return node;
     }

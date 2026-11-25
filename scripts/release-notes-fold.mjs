@@ -4,9 +4,10 @@
 // how the What's new fold workflow uses this: that folder's README.
 //
 // Where a line goes: the newest entry when it is dated `--date` (default:
-// today, UTC) or later, after its last line, which the notes file's rule
-// allows ("a second release on the same day appends lines"); otherwise a new
-// entry dated `--date` at the top, under a plain title anyone may reword.
+// today in the notes' zone, `RELEASE_NOTE_TIME_ZONE`, not CI's UTC clock,
+// #6054) or later, after its last line, which the notes file's rule allows
+// ("a second release on the same day appends lines"); otherwise a new entry
+// dated `--date` at the top, under a plain title anyone may reword.
 // Lines fold in file-name order.
 //
 // Which list it joins is its folder: `web/` and `phone/` hold lines only true
@@ -38,6 +39,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   RELEASE_NOTE_PLACES,
+  releaseNoteDay,
   releaseNoteLineProblem,
 } from "../packages/validation/src/release-notes.ts";
 import { isInvokedDirectly } from "./ci/lib/invoked-directly.mjs";
@@ -305,9 +307,6 @@ export function foldLines(source, lines, date) {
   return source.slice(0, after) + entry + source.slice(after);
 }
 
-export function todayUtc(now = new Date()) {
-  return now.toISOString().slice(0, 10);
-}
 
 export function runCli(
   argv = process.argv.slice(2),
@@ -319,7 +318,7 @@ export function runCli(
   } = {},
 ) {
   const dateAt = argv.indexOf("--date");
-  const date = dateAt === -1 ? todayUtc(now) : argv[dateAt + 1];
+  const date = dateAt === -1 ? releaseNoteDay(now) : argv[dateAt + 1];
   const lines = readLines(dir);
   if (argv.includes("--check")) {
     log(
