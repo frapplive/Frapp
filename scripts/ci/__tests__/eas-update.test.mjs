@@ -242,18 +242,19 @@ test("the staging runtime moves with the app's own native source (#6024)", () =>
   assert.equal(withSource("class A {}\r\n").runtime, base.runtime, "line endings");
 });
 
-test("listNativeSources walks every native source dir, and reads none that is missing", () => {
-  const dirent = (name, dir) => ({ name, isDirectory: () => dir, isFile: () => !dir });
-  const tree = {
-    "/r/apps/mobile/targets": [dirent("notification-service", true)],
-    "/r/apps/mobile/targets/notification-service": [dirent("Info.plist", false), dirent("NotificationService.swift", false)],
-  };
-  const listed = listNativeSources({ root: "/r", readdir: (p) => tree[p], exists: (p) => p in tree });
-  assert.deepEqual(listed, [
+test("listNativeSources lists only what git tracks under the native source dirs", () => {
+  const { git, calls } = fakeGit({
+    "ls-files -z -- apps/mobile/targets": {
+      stdout: "apps/mobile/targets/notification-service/Info.plist\0apps/mobile/targets/notification-service/NotificationService.swift\0",
+    },
+  });
+  assert.deepEqual(listNativeSources({ git }), [
     "apps/mobile/targets/notification-service/Info.plist",
     "apps/mobile/targets/notification-service/NotificationService.swift",
   ]);
-  assert.deepEqual(listNativeSources({ root: "/r", readdir: () => assert.fail("read"), exists: () => false }), []);
+  assert.deepEqual(calls, ["ls-files -z -- apps/mobile/targets"]);
+  const failing = fakeGit({ "ls-files": { status: 128, stderr: "not a git repository" } });
+  assert.throws(() => listNativeSources({ git: failing.git }), /not a git repository/);
 });
 
 test("the staging runtime refuses a tree it can't read natives from", () => {

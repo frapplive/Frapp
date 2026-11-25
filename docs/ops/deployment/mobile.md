@@ -724,7 +724,8 @@ traps a bare `eas update` falls into (eas-cli 24.8.0 source, read 2026-11-05, #3
   changed since one of those builds, the update calls a module the binary lacks, and the app
   crashes at launch. For `production`, the guard reads every store build of the current
   `expo.version` from `apps/mobile/store/shipped-builds.json`. It refuses unless `app.json`,
-  `app.config.js` and every native package's lockfile version match that build's commit. When it
+  `app.config.js`, the native source under `apps/mobile/targets/` and every native package's
+  lockfile version match that build's commit. When it
   refuses, the fix is the "Native changes" rule in
   [`spec/environments/README.md` § Mobile (EAS)](../../../spec/environments/README.md#mobile-eas):
   bump `expo.version` and ship a store build (§ 6.6). The new version starts a runtime that the

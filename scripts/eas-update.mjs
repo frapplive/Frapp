@@ -371,20 +371,18 @@ export function stagingRuntimeVersion({
   return { runtime: `${version}-${hash.digest("hex").slice(0, 12)}` };
 }
 
-/** Every file under {@link NATIVE_SOURCE_DIRS}, as repo-relative paths; a missing dir has none. */
-export function listNativeSources({ root = ROOT, readdir = readdirSync, exists = existsSync } = {}) {
-  const files = [];
-  const walk = (dir) => {
-    for (const entry of readdir(path.join(root, dir), { withFileTypes: true })) {
-      const child = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) walk(child);
-      else if (entry.isFile()) files.push(child);
-    }
-  };
-  for (const dir of NATIVE_SOURCE_DIRS) {
-    if (exists(path.join(root, dir))) walk(dir);
+/**
+ * Every tracked file under {@link NATIVE_SOURCE_DIRS}, as repo-relative paths. Tracked only, the
+ * way `compareNativeInputs` sees them through `git diff`: an untracked or ignored file (a Finder
+ * `.DS_Store`, an editor's swap file) would otherwise move a laptop's hash away from the one CI
+ * computed for the binary built from the same commit, and its update would reach no phone.
+ */
+export function listNativeSources({ git = gitIn(ROOT) } = {}) {
+  const result = git(["ls-files", "-z", "--", ...NATIVE_SOURCE_DIRS]);
+  if (result.status !== 0) {
+    throw new Error(`git ls-files ${NATIVE_SOURCE_DIRS.join(" ")} failed: ${result.stderr.trim()}`);
   }
-  return files;
+  return result.stdout.split("\0").filter(Boolean);
 }
 
 /** A git runner in `dir` that never throws: `(args) => { status, stdout, stderr }`. */

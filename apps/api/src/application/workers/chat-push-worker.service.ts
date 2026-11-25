@@ -164,26 +164,34 @@ interface PushSender {
 }
 
 /**
+ * The name a push gives the conversation it belongs to, or `null` for one it
+ * names by the sender alone: `#<name>` for a channel, announcements included,
+ * a group DM's own name, and nothing for a DM or an unnamed group DM. One home
+ * for the title's channel half and the conversation the phone draws (#6024),
+ * so the two can't name it differently.
+ */
+function conversationName(
+  channel: Pick<CachedChannelRow, 'type' | 'name'>,
+): string | null {
+  if (isDirectChannel(channel)) {
+    return readableChannelName(channel).channelName ?? null;
+  }
+  return `#${channel.name}`;
+}
+
+/**
  * Who a chat push is from and what conversation it belongs to, for the phone
  * to draw it as a message from that person (#6024, `PushPayload.communication`).
- * A DM is one-to-one and carries no group name. A channel, announcements
- * included, is named `#<name>` the way its title names it; a group DM by its
- * own name, and an unnamed one by none, so the phone draws it like a DM from
- * the sender, as its title already reads.
+ * A conversation with a name ({@link conversationName}) is a group; one
+ * without, a DM or an unnamed group DM, is drawn like a DM from the sender, as
+ * its title already reads.
  */
 function pushCommunication(
   channel: Pick<CachedChannelRow, 'type' | 'name'>,
   senderId: string,
   sender: PushSender,
 ): PushCommunication {
-  const groupName =
-    channel.type === 'DM'
-      ? undefined
-      : channel.type === 'GROUP_DM'
-        ? readableChannelName(channel).channelName
-        : channel.name
-          ? `#${channel.name}`
-          : undefined;
+  const groupName = conversationName(channel);
   return {
     senderId,
     senderName: sender.name,
@@ -1168,16 +1176,16 @@ export class ChatPushWorkerService
         ? `Announcement from ${senderName}`
         : 'New Announcement';
     }
+    const conversation = conversationName(channel);
     if (isDirectChannel(channel)) {
-      const groupName = readableChannelName(channel).channelName ?? null;
       if (senderName) {
-        return groupName ? `${senderName} in ${groupName}` : senderName;
+        return conversation ? `${senderName} in ${conversation}` : senderName;
       }
-      return groupName ?? 'New Message';
+      return conversation ?? 'New Message';
     }
     return senderName
-      ? `${senderName} in #${channel.name}`
-      : `New message in #${channel.name}`;
+      ? `${senderName} in ${conversation}`
+      : `New message in ${conversation}`;
   }
 
   // ── Internal test helpers ─────────────────────────────────────────────
