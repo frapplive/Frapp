@@ -47,7 +47,7 @@ vi.mock("@/lib/hooks/use-toast", () => ({
 
 const { RushNotesAccess } = await import("./rush-module-settings");
 const { RushStageEditor, stagesBody } = await import("./rush-stage-editor");
-const { RushStaleDays } = await import("./rush-stale-days");
+const { RushStaleDaysRow } = await import("./rush-stale-days");
 
 const stage = (key: string, label: string, category: string, position = 0) => ({
   id: `s-${key}`,
@@ -373,7 +373,11 @@ describe("the stale days (#5934)", () => {
   beforeEach(() => saveSettings.mockReset());
 
   it("reads as a sentence for a role that can't change it", () => {
-    render(<RushStaleDays staleDays={7} canEdit={false} />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit={false} />
+      </ul>,
+    );
     expect(
       screen.getByText("Needs follow-up after 7 days without a logged contact"),
     ).toBeInTheDocument();
@@ -382,7 +386,11 @@ describe("the stale days (#5934)", () => {
 
   it("saves a new number on Enter for rush:manage", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "10{Enter}");
@@ -394,7 +402,11 @@ describe("the stale days (#5934)", () => {
 
   it("refuses a number outside 1 to 60 and sends nothing", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "90{Enter}");
@@ -406,7 +418,11 @@ describe("the stale days (#5934)", () => {
 
   it("puts the old number back on Escape", async () => {
     const user = userEvent.setup();
-    render(<RushStaleDays staleDays={7} canEdit />);
+    render(
+      <ul>
+        <RushStaleDaysRow staleDays={7} canEdit />
+      </ul>,
+    );
     const field = screen.getByRole("textbox", { name: /Days without/ });
     await user.clear(field);
     await user.type(field, "12{Escape}");

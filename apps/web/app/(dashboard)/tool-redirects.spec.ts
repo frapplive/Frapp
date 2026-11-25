@@ -21,12 +21,12 @@ const open = (route: Route, params: Record<string, string | string[]> = {}) =>
 // The officer tools open inside Chapter settings (#3837); their old routes
 // only redirect, carrying what the old link carried.
 describe("old officer tool routes", () => {
-  it("sends /chat-admin to the Chat page, keeping a channel", async () => {
+  it("sends /chat-admin to Chat admin, keeping a channel", async () => {
     await expect(open(ChatAdmin)).rejects.toThrow(
-      "redirect:/settings?tab=chat",
+      "redirect:/settings?tab=chat&page=chat-admin",
     );
     await expect(open(ChatAdmin, { channel: "c-1" })).rejects.toThrow(
-      "redirect:/settings?tab=chat&channel=c-1",
+      "redirect:/settings?tab=chat&page=chat-admin&channel=c-1",
     );
   });
 
@@ -41,6 +41,6 @@ describe("old officer tool routes", () => {
   it("sends /reports to the Reports page, and ignores an old tab", async () => {
     await expect(
       open(Reports, { tab: "roles", extra: ["a", "b"] }),
-    ).rejects.toThrow("redirect:/settings?tab=reports");
+    ).rejects.toThrow("redirect:/settings?tab=reports&page=reports");
   });
 });

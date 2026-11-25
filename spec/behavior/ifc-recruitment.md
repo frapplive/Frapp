@@ -473,7 +473,7 @@ All of it needs `rush:view`, except vote counts and rating averages, which need 
 
 **Built in #5973:** the recruitment contacts Group, the card channel, the new-member role, and how long a bid lasts until councils land ([`rush.md` § Settings](rush.md#settings)). The interest form's own settings come with that slice.
 
-Every chapter-side setting in this design goes on the **Recruitment module page** in Chapter settings, the one-page-per-module layout from #4073 (switch, rules that save, who can). Nothing here adds a second recruitment settings screen. The page holds:
+Every chapter-side setting in this design goes on the **Recruitment module page** in Chapter settings, the one-page-per-module layout from #4073 (switch, rules that save, who can), in the settings-rows shape since #6030: a setting typed in place is a row, and a list of its own (the stages, the tags) is a row that opens its own page with a way back. Nothing here adds a second recruitment settings screen. The page holds:
 
 - the interest form: open or closed, blurb, questions, QR labels, replace form;
 - stages and their categories, tags, and the stale-days setting;

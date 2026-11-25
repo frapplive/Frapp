@@ -833,12 +833,15 @@ function ChatAdminBody({
             <div className="@container">
               <section aria-labelledby="ca-edit-label" className="space-y-6">
                 {/*
-                  Drawn in place of the Chat page of Chapter settings, so it
+                  Drawn in place of Chat admin in Chapter settings, so it
                   heads itself the way that page does, with the way back to
                   it above (`SettingsSubpage`'s shape, plus the badges).
                 */}
                 <header className="space-y-1 border-b border-border pb-6">
-                  <SettingsBackLink href={CHAT_SETTINGS_PATH} label="Chat" />
+                  <SettingsBackLink
+                    href={CHAT_SETTINGS_PATH}
+                    label="Chat admin"
+                  />
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2
                       id="ca-edit-label"
@@ -1135,7 +1138,7 @@ function ChatAdminBody({
               <Button asChild variant="secondary" size="sm" className="gap-1.5">
                 <Link href={CHAT_SETTINGS_PATH}>
                   <ArrowLeft className="h-4 w-4" />
-                  All chat settings
+                  Chat admin
                 </Link>
               </Button>
             </div>

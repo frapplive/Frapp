@@ -776,7 +776,7 @@ describe("MemberDetailSheet Adjust points (#5950)", () => {
     renderProfile(baseMember, { points: 142 });
     expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute(
       "href",
-      "/settings?tab=points&member=u1",
+      "/settings?tab=points&page=points-ledger&member=u1",
     );
   });
 

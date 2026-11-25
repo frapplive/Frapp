@@ -8,7 +8,6 @@ import {
   useSaveRushSettings,
   type RushSettingsPatch,
 } from "@repo/hooks";
-import { ProfileSection } from "@/components/profile/profile-section";
 import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   Select,
@@ -124,160 +123,170 @@ export function RushRecruitmentPicks({
 
   return (
     <>
-      <ProfileSection id="settings-module-rush-bids" title="Bids">
-        <SettingsGroup>
-          {canEdit ? (
-            <RushDaysRow
-              days={settings.bid_expiry_days}
-              min={RUSH_BID_EXPIRY_DAYS_MIN}
-              max={RUSH_BID_EXPIRY_DAYS_MAX}
-              label="Bids expire after"
-              description="Unless the prospect answers first"
-              ariaLabel="Days a bid stays open before it expires"
-              failTitle="Couldn't save how long bids last"
-              onSave={(days, done) =>
-                save.mutate({ bid_expiry_days: days }, done)
+      <SettingsGroup
+        heading="Joining"
+        footnote="A prospect whose acceptance is confirmed is invited to join with this role."
+      >
+        <SettingsRow
+          label="New member role"
+          description={
+            noRole ? (
+              <span className="text-warning">
+                Your New members tier has no role. Pick one.
+              </span>
+            ) : (
+              (readOnly ?? undefined)
+            )
+          }
+          control={
+            <Select
+              value={roleValue}
+              disabled={locked || !rolesQuery.isSuccess}
+              onValueChange={(next) =>
+                pick(
+                  { new_member_role_id: next === NONE ? null : next },
+                  "the new member role",
+                )
               }
-            />
-          ) : (
-            <SettingsRow
-              label={`Bids expire after ${settings.bid_expiry_days} ${
-                settings.bid_expiry_days === 1 ? "day" : "days"
-              }`}
-              description="Your role can't change this."
-              control={null}
-            />
-          )}
-        </SettingsGroup>
-      </ProfileSection>
-
-      <ProfileSection id="settings-module-rush-joining" title="Joining">
-        <SettingsGroup footnote="A prospect whose acceptance is confirmed is invited to join with this role.">
-          <SettingsRow
-            label="New member role"
-            description={
-              noRole ? (
-                <span className="text-warning">
-                  Your New members tier has no role. Pick one.
-                </span>
-              ) : (
-                (readOnly ?? undefined)
-              )
-            }
-            control={
-              <Select
-                value={roleValue}
-                disabled={locked || !rolesQuery.isSuccess}
-                onValueChange={(next) =>
-                  pick(
-                    { new_member_role_id: next === NONE ? null : next },
-                    "the new member role",
-                  )
-                }
-              >
-                <SelectTrigger className={TRIGGER} aria-label="New member role">
-                  <SelectValue
-                    placeholder={
-                      rolesQuery.isError ? "Couldn't load roles" : "Pick a role"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {defaultRole ? (
-                    <SelectItem value={NONE}>
-                      {`${defaultRole.name} (default)`}
-                    </SelectItem>
-                  ) : null}
-                  {roles
-                    .filter((role) => role.id !== defaultRole?.id)
-                    .map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-        </SettingsGroup>
-      </ProfileSection>
-
-      <ProfileSection id="settings-module-rush-sign-ups" title="Sign-ups">
-        <SettingsGroup footnote="Used once your interest form is open. The card shows a name and stage, never contact details.">
-          <SettingsRow
-            label="Recruitment contacts"
-            description={
-              skipped.length > 0 ? (
-                <span className="text-warning">
-                  {`${namesList(skipped)} can't open recruitment, so ${
-                    skipped.length === 1 ? "isn't" : "aren't"
-                  } told.`}
-                </span>
-              ) : (
-                (readOnly ??
-                "Told about each sign-up, with recruitment's managers")
-              )
-            }
-            control={
-              <Select
-                value={groupKnown ? (settings.contacts_group_id ?? NONE) : ""}
-                disabled={locked || !groupsQuery.isSuccess}
-                onValueChange={(next) =>
-                  pick(
-                    { contacts_group_id: next === NONE ? null : next },
-                    "the recruitment contacts",
-                  )
-                }
-              >
-                <SelectTrigger
-                  className={TRIGGER}
-                  aria-label="Recruitment contacts"
-                >
-                  <SelectValue placeholder="Pick a Group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>No Group</SelectItem>
-                  {groups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
+            >
+              <SelectTrigger className={TRIGGER} aria-label="New member role">
+                <SelectValue
+                  placeholder={
+                    rolesQuery.isError ? "Couldn't load roles" : "Pick a role"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {defaultRole ? (
+                  <SelectItem value={NONE}>
+                    {`${defaultRole.name} (default)`}
+                  </SelectItem>
+                ) : null}
+                {roles
+                  .filter((role) => role.id !== defaultRole?.id)
+                  .map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-          <SettingsRow
-            label="Card channel"
-            description={
-              readOnly ?? "Only a channel everyone in it can open recruitment"
-            }
-            control={
-              <Select
-                value={channelKnown ? (settings.card_channel_id ?? NONE) : ""}
-                disabled={locked || !channelsQuery.isSuccess}
-                onValueChange={(next) =>
-                  pick(
-                    { card_channel_id: next === NONE ? null : next },
-                    "the card channel",
-                  )
-                }
+              </SelectContent>
+            </Select>
+          }
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        heading="Sign-ups"
+        footnote="Used once your interest form is open. The card shows a name and stage, never contact details."
+      >
+        <SettingsRow
+          label="Recruitment contacts"
+          description={
+            skipped.length > 0 ? (
+              <span className="text-warning">
+                {`${namesList(skipped)} can't open recruitment, so ${
+                  skipped.length === 1 ? "isn't" : "aren't"
+                } told.`}
+              </span>
+            ) : (
+              (readOnly ??
+              "Told about each sign-up, with recruitment's managers")
+            )
+          }
+          control={
+            <Select
+              value={groupKnown ? (settings.contacts_group_id ?? NONE) : ""}
+              disabled={locked || !groupsQuery.isSuccess}
+              onValueChange={(next) =>
+                pick(
+                  { contacts_group_id: next === NONE ? null : next },
+                  "the recruitment contacts",
+                )
+              }
+            >
+              <SelectTrigger
+                className={TRIGGER}
+                aria-label="Recruitment contacts"
               >
-                <SelectTrigger className={TRIGGER} aria-label="Card channel">
-                  <SelectValue placeholder="Pick a channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>No card</SelectItem>
-                  {channels.map((channel) => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      {`#${channel.name}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-        </SettingsGroup>
-      </ProfileSection>
+                <SelectValue placeholder="Pick a Group" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>No Group</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+        <SettingsRow
+          label="Card channel"
+          description={
+            readOnly ?? "Only a channel everyone in it can open recruitment"
+          }
+          control={
+            <Select
+              value={channelKnown ? (settings.card_channel_id ?? NONE) : ""}
+              disabled={locked || !channelsQuery.isSuccess}
+              onValueChange={(next) =>
+                pick(
+                  { card_channel_id: next === NONE ? null : next },
+                  "the card channel",
+                )
+              }
+            >
+              <SelectTrigger className={TRIGGER} aria-label="Card channel">
+                <SelectValue placeholder="Pick a channel" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>No card</SelectItem>
+                {channels.map((channel) => (
+                  <SelectItem key={channel.id} value={channel.id}>
+                    {`#${channel.name}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+      </SettingsGroup>
     </>
+  );
+}
+
+/**
+ * Recruitment → Rules' bid row (Winston, 2026-11-24): how many days a bid
+ * stays open unless the prospect answers first. A chapter setting until
+ * councils land; `rush:manage` changes it.
+ */
+export function RushBidExpiryRow({ canEdit }: { canEdit: boolean }) {
+  const settingsQuery = useRushSettings();
+  const save = useSaveRushSettings();
+  const settings = settingsQuery.data;
+  if (!settings) return null;
+  if (!canEdit) {
+    return (
+      <SettingsRow
+        label={`Bids expire after ${settings.bid_expiry_days} ${
+          settings.bid_expiry_days === 1 ? "day" : "days"
+        }`}
+        description="Your role can't change this."
+        control={null}
+      />
+    );
+  }
+  return (
+    <RushDaysRow
+      days={settings.bid_expiry_days}
+      min={RUSH_BID_EXPIRY_DAYS_MIN}
+      max={RUSH_BID_EXPIRY_DAYS_MAX}
+      label="Bids expire after"
+      description="Unless the prospect answers first"
+      ariaLabel="Days a bid stays open before it expires"
+      failTitle="Couldn't save how long bids last"
+      onSave={(days, done) => save.mutate({ bid_expiry_days: days }, done)}
+    />
   );
 }

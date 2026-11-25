@@ -48,20 +48,11 @@ export type SettingsTool = {
   /** The module page in Chapter settings that holds it (`?tab=`). */
   page: string;
   /**
-   * The tool is drawn on its module page itself (Study zones' zone list, the
-   * Reports form, Chat's channels and report queue, the points ledger, the
-   * chapter's service history), so `href` is that page
-   * and the page lists no row for it. A tool without it (Discord import) is a
-   * row on its module page that opens it in place of the page, with a way
-   * back, still inside Chapter settings.
+   * What the tool's row on its module page says, where its own name would
+   * repeat the page's (Study zones' Zones). The row opens the tool in place of
+   * the page (`?page=<id>`, #6030), with a way back.
    */
-  embedded?: boolean;
-  /**
-   * The embedded body is a list that keeps growing (the points ledger, the
-   * service history), so it is drawn last on its page, under the rules and
-   * who-can, which stay a screen from the top however long it gets.
-   */
-  growsLong?: boolean;
+  rowLabel?: string;
 };
 
 export const SETTINGS_TOOLS: readonly SettingsTool[] = [
@@ -73,7 +64,6 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     href: CHAT_SETTINGS_PATH,
     permission: "channels:manage",
     page: "chat",
-    embedded: true,
   },
   {
     // `channels:manage`, like Chat admin: an import creates channels, writes
@@ -96,8 +86,6 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     permission: "points:view_all",
     page: "points",
     module: "points",
-    embedded: true,
-    growsLong: true,
   },
   {
     // The chapter's reviewed service entries (#5950). The Service hours
@@ -110,8 +98,6 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     permission: "service:approve",
     page: "hours",
     module: "hours",
-    embedded: true,
-    growsLong: true,
   },
   {
     id: "study-zones",
@@ -121,7 +107,7 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     permission: "geofences:manage",
     page: "geofences",
     module: "geofences",
-    embedded: true,
+    rowLabel: "Zones",
   },
   {
     id: "reports",
@@ -131,7 +117,7 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     permission: "reports:export",
     page: "reports",
     module: "reports",
-    embedded: true,
+    rowLabel: "Export a report",
   },
 ];
 

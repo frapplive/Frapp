@@ -87,7 +87,7 @@ Stage, fit rating and bid status are three separate things, because a chapter ac
 
 - **Reading notes needs `rush:read_notes`; writing them needs `rush:notes`.** #4070's backfill gave `rush:notes` to every role that held `members:view`, New Member and Alumni included, so reading needed a key of its own to keep notes to a committee (Paul, 2026-11-11).
   - **New chapters:** the top two starting tiers (Exec board, Officers and chairs) hold `rush:read_notes`, as officer defaults (#4068 decision 9).
-  - **Existing chapters:** nobody holds it until an officer turns it on. The Recruitment settings page says "Nobody can read recruitment notes yet" and offers to grant it to the chapter's top two tiers, which needs `roles:manage`; the page's Who can block grants it to anyone else.
+  - **Existing chapters:** nobody holds it until an officer turns it on. The Recruitment settings page's **Read recruitment notes** row says **Only the President**, and the page it opens says "Nobody can read recruitment notes yet" and offers to grant it to the chapter's top two tiers, which needs `roles:manage`; the same page's switches and Add a role grant it to anyone else (#6030).
   - A member who can write but not read sees the box to write a note and who can read it, and not the notes.
 - **Nobody reads notes about themselves.** On a prospect linked to the viewer's own account, the notes read is empty and writing, editing or deleting a note is refused, whatever keys they hold.
 - **The author edits or deletes their own note; `rush:manage` deletes any.**

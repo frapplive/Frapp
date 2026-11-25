@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Columns3, Tag } from "lucide-react";
+import { countSummary } from "@repo/hooks/module-settings";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   rushPipelineAccess,
   useMyPermissions,
@@ -13,8 +16,11 @@ import { Button } from "@/components/ui/button";
 import { useTierPermissionToggle } from "@/components/roles/use-role-permission-toggle";
 import { useRolesData } from "@/components/roles/use-roles-data";
 import { RushStageEditor } from "./rush-stage-editor";
-import { RushRecruitmentPicks } from "./rush-recruitment-picks";
-import { RushStaleDays } from "./rush-stale-days";
+import {
+  RushBidExpiryRow,
+  RushRecruitmentPicks,
+} from "./rush-recruitment-picks";
+import { RushStaleDaysRow } from "./rush-stale-days";
 import { RushTagList } from "./rush-tag-list";
 
 /** The key that lets a role read recruitment notes. */
@@ -22,56 +28,93 @@ export const RUSH_READ_NOTES = "rush:read_notes";
 
 /**
  * The pipeline's settings on the Recruitment module page (#5924,
- * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live):
- * its stages, its tags, how many days without a contact a prospect needs a
- * follow-up after (#5934), the role an accepted prospect joins with and who
- * hears about sign-ups (#5973), and turning notes on for a chapter where
- * nobody can read them yet. One page, no second recruitment settings screen. The
- * stages and tags read through the pipeline's routes, so they show only to a
- * viewer who can open the pipeline while the module is on; `rush:manage`
- * edits them.
+ * `spec/behavior/ifc-recruitment.md` § Where the chapter's settings live), in
+ * the settings-rows shape (#6030): a Rules group with the two day counts typed
+ * in place (follow-ups #5934, bids) and a row each for the stages and the
+ * tags, which open their own pages; then who an accepted prospect joins as
+ * and who hears about sign-ups (#5973). One page, no second recruitment
+ * settings screen. The stages and tags read through the pipeline's routes, so
+ * they show only to a viewer who can open the pipeline while the module is
+ * on; `rush:manage` edits them.
  */
 export function RushModuleSettings({
   moduleOn,
-  canEditRoles,
   canSeeWhoCan,
+  pageHref,
 }: {
   moduleOn: boolean;
-  /** `roles:manage`, the guard on the tier write. */
-  canEditRoles: boolean;
   /** `members:view`, which reading the chapter's roles needs. */
   canSeeWhoCan: boolean;
+  /** Where one of the page's own pages is (`?page=`). */
+  pageHref: (page: string) => string;
 }) {
   const permissions = useMyPermissions().data?.permissions;
   const access = rushPipelineAccess(permissions);
   const pipeline = useRushPipeline({ enabled: moduleOn && access.view });
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {moduleOn && access.view ? (
         pipeline.data ? (
-          <>
-            <RushStageEditor
-              stages={pipeline.data.stages}
-              canEdit={access.manage}
-            />
-            <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />
-            <RushStaleDays
+          <SettingsGroup heading="Rules">
+            <RushStaleDaysRow
               staleDays={pipeline.data.stale_days}
               canEdit={access.manage}
             />
-            <RushRecruitmentPicks
-              canEdit={access.manage}
-              canSeeRoles={canSeeWhoCan}
+            <RushBidExpiryRow canEdit={access.manage} />
+            <SettingsRow
+              id="module-row-stages"
+              icon={Columns3}
+              label="Stages"
+              value={countSummary(
+                pipeline.data.stages.filter((stage) => !stage.hidden).length,
+                "stage",
+                "stages",
+              )}
+              href={pageHref("stages")}
             />
-          </>
+            <SettingsRow
+              id="module-row-tags"
+              icon={Tag}
+              label="Tags"
+              value={countSummary(pipeline.data.tags.length, "tag", "tags")}
+              href={pageHref("tags")}
+            />
+          </SettingsGroup>
         ) : pipeline.isError ? (
           <InlineNote>Couldn&apos;t load the stages and tags.</InlineNote>
         ) : null
       ) : null}
-      {canSeeWhoCan ? <RushNotesAccess canEditRoles={canEditRoles} /> : null}
+      <RushRecruitmentPicks
+        canEdit={access.manage}
+        canSeeRoles={canSeeWhoCan}
+      />
     </div>
   );
+}
+
+/** Recruitment → Stages, the page its row opens. */
+export function RushStagesPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  const pipeline = useRushPipeline({ enabled: access.view });
+  if (pipeline.isError) {
+    return <InlineNote>Couldn&apos;t load the stages.</InlineNote>;
+  }
+  if (!pipeline.data) return null;
+  return (
+    <RushStageEditor stages={pipeline.data.stages} canEdit={access.manage} />
+  );
+}
+
+/** Recruitment → Tags, the page its row opens. */
+export function RushTagsPage() {
+  const access = rushPipelineAccess(useMyPermissions().data?.permissions);
+  const pipeline = useRushPipeline({ enabled: access.view });
+  if (pipeline.isError) {
+    return <InlineNote>Couldn&apos;t load the tags.</InlineNote>;
+  }
+  if (!pipeline.data) return null;
+  return <RushTagList tags={pipeline.data.tags} canEdit={access.manage} />;
 }
 
 /**

@@ -43,12 +43,15 @@ export function SettingsSubpage({
   backHref,
   backLabel,
   title,
+  description,
   children,
   shown = true,
 }: {
   backHref: string;
   backLabel: string;
   title: string;
+  /** One muted line under the title, when the title alone can't say it. */
+  description?: ReactNode;
   children: ReactNode;
   /** False while the page stays mounted but hidden, keeping its drafts. */
   shown?: boolean;
@@ -75,6 +78,9 @@ export function SettingsSubpage({
         >
           {title}
         </h2>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
       </header>
       <SectionTitledByPage.Provider value={true}>
         {children}
