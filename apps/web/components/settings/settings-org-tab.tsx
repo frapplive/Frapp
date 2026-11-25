@@ -259,9 +259,7 @@ export function SettingsOrgTab({
 
   // Says what the role can't do, never which permission key it lacks.
   const readOnlyHint = (
-    <p className="text-xs text-muted-foreground">
-      {CHAPTER_TAB_COPY.readOnly}
-    </p>
+    <p className="text-xs text-muted-foreground">{CHAPTER_TAB_COPY.readOnly}</p>
   );
   const manageHint = canManage ? null : readOnlyHint;
   const profileHint = canEditProfile ? null : readOnlyHint;

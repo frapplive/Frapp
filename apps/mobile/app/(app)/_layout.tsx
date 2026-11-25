@@ -183,6 +183,24 @@ export default function AppLayout() {
         name="chapter-settings"
         options={{ title: SCREEN_TITLES["chapter-settings"] }}
       />
+      {/* The pages Chapter settings' Chapter rows push (#6027), as web's
+          Chapter tab opens them behind `?page=`. */}
+      <Stack.Screen
+        name="chapter-mark"
+        options={{ title: SCREEN_TITLES["chapter-mark"] }}
+      />
+      <Stack.Screen
+        name="chapter-identity"
+        options={{ title: SCREEN_TITLES["chapter-identity"] }}
+      />
+      <Stack.Screen
+        name="chapter-type"
+        options={{ title: SCREEN_TITLES["chapter-type"] }}
+      />
+      <Stack.Screen
+        name="chapter-vocabulary"
+        options={{ title: SCREEN_TITLES["chapter-vocabulary"] }}
+      />
       {/* The record of officer changes (Paul, 2026-11-21), from Chapter settings. */}
       <Stack.Screen
         name="chapter-logs"

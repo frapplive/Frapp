@@ -40,7 +40,14 @@ import {
 export type SettingsArea = "chapter" | "personal";
 
 export type SettingPhoneScreen =
-  "/chapter-settings" | "/chapter-roles" | "/chapter-logs" | "/preferences";
+  | "/chapter-settings"
+  | "/chapter-mark"
+  | "/chapter-identity"
+  | "/chapter-type"
+  | "/chapter-vocabulary"
+  | "/chapter-roles"
+  | "/chapter-logs"
+  | "/preferences";
 
 export type SettingEntry = {
   /** Stable; it is the `?setting=` value a link carries. */
@@ -175,6 +182,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["name", "rename", "organization name", "fraternity", "sorority"],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-name" },
+    phone: { screen: "/chapter-settings", anchor: "chapter-name" },
   },
   {
     id: "university",
@@ -184,6 +192,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["school", "college", "campus"],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-university" },
+    phone: { screen: "/chapter-settings", anchor: "university" },
   },
   {
     id: "donation-link",
@@ -201,6 +210,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-donation" },
+    phone: { screen: "/chapter-settings", anchor: "donation-link" },
   },
   {
     id: "logo",
@@ -214,6 +224,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-chapter-mark",
       params: { page: "mark" },
     },
+    phone: { screen: "/chapter-mark", anchor: "logo" },
   },
   {
     id: "short-name",
@@ -227,6 +238,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "chapter-short-name",
       params: { page: "mark" },
     },
+    phone: { screen: "/chapter-mark", anchor: "short-name" },
   },
   {
     id: "accent",
@@ -257,6 +269,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["letters", "symbols"],
     requires: CONFIG,
     web: { page: "org", anchor: "greek-letters", params: { page: "identity" } },
+    phone: { screen: "/chapter-identity", anchor: "greek-letters" },
   },
   {
     id: "designation",
@@ -266,6 +279,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["chapter letters", "which chapter"],
     requires: CONFIG,
     web: { page: "org", anchor: "designation", params: { page: "identity" } },
+    phone: { screen: "/chapter-identity", anchor: "designation" },
   },
   {
     id: "school-short",
@@ -275,6 +289,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["school abbreviation", "university short name"],
     requires: CONFIG,
     web: { page: "org", anchor: "school-short", params: { page: "identity" } },
+    phone: { screen: "/chapter-identity", anchor: "school-short" },
   },
   {
     id: "founded-year",
@@ -284,6 +299,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["founding", "founded", "established", "charter", "since"],
     requires: CONFIG,
     web: { page: "org", anchor: "founded-year", params: { page: "identity" } },
+    phone: { screen: "/chapter-identity", anchor: "founded-year" },
   },
   {
     id: "organization-type",
@@ -307,6 +323,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-archetype",
       params: { page: "type" },
     },
+    phone: { screen: "/chapter-settings", anchor: "organization-type" },
   },
   {
     id: "vocabulary",
@@ -320,6 +337,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-vocabulary",
       params: { page: "vocabulary" },
     },
+    phone: { screen: "/chapter-settings", anchor: "vocabulary" },
   },
   {
     id: "vocab-recruitment",
@@ -333,6 +351,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "vocab-recruitment",
       params: { page: "vocabulary" },
     },
+    phone: { screen: "/chapter-vocabulary", anchor: "vocab-recruitment" },
   },
   {
     id: "vocab-pledge",
@@ -353,6 +372,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "vocab-pledge",
       params: { page: "vocabulary" },
     },
+    phone: { screen: "/chapter-vocabulary", anchor: "vocab-pledge" },
   },
   {
     id: "vocab-class",
@@ -362,6 +382,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["pledge class", "line", "class", "cohort", "vocabulary"],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-class", params: { page: "vocabulary" } },
+    phone: { screen: "/chapter-vocabulary", anchor: "vocab-class" },
   },
   {
     id: "vocab-order",
@@ -378,6 +399,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-order", params: { page: "vocabulary" } },
+    phone: { screen: "/chapter-vocabulary", anchor: "vocab-order" },
   },
   {
     id: "vocab-tier",
@@ -387,6 +409,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["tier", "rank", "officer level", "vocabulary"],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-tier", params: { page: "vocabulary" } },
+    phone: { screen: "/chapter-vocabulary", anchor: "vocab-tier" },
   },
   {
     id: "birthday-posts",
@@ -396,6 +419,7 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["birthday", "birthdays", "celebrate", "birthday channel"],
     requires: CONFIG,
     web: { page: "org", anchor: "birthday-channel" },
+    phone: { screen: "/chapter-settings", anchor: "birthday-posts" },
   },
   {
     id: "member-names",

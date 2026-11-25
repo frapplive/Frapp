@@ -146,7 +146,11 @@ describe("Chapter mark", () => {
 
   it("names what the mark draws", () => {
     expect(
-      chapterMarkValue({ logoUrl: "https://x/logo.png", branding: {}, name: "A" }),
+      chapterMarkValue({
+        logoUrl: "https://x/logo.png",
+        branding: {},
+        name: "A",
+      }),
     ).toBe("Logo");
     expect(
       chapterMarkValue({
@@ -253,7 +257,11 @@ describe("Vocabulary", () => {
   it("sends every word trimmed, a cleared one as empty", () => {
     const draft = chapterVocabularyDraftOf({ recruitment: "Rush" });
     expect(
-      chapterVocabularyPatch({ ...draft, recruitment: " ", pledge: " Pledge " }),
+      chapterVocabularyPatch({
+        ...draft,
+        recruitment: " ",
+        pledge: " Pledge ",
+      }),
     ).toEqual({
       vocabulary: {
         recruitment: "",

@@ -210,8 +210,7 @@ export function chapterIdentityDraftOf(
     greekLetters: branding.greek_letters ?? "",
     designation: branding.designation ?? "",
     schoolShort: branding.school_short ?? "",
-    foundedYear:
-      branding.founded_at != null ? String(branding.founded_at) : "",
+    foundedYear: branding.founded_at != null ? String(branding.founded_at) : "",
   };
 }
 
@@ -307,11 +306,7 @@ export function chapterArchetypeSwitchPatch(
 // ── Vocabulary ──────────────────────────────────────────────────────────
 
 export type ChapterVocabularyKey =
-  | "recruitment"
-  | "pledge"
-  | "class"
-  | "order"
-  | "tier";
+  "recruitment" | "pledge" | "class" | "order" | "tier";
 
 /** The five words, in the order both apps draw them. */
 export const CHAPTER_VOCABULARY_FIELDS: readonly {
@@ -495,8 +490,7 @@ export const CHAPTER_TAB_COPY = {
       : "Whether the letters show is set under Chapter mark. Saving writes an entry to the chapter audit log.",
   typeHint: (archetype: Archetype) =>
     `${archetype.description} Sets defaults for modules and vocabulary.`,
-  typeConfirmTitle: (archetype: Archetype) =>
-    `Switch to ${archetype.label}?`,
+  typeConfirmTitle: (archetype: Archetype) => `Switch to ${archetype.label}?`,
   typeConfirmBody: (archetype: Archetype) =>
     `This resets modules and vocabulary to ${archetype.short} defaults. Your chapter identity, branding, and custom fields are kept. An entry is written to the audit log.`,
   typeConfirmAction: "Switch archetype",

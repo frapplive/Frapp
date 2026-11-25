@@ -102,6 +102,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useOrgConfig: (options?: { enabled?: boolean }) =>
       ok(options?.enabled === false ? undefined : h.config),
     usePatchOrgConfig: () => ({ mutate: h.patchConfig, isPending: false }),
+    // The Chapter tab's profile and birthday posts (#6027).
+    useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
+    useChannels: () => ok([]),
     useCategories: () => ok([]),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
