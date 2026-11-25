@@ -62,12 +62,7 @@ const DRAWN_MARK =
  * A glyph sized to a fixed box is not text on the scale. The entries marked
  * "Grandfathered" are board-drawn sizes held for #3075 to decide.
  */
-const EXCEPTIONS: {
-  file: string;
-  literal: string;
-  count: number;
-  reason: string;
-}[] = [
+const EXCEPTIONS: { file: string; literal: string; count: number; reason: string }[] = [
   {
     file: "components/chat/chip.ts",
     literal: "text-[14px]",
@@ -76,36 +71,11 @@ const EXCEPTIONS: {
       "ACTION_BAR_BUTTON sizes the quick-reaction emoji inside a 28px icon " +
       "button. It is not label text, and `text-label` would set 600/1.3 on it.",
   },
-  {
-    file: "components/chat/mention-list.tsx",
-    literal: "text-[10px]",
-    count: 1,
-    reason: DRAWN_MARK,
-  },
-  {
-    file: "components/chat/channel-member-list.tsx",
-    literal: "text-[10px]",
-    count: 1,
-    reason: DRAWN_MARK,
-  },
-  {
-    file: "components/layout/account-menu.tsx",
-    literal: "text-[10px]",
-    count: 1,
-    reason: DRAWN_MARK,
-  },
-  {
-    file: "components/alumni/alumni-directory.tsx",
-    literal: "text-[9px]",
-    count: 1,
-    reason: DRAWN_MARK,
-  },
-  {
-    file: "components/members/members-directory.tsx",
-    literal: "text-[9px]",
-    count: 1,
-    reason: DRAWN_MARK,
-  },
+  { file: "components/chat/mention-list.tsx", literal: "text-[10px]", count: 1, reason: DRAWN_MARK },
+  { file: "components/chat/channel-member-list.tsx", literal: "text-[10px]", count: 1, reason: DRAWN_MARK },
+  { file: "components/layout/account-menu.tsx", literal: "text-[10px]", count: 1, reason: DRAWN_MARK },
+  { file: "components/alumni/alumni-directory.tsx", literal: "text-[9px]", count: 1, reason: DRAWN_MARK },
+  { file: "components/members/members-directory.tsx", literal: "text-[9px]", count: 1, reason: DRAWN_MARK },
   {
     file: "components/layout/crest-tile.tsx",
     literal: "text-[9.5px]",
@@ -116,8 +86,7 @@ const EXCEPTIONS: {
     file: "components/layout/crest-tile.tsx",
     literal: "text-[7.5px]",
     count: 1,
-    reason:
-      "The monogram's step-down past four characters, which overflow the tile at 9.5.",
+    reason: "The monogram's step-down past four characters, which overflow the tile at 9.5.",
   },
   {
     file: "components/layout/notifications-bell.tsx",
@@ -155,8 +124,7 @@ const EXCEPTIONS: {
     file: "components/billing/pro-chip.tsx",
     literal: "text-[10.5px]",
     count: 1,
-    reason:
-      "Grandfathered: board 4b's chip geometry, held by its docstring. #3075 decides.",
+    reason: "Grandfathered: board 4b's chip geometry, held by its docstring. #3075 decides.",
   },
 ];
 
@@ -201,21 +169,15 @@ describe("type scale call sites (#2842)", () => {
   });
 
   it("matches a px size in every spelling a class list can carry it", () => {
-    expect(literalsIn("px-2 text-[12.5px] font-semibold")).toEqual([
-      "text-[12.5px]",
-    ]);
+    expect(literalsIn("px-2 text-[12.5px] font-semibold")).toEqual(["text-[12.5px]"]);
     expect(literalsIn("hover:text-[11px] !text-[15px] text-[18px]!")).toEqual([
       "text-[11px]",
       "text-[15px]",
       "text-[18px]",
     ]);
-    expect(literalsIn("[&_[cmdk-group-heading]]:text-[13px]")).toEqual([
-      "text-[13px]",
-    ]);
+    expect(literalsIn("[&_[cmdk-group-heading]]:text-[13px]")).toEqual(["text-[13px]"]);
     expect(literalsIn("text-[length:24px]")).toEqual(["text-[24px]"]);
-    expect(literalsIn("text-caption text-muted-foreground h-[13px]")).toEqual(
-      [],
-    );
+    expect(literalsIn("text-caption text-muted-foreground h-[13px]")).toEqual([]);
   });
 
   describe("reads class strings, not comments, in every file kind it scans", () => {
@@ -251,7 +213,7 @@ describe("type scale call sites (#2842)", () => {
           [
             "/** Not `text-[12.5px]`: the caption role. */",
             "// text-[11px] was the board's size",
-            "{/* text-[15px] */}",
+            '{/* text-[15px] */}',
             'export const A = "text-caption";',
           ].join("\n"),
         ),
@@ -266,9 +228,7 @@ describe("type scale call sites (#2842)", () => {
   });
 
   it("writes no font size as an arbitrary literal outside the ledger", () => {
-    const allowed = new Map(
-      EXCEPTIONS.map((e) => [`${e.file} ${e.literal}`, e.count]),
-    );
+    const allowed = new Map(EXCEPTIONS.map((e) => [`${e.file} ${e.literal}`, e.count]));
     const found: string[] = [];
     for (const [file, counts] of literalsByFile()) {
       for (const [literal, count] of counts) {
