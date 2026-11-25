@@ -122,6 +122,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useMyPermissions: () => ({ data: { permissions: state.permissions } }),
   useAssignPledgeClasses: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveMember: () => ({ mutate: state.removeMutate, isPending: false }),
+  // Chat timeouts (#6006): the lift from the menu, and the sheet's writes.
+  useLiftChatTimeout: () => ({ mutate: vi.fn(), isPending: false }),
+  useTimeOutMember: () => ({ mutate: vi.fn(), isPending: false }),
   useCorrectMemberProfile: () => ({
     mutate: state.correctMutate,
     isPending: false,

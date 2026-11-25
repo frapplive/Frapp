@@ -844,6 +844,7 @@ What the read returns, and who sees which row, is [`../../behavior/activity.md`]
   It opens the adjustment form with the member fixed, titled "Adjust <name>'s points".
   Remove from chapter is a row in the `⋯` beside the close, drawn only when the profile read says this viewer may remove this member (`viewer_can_remove`: `members:remove`, not their own profile, and the member ranks below them, [`rbac.md` § Rank](../../behavior/rbac.md#rank)), and it asks before it acts.
   Above it, Edit name and graduation year, drawn where the read says `viewer_can_edit_profile`, opens `MemberCorrectionDialog` (#4367; rules in [`members.md` § Profiles](../../behavior/members.md#profiles)).
+  Between them, Time out, or Lift timeout while one runs (#6006), drawn where the read says `viewer_can_timeout`: Time out opens `TimeoutMemberDialog` (also the message More menu's), Lift timeout asks first. A running timeout reads "Timed out until …" under the name, to the member and to whoever can time out ([chat § Timeouts](../../behavior/chat/README.md#timeouts)).
   With nothing to hold the `⋯` is not drawn ([`components.md` § Shared rules](../design-system/components.md#2-shared-rules), 2026-11-11).
   _(Changed 2026-11-11: it was a full-width red button in the footer for any `members:remove` holder, on their own profile too.)_
   Mobile's Block / Unblock is not on web's sheet; web blocks from a message's More menu and undoes it in `/profile`.
