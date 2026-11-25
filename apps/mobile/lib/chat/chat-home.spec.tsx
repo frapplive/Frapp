@@ -233,6 +233,17 @@ vi.mock("@repo/hooks", async () => {
     lastChannelStorageKey: actual.lastChannelStorageKey,
     useActiveChapterId: () => "chapter-1",
     groupChannelsByCategory: actual.groupChannelsByCategory,
+    // New unreads pills (#6045): the rule and its words run for real.
+    unreadJumpTargets: actual.unreadJumpTargets,
+    unreadJumpRowKey: actual.unreadJumpRowKey,
+    unreadJumpHeadKey: actual.unreadJumpHeadKey,
+    unreadJumpEdgeOf: actual.unreadJumpEdgeOf,
+    unreadJumpState: actual.unreadJumpState,
+    sameUnreadJumpState: actual.sameUnreadJumpState,
+    unreadJumpLabel: actual.unreadJumpLabel,
+    NO_UNREAD_JUMP: actual.NO_UNREAD_JUMP,
+    NEW_UNREADS_LABEL: actual.NEW_UNREADS_LABEL,
+    UNREAD_JUMP_HIGHLIGHT_MS: actual.UNREAD_JUMP_HIGHLIGHT_MS,
     otherMemberId: actual.otherMemberId,
     directChannelDisplayName: actual.directChannelDisplayName,
     HIDDEN_CONVERSATIONS_LABEL: actual.HIDDEN_CONVERSATIONS_LABEL,
@@ -384,6 +395,34 @@ vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => branding.current,
 }));
 
+// New unreads pills (#6045): the hook's own measuring needs a laid-out scroll
+// view, which a test renderer has none of (`lib/chat/use-unread-jump.spec.ts`
+// covers it). Here it records what the screen hands it and answers with the
+// pills a test sets, so the screen's wiring is what is under test.
+const unreadJumpHook = vi.hoisted(() => ({
+  calls: [] as { targets: { key: string; addressed: boolean }[] }[],
+  refKeys: new Set<string>(),
+  state: { above: null, below: null } as {
+    above: unknown;
+    below: unknown;
+  },
+  jump: vi.fn(),
+}));
+vi.mock("@/lib/chat/use-unread-jump", () => ({
+  useUnreadJump: (args: { targets: { key: string; addressed: boolean }[] }) => {
+    unreadJumpHook.calls.push(args);
+    return {
+      state: unreadJumpHook.state,
+      jump: unreadJumpHook.jump,
+      refFor: (key: string) => (node: unknown) => {
+        if (node) unreadJumpHook.refKeys.add(key);
+      },
+      onScroll: () => undefined,
+      litKey: null,
+    };
+  },
+}));
+
 import ChatHomeScreen from "@/app/(app)/(tabs)/index";
 import * as Sentry from "@sentry/react-native";
 import { resetChannelsRefusedReport } from "@/lib/chat/channels-error";
@@ -486,6 +525,9 @@ beforeEach(() => {
   // behind the skeleton while one may still happen.
   settleChatLaunch();
   vi.clearAllMocks();
+  unreadJumpHook.calls = [];
+  unreadJumpHook.refKeys.clear();
+  unreadJumpHook.state = { above: null, below: null };
   tenant.council = false;
   chapterScope.value = "chapter";
   latestData.value = [];
@@ -801,9 +843,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       ),
     ).toHaveLength(0);
 
-    act(() =>
-      pressableLabelled(tree, "Filter channels").props.onPress(),
-    );
+    act(() => pressableLabelled(tree, "Filter channels").props.onPress());
     const toggle = (label: string) =>
       tree.root
         .findByType(ChannelFilterMenu)
@@ -2687,5 +2727,87 @@ describe("Chat home Now card (#5777)", () => {
     } finally {
       homeEventsNow.value = { events: [], now: Date.now() };
     }
+  });
+});
+
+describe("Chat home's New unreads pills (#6045)", () => {
+  const social = { id: "c-social", name: "social", type: "PUBLIC" };
+  const lastTargets = () =>
+    unreadJumpHook.calls[unreadJumpHook.calls.length - 1]!.targets;
+
+  it("hands the hook the unread rows, red for a mention, and measures each one", () => {
+    channelsData.value = [general, social];
+    unreadData.value = [
+      { channel_id: general.id, unread_count: 2, mention_count: 1 },
+    ];
+    // A host view for every ref, as a device has.
+    render({ createNodeMock: () => ({}) });
+    expect(lastTargets()).toEqual([
+      { key: `row:${general.id}`, addressed: true },
+    ]);
+    expect(unreadJumpHook.refKeys.has(`row:${general.id}`)).toBe(true);
+    expect(unreadJumpHook.refKeys.has(`row:${social.id}`)).toBe(true);
+  });
+
+  it("points at a folded heading for its unread rows", () => {
+    channelsData.value = [general, social];
+    unreadData.value = [
+      { channel_id: social.id, unread_count: 3, mention_count: 0 },
+    ];
+    sidebarPrefs.value = {
+      ...sidebarPrefs.value,
+      collapsed: new Set(["channels"]),
+    };
+    render({ createNodeMock: () => ({}) });
+    expect(lastTargets()).toEqual([{ key: "head:channels", addressed: false }]);
+    expect(unreadJumpHook.refKeys.has("head:channels")).toBe(true);
+  });
+
+  it("has nothing to point at on counts the phone saved (#4006)", async () => {
+    const { holdUnreadFirstPaint, resetUnreadFirstPaintForTests } =
+      await import("@/lib/chat/unread-first-paint");
+    channelsData.value = [general, social];
+    unreadData.value = undefined as never;
+    holdUnreadFirstPaint({
+      saved: [{ channel_id: general.id, unread_count: 4, mention_count: 0 }],
+      tray: { channelIds: new Set(), since: Date.now() },
+    });
+    try {
+      render();
+      expect(lastTargets()).toEqual([]);
+    } finally {
+      resetUnreadFirstPaintForTests();
+    }
+  });
+
+  it("draws the pills the hook reports, and a press jumps", () => {
+    channelsData.value = [general, social];
+    unreadJumpHook.state = {
+      above: null,
+      below: {
+        next: { key: `row:${social.id}`, addressed: true },
+        addressed: true,
+      },
+    };
+    const tree = render();
+    expect(
+      tree.root.findAllByProps({ testID: "unread-jump-above" }),
+    ).toHaveLength(0);
+    const pill = tree.root.findByProps({ testID: "unread-jump-below" });
+    expect(pill.props.accessibilityLabel).toBe("Jump to unread channels below");
+    act(() => pill.props.onPress());
+    expect(unreadJumpHook.jump).toHaveBeenCalledWith("below");
+  });
+
+  it("draws no pill with no list on screen", () => {
+    channelsData.value = [];
+    unreadJumpHook.state = {
+      above: null,
+      below: { next: { key: "row:x", addressed: false }, addressed: false },
+    };
+    const tree = render();
+    expect(
+      tree.root.findAllByProps({ testID: "unread-jump-below" }),
+    ).toHaveLength(0);
   });
 });
