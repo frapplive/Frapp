@@ -124,9 +124,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     title: "New in this update",
     changes: [
       "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+      "Recruitment has an interest form: open it from the Recruitment settings page, share its link or a QR code, and each person who fills it in lands in your pipeline's first stage.",
     ],
     web: [
       "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+    ],
+    phone: [
+      "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
     ],
   },
   {
