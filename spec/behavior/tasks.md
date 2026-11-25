@@ -240,7 +240,7 @@ On mobile's task board only the row's checkbox changes a task; a tap elsewhere o
 - The assignee sees their own tasks.
 - All admins (users with `tasks:manage`) see all tasks.
 - Members without `tasks:manage` only see tasks assigned to themselves, and the tasks a tier, role or group they're in follows, without those tasks' proof (§ Following a task; changed in #5473 by Shawn's ask, 2026-11-19: before it, only their own).
-- One exception: anyone who may read posted minutes sees whether each task made from its action items is done, and for a task for everyone how many copies are ("14 of 20 done"), as checkboxes on the minutes. Nothing else of the task reaches them (Paul, 2026-11-18: action items "as checkboxes that update"; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)).
+- One exception: anyone who may read posted minutes sees whether each task made from its action items is done, and for a task for everyone how many copies are ("14 of 20 done"), as checkboxes on the minutes, and since #6062 its status and who has it, as faces on the item. Nothing else of the task reaches them (Paul, 2026-11-18: action items "as checkboxes that update"; [`meetings.md` § Suggested tasks](meetings.md#suggested-tasks)). Changed in #6062 by pdcarlson, 2026-11-25: the status and who has it were added; the minutes already name who owes an item.
 
 ## Chat Integration
 

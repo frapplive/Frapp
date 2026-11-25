@@ -4173,6 +4173,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/meetings/{id}/action-items/{index}/task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make an action item of posted minutes a task, assigned to these members (#6062). An item already a task keeps it; one with a suggestion waiting accepts that suggestion */
+        post: operations["MeetingActionItemTasksController_makeTask_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meetings/series/{key}/open-action-items": {
         parameters: {
             query?: never;
@@ -11849,6 +11866,28 @@ export interface components {
             done: boolean;
             /** @description A task for everyone: how many of its copies are done. */
             group: components["schemas"]["ActionItemTaskGroupDto"] | null;
+            /**
+             * @description The task’s status; a task for everyone’s copies read as one (done when all are, overdue when an open one is).
+             * @enum {string}
+             */
+            status: "TODO" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
+            /** @description Who has it: its member, or every copy’s. */
+            assignee_ids: string[];
+            /**
+             * Format: uuid
+             * @description The task, for a viewer who can manage tasks; null for anyone else.
+             */
+            task_id: string | null;
+        };
+        MakeActionItemTaskDto: {
+            /** @description The item’s text as the officer saw it, so an edit to the minutes meanwhile is caught. */
+            text: string;
+            /** @description One member gets the task; several each get their own copy. */
+            assignee_ids: string[];
+            /** @description Defaults to the item’s text. */
+            title?: string;
+            /** @description `YYYY-MM-DD`, or null for none. Defaults to the day the minutes named. */
+            due_date?: string | null;
         };
         OpenActionItemDto: {
             /** @description The action item’s place in its minutes’ list, from 0. */
@@ -24683,6 +24722,48 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MeetingActionItemTaskDto"][];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    MeetingActionItemTasksController_makeTask_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MakeActionItemTaskDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingActionItemTaskDto"];
+                };
+            };
+            /** @description The minutes changed since they were read, or another officer made the item a task at the same moment */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

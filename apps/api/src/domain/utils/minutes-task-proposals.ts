@@ -56,7 +56,7 @@ export function actionItemKey(text: string): string {
  * `meeting_id` (#5562), named on screen as the meeting is called now, never
  * written into the text, where a renamed meeting would leave its old name.
  */
-function descriptionFrom(text: string, title: string): string | null {
+export function descriptionFrom(text: string, title: string): string | null {
   return title === text ? null : text;
 }
 

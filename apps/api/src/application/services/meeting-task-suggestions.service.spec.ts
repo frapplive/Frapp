@@ -44,9 +44,21 @@ function build(switchOn = true) {
   };
   const suggestions = {
     reconcileSource: jest.fn(async () => ({ created: [], withdrawn: 0 })),
+    accept: jest.fn(async () => ({})),
   };
   const consent = { chapterSwitchOn: jest.fn(async () => switchOn) };
-  const tasks = { doneMarks: jest.fn(async () => new Map()) };
+  const tasks = {
+    doneMarks: jest.fn(async () => new Map()),
+    create: jest.fn(async () => ({ id: 't-new' })),
+  };
+  const itemTasks = {
+    claim: jest.fn(async () => true),
+    setTask: jest.fn(async () => undefined),
+    release: jest.fn(async () => undefined),
+    listForMeeting: jest.fn(
+      async () => [] as { item_key: string; task_id: string | null }[],
+    ),
+  };
   const repo = {
     listKeyedForSource: jest.fn(
       async (_chapterId: string, _source: { id: string }) => [] as unknown[],
@@ -58,8 +70,18 @@ function build(switchOn = true) {
     consent as never,
     tasks as never,
     repo as never,
+    itemTasks as never,
   );
-  return { service, meetings, suggestions, consent, listeners, tasks, repo };
+  return {
+    service,
+    meetings,
+    suggestions,
+    consent,
+    listeners,
+    tasks,
+    repo,
+    itemTasks,
+  };
 }
 
 describe('MeetingTaskSuggestionsService (#4313)', () => {
@@ -198,7 +220,9 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
 
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([{ index: 0, done: true, group: null }]);
+    ).resolves.toEqual([
+      { index: 0, done: true, group: null, task_id: 't-bus' },
+    ]);
     expect(meetings.get).toHaveBeenCalledWith(CHAPTER, MEETING, OFFICER);
     expect(tasks.doneMarks).toHaveBeenCalledWith(CHAPTER, ['t-bus']);
   });
@@ -214,7 +238,12 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
     ).resolves.toEqual([
-      { index: 1, done: false, group: { done: 14, total: 20 } },
+      {
+        index: 1,
+        done: false,
+        group: { done: 14, total: 20 },
+        task_id: 't-shirts',
+      },
     ]);
   });
 
@@ -239,7 +268,9 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
     );
     await expect(
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
-    ).resolves.toEqual([{ index: 0, done: true, group: null }]);
+    ).resolves.toEqual([
+      { index: 0, done: true, group: null, task_id: 't-shirts' },
+    ]);
   });
 
   it('leaves out an item whose task was deleted since', async () => {
@@ -259,6 +290,274 @@ describe("actionItemTasks: the minutes' checkboxes", () => {
       service.actionItemTasks(CHAPTER, MEETING, OFFICER),
     ).resolves.toEqual([]);
     expect(repo.listKeyedForSource).not.toHaveBeenCalled();
+  });
+});
+
+describe('makeTask: an action item made a task from the minutes (#6062)', () => {
+  const MODULES = null;
+  const mark = {
+    done: false,
+    group: null,
+    status: 'TODO',
+    assignee_ids: [JAKE],
+  };
+
+  it('claims the item, makes the task linked to the meeting, and fills the claim', async () => {
+    const { service, tasks, itemTasks } = build();
+    itemTasks.listForMeeting
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { item_key: actionItemKey('Book the bus'), task_id: 't-new' },
+      ]);
+    tasks.doneMarks.mockResolvedValue(new Map([['t-new', mark]]));
+
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-new' });
+
+    expect(itemTasks.claim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meeting_id: MEETING,
+        item_key: actionItemKey('Book the bus'),
+        chapter_id: CHAPTER,
+        created_by: OFFICER,
+      }),
+      expect.any(String),
+    );
+    expect(tasks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chapter_id: CHAPTER,
+        title: 'Book the bus',
+        assignee_id: JAKE,
+        assignee_ids: null,
+        // The day the minutes named, when none is sent.
+        due_date: '2026-11-14',
+        meeting_id: MEETING,
+        created_by: OFFICER,
+      }),
+    );
+    expect(itemTasks.setTask).toHaveBeenCalledWith(
+      CHAPTER,
+      MEETING,
+      actionItemKey('Book the bus'),
+      't-new',
+    );
+  });
+
+  it('gives several members each their own copy, with the words and day sent', async () => {
+    const OTHER = '44444444-4444-4444-8444-444444444444';
+    const { service, tasks, itemTasks } = build();
+    itemTasks.listForMeeting
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { item_key: actionItemKey('Order shirts'), task_id: 't-new' },
+      ]);
+    tasks.doneMarks.mockResolvedValue(new Map([['t-new', mark]]));
+    await service.makeTask(
+      CHAPTER,
+      OFFICER,
+      MEETING,
+      1,
+      {
+        text: 'Order shirts',
+        assignee_ids: [JAKE, OTHER, JAKE],
+        title: 'Order chapter shirts',
+        due_date: null,
+      },
+      MODULES,
+    );
+    expect(tasks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Order chapter shirts',
+        assignee_id: null,
+        assignee_ids: [JAKE, OTHER],
+        due_date: null,
+      }),
+    );
+  });
+
+  it('makes nothing for an item already a task through Suggested tasks', async () => {
+    const { service, repo, tasks, itemTasks } = build();
+    repo.listKeyedForSource.mockResolvedValue([
+      {
+        status: 'accepted',
+        result_id: 't-bus',
+        dedupe_key: actionItemKey('Book the bus'),
+      },
+    ]);
+    tasks.doneMarks.mockResolvedValue(new Map([['t-bus', mark]]));
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-bus' });
+    expect(tasks.create).not.toHaveBeenCalled();
+    expect(itemTasks.claim).not.toHaveBeenCalled();
+  });
+
+  it('accepts a suggestion still waiting for the item instead of making a second task', async () => {
+    const { service, repo, tasks, suggestions, itemTasks } = build();
+    const waiting = {
+      id: 'sugg-1',
+      status: 'pending',
+      result_id: null,
+      dedupe_key: actionItemKey('Book the bus'),
+    };
+    repo.listKeyedForSource
+      .mockResolvedValueOnce([waiting])
+      .mockResolvedValueOnce([waiting])
+      .mockResolvedValue([
+        { ...waiting, status: 'accepted', result_id: 't-bus' },
+      ]);
+    tasks.doneMarks.mockResolvedValue(new Map([['t-bus', mark]]));
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).resolves.toEqual({ index: 0, ...mark, task_id: 't-bus' });
+    expect(suggestions.accept).toHaveBeenCalledWith(
+      CHAPTER,
+      OFFICER,
+      'sugg-1',
+      expect.objectContaining({
+        edits: {
+          kind: 'task',
+          fields: expect.objectContaining({
+            title: 'Book the bus',
+            assignee_id: JAKE,
+            due_date: '2026-11-14',
+          }),
+        },
+      }),
+    );
+    expect(tasks.create).not.toHaveBeenCalled();
+    expect(itemTasks.claim).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the minutes changed since the officer read them', async () => {
+    const { service, tasks } = build();
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the van', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'meeting.action_item.changed' },
+    });
+    expect(tasks.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a draft', async () => {
+    const { service, meetings } = build();
+    meetings.get.mockResolvedValue({ meeting: meeting({ status: 'draft' }) });
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'meeting.action_item.not_posted' },
+    });
+  });
+
+  it('tells the second of two officers at once that it is a task already', async () => {
+    const { service, tasks, itemTasks } = build();
+    itemTasks.claim.mockResolvedValue(false);
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'meeting.action_item.already_task' },
+    });
+    expect(tasks.create).not.toHaveBeenCalled();
+  });
+
+  it('gives the claim back when the task could not be made', async () => {
+    const { service, tasks, itemTasks } = build();
+    tasks.create.mockRejectedValue(new Error('boom'));
+    await expect(
+      service.makeTask(
+        CHAPTER,
+        OFFICER,
+        MEETING,
+        0,
+        { text: 'Book the bus', assignee_ids: [JAKE] },
+        MODULES,
+      ),
+    ).rejects.toThrow('boom');
+    expect(itemTasks.release).toHaveBeenCalledWith(
+      CHAPTER,
+      MEETING,
+      actionItemKey('Book the bus'),
+    );
+    expect(itemTasks.setTask).not.toHaveBeenCalled();
+  });
+
+  it('reads a task made from the minutes on the checkboxes', async () => {
+    const { service, tasks, itemTasks } = build();
+    itemTasks.listForMeeting.mockResolvedValue([
+      { item_key: actionItemKey('Order shirts'), task_id: 't-made' },
+      // A claim still being made has no task to read.
+      { item_key: actionItemKey('Book the bus'), task_id: null },
+    ]);
+    tasks.doneMarks.mockResolvedValue(new Map([['t-made', mark]]));
+    await expect(
+      service.actionItemTasks(CHAPTER, MEETING, OFFICER),
+    ).resolves.toEqual([{ index: 1, ...mark, task_id: 't-made' }]);
+  });
+
+  it('never suggests an item already made a task from the minutes', async () => {
+    const env = process.env.AI_ENABLED;
+    process.env.AI_ENABLED = 'true';
+    const { service, suggestions, itemTasks } = build();
+    itemTasks.listForMeeting.mockResolvedValue([
+      { item_key: actionItemKey('Book the bus'), task_id: 't-made' },
+    ]);
+    try {
+      await service.sync(meeting(), { reason: 'edited', actorId: OFFICER });
+    } finally {
+      if (env === undefined) delete process.env.AI_ENABLED;
+      else process.env.AI_ENABLED = env;
+    }
+    const call = (
+      suggestions.reconcileSource.mock.calls as unknown as [
+        { proposals: { dedupeKey: string }[] },
+      ][]
+    )[0][0];
+    expect(call.proposals.map((proposal) => proposal.dedupeKey)).toEqual([
+      actionItemKey('Order shirts'),
+    ]);
   });
 });
 

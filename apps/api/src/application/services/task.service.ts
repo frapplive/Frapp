@@ -124,6 +124,17 @@ const VALID_ASSIGNEE_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
  * value, so a client holding only `status` cannot tell which transition is
  * legal — and therefore cannot offer the assignee any action at all (#1051).
  */
+/** Where a task stands for an action item of minutes (`doneMarks`). */
+export interface TaskDoneMark {
+  done: boolean;
+  /** A task for everyone: how many of its copies are done. */
+  group: { done: number; total: number } | null;
+  /** The display status, a group's read as one. */
+  status: TaskStatus;
+  /** Who has it: its member, or every copy's. */
+  assignee_ids: string[];
+}
+
 function toDisplayStatus(task: Task, now: Date = new Date()): TaskView {
   return {
     ...task,
@@ -568,36 +579,52 @@ export class TaskService {
   }
 
   /**
-   * Whether each of these tasks is done, by task id, in two reads whatever
-   * the count: a task for everyone is done once every copy is (#4295 step 3),
-   * and comes with its counts. Tasks that no longer exist are left out. For
-   * the checkboxes on posted minutes, which show nothing else of the task.
+   * Where each of these tasks stands, for an action item of minutes (#6062):
+   * done, its display status, and who has it. A group's copies are read as
+   * one: done when every copy is, overdue when an open copy is, started
+   * when any copy is done or under way, and its people are every copy's.
+   * Ids that are not this chapter's tasks are left out.
    */
   async doneMarks(
     chapterId: string,
     ids: string[],
-  ): Promise<
-    Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >
-  > {
+    now: Date = new Date(),
+  ): Promise<Map<string, TaskDoneMark>> {
     const tasks = await this.taskRepo.findByIds(chapterId, [...new Set(ids)]);
-    const groups = await this.groupSummaries(chapterId, tasks);
-    const marks = new Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >();
+    const groupIds = [
+      ...new Set(
+        tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
+      ),
+    ];
+    const copies =
+      groupIds.length > 0
+        ? await this.taskRepo.findGroupCopyStates(chapterId, groupIds)
+        : [];
+    const marks = new Map<string, TaskDoneMark>();
     for (const task of tasks) {
-      const summary = task.group_id ? groups.get(task.group_id) : undefined;
-      const group = summary
-        ? { done: summary.done, total: summary.total }
-        : null;
+      const own = task.group_id
+        ? copies.filter((copy) => copy.group_id === task.group_id)
+        : [task];
+      const statuses = own.map((copy) => displayStatusOf(copy, now));
+      const doneCount = statuses.filter(
+        (status) => status === TaskStatus.COMPLETED,
+      ).length;
+      const done = own.length > 0 && doneCount === own.length;
       marks.set(task.id, {
-        done: group
-          ? group.total > 0 && group.done >= group.total
-          : task.status === TaskStatus.COMPLETED,
-        group,
+        done,
+        group: task.group_id ? { done: doneCount, total: own.length } : null,
+        status: done
+          ? TaskStatus.COMPLETED
+          : statuses.includes(TaskStatus.OVERDUE)
+            ? TaskStatus.OVERDUE
+            : doneCount > 0 || statuses.includes(TaskStatus.IN_PROGRESS)
+              ? TaskStatus.IN_PROGRESS
+              : TaskStatus.TODO,
+        assignee_ids: [
+          ...new Set(
+            own.flatMap((copy) => (copy.assignee_id ? [copy.assignee_id] : [])),
+          ),
+        ],
       });
     }
     return marks;

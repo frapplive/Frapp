@@ -1224,8 +1224,15 @@ describe('TaskService', () => {
       expect(marks.get('copy-user-1')).toEqual({
         done: true,
         group: { done: 2, total: 2 },
+        status: TaskStatus.COMPLETED,
+        // Every copy's member, for the minutes' faces (#6062).
+        assignee_ids: ['user-1', 'user-2'],
       });
-      expect(marks.get('solo')).toEqual({ done: true, group: null });
+      expect(marks.get('solo')).toMatchObject({
+        done: true,
+        group: null,
+        status: TaskStatus.COMPLETED,
+      });
 
       mockTaskRepo.findGroupCopies.mockResolvedValue([
         copyOf('user-1', { status: TaskStatus.COMPLETED }),
@@ -1235,6 +1242,9 @@ describe('TaskService', () => {
       expect(partway.get('copy-user-1')).toEqual({
         done: false,
         group: { done: 1, total: 2 },
+        // One copy done: the group is under way.
+        status: TaskStatus.IN_PROGRESS,
+        assignee_ids: ['user-1', 'user-2'],
       });
     });
 
