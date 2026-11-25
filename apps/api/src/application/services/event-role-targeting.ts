@@ -5,6 +5,8 @@ import {
   type EventAttendance,
   type EventAttendanceFields,
   type EventAttendanceStatus,
+  eventTakesAttendance,
+  type EventTimingFields,
 } from '@repo/validation';
 import { SystemPermissions } from '#domain/constants/permissions';
 
@@ -39,10 +41,12 @@ export function isInvited(
  * keeps its steps apart because each refusal is logged with its own reason.
  */
 export function checkInAdmits(
-  event: EventAttendanceFields,
+  event: EventAttendanceFields & EventTimingFields,
   memberRoleIds: readonly string[],
   isAlumni: boolean,
 ): boolean {
+  // An event that takes no attendance admits nobody (#6098).
+  if (!eventTakesAttendance(event)) return false;
   const { status, byRole } = attendanceFor(event, memberRoleIds);
   return status !== 'not_invited' && (!isAlumni || byRole);
 }

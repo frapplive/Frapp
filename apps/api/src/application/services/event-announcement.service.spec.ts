@@ -1,6 +1,7 @@
 import { BadRequestException, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { Event } from '#domain/entities/event.entity';
+import { eventChangeOf } from './event-announcement.service';
 import {
   baseEvent,
   createEventServiceFixture,
@@ -230,6 +231,87 @@ describe('EventAnnouncementService', () => {
       expect(copyFor('user-a', 'America/New_York')).toEqual({
         title: 'Chapter rescheduled',
         body: 'Now Fri, Nov 27, 6–7 PM · Optional',
+      });
+    });
+
+    describe('dated, tentative and calendar-only events (#6098)', () => {
+      // Its bounds are a New York request's midnights; the push names days.
+      const firstDay = {
+        ...thanksgiving,
+        start_time: '2027-01-11T05:00:00.000Z',
+        end_time: '2027-01-12T05:00:00.000Z',
+        timing: 'all_day' as const,
+        start_date: '2027-01-11',
+        end_date: '2027-01-11',
+      };
+      const createTimed = () =>
+        service.create({
+          chapter_id: 'ch-1',
+          name: 'Chapter',
+          start_time: thanksgiving.start_time,
+          end_time: thanksgiving.end_time,
+          created_by: 'user-creator',
+        });
+
+      it('names an all-day event by its day, never a clock time', async () => {
+        mockEventRepo.create.mockResolvedValue(firstDay);
+        await createTimed();
+
+        expect(copyFor('user-a', 'America/Los_Angeles').body).toMatch(
+          /^Optional · Mon, Jan 11(, 2027)? · All day$/,
+        );
+      });
+
+      it('names a multi-day all-day event by its first and last days', async () => {
+        mockEventRepo.create.mockResolvedValue({
+          ...firstDay,
+          start_date: '2027-01-22',
+          end_date: '2027-02-12',
+        });
+        await createTimed();
+
+        expect(copyFor('user-a', 'America/New_York').body).toMatch(
+          /^Optional · Jan 22 – Feb 12(, 2027)? · All day$/,
+        );
+      });
+
+      it('names a time-TBD event by its day and Time TBD', async () => {
+        mockEventRepo.create.mockResolvedValue({
+          ...firstDay,
+          timing: 'time_tbd',
+          start_date: '2027-01-14',
+          end_date: '2027-01-14',
+        });
+        await createTimed();
+
+        expect(copyFor('user-a', 'America/New_York').body).toMatch(
+          /^Optional · Thu, Jan 14(, 2027)? · Time TBD$/,
+        );
+      });
+
+      it('says Tentative after the attendance', async () => {
+        mockEventRepo.create.mockResolvedValue({
+          ...thanksgiving,
+          is_tentative: true,
+        });
+        await createTimed();
+
+        expect(copyFor('user-a', 'America/New_York').body).toBe(
+          'Optional · Tentative · Thu, Nov 26, 6–7 PM',
+        );
+      });
+
+      it('says nothing about attendance for an event on the calendar only', async () => {
+        mockEventRepo.create.mockResolvedValue({
+          ...thanksgiving,
+          is_mandatory: true,
+          calendar_only: true,
+        });
+        await createTimed();
+
+        const body = copyFor('user-a', 'America/New_York').body;
+        expect(body).toBe('Thu, Nov 26, 6–7 PM');
+        expect(body).not.toMatch(/Required|Optional/);
       });
     });
 
@@ -664,5 +746,69 @@ describe('EventAnnouncementService', () => {
         expect(mockChatService.sendMessage).not.toHaveBeenCalled();
       });
     });
+  });
+});
+
+describe('eventChangeOf, dated events (#6098)', () => {
+  const dated = {
+    start_time: '2027-01-11T05:00:00.000Z',
+    end_time: '2027-01-12T05:00:00.000Z',
+    location: null,
+    recurrence_rule: null,
+    timing: 'all_day' as const,
+    start_date: '2027-01-11',
+    end_date: '2027-01-11',
+  };
+
+  it('reads a re-save of the same days from another zone as no change', () => {
+    // Saved again from Los Angeles: the midnight bounds shift, the days don't.
+    expect(
+      eventChangeOf(dated, {
+        timing: 'all_day',
+        start_date: '2027-01-11',
+        end_date: '2027-01-11',
+        start_time: '2027-01-11T08:00:00.000Z',
+        end_time: '2027-01-12T08:00:00.000Z',
+      }),
+    ).toBeNull();
+  });
+
+  it('reads a change of days as a reschedule', () => {
+    expect(eventChangeOf(dated, { end_date: '2027-01-12' })).toBe('time');
+    expect(eventChangeOf(dated, { start_date: '2027-01-10' })).toBe('time');
+  });
+
+  it('reads a switch between timed and dated as a reschedule', () => {
+    expect(eventChangeOf(dated, { timing: 'time_tbd' })).toBe('time');
+    expect(
+      eventChangeOf(dated, {
+        timing: 'timed',
+        start_date: null,
+        end_date: null,
+        start_time: '2027-01-11T23:00:00.000Z',
+        end_time: '2027-01-12T00:00:00.000Z',
+      }),
+    ).toBe('time');
+    expect(
+      eventChangeOf(
+        { ...dated, timing: 'timed', start_date: null, end_date: null },
+        { timing: 'all_day', start_date: '2027-01-11', end_date: '2027-01-11' },
+      ),
+    ).toBe('time');
+  });
+
+  it('keeps a timed event compared by its instants', () => {
+    const timed = {
+      ...dated,
+      timing: 'timed' as const,
+      start_date: null,
+      end_date: null,
+    };
+    expect(
+      eventChangeOf(timed, { start_time: '2027-01-11T05:00:00+00:00' }),
+    ).toBeNull();
+    expect(
+      eventChangeOf(timed, { start_time: '2027-01-11T06:00:00.000Z' }),
+    ).toBe('time');
   });
 });

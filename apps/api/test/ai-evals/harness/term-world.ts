@@ -504,6 +504,11 @@ export function createTermWorld(
     end_time: new Date(
       Date.parse(termEvent.start) + EVENT_HOURS * HOUR_MS,
     ).toISOString(),
+    timing: 'timed',
+    start_date: null,
+    end_date: null,
+    is_tentative: false,
+    calendar_only: false,
     point_value: termEvent.points,
     is_mandatory: termEvent.invites
       ? termEvent.invites.everyoneElse === 'required'

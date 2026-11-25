@@ -11,6 +11,7 @@ import {
   type EventAgendaItem,
   type EventAttendancePicks,
   type EventAgendaTabledFrom,
+  type EventTiming,
 } from '@repo/validation';
 import type { FrappLinkInput } from './frapp-link/frapp-link-input';
 
@@ -19,8 +20,17 @@ export interface CreateEventInput {
   name: string;
   description?: string | null;
   location?: string | null;
-  start_time: string;
-  end_time: string;
+  /** Required for a timed event; a dated event's bounds are the server's. */
+  start_time?: string;
+  end_time?: string;
+  /** Omitted: timed (#6098). The rules are `event-timing-input.ts`. */
+  timing?: EventTiming;
+  /** First and last day of a dated event, `YYYY-MM-DD`. */
+  start_date?: string | null;
+  end_date?: string | null;
+  is_tentative?: boolean;
+  /** On the calendar only: no check-in, points or absences (#6098). */
+  calendar_only?: boolean;
   point_value?: number;
   is_mandatory?: boolean;
   recurrence_rule?: string | null;
@@ -86,6 +96,12 @@ export interface UpdateEventInput {
   location?: string | null;
   start_time?: string;
   end_time?: string;
+  /** Changes the event's shape; see `resolveUpdateTiming` (#6098). */
+  timing?: EventTiming;
+  start_date?: string | null;
+  end_date?: string | null;
+  is_tentative?: boolean;
+  calendar_only?: boolean;
   point_value?: number;
   is_mandatory?: boolean;
   recurrence_rule?: string | null;
@@ -359,4 +375,38 @@ function assertUniqueIds(
     }
     seen.add(id);
   }
+}
+
+/**
+ * Why an event can't be on the calendar only, or null when it can
+ * (`spec/behavior/events.md` § Dates, tentative and on the calendar only,
+ * #6098). Nobody attends a calendar-only event, so no role can be Required
+ * or Optional at it; Not invited still hides it from a role.
+ */
+export function calendarOnlyRolesProblem(lists: {
+  required_role_ids?: readonly string[] | null;
+  optional_role_ids?: readonly string[] | null;
+}): string | null {
+  return (lists.required_role_ids?.length ?? 0) > 0 ||
+    (lists.optional_role_ids?.length ?? 0) > 0
+    ? 'An event on the calendar only has no Required or Optional roles; send them empty, or turn calendar_only off.'
+    : null;
+}
+
+/**
+ * A calendar-only create as stored: no points and nobody required, whatever
+ * the form still held, and no role made Required or Optional (a 400, since
+ * that is a choice the member made, not a leftover default).
+ */
+export function calendarOnlyShape(input: CreateEventInput): CreateEventInput {
+  if (!input.calendar_only) return input;
+  const problem = calendarOnlyRolesProblem(input);
+  if (problem) throw new BadRequestException(problem);
+  return {
+    ...input,
+    point_value: 0,
+    is_mandatory: false,
+    required_role_ids: null,
+    optional_role_ids: null,
+  };
 }

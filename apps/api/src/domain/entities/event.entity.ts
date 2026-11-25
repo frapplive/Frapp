@@ -3,6 +3,7 @@ import type {
   EventAgendaItem,
   EventAttachment,
   EventAttendancePicks,
+  EventTiming,
 } from '@repo/validation';
 
 export interface Event {
@@ -11,8 +12,30 @@ export interface Event {
   name: string;
   description: string | null;
   location: string | null;
+  /**
+   * For a dated event (`timing` all_day or time_tbd), the saving request's
+   * local-midnight bounds of its days, so range reads keep finding it; the
+   * apps show `start_date`/`end_date` instead (#6098).
+   */
   start_time: string;
   end_time: string;
+  /**
+   * `timed` (every event before #6098), `all_day` (whole days, possibly
+   * several) or `time_tbd` (one day, time not set). The rules are
+   * `event-timing.ts` in `@repo/validation`.
+   */
+  timing: EventTiming;
+  /** First day of a dated event, `YYYY-MM-DD` with no zone; null when timed. */
+  start_date: string | null;
+  /** Last day (inclusive) of a dated event; null when timed. */
+  end_date: string | null;
+  /** The event might not happen: a status rather than words in the name. */
+  is_tentative: boolean;
+  /**
+   * On the calendar for information: nobody checks in, earns points or is
+   * marked absent. Its points are 0 and it requires no one.
+   */
+  calendar_only: boolean;
   point_value: number;
   is_mandatory: boolean;
   recurrence_rule: string | null;
