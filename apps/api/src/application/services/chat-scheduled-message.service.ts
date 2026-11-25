@@ -8,7 +8,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { isDirectChannel, withoutObjectReplacement } from '@repo/validation';
+import {
+  CHAT_TIMED_OUT_CODE,
+  isDirectChannel,
+  withoutObjectReplacement,
+} from '@repo/validation';
 import {
   CHAT_SCHEDULED_MESSAGE_REPOSITORY,
   type ChatScheduledMessagePatch,
@@ -476,11 +480,30 @@ function checkSendAt(raw: string, now: number): string {
  * won't change. A 403 is the author's access; any other 4xx is the message.
  */
 function refusalReason(error: unknown): ChatScheduledMessageFailure | null {
+  // A chat timeout (#6006) is not lost access: the member can post there
+  // again once it ends, so the push says it didn't send and the row stays to
+  // edit or send again, as for any other refusal.
+  if (
+    error instanceof ForbiddenException &&
+    codeOfHttpException(error) === CHAT_TIMED_OUT_CODE
+  ) {
+    return 'not_sendable';
+  }
   if (error instanceof ForbiddenException) return 'no_access';
   if (error instanceof HttpException) {
     const status = error.getStatus();
     if (status === 404) return 'no_access';
     if (status >= 400 && status < 500 && status !== 429) return 'not_sendable';
+  }
+  return null;
+}
+
+/** The structured `code` an `HttpException` was thrown with, if any. */
+function codeOfHttpException(error: HttpException): string | null {
+  const response = error.getResponse();
+  if (response && typeof response === 'object' && 'code' in response) {
+    const { code } = response as { code?: unknown };
+    return typeof code === 'string' ? code : null;
   }
   return null;
 }

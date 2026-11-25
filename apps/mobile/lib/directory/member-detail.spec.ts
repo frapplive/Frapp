@@ -87,6 +87,9 @@ describe("selectMemberDetail", () => {
       orderNumber: null,
       canRemove: false,
       canEditProfile: false,
+      canTimeOut: false,
+      chatTimeoutUntil: null,
+      chatTimeoutReason: null,
     });
   });
 
@@ -111,6 +114,21 @@ describe("selectMemberDetail", () => {
       selectMemberDetail(profile({ viewer_can_edit_profile: "true" }))
         ?.canEditProfile,
     ).toBe(false);
+  });
+
+  it("carries the API's viewer_can_timeout and the running timeout (#6006)", () => {
+    const detail = selectMemberDetail(
+      profile({
+        viewer_can_timeout: true,
+        chat_timeout_until: "2026-11-25T23:40:00.000Z",
+        chat_timeout_reason: "spamming",
+      }),
+    );
+    expect(detail).toMatchObject({
+      canTimeOut: true,
+      chatTimeoutUntil: "2026-11-25T23:40:00.000Z",
+      chatTimeoutReason: "spamming",
+    });
   });
 
   it("carries the API's viewer_can_remove, and only a literal true", () => {

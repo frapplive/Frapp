@@ -111,6 +111,7 @@ export {
   useSidebarPreferences,
   useSidebarPreferencesRefetch,
 } from "./use-chat-sidebar";
+export * from "./use-chat-timeout";
 export * from "./use-council-chapters";
 export * from "./use-councils";
 export * from "./use-custom-fields";

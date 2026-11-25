@@ -18,8 +18,14 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ChatMessageFlag, MentionPick } from "@repo/validation";
 import {
+  CHAT_TIMED_OUT_CODE,
+  CHAT_TIMED_OUT_REFUSAL,
+  type ChatMessageFlag,
+  type MentionPick,
+} from "@repo/validation";
+import {
+  codeOf,
   isDefinitiveClientError,
   isServerBusy,
   randomClientId,
@@ -297,9 +303,20 @@ export function classifyChatError(error: unknown): {
     }
   }
   const reason = serverReasonOf(error);
+  // A chat timeout (#6006) reads as its own sentence, whatever the server's
+  // message says; the composer's banner says until when.
+  if (codeOf(error) === CHAT_TIMED_OUT_CODE) {
+    return {
+      terminal: true,
+      status,
+      message: CHAT_TIMED_OUT_REFUSAL,
+      busy: false,
+    };
+  }
   // A busy server's 429 (Cloud Run's `Rate exceeded.` when every copy of the
   // API is full) is nobody's pace: it reads as busy on every chat write.
-  const busy = status === 429 && isServerBusy({ statusCode: 429, message: reason });
+  const busy =
+    status === 429 && isServerBusy({ statusCode: 429, message: reason });
   const message = busy ? SERVER_BUSY_COPY : chatRefusalCopy(reason, status);
   const terminal =
     typeof status === "number" && isDefinitiveClientError(status);

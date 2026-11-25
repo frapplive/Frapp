@@ -217,8 +217,19 @@ vi.mock("@/lib/chat/message-reminder", async (importOriginal) => ({
   useRemindMessage: () => remind,
 }));
 
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeout: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
+  // Chat timeouts (#6006): the viewer's own, read through
+  // `chatTimeout`, and the sheet's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeout.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutate: () => {}, isPending: false }),
+  useLiftChatTimeout: () => ({ mutate: () => {}, isPending: false }),
   // Dictation's cleanup needs the API client; nothing here dictates.
   useCleanDictation: () => async () => null,
   // The roster catch-up has its own spec in `@repo/hooks`.

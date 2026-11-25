@@ -145,6 +145,7 @@ import {
 import { ThreadHistoryEdge } from "@/components/chat/thread-history-edge";
 import { ThreadMessageRow } from "@/components/chat/thread-message-row";
 import { MessageThreadScreen } from "@/components/chat/message-thread-screen";
+import { useChatTimeoutHere } from "@/lib/chat/use-chat-timeout-here";
 import { messageLinkUrl } from "@repo/validation";
 import { webAppOrigin } from "@/lib/onboarding/chapter-wizard/invite-link";
 import {
@@ -501,6 +502,12 @@ function ChannelThreadScreen() {
   // row is likely to succeed, as web's `canManageChannel` does.
   const permissionList = usePermissionList();
   const canManageChannel = can("channels:manage", permissionList);
+  // Chat timeouts (#6006): the composer's hint while the viewer is timed out
+  // here, and Time out on a sender's long-press.
+  const timeoutHere = useChatTimeoutHere(openChannel?.channel ?? null);
+  const timedOutHint = timeoutHere.hint;
+  const timeOutTargetFor = timeoutHere.targetFor;
+  const canPostNow = channelCanPost && !timedOutHint;
   const canReplyHere = channelAllowsReplies({
     can_post: channelCanPost,
     is_read_only: channelIsReadOnly,
@@ -1499,6 +1506,11 @@ function ChannelThreadScreen() {
         canDelete: actions.canDelete,
         canReport: actions.canReport,
         blockUserId: actions.canBlock ? message.sender_id : null,
+        timeOut: timeOutTargetFor(
+          message,
+          viewerId,
+          resolveAuthorName(message, nameFor),
+        ),
         senderName: resolveAuthorName(message, nameFor),
         senderLabel: resolveAuthorLabel(message, nameFor, viewerId),
         sentAt: message.created_at,
@@ -1544,6 +1556,7 @@ function ChannelThreadScreen() {
       postCapability.isAuditLog,
       refetchRoster,
       staging.isEditing,
+      timeOutTargetFor,
       viewerId,
     ],
   );
@@ -2251,7 +2264,7 @@ function ChannelThreadScreen() {
               value={staging.value}
               onChangeText={staging.onChangeText}
               onSend={handleSend}
-              canSend={canSend && channelCanPost && !staging.isSavingEdit}
+              canSend={canSend && canPostNow && !staging.isSavingEdit}
               context={staging.context}
               mentionCandidates={mentionRoster.data}
               avatarFor={memberAvatarFor}
@@ -2286,7 +2299,7 @@ function ChannelThreadScreen() {
                   ? "Connecting to chat…"
                   : !channelCanPost
                     ? postRefusalHint(postCapability)
-                    : null)
+                    : timedOutHint)
               }
               hintTone={
                 askNotice || sendError || attachError || staging.editError
@@ -2300,12 +2313,12 @@ function ChannelThreadScreen() {
               // a sheet that greys what can't work this second and says why
               // (offline Photo among them: an upload has no outbox).
               onOpenPlus={staging.isEditing ? undefined : composerPlus.openPlus}
-              plusDisabled={!channelCanPost}
+              plusDisabled={!canPostNow}
               onRemovePhoto={removePhoto}
               onRetryPhoto={retryPhoto}
               isPicking={isPicking}
               onSchedule={
-                canSend && !staging.isSavingEdit
+                canSend && !timedOutHint && !staging.isSavingEdit
                   ? scheduleSend.openSchedule
                   : undefined
               }
@@ -2356,6 +2369,7 @@ function ChannelThreadScreen() {
         onEdit={staging.startEdit}
         onDelete={handleDelete}
         onMention={handleMention}
+        onTimeOut={timeoutHere.open}
         onMarkUnread={handleMarkUnread}
         onReact={handleReact}
         onUnreact={handleUnreact}
@@ -2364,6 +2378,7 @@ function ChannelThreadScreen() {
         onSetSaved={handleSetSaved}
         onRemind={handleRemind}
       />
+      {timeoutHere.sheet}
       <MessageListSheet
         ref={listSheetRef}
         kind={listKind}

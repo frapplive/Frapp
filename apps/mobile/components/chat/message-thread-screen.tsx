@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChatTimeoutHere } from "@/lib/chat/use-chat-timeout-here";
 import { ChatBackground } from "@/components/chat/chat-background";
 import {
   Alert,
@@ -256,6 +257,11 @@ export function MessageThreadScreen({
       }),
     [channelQuery.data, queryClient, channelId, viewerId, roster.byId],
   );
+  // Chat timeouts (#6006): a thread reply is in its channel, so the
+  // composer's hint and Time out follow the channel's.
+  const timeoutHere = useChatTimeoutHere(openChannel?.channel ?? null);
+  const timedOutHint = timeoutHere.hint;
+  const timeOutTargetFor = timeoutHere.targetFor;
   const channelTitle = threadTitleFor(openChannel, channelQuery.isFetching);
 
   // The viewer's block list, as s05 applies it: a held row isn't drawn, a
@@ -728,6 +734,11 @@ export function MessageThreadScreen({
         canDelete: actions.canDelete,
         canReport: actions.canReport,
         blockUserId: actions.canBlock ? message.sender_id : null,
+        timeOut: timeOutTargetFor(
+          message,
+          viewerId,
+          resolveAuthorName(message, nameFor),
+        ),
         senderName: resolveAuthorName(message, nameFor),
         senderLabel: resolveAuthorLabel(message, nameFor, viewerId),
         sentAt: message.created_at,
@@ -748,6 +759,7 @@ export function MessageThreadScreen({
       canManageChannel,
       refetchRoster,
       nameFor,
+      timeOutTargetFor,
     ],
   );
   // Save message on the root and on replies (#3723), as web's thread panel
@@ -1079,18 +1091,19 @@ export function MessageThreadScreen({
             }
             plusLabel="Send a GIF"
             onSchedule={
-              !writeBlockedReason && !staging.isEditing
+              !writeBlockedReason && !timedOutHint && !staging.isEditing
                 ? scheduleSend.openSchedule
                 : undefined
             }
             scheduled={scheduleSend.scheduled}
-            plusDisabled={!!writeBlockedReason || !canReply}
+            plusDisabled={!!writeBlockedReason || !canReply || !!timedOutHint}
             canSend={
               !!viewerId &&
               !writeBlockedReason &&
               // The composer keys its input's `editable` on this, so an emptied
               // edit stays typeable; it greys Save out itself, and the hint says
               // why (`useComposerStaging`).
+              !timedOutHint &&
               (staging.isEditing ? !staging.isSavingEdit : canReply)
             }
             placeholder={
@@ -1104,7 +1117,9 @@ export function MessageThreadScreen({
                   : staging.editError
                 : !canReply
                   ? THREAD_NO_REPLY_HINT
-                  : writeBlockedReason
+                  : timedOutHint
+                    ? timedOutHint
+                    : writeBlockedReason
                     ? THREAD_OFFLINE_HINT
                     : sendError
             }

@@ -627,6 +627,11 @@ vi.mock("@/components/onboarding/welcome-card", () => ({
 const chatEventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
 }));
+/** The viewer's own chat timeout as `GET /v1/chat/timeout` answers (#6006). */
+const chatTimeoutState: {
+  current: { until: string | null; reason: string | null };
+} = { current: { until: null, reason: null } };
+
 vi.mock("@repo/hooks", async () => ({
   // The Now card's read (#5777): nothing on unless a test says so.
   useEventsOnNow: () => chatEventsNow.value,
@@ -763,6 +768,12 @@ vi.mock("@repo/hooks", async () => ({
   }),
   // The rows' clock (#5519): a fixed instant, so times read the same each run.
   useNowDate: () => FIXED_NOW,
+  // Chat timeouts (#6006): the viewer's own (`chatTimeoutState`), and the
+  // Time out dialog's reads and writes.
+  useMyChatTimeout: () => ({ data: chatTimeoutState.current }),
+  useMemberByUserId: () => ({ data: undefined }),
+  useTimeOutMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useLiftChatTimeout: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // Direct messages' order and last lines (#3774).
   useChannelLatestMessages: (options?: { enabled?: boolean }) => {
     latestReads.enabled.push(options?.enabled ?? true);

@@ -4419,6 +4419,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls */
+        get: operations["ChatTimeoutController_mine_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/{id}/chat-timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President. */
+        put: operations["ChatTimeoutController_timeOut_v1"];
+        post?: never;
+        /** Lift a member's chat timeout early. Under the same rank rule as setting one. */
+        delete: operations["ChatTimeoutController_lift_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rush/candidates": {
         parameters: {
             query?: never;
@@ -8590,6 +8625,15 @@ export interface components {
             viewer_can_remove?: boolean;
             /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads. */
             viewer_can_edit_profile?: boolean;
+            /** @description Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads. */
+            viewer_can_timeout?: boolean;
+            /**
+             * Format: date-time
+             * @description Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout.
+             */
+            chat_timeout_until?: string | null;
+            /** @description The reason the officer gave, under the same rule. */
+            chat_timeout_reason?: string | null;
         };
         MemberRosterEntryDto: {
             /** @description users.id — the id chat carries as sender_id */
@@ -12076,6 +12120,33 @@ export interface components {
         SetChapterGroupMembersDto: {
             /** @description The group's whole member list, as `users.id`s of members of the chapter. Replaces the list, all or none. */
             member_ids: string[];
+        };
+        ChatTimeoutStateDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+        };
+        SetChatTimeoutDto: {
+            /**
+             * @description 5 minutes, 1 hour, 1 day or 1 week.
+             * @enum {string}
+             */
+            duration: "5m" | "1h" | "1d" | "1w";
+            /** @description Shown to the member and to officers who can time out. Optional. */
+            reason?: string | null;
+        };
+        MemberChatTimeoutDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+            /** Format: uuid */
+            member_id: string;
         };
         RushCandidateViewDto: {
             /** Format: uuid */
@@ -25355,6 +25426,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChapterGroupDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_mine_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatTimeoutStateDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_timeOut_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetChatTimeoutDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_lift_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
                 };
             };
             /** @description Error */

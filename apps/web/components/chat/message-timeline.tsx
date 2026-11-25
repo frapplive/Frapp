@@ -558,6 +558,8 @@ export interface MessageTimelineProps {
   /** A row's Report and Block (#2687); see `MessageItemProps`. */
   onReport?: (message: ChatMessage) => void;
   onBlock?: (message: ChatMessage) => void;
+  /** Time out a message's sender (#6006); see `MessageItem`. */
+  onTimeOut?: (message: ChatMessage) => void;
   /** A row's Forward (#4907); see `MessageItemProps`. */
   onForward?: (message: ChatMessage) => void;
   /** Opens a member's profile by `users.id` (#3726); see `MessageItemProps`. */
@@ -656,6 +658,7 @@ export const MessageTimeline = forwardRef<
     inAuditLog,
     onReport,
     onBlock,
+    onTimeOut,
     onForward,
     onOpenProfile,
     isMember,
@@ -1430,6 +1433,7 @@ export const MessageTimeline = forwardRef<
                   inAuditLog={inAuditLog}
                   onReport={onReport}
                   onBlock={onBlock}
+                  onTimeOut={onTimeOut}
                   onForward={onForward}
                   onOpenProfile={onOpenProfile}
                   isMember={isMember}

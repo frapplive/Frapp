@@ -14798,6 +14798,143 @@
         ]
       }
     },
+    "/v1/chat/timeout": {
+      "get": {
+        "operationId": "ChatTimeoutController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTimeoutStateDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/v1/members/{id}/chat-timeout": {
+      "put": {
+        "operationId": "ChatTimeoutController_timeOut_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetChatTimeoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President.",
+        "tags": [
+          "Chat"
+        ]
+      },
+      "delete": {
+        "operationId": "ChatTimeoutController_lift_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lift a member's chat timeout early. Under the same rank rule as setting one.",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
     "/v1/rush/candidates": {
       "get": {
         "operationId": "RushController_lookup_v1",
@@ -27805,6 +27942,21 @@
           "viewer_can_edit_profile": {
             "type": "boolean",
             "description": "Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads."
+          },
+          "viewer_can_timeout": {
+            "type": "boolean",
+            "description": "Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads."
+          },
+          "chat_timeout_until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout."
+          },
+          "chat_timeout_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reason the officer gave, under the same rule."
           }
         },
         "required": [
@@ -37674,6 +37826,73 @@
         },
         "required": [
           "member_ids"
+        ]
+      },
+      "ChatTimeoutStateDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "until",
+          "reason"
+        ]
+      },
+      "SetChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5m",
+              "1h",
+              "1d",
+              "1w"
+            ],
+            "description": "5 minutes, 1 hour, 1 day or 1 week."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "Shown to the member and to officers who can time out. Optional."
+          }
+        },
+        "required": [
+          "duration"
+        ]
+      },
+      "MemberChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "member_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "until",
+          "reason",
+          "member_id"
         ]
       },
       "RushCandidateViewDto": {

@@ -24,9 +24,11 @@ import {
   useBlockedUserIds,
   useGetOrCreateDm,
   useGroups,
+  useLiftChatTimeout,
   useMemberByUserId,
   useMemberDisplayNames,
   useMemberPhoneReach,
+  useNowDate,
   usePermissionList,
   useRemoveMember,
   useRoles,
@@ -34,10 +36,16 @@ import {
   type AssignmentChip,
 } from "@repo/hooks";
 import {
+  isChatTimeoutActive,
   PHONE_REACH_LABEL,
   phoneReachLastOpened,
   phoneReachSummary,
 } from "@repo/validation";
+import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import {
+  TimeoutMemberSheet,
+  type TimeoutSheetTarget,
+} from "@/components/chat/timeout-member-sheet";
 import { BIRTHDAY_COPY, can } from "@repo/validation";
 import { parseChapterRoles } from "@repo/hooks/chapter-roles";
 import { errorCopy } from "@repo/hooks/error-copy";
@@ -86,6 +94,7 @@ import { usePledgeClassRows } from "@/lib/directory/pledge-class";
 import { selectMemberDetail } from "@/lib/directory/member-detail";
 import { showPhoneActions } from "@/lib/directory/phone-actions";
 import {
+  confirmLiftTimeout,
   confirmRemoveMember,
   memberMenuActions,
   showMemberMenu,
@@ -274,6 +283,17 @@ export function MemberProfile({
   const correctionSheetRef = useRef<BottomSheetModal>(null);
   const [correctionSession, setCorrectionSession] =
     useState<MemberCorrectionSession | null>(null);
+  // Time out (#6006): the sheet a message's long-press opens too.
+  const timeoutSheetRef = useRef<BottomSheetModal>(null);
+  const [timeoutTarget, setTimeoutTarget] =
+    useState<TimeoutSheetTarget | null>(null);
+  const liftTimeout = useLiftChatTimeout();
+  const now = useNowDate();
+  const timedOutUntil =
+    detail?.chatTimeoutUntil &&
+    isChatTimeoutActive(detail.chatTimeoutUntil, now.getTime())
+      ? detail.chatTimeoutUntil
+      : null;
   // Folded on every visit: logistics are a tap away, not the first read.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Distinct from "no role" (`[]` once the read has settled): while it is
@@ -298,6 +318,9 @@ export function MemberProfile({
     // The server's answer, as for removal below.
     canEdit:
       !!detail?.canEditProfile && !!detail.memberId && otherMemberId !== null,
+    canTimeOut:
+      !!detail?.canTimeOut && !!detail.memberId && otherMemberId !== null,
+    timedOut: timedOutUntil !== null,
     canBlock: blockTarget !== null,
     isBlocked,
     // The server's answer already excludes the viewer's own profile; the
@@ -339,6 +362,27 @@ export function MemberProfile({
             graduationYear: target.graduationYear,
           });
           correctionSheetRef.current?.present();
+        } else if (action === "time-out") {
+          setTimeoutTarget({ userId: target.userId, name: target.displayName });
+          timeoutSheetRef.current?.present();
+        } else if (action === "lift-timeout" && target.memberId) {
+          const memberId = target.memberId;
+          confirmLiftTimeout({
+            name: target.displayName,
+            run: () =>
+              liftTimeout.mutate(
+                { memberId },
+                {
+                  onError: (error) =>
+                    Alert.alert(
+                      CHAT_TIMEOUT_COPY.liftFailed,
+                      errorCopy(error, "Try again in a moment.", {
+                        serverWritesForMembers: true,
+                      }),
+                    ),
+                },
+              ),
+          });
         } else if (action === "block") {
           confirmBlockMember({
             name: target.displayName,
@@ -505,6 +549,13 @@ export function MemberProfile({
           {statusLine ? (
             <Text style={styles.statusLine} numberOfLines={2}>
               {statusLine}
+            </Text>
+          ) : null}
+          {timedOutUntil ? (
+            // The member and whoever can time out see it (#6006), as on web.
+            <Text style={styles.timeoutLine}>
+              {CHAT_TIMEOUT_COPY.until(timedOutUntil, now)}
+              {detail.chatTimeoutReason ? ` · ${detail.chatTimeoutReason}` : ""}
             </Text>
           ) : null}
 
@@ -721,6 +772,7 @@ export function MemberProfile({
         ref={correctionSheetRef}
         session={correctionSession}
       />
+      <TimeoutMemberSheet ref={timeoutSheetRef} target={timeoutTarget} />
     </>
   );
 }
@@ -933,6 +985,10 @@ function createStyles(tokens: SignetTokens) {
     meta: {
       ...typeRole(tokens.typography.role.caption),
       color: tokens.color.text.muted,
+    },
+    timeoutLine: {
+      ...typeRole(tokens.typography.role.caption),
+      color: tokens.color.semantic.warning,
     },
     // At the header's start, under the name it belongs to: the phone's
     // header is left-aligned where web's sheet centers its own.
