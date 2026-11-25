@@ -27,6 +27,7 @@ import {
   pulledNames,
   staleInstall,
   stagingRuntimeVersion,
+  listNativeSources,
   updateEnv,
   uploadSourceMaps,
 } from "../../eas-update.mjs";
@@ -195,13 +196,15 @@ const STAGING_EAS = {
     },
   },
 };
+/** No native source files: the staging cases below fake every file they read. */
+const noSources = () => [];
 const stagingFiles = (over = {}) =>
   files({ [EAS_JSON]: JSON.stringify(STAGING_EAS), [APP_CONFIG]: "module.exports = (c) => c;\n", ...over });
 
 test("the staging runtime is the version plus a hash that moves with each native input and nothing else", () => {
-  const base = stagingRuntimeVersion({ readFile: stagingFiles(), isNative });
+  const base = stagingRuntimeVersion({ readFile: stagingFiles(), isNative, nativeSources: noSources });
   assert.match(base.runtime, /^0\.9\.1-[0-9a-f]{12}$/);
-  assert.deepEqual(stagingRuntimeVersion({ readFile: stagingFiles(), isNative }), base, "stable for one tree");
+  assert.deepEqual(stagingRuntimeVersion({ readFile: stagingFiles(), isNative, nativeSources: noSources }), base, "stable for one tree");
   const withLock = (versions) => ({
     [LOCKFILE]: JSON.stringify(lock(versions)),
     "node_modules/.package-lock.json": JSON.stringify(lock(versions)),
@@ -210,6 +213,7 @@ test("the staging runtime is the version plus a hash that moves with each native
   const jsOnly = stagingRuntimeVersion({
     readFile: stagingFiles(withLock({ "expo-haptics": "57.0.3", react: "19.2.4" })),
     isNative,
+    nativeSources: noSources,
   });
   assert.equal(jsOnly.runtime, base.runtime);
   for (const [label, over] of [
@@ -218,27 +222,54 @@ test("the staging runtime is the version plus a hash that moves with each native
     ["app.json", { [APP_JSON]: JSON.stringify({ expo: { version: "0.9.1", name: "x" } }) }],
     ["app.config.js", { [APP_CONFIG]: "module.exports = (c) => ({ ...c });\n" }],
   ]) {
-    const moved = stagingRuntimeVersion({ readFile: stagingFiles(over), isNative });
+    const moved = stagingRuntimeVersion({ readFile: stagingFiles(over), isNative, nativeSources: noSources });
     assert.match(moved.runtime, /^0\.9\.1-[0-9a-f]{12}$/, label);
     assert.notEqual(moved.runtime, base.runtime, label);
   }
   // A Windows checkout's line endings are not a native input.
-  const crlf = stagingRuntimeVersion({ readFile: stagingFiles({ [APP_CONFIG]: "module.exports = (c) => c;\r\n" }), isNative });
+  const crlf = stagingRuntimeVersion({ readFile: stagingFiles({ [APP_CONFIG]: "module.exports = (c) => c;\r\n" }), isNative, nativeSources: noSources });
   assert.equal(crlf.runtime, base.runtime);
+});
+
+test("the staging runtime moves with the app's own native source (#6024)", () => {
+  const SWIFT = "apps/mobile/targets/notification-service/NotificationService.swift";
+  const withSource = (text, list = [SWIFT]) =>
+    stagingRuntimeVersion({ readFile: stagingFiles({ [SWIFT]: text }), isNative, nativeSources: () => list });
+  const base = withSource("class A {}\n");
+  assert.match(base.runtime, /^0\.9\.1-[0-9a-f]{12}$/);
+  assert.notEqual(withSource("class B {}\n").runtime, base.runtime, "an edit");
+  assert.notEqual(withSource("class A {}\n", []).runtime, base.runtime, "a removal");
+  assert.equal(withSource("class A {}\r\n").runtime, base.runtime, "line endings");
+});
+
+test("listNativeSources walks every native source dir, and reads none that is missing", () => {
+  const dirent = (name, dir) => ({ name, isDirectory: () => dir, isFile: () => !dir });
+  const tree = {
+    "/r/apps/mobile/targets": [dirent("notification-service", true)],
+    "/r/apps/mobile/targets/notification-service": [dirent("Info.plist", false), dirent("NotificationService.swift", false)],
+  };
+  const listed = listNativeSources({ root: "/r", readdir: (p) => tree[p], exists: (p) => p in tree });
+  assert.deepEqual(listed, [
+    "apps/mobile/targets/notification-service/Info.plist",
+    "apps/mobile/targets/notification-service/NotificationService.swift",
+  ]);
+  assert.deepEqual(listNativeSources({ root: "/r", readdir: () => assert.fail("read"), exists: () => false }), []);
 });
 
 test("the staging runtime refuses a tree it can't read natives from", () => {
   const stale = stagingRuntimeVersion({
     readFile: stagingFiles({ "node_modules/.package-lock.json": JSON.stringify(lock({ "expo-haptics": "57.0.2", react: "19.2.3" })) }),
     isNative,
+    nativeSources: noSources,
   });
   assert.match(stale.error, /npm ci/);
   const absent = stagingRuntimeVersion({
     readFile: stagingFiles({ [LOCKFILE]: JSON.stringify(lock({ "expo-haptics": "57.0.3", react: "19.2.3", "@sentry/react-native": "8.0.0" })) }),
     isNative,
+    nativeSources: noSources,
   });
   assert.match(absent.error, /@sentry\/react-native is in the lockfile but not installed/);
-  const noVersion = stagingRuntimeVersion({ readFile: stagingFiles({ [APP_JSON]: JSON.stringify({ expo: {} }) }), isNative });
+  const noVersion = stagingRuntimeVersion({ readFile: stagingFiles({ [APP_JSON]: JSON.stringify({ expo: {} }) }), isNative, nativeSources: noSources });
   assert.match(noVersion.error, /expo\.version/);
 });
 

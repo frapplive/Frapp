@@ -167,6 +167,52 @@ describe('ExpoPushProvider', () => {
       expect(actionable[0]).toMatchObject({ categoryId: 'event-excuse' });
       expect(plain[0]).not.toHaveProperty('categoryId');
     });
+
+    it('sends who a chat push is from so the phone draws their photo (#6024)', async () => {
+      mockSendPushNotificationsAsync.mockResolvedValue([
+        { status: 'ok', id: 'r-1' },
+      ]);
+      const communication = {
+        senderId: 'u-sam',
+        senderName: 'Sam Rivera',
+        senderImageUrl: 'https://storage.example/signed/sam.jpg',
+        groupName: '#general',
+      };
+
+      await provider.sendToUser([VALID_A], {
+        title: 'Sam Rivera in #general',
+        body: 'hi',
+        data: { target: { screen: 'chat', channelId: 'ch-1' } },
+        communication,
+      });
+      await provider.sendToUser([VALID_A], {
+        title: 'Sam Rivera',
+        body: 'hi',
+        communication: { senderId: 'u-sam', senderName: 'Sam Rivera' },
+      });
+      await provider.sendToUser([VALID_A], { title: 'Hi', body: 'There' });
+
+      const [[withPhoto], [noPhoto], [plain]] = mockSendPushNotificationsAsync
+        .mock.calls as [Record<string, unknown>[]][];
+      // The iOS extension reads `data.communication`; Android draws
+      // `richContent.image` as the large icon.
+      expect(withPhoto[0]).toMatchObject({
+        mutableContent: true,
+        richContent: { image: communication.senderImageUrl },
+        data: {
+          target: { screen: 'chat', channelId: 'ch-1' },
+          communication,
+        },
+      });
+      // No photo: iOS still draws the sender (their initials); Android keeps
+      // the app icon.
+      expect(noPhoto[0]).toMatchObject({ mutableContent: true });
+      expect(noPhoto[0]).not.toHaveProperty('richContent');
+      for (const key of ['mutableContent', 'richContent']) {
+        expect(plain[0]).not.toHaveProperty(key);
+      }
+      expect(plain[0].data).toBeUndefined();
+    });
   });
 
   // #3846: a push with no text tells the reader nothing on a lock screen.

@@ -25,8 +25,12 @@
       "bundleIdentifier": "live.frapp.mobile",
       "associatedDomains": ["applinks:app.frapp.live"],
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.usernotifications.communication": true
+      },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserActivityTypes": ["INSendMessageIntent"]
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,
@@ -87,6 +91,7 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+      "@bacons/apple-targets",
       [
         "expo-secure-store",
         {

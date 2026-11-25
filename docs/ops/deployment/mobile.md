@@ -512,6 +512,18 @@ stops if a later ship has tagged another commit; dispatch Deploy production for 
   but also starts a build outside Deploy production. *The failure is from the run. The cause and
   the commands are read from eas-cli 24.8.0's source (2026-11-12); the fix itself hasn't been run
   yet, so correct this from the first time it is.*
+- **A provisioning profile for every app extension, before the first store build that adds it**
+  (#6024). Each extension is its own bundle ID with its own profile, and a non-interactive build
+  can't make either. The Notification Service Extension (`apps/mobile/targets/notification-service`,
+  added by `@bacons/apple-targets`, which lists it for EAS in
+  `extra.eas.build.experimental.ios.appExtensions`) is `live.frapp.mobile.NotificationService`, and
+  `live.frapp.mobile.staging.NotificationService` for Frapp Staging. The same **All: Set up all the
+  required credentials** run as the capability item above, from a checkout that has the extension,
+  sets up every target the config lists; run it for `production` and again for `staging`
+  (`--profile staging`). The same release adds the Communication Notifications capability
+  (`com.apple.developer.usernotifications.communication` under `ios.entitlements`), so that run
+  covers both. *Derived from eas-cli's documented handling of `appExtensions`; not yet run, so
+  correct this from the first time it is.*
 - **iOS signing credentials in EAS.** A non-interactive build can't create the distribution
   certificate (eas-cli's `SetUpDistributionCertificate` throws `MissingCredentialsNonInteractiveError`).
   One interactive `npm run eas -- build --platform ios --profile production` creates it. *Status

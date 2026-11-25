@@ -18,6 +18,8 @@ import type { IMemberRepository } from '#domain/repositories/member.repository.i
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import { NotificationService } from '../services/notification.service';
+import { ProfilePhotoUrlService } from '../services/profile-photo-url.service';
+import type { PushCommunication } from '#domain/adapters/notification.interface';
 import { BurstBundler } from './burst-bundler';
 import { CHAT_NOTIFICATION_PREFERENCE_REPOSITORY } from '#domain/repositories/chat-notification-preference.repository.interface';
 import type { IChatNotificationPreferenceRepository } from '#domain/repositories/chat-notification-preference.repository.interface';
@@ -152,6 +154,42 @@ function readableChannelName(
     return {};
   }
   return channel.name ? { channelName: channel.name } : {};
+}
+
+/** Who a chat push is from, as the worker resolved them. */
+interface PushSender {
+  name: string;
+  /** A signed URL to their profile photo, or `null` when they have none. */
+  imageUrl: string | null;
+}
+
+/**
+ * Who a chat push is from and what conversation it belongs to, for the phone
+ * to draw it as a message from that person (#6024, `PushPayload.communication`).
+ * A DM is one-to-one and carries no group name. A channel, announcements
+ * included, is named `#<name>` the way its title names it; a group DM by its
+ * own name, and an unnamed one by none, so the phone draws it like a DM from
+ * the sender, as its title already reads.
+ */
+function pushCommunication(
+  channel: Pick<CachedChannelRow, 'type' | 'name'>,
+  senderId: string,
+  sender: PushSender,
+): PushCommunication {
+  const groupName =
+    channel.type === 'DM'
+      ? undefined
+      : channel.type === 'GROUP_DM'
+        ? readableChannelName(channel).channelName
+        : channel.name
+          ? `#${channel.name}`
+          : undefined;
+  return {
+    senderId,
+    senderName: sender.name,
+    ...(sender.imageUrl ? { senderImageUrl: sender.imageUrl } : {}),
+    ...(groupName ? { groupName } : {}),
+  };
 }
 
 /**
@@ -308,6 +346,8 @@ export class ChatPushWorkerService
     /** The sender's display name, which every chat push now carries (#2771). */
     @Inject(USER_REPOSITORY)
     private readonly userRepo: IUserRepository,
+    /** The sender's photo, which a chat push carries for the phone to draw (#6024). */
+    private readonly profilePhotos: ProfilePhotoUrlService,
     /** Who follows or muted a thread, for a thread reply's audience (#3785). */
     @Inject(CHAT_THREAD_REPOSITORY)
     private readonly threads: IChatThreadRepository,
@@ -600,7 +640,7 @@ export class ChatPushWorkerService
 
     // Read once, and only once a recipient is actually getting a push: most
     // messages in a `mentions` channel push nobody.
-    let senderName: Promise<string | null> | null = null;
+    let sender: Promise<PushSender | null> | null = null;
 
     for (const recipientId of recipientIds) {
       const prefs = prefsByUser.get(recipientId) ?? [];
@@ -632,7 +672,7 @@ export class ChatPushWorkerService
       const burst = this.bundler.record(bundleKey, mentioned);
       if (burst.action === 'skip') continue;
 
-      senderName ??= this.resolveSenderName(row.sender_id);
+      sender ??= this.resolveSender(row.sender_id);
       const payload = this.buildPayload(
         channel,
         row.sender_id,
@@ -640,7 +680,7 @@ export class ChatPushWorkerService
           ? senderPreview
           : withheldPreview,
         burst,
-        await senderName,
+        await sender,
         threadRootId,
         mentioned,
         row.id,
@@ -973,13 +1013,16 @@ export class ChatPushWorkerService
   }
 
   /**
-   * The sender's display name, or `null` when there is nothing worth showing:
-   * no sender, a blank name, or a lookup that failed. A failed lookup costs the
-   * name, never the push, so it is logged and swallowed.
+   * The sender as a push shows them: their display name and, when they have
+   * one, a signed URL to their profile photo (#6024). `null` when there is no
+   * name worth showing: no sender, a blank name, or a lookup that failed. A
+   * failed lookup costs the name, never the push, so it is logged and
+   * swallowed; a photo that fails to sign costs only the photo
+   * (`ProfilePhotoUrlService` serves `null` then).
    */
-  private async resolveSenderName(
+  private async resolveSender(
     senderId: string | null,
-  ): Promise<string | null> {
+  ): Promise<PushSender | null> {
     // The system actor ("Frapp System") posts the audit bridge, poll-expiry
     // notices and invite-accept DMs. #2771 kept their handling as it was, so
     // they keep the titles they had rather than naming a sender nobody is.
@@ -989,12 +1032,17 @@ export class ChatPushWorkerService
         senderId,
       ]);
       const name = identity?.display_name?.trim();
-      return name ? name : null;
+      if (!name) return null;
+      const [signed] = await this.profilePhotos.signRows(
+        [{ avatar_url: identity.avatar_url }],
+        () => senderId,
+      );
+      return { name, imageUrl: signed?.avatar_url ?? null };
     } catch (err) {
       logThrowable(
         this.logger,
         'warn',
-        `chat-push: sender name lookup failed for ${senderId}; pushing without it`,
+        `chat-push: sender lookup failed for ${senderId}; pushing without it`,
         err,
       );
       return null;
@@ -1006,7 +1054,7 @@ export class ChatPushWorkerService
     senderId: string | null,
     preview: string,
     burst: ReturnType<BurstBundler['record']>,
-    senderName: string | null,
+    pushSender: PushSender | null,
     threadRootId: string | null = null,
     mentioned = false,
     messageId: string | null = null,
@@ -1021,6 +1069,7 @@ export class ChatPushWorkerService
     // reader may reply in its thread (#3785), so the channel alone would hand
     // every member an URGENT, quiet-hours-skipping push.
     const isAnnouncement = !threadRootId && this.isAnnouncementPush(channel);
+    const senderName = pushSender?.name ?? null;
     const shared = {
       title: this.titleFor(channel, isAnnouncement, senderName),
       category: isAnnouncement ? 'announcements' : 'chat',
@@ -1028,6 +1077,11 @@ export class ChatPushWorkerService
       // One iOS stack per conversation. A DM is its own channel, so this is
       // also one stack per person; the app clears a stack once it is read.
       threadId: chatPushThreadId(channel.id),
+      ...(senderId && pushSender
+        ? {
+            communication: pushCommunication(channel, senderId, pushSender),
+          }
+        : {}),
     };
     // The sender rides on every chat row, bundled or not, so the in-app list
     // can withhold a member's rows from someone who blocks them later (#2715).
