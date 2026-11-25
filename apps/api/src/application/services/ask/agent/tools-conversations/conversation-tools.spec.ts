@@ -1154,6 +1154,28 @@ describe('conversation and record tools', () => {
       expect(result.leftOutMessages).toBe(2);
     });
 
+    it('opens no conversation when the index could only match words: the word search already ran', async () => {
+      const { tool, catchUp } = build({
+        hits: [hit()],
+        retrieval: {
+          status: 'ok',
+          passages: [
+            {
+              channelId: GENERAL,
+              messageId: MESSAGE,
+              sourceAt: '2026-11-10T20:00:00.000Z',
+              messageCount: 9,
+            },
+          ],
+          leftOutMessages: 0,
+          wordsOnly: true,
+        },
+      });
+      const result = await tool.run({ ...args, query: 'formal bus' }, context);
+      expect(catchUp.readStretch).not.toHaveBeenCalled();
+      expect(result.sources.length).toBeGreaterThan(0);
+    });
+
     it('keeps only the named member’s messages from a conversation the meaning search found', async () => {
       const { tool } = build({
         passages: [
@@ -1290,11 +1312,11 @@ describe('conversation and record tools', () => {
       sourceAt: '2026-01-01T00:00:00.000Z',
       ...over,
     });
-    const build = (passages: unknown[], status = 'ok') => {
+    const build = (passages: unknown[], status = 'ok', wordsOnly = false) => {
       const retrieval = {
         retrieve: jest.fn(async () =>
           status === 'ok'
-            ? { status, passages, leftOutMessages: 0 }
+            ? { status, passages, leftOutMessages: 0, wordsOnly }
             : { status: 'unavailable', reason: 'disabled' },
         ),
       };
@@ -1399,6 +1421,19 @@ describe('conversation and record tools', () => {
       expect(
         (await build([]).tool.run({ ...args, since: 'spring' }, context)).note,
       ).toMatch(/dates could not be read/);
+    });
+
+    it('does not call a miss proof of absence when only words could be matched', async () => {
+      expect(
+        (await build([], 'ok', true).tool.run(args, context)).note,
+      ).toMatch(/only exact words were matched/);
+      // Passages found by their words are still given.
+      const found = await build([passage()], 'ok', true).tool.run(
+        args,
+        context,
+      );
+      expect(found.sources).toHaveLength(1);
+      expect(found.note).toBeNull();
     });
   });
 
