@@ -104,9 +104,6 @@ export * from "./event-attendance";
 // Editing or deleting an existing event: what a save sends, and whether to
 // ask "this event or all upcoming" first. Web and the phone share it (#3667).
 export * from "./event-edit";
-// All-day, multi-day and time-TBD events, tentative, and on the calendar only
-// (#6098): the shapes and the rules both apps and the API read.
-export * from "./event-timing";
 // Absence excuses for required events: the late window and reason limit the
 // API enforces and the apps read (#3735).
 export * from "./event-excuse";
@@ -115,6 +112,9 @@ export * from "./event-form-rows";
 // What is on right now, and the Now card's words (#5777).
 export * from "./event-now";
 export * from "./event-page";
+// All-day, multi-day and time-TBD events, tentative, and on the calendar only
+// (#6098): the shapes and the rules both apps and the API read.
+export * from "./event-timing";
 // The chapter's Everyone role, the floor every member holds, and the three
 // base roles an officer gives (Paul, 2026-11-21).
 export {
