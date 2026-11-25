@@ -168,7 +168,7 @@ describe("the route is flush on the shell", () => {
 /*
  * The settings-row shape (#6031): a title, the plan as one row, then rows for
  * the plan table and the member invoices, each opening a page of its own with
- * a way back. Every word of billing copy is as it was.
+ * a way back. No pricing, legal or plan wording changed.
  */
 describe("the page in rows", () => {
   it("titles itself, then the plan, then the table's and the invoices' rows", () => {

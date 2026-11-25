@@ -1112,7 +1112,7 @@ What needs stating is where the board describes a product this codebase does not
   The plan is one row in a group's frame: its name and status chip, the meta line under them, and its one action at the row's end, sized to its label.
   Under it, a group of rows: the plan table's ("What your plan includes", or "What the subscription unlocks" off a paid plan, with how many modules it lists) and, while dues is on, Member invoices with how many are open.
   Each opens a page of its own with a way back (`?tab=billing&page=plan|invoices`), so the table no longer fills the page a president opens a few times a year.
-  Cancel or close stays last. Every word of billing copy stayed as it was.
+  Cancel or close stays last. The plan's, the table's and Cancel or close's words are unchanged; the table names modules as the app does (Study zones, Logs, Chapter settings, Paul's pick), the plan's meta line lost its Invoices link to the Member invoices row, and the rows' labels and counts are new.
   The phone has no billing page: subscriptions are not offered, linked or mentioned in the app ([`../../behavior/onboarding.md`](../../behavior/onboarding.md)).
 
 - **Omit, never placeholder.**

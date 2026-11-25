@@ -151,14 +151,11 @@ const ROW_CLASS =
   "grid min-h-10 grid-cols-[1fr_72px_72px] items-center gap-2 border-t border-border px-4 py-1.5 @md:grid-cols-[1fr_120px_120px]";
 
 /**
- * `onPaidPlan` is whether the chapter holds the subscription (`active` or
- * `past_due`). A president on Pro opens Plan and billing to see what the
- * chapter is paying for, not to be sold it, so the heading says so and the
- * Pro column is marked as theirs. `false` and unknown keep the selling copy.
- */
-/**
  * The table's name, which is the title of the page it opens on (#6031) and
- * the label of Plan and billing's row that opens it.
+ * the label of Plan and billing's row that opens it. `onPaidPlan` is whether
+ * the chapter holds the subscription (`active` or `past_due`): a president on
+ * Pro opens Plan and billing to see what the chapter is paying for, not to be
+ * sold it, so the name says so. `false` and unknown keep the selling copy.
  */
 export function planMatrixTitle(onPaidPlan: boolean): string {
   return onPaidPlan
@@ -179,6 +176,7 @@ export function planMatrixModuleCount(): number {
 /**
  * The plan table, on a page of its own that Plan and billing's row opens
  * (#6031): the page's heading names it, so the table draws none of its own.
+ * On a paid plan (`onPaidPlan`) the Pro column is marked as the chapter's.
  */
 export function PlanMatrix({ onPaidPlan = false }: { onPaidPlan?: boolean }) {
   return (

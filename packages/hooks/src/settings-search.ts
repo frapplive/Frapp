@@ -602,9 +602,14 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["receipts", "billing history", "payments", "invoice"],
     // Viewing alone changes nothing there, and search lists what can change.
     requires: ["billing:view", "billing:manage"],
-    // The list is drawn only while dues is on (off for the beta).
+    // The list is drawn only while dues is on (off for the beta), on its
+    // own page of Plan and billing (#6031).
     betaModule: "dues",
-    web: { page: "billing", anchor: "invoice-list-heading" },
+    web: {
+      page: "billing",
+      anchor: "invoice-list-heading",
+      params: { page: "invoices" },
+    },
   },
   {
     id: "cancel-chapter",

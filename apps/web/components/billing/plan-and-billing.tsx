@@ -59,7 +59,9 @@ const PAGE_TITLE = "Plan and billing";
  * the plan table and the member invoices are rows that open pages of their
  * own (`?page=plan|invoices`, `BILLING_SETTINGS_PAGES`), the way GitHub's,
  * Linear's and Slack's billing pages keep the plan comparison and invoices a
- * step away. Every word of billing copy stayed as it was.
+ * step away. No pricing, legal or plan wording changed: the rows' labels
+ * and counts are new, the plan's meta line lost its Invoices link to the
+ * Member invoices row, and the table names modules as the app does.
  *
  * The top bar supplies the route's `<h1>`; the page's title is an `<h2>`.
  */

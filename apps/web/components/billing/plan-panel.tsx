@@ -444,7 +444,9 @@ export function PlanPanel() {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-2">
+      {/* `items-start`: stacked under the text on a narrow panel, the action
+          keeps its label's width rather than spanning the row. */}
+      <div className="flex shrink-0 flex-col items-start gap-2">
         {awaiting ? (
           <ActivationWait
             exhausted={exhausted}
