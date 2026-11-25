@@ -378,8 +378,15 @@ describe('service_hours', () => {
       is_alumni: true,
     }),
   ];
-  const build = (board: unknown[], roster: unknown[] = profiles) => {
-    const service = { leaderboard: jest.fn(async () => board) };
+  const build = (
+    board: unknown[],
+    roster: unknown[] = profiles,
+    pending: unknown[] = [],
+  ) => {
+    const service = {
+      leaderboard: jest.fn(async () => board),
+      findByChapterFiltered: jest.fn(async () => pending),
+    };
     const members = { findProfilesByChapter: jest.fn(async () => roster) };
     return {
       service,
@@ -422,6 +429,57 @@ describe('service_hours', () => {
     for (const detail of CONTACT_DETAILS) {
       expect(JSON.stringify(result)).not.toContain(detail);
     }
+  });
+
+  it('never reads the approval queue for a member who does not approve service', async () => {
+    const { tool, service } = build([]);
+    await tool.run({ from: '', to: '' }, context);
+    expect(service.findByChapterFiltered).not.toHaveBeenCalled();
+  });
+
+  it('shows a member who approves service what is waiting on them', async () => {
+    const entry = (over: object) => ({
+      user_id: 'user-3',
+      date: '2026-11-08',
+      duration_minutes: 180,
+      description: 'Sorted cans at the pantry, call 555-0100',
+      status: 'PENDING',
+      ...over,
+    });
+    const { tool, service } = build([], profiles, [
+      entry({}),
+      // Before the range: still waiting, so still listed.
+      entry({ user_id: 'user-2', date: '2026-09-30', duration_minutes: 120 }),
+      // No longer in the chapter.
+      entry({ user_id: 'user-gone' }),
+    ]);
+    const approver = askerContext({
+      enabledModules: { hours: true },
+      permissions: new Set(['members:view', 'service:approve']),
+    });
+    const result = await tool.run({ from: '', to: '' }, approver);
+
+    expect(service.findByChapterFiltered).toHaveBeenCalledWith('chapter-a', {
+      status: 'PENDING',
+    });
+    const lines = linesOf(result);
+    expect(lines).toContain(
+      'Active members with nothing logged in that range, approved or waiting: 2 of 3.',
+    );
+    expect(lines).toContain('Entries waiting for approval: 2, 5 hours in all.');
+    expect(lines).toContain(
+      'Waiting for approval: Avery Lin, 2 hours on Wednesday, September 30, 2026.',
+    );
+    expect(lines).toContain(
+      'Waiting for approval: Jordan Lee, 3 hours on Sunday, November 8, 2026.',
+    );
+    expect(lines).toContain(
+      'Jordan Lee: no approved service in that range; 1 entry waiting for approval.',
+    );
+    expect(lines).toContain('Avery Lin: no approved service in that range.');
+    // What the member wrote about the service stays on the approval page.
+    expect(JSON.stringify(result)).not.toContain('pantry');
+    expect(result.note).toMatch(/a member with one has logged service/);
   });
 
   it('cuts a very long chapter and keeps the counts whole', async () => {
