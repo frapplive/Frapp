@@ -120,6 +120,16 @@ export function releaseNoteLineCount(note: ReleaseNote): number {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
   {
+    date: "2026-11-25",
+    title: "New in this update",
+    changes: [
+      "Posted minutes are now filed in Documents, in a Minutes folder that only the people the meeting invited can see.",
+    ],
+    web: [
+      "Documents, minutes and Backwork are one Resources row in the sidebar, in place of Meetings, Documents and Backwork.",
+    ],
+  },
+  {
     date: "2026-11-24",
     title: "New in this update",
     changes: [
