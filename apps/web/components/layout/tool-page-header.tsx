@@ -68,11 +68,12 @@ export function ToolPageHeader({
         count with chat open). The views never wrap or shrink, and the title
         is capped rather than squeezed: 16rem, and 6rem in a header under
         26rem (the 375px floor beside chat), where it truncates. Nothing else
-        in this group gives, so the views can't run under the actions;
+        in this group shrinks, though it grows into spare room, so the views
+        can't run under the actions;
         `PageActions`' pages fold their own controls on the header's width
         (`HEADER_BUTTON_FOLD`, `HeaderSearch`, Rush's View menu).
       */}
-      <div className="flex min-w-0 shrink-0 items-center gap-3 @max-[26rem]:gap-2">
+      <div className="flex min-w-0 grow shrink-0 items-center gap-3 @max-[26rem]:gap-2">
         <div className="hidden min-w-0 max-w-64 items-center lg:flex @max-[26rem]:max-w-24">
           {pageTitle ? (
             <PageTitleText pageTitle={pageTitle} asHeading={titleIsHeading} />
