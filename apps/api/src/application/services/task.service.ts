@@ -197,6 +197,24 @@ export type TaskRowListOptions = TaskListOptions &
     withTotal?: boolean;
   };
 
+/**
+ * Whether a task is done, for the minutes' checkbox (`doneMarks`), and who
+ * it went to, for an officer's row (#6051).
+ */
+export interface TaskDoneMark {
+  done: boolean;
+  /** A task for everyone: how many of its copies are done. */
+  group: { done: number; total: number } | null;
+  who: {
+    /** A task for everyone's audience; null for a task for one member. */
+    audience: TaskGroupSummary['audience'] | null;
+    /** The role's, group's or tier's name, when it went to one. */
+    audience_name: string | null;
+    /** The member, or the named people of a task for several. */
+    assignee_ids: string[];
+  };
+}
+
 /** A copy's state with its display status, as a group row reads it (#5492). */
 export type TaskGroupCopyView = TaskGroupCopyState & {
   stored_status: TaskStatus;
@@ -571,23 +589,28 @@ export class TaskService {
    * Whether each of these tasks is done, by task id, in two reads whatever
    * the count: a task for everyone is done once every copy is (#4295 step 3),
    * and comes with its counts. Tasks that no longer exist are left out. For
-   * the checkboxes on posted minutes, which show nothing else of the task.
+   * the checkboxes on posted minutes; `who` (who it went to) is for the
+   * callers that may show it, an officer who manages tasks (#6051).
    */
   async doneMarks(
     chapterId: string,
     ids: string[],
-  ): Promise<
-    Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >
-  > {
+  ): Promise<Map<string, TaskDoneMark>> {
     const tasks = await this.taskRepo.findByIds(chapterId, [...new Set(ids)]);
-    const groups = await this.groupSummaries(chapterId, tasks);
-    const marks = new Map<
-      string,
-      { done: boolean; group: { done: number; total: number } | null }
-    >();
+    const groupIds = [
+      ...new Set(
+        tasks.flatMap((task) => (task.group_id ? [task.group_id] : [])),
+      ),
+    ];
+    const [groupRows, copies] =
+      groupIds.length > 0
+        ? await Promise.all([
+            this.taskRepo.findGroups(chapterId, groupIds),
+            this.taskRepo.findGroupCopyStates(chapterId, groupIds),
+          ])
+        : [[], []];
+    const groups = await this.summarize(chapterId, groupRows, copies);
+    const marks = new Map<string, TaskDoneMark>();
     for (const task of tasks) {
       const summary = task.group_id ? groups.get(task.group_id) : undefined;
       const group = summary
@@ -598,6 +621,24 @@ export class TaskService {
           ? group.total > 0 && group.done >= group.total
           : task.status === TaskStatus.COMPLETED,
         group,
+        who: summary
+          ? {
+              audience: summary.audience,
+              audience_name: summary.target_name,
+              // Named people only: a role, a group or everyone is said by
+              // its name, however many copies it has.
+              assignee_ids:
+                summary.audience === 'people'
+                  ? copies.flatMap((copy) =>
+                      copy.group_id === task.group_id ? [copy.assignee_id] : [],
+                    )
+                  : [],
+            }
+          : {
+              audience: null,
+              audience_name: null,
+              assignee_ids: [task.assignee_id],
+            },
       });
     }
     return marks;

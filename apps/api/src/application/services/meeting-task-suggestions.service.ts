@@ -17,7 +17,7 @@ import {
   type ReconcileAiSuggestionsResult,
 } from './ai-suggestion.service';
 import { MeetingService } from './meeting.service';
-import { TaskService } from './task.service';
+import { TaskService, type TaskDoneMark } from './task.service';
 
 /**
  * Where an action item of posted minutes stands as a task: the minutes'
@@ -31,6 +31,12 @@ export interface ActionItemTask {
   done: boolean;
   /** A task for everyone: how many of its copies are done. */
   group: { done: number; total: number } | null;
+  /**
+   * The task, for an officer who manages tasks and so may read it (#6051):
+   * its id, for Open task, and who it went to, for the item's owner line.
+   * Null for everyone else, who sees only the done mark.
+   */
+  task: { id: string; who: TaskDoneMark['who'] } | null;
 }
 
 /** One posted minutes' open action items (`seriesOpenActionItems`). */
@@ -88,16 +94,22 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
    * item to Frapp and loses its box. Only the done mark is told, never the task's own fields, because a
    * member may read the minutes without being able to read the task, and the
    * minutes already say who owes it (`tasks.md` § Visibility records this
-   * exception).
+   * exception). An officer who manages tasks, who may read every task,
+   * also gets each task's id and who it went to (`withTask`, #6051), so the
+   * item's row can say who it is for and open it.
    */
   async actionItemTasks(
     chapterId: string,
     meetingId: string,
     viewerId: string,
+    options: { withTask?: boolean } = {},
   ): Promise<ActionItemTask[]> {
     // Throws for minutes the viewer may not read, as the minutes' own read.
     const { meeting } = await this.meetings.get(chapterId, meetingId, viewerId);
-    return this.marksFor(chapterId, meeting);
+    const marks = await this.marksFor(chapterId, meeting);
+    return options.withTask
+      ? marks
+      : marks.map((mark) => ({ ...mark, task: null }));
   }
 
   /**
@@ -198,7 +210,16 @@ export class MeetingTaskSuggestionsService implements OnModuleInit {
     // A task deleted since leaves its item with nothing to follow.
     return wanted.flatMap(({ index, taskId }) => {
       const mark = marks.get(taskId);
-      return mark ? [{ index, ...mark }] : [];
+      return mark
+        ? [
+            {
+              index,
+              done: mark.done,
+              group: mark.group,
+              task: { id: taskId, who: mark.who },
+            },
+          ]
+        : [];
     });
   }
 

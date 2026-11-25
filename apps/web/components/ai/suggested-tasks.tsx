@@ -124,37 +124,58 @@ import { cn, getErrorMessage } from "@/lib/utils";
 const DECIDE_MAX = 50;
 
 type SuggestedTask = NonNullable<AiSuggestion["task"]>;
-type WaitingSuggestion = AiSuggestion & { task: SuggestedTask };
+export type WaitingSuggestion = AiSuggestion & { task: SuggestedTask };
 
 /** What the officer changed on a row before deciding: who, and when. */
-interface RowEdits {
+export interface RowEdits {
   /** The Who picker's pick; null when cleared, absent when untouched. */
   who?: TaskWho | null;
   /** A due entry, as `DueDateField` holds it; `""` when cleared. */
   due?: string;
 }
 
-function isWaitingTask(item: AiSuggestion): item is WaitingSuggestion {
+export function isWaitingTask(item: AiSuggestion): item is WaitingSuggestion {
   return item.kind === "task" && item.task !== null;
 }
 
-function dueEntryOf(task: SuggestedTask): string {
+export function dueEntryOf(task: SuggestedTask): string {
   return task.due_date
     ? dueEntryFromTask({ due_date: task.due_date, due_at: task.due_at })
     : "";
 }
 
 /** What Frapp filled in where the minutes left who or when out. */
-interface RowGuess {
+export interface RowGuess {
   who: TaskWho | null;
   due: string | null;
+}
+
+/**
+ * Frapp's suggestion for who and when, where the minutes said neither
+ * (`spec/behavior/meetings.md` § Suggested tasks): the one member the item's
+ * words name, and a week after the meeting. Last year's tasks name nobody on
+ * purpose (#3930).
+ */
+export function suggestionGuess(
+  item: WaitingSuggestion,
+  members: Parameters<typeof suggestTaskOwner>[1],
+  meetingStart: string | null | undefined,
+): RowGuess {
+  return {
+    who: (() => {
+      if (taskWhoOf(item.task) || item.task.last_year_on) return null;
+      const userId = suggestTaskOwner(item.quote ?? item.task.title, members);
+      return userId ? { kind: "person" as const, userId } : null;
+    })(),
+    due: item.task.due_date ? null : suggestTaskDue(meetingStart),
+  };
 }
 
 /**
  * Who and when as the row stands: the officer's pick, else what the minutes
  * said, else Frapp's suggestion.
  */
-function rowValues(
+export function rowValues(
   item: WaitingSuggestion,
   edits: RowEdits | undefined,
   guess?: RowGuess,
@@ -169,14 +190,14 @@ function rowValues(
   };
 }
 
-interface RowValues {
+export interface RowValues {
   who: TaskWho | null;
   /** A due entry, as `DueDateField` holds it; `""` when none. */
   due: string;
 }
 
 /** Only what differs from the suggestion, as the accept route takes it. */
-function editsFor(
+export function editsFor(
   item: WaitingSuggestion,
   values: RowValues,
 ): TaskSuggestionEdits | undefined {
@@ -198,7 +219,7 @@ function editsFor(
  * grabs, since whoever claims it gets it by then. Any other task may have
  * none (#5761).
  */
-function needsDue(who: TaskWho | null): boolean {
+export function needsDue(who: TaskWho | null): boolean {
   return who?.kind === "someone";
 }
 
@@ -275,18 +296,7 @@ export function SuggestedTasks({
     return new Map<string, RowGuess>(
       items.map((item) => [
         item.id,
-        {
-          // Last year's tasks name nobody on purpose (#3930).
-          who: (() => {
-            if (taskWhoOf(item.task) || item.task.last_year_on) return null;
-            const userId = suggestTaskOwner(
-              item.quote ?? item.task.title,
-              members,
-            );
-            return userId ? { kind: "person" as const, userId } : null;
-          })(),
-          due: item.task.due_date ? null : suggestTaskDue(startOf(item)),
-        },
+        suggestionGuess(item, members, startOf(item)),
       ]),
     );
   }, [items, members, meetingsQuery.data, source, sourceStart]);
@@ -669,11 +679,6 @@ function SuggestedTaskRow({
   acceptWith: (task: TaskSuggestionEdits) => Promise<void>;
 }) {
   const { task } = item;
-  // The form's Who, opened on the card's and sent as the suggestion's own
-  // who-fields, so a role, a group or up for grabs survives the form.
-  // Absent until changed in the form, so it opens on the card's latest pick.
-  const [formWhoEdit, setFormWhoEdit] = useState<TaskWho | null>();
-  const formWho = formWhoEdit !== undefined ? formWhoEdit : values.who;
   const missingWho = flagged && !values.who;
   const missingDue = flagged && !values.due && needsDue(values.who);
   const passedDue =
@@ -685,49 +690,13 @@ function SuggestedTaskRow({
   });
 
   if (formOpen) {
-    const initialDraft: TaskDraft = {
-      title: task.title,
-      // Shown by the Who picker from `formWho`; the form reads it only for a
-      // single member.
-      assigneeId: values.who?.kind === "person" ? values.who.userId : "",
-      dueDate: values.due,
-      points: "",
-      description: task.description ?? "",
-      subtasks: task.subtasks,
-      // A suggestion's form has no Repeat (#5119).
-      repeat: noTaskRepeatDraft(),
-      photoFiles: [],
-      keptPhotos: [],
-      proofKind: "none",
-      showMore: false,
-    };
     return (
-      <div className="rounded-[14px] border border-border p-3">
-        <TaskForm
-          suggestion
-          who={{ value: formWho, onChange: setFormWhoEdit }}
-          initialDraft={initialDraft}
-          onDiscard={onCloseForm}
-          onDone={onCloseForm}
-          onPost={async (input) => {
-            try {
-              // The whole form, as the officer left it: the task is made
-              // from exactly these fields, as the board's form would.
-              await acceptWith({
-                title: input.title,
-                description: input.description ?? null,
-                ...taskWhoSuggestionFields(formWho),
-                due_date: input.due_date,
-                due_at: input.due_at ?? null,
-                subtasks: input.subtasks ?? [],
-              });
-              return { ok: true };
-            } catch (error) {
-              return { ok: false, error: suggestionRefusalLine(error) };
-            }
-          }}
-        />
-      </div>
+      <SuggestionTaskForm
+        item={item}
+        values={values}
+        onClose={onCloseForm}
+        acceptWith={acceptWith}
+      />
     );
   }
 
@@ -994,6 +963,74 @@ function SimilarTaskCard({
           {SIMILAR_TASK_COPY.same}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Change before creating: the board's own task form, opened on the
+ * suggestion as the card or the action item's row stands, which accepts the
+ * suggestion with exactly what the form holds.
+ */
+export function SuggestionTaskForm({
+  item,
+  values,
+  onClose,
+  acceptWith,
+}: {
+  item: WaitingSuggestion;
+  values: RowValues;
+  onClose: () => void;
+  acceptWith: (task: TaskSuggestionEdits) => Promise<void>;
+}) {
+  const { task } = item;
+  // The form's Who, opened on the card's and sent as the suggestion's own
+  // who-fields, so a role, a group or up for grabs survives the form.
+  // Absent until changed in the form, so it opens on the card's latest pick.
+  const [formWhoEdit, setFormWhoEdit] = useState<TaskWho | null>();
+  const formWho = formWhoEdit !== undefined ? formWhoEdit : values.who;
+  const initialDraft: TaskDraft = {
+    title: task.title,
+    // Shown by the Who picker from `formWho`; the form reads it only for a
+    // single member.
+    assigneeId: values.who?.kind === "person" ? values.who.userId : "",
+    dueDate: values.due,
+    points: "",
+    description: task.description ?? "",
+    subtasks: task.subtasks,
+    // A suggestion's form has no Repeat (#5119).
+    repeat: noTaskRepeatDraft(),
+    photoFiles: [],
+    keptPhotos: [],
+    proofKind: "none",
+    showMore: false,
+  };
+  return (
+    <div className="rounded-[14px] border border-border p-3">
+      <TaskForm
+        suggestion
+        who={{ value: formWho, onChange: setFormWhoEdit }}
+        initialDraft={initialDraft}
+        onDiscard={onClose}
+        onDone={onClose}
+        onPost={async (input) => {
+          try {
+            // The whole form, as the officer left it: the task is made
+            // from exactly these fields, as the board's form would.
+            await acceptWith({
+              title: input.title,
+              description: input.description ?? null,
+              ...taskWhoSuggestionFields(formWho),
+              due_date: input.due_date,
+              due_at: input.due_at ?? null,
+              subtasks: input.subtasks ?? [],
+            });
+            return { ok: true };
+          } catch (error) {
+            return { ok: false, error: suggestionRefusalLine(error) };
+          }
+        }}
+      />
     </div>
   );
 }
