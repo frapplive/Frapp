@@ -1,4 +1,4 @@
-import { Menu, nativeImage, Tray } from "electron";
+import { Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 import { openAtLoginItem } from "./menu";
 
 /**
@@ -8,6 +8,7 @@ import { openAtLoginItem } from "./menu";
 export function createTray(options: {
   showWindow: () => void;
   onChange: () => void;
+  updateItems: () => MenuItemConstructorOptions[];
   iconPath: string;
 }): { rebuild: () => void } {
   const icon = nativeImage.createFromPath(options.iconPath).resize({ width: 16, height: 16 });
@@ -15,10 +16,12 @@ export function createTray(options: {
   tray.setToolTip("Frapp");
   const rebuild = (): void => {
     const loginItem = openAtLoginItem(options.onChange);
+    const updateItems = options.updateItems();
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: "Open Frapp", click: () => options.showWindow() },
         ...(loginItem ? [{ type: "separator" } as const, loginItem] : []),
+        ...(updateItems.length > 0 ? [{ type: "separator" } as const, ...updateItems] : []),
         { type: "separator" },
         { role: "quit", label: "Quit Frapp" },
       ]),

@@ -10,8 +10,13 @@ export function installAppMenu(options: {
   isPackaged: boolean;
   showWindow: () => void;
   onChange: () => void;
+  /** The self-update rows (`updater.ts`); none where the build doesn't update. */
+  updateItems: () => MenuItemConstructorOptions[];
 }): void {
   const isMac = process.platform === "darwin";
+  const updateItems = options.updateItems();
+  const updates: MenuItemConstructorOptions[] =
+    updateItems.length > 0 ? [...updateItems, { type: "separator" }] : [];
   const loginItem = openAtLoginItem(options.onChange);
   const login: MenuItemConstructorOptions[] = loginItem ? [loginItem, { type: "separator" }] : [];
   const view: MenuItemConstructorOptions[] = [
@@ -30,6 +35,7 @@ export function installAppMenu(options: {
           label: app.name,
           submenu: [
             { role: "about" },
+            ...updateItems,
             { type: "separator" },
             ...login,
             { role: "hide" },
@@ -39,7 +45,7 @@ export function installAppMenu(options: {
             { role: "quit" },
           ],
         }
-      : { label: "&File", submenu: [...login, { role: "quit" }] },
+      : { label: "&File", submenu: [...updates, ...login, { role: "quit" }] },
     { role: "editMenu" },
     { label: "&View", submenu: view },
     {

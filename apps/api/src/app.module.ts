@@ -23,6 +23,7 @@ import { InviteModule } from './modules/invite/invite.module';
 import { EventModule } from './modules/event/event.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
 import { FrappLinkModule } from './modules/frapp-link/frapp-link.module';
+import { DesktopUpdateModule } from './modules/desktop-update/desktop-update.module';
 import { MeetingDraftModule } from './modules/meeting/meeting-draft.module';
 import { MeetingRecordingModule } from './modules/meeting/meeting-recording.module';
 import { MeetingMinutesRequestModule } from './modules/meeting/meeting-minutes-request.module';
@@ -134,6 +135,8 @@ import { validateEnv } from './config/env.validation';
     ChapterDocumentModule,
     // Names the records tasks' and events' attachments point at.
     FrappLinkModule,
+    // Where the desktop app looks for updates.
+    DesktopUpdateModule,
     PollModule,
     PredictionModule,
     SemesterRolloverModule,

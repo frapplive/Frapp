@@ -10,6 +10,11 @@ CLOUD_RUN_SERVICE="frapp-api"
 # the uptime check both use it.
 GCP_STAGING_HOST="api-staging.frapp.live"
 GCP_PRODUCTION_HOST="api.frapp.live"
+# The desktop app's releases (scripts/gcp/desktop-downloads.sh). The same name
+# is in .github/workflows/desktop-release.yml and
+# apps/api/src/domain/constants/desktop-updates.ts; a test in
+# scripts/ci/__tests__/desktop-publish.test.mjs holds them together.
+DESKTOP_RELEASES_BUCKET="frapp-live-downloads"
 
 step() { printf '\n==> %s\n' "$*"; }
 

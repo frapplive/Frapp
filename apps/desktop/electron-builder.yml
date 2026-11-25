@@ -1,6 +1,9 @@
 # Packaging for the desktop shell (ADR-29). `npm run dist -w apps/desktop`
-# builds for the current OS. Signing, notarization and publishing to the
-# update feed come with #4843; until then every build is unsigned.
+# builds for the current OS, unsigned. The `Desktop release` workflow builds
+# the signed ones: it supplies the Mac certificate and Apple API key through
+# the environment, and the Windows `azureSignOptions` on the command line, so
+# no publisher name or account lives in this file (#4843,
+# docs/ops/deployment/desktop-releases.md).
 appId: live.frapp.desktop
 productName: Frapp
 copyright: Copyright © Frapp
@@ -8,9 +11,20 @@ copyright: Copyright © Frapp
 directories:
   output: release
 
-# The compiled shell and nothing else. It has no runtime dependencies, and
-# without the exclusion electron-builder walks up to the monorepo root and
-# packs its whole node_modules into the app.
+# Where an installed app looks for updates (src/main/updater.ts): the API's
+# `GET /v1/desktop/updates/:file`, which redirects each feed and file to a
+# time-limited link into the private releases bucket. Nothing here uploads:
+# every build runs with `--publish never`, and scripts/ci/desktop-publish.mjs
+# puts the files in the bucket. A plain version always writes the `latest`
+# feeds; which channel reads them is decided at publish.
+publish:
+  - provider: generic
+    url: https://api.frapp.live/v1/desktop/updates
+
+# The compiled shell, bundled into one file by scripts/bundle.mjs.
+# Nothing from node_modules: its one runtime library is compiled into the
+# bundle, and without the exclusion electron-builder walks up to the monorepo
+# root and packs the whole workspace's node_modules into the app.
 files:
   - dist/**/*
   - package.json
@@ -43,8 +57,9 @@ mac:
     - target: zip
       arch: [universal]
   hardenedRuntime: true
-  # Unsigned until #4843 adds the Developer ID certificate.
-  identity: null
+  # No `identity`: electron-builder signs with the certificate in CSC_LINK
+  # when the release workflow provides one, and skips signing when there is
+  # none (desktop-build.yml sets CSC_IDENTITY_AUTO_DISCOVERY=false).
 
 dmg:
   title: Frapp
