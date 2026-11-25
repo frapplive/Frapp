@@ -157,6 +157,26 @@ export function JumpToLatestGlyph({ className }: ChatGlyphProps) {
   );
 }
 
+/**
+ * The "New messages" pill's arrow (#6052): up toward a divider above the
+ * screen, down toward one below. The send arrow, turned over for down, as the
+ * jump control's is.
+ */
+export function NewMessagesArrowGlyph({
+  className,
+  direction,
+}: ChatGlyphProps & { direction: "up" | "down" }) {
+  return (
+    <Svg className={className}>
+      {direction === "up" ? (
+        SEND_ARROW
+      ) : (
+        <g transform="rotate(180 12 12)">{SEND_ARROW}</g>
+      )}
+    </Svg>
+  );
+}
+
 /** Announcement / broadcast. Horn filled, sound lines stroke-only. */
 export function AnnouncementGlyph({ className, active }: ChatGlyphProps) {
   return (

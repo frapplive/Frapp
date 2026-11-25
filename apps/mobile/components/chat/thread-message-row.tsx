@@ -34,6 +34,7 @@ import { AskAnswerCard } from "./ask-answer-card";
 import { BlockedMessageTombstone } from "./blocked-message-tombstone";
 import type { ChatCardFrameProps } from "./chat-card";
 import { EventCard } from "./event-card";
+import { NewMessagesDivider } from "./new-messages-pill";
 import { HoursCard } from "./hours-card";
 import { MessageItem, MessageRowFrame, OwnLineMarkers } from "./message-item";
 import { ThreadChip } from "./thread-chip";
@@ -82,6 +83,12 @@ export interface ThreadMessageRowProps {
   /** The run's last row (Bubbles draws the avatar under it). Defaults to `true`. */
   endsRun?: boolean;
   startsDay: boolean;
+  /**
+   * The channel's first unread message as it opened (#6052): the "New
+   * messages" divider goes above it, carrying the date when it also starts a
+   * day.
+   */
+  newMessagesAbove?: boolean;
   /**
    * Resolved before any row mounts (#2250): `chat-thread.tsx` withholds the
    * list while `/v1/users/me` is in flight, because a null viewer would paint
@@ -142,7 +149,15 @@ export function ThreadMessageRow(props: ThreadMessageRowProps) {
   // and the divider reads above the row.
   return (
     <View>
-      {props.startsDay ? (
+      {props.newMessagesAbove ? (
+        <NewMessagesDivider
+          dayLabel={
+            props.startsDay
+              ? dayDividerLabel(props.row.message.created_at)
+              : undefined
+          }
+        />
+      ) : props.startsDay ? (
         <DayDivider createdAt={props.row.message.created_at} />
       ) : null}
       <ThreadMessageRowBody {...props} />

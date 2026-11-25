@@ -6418,14 +6418,29 @@ describe('ChatService', () => {
         PRIVATE_OTHERS,
       ]);
       mockReadReceiptRepo.getUnreadCounts.mockResolvedValue([
-        { channel_id: baseChannel.id, unread_count: 3, mention_count: 1 },
-        { channel_id: PRIVATE_OTHERS.id, unread_count: 9, mention_count: 4 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 3,
+          mention_count: 1,
+          last_read_at: null,
+        },
+        {
+          channel_id: PRIVATE_OTHERS.id,
+          unread_count: 9,
+          mention_count: 4,
+          last_read_at: null,
+        },
       ]);
 
       const result = await service.getUnreadCounts('ch-1', 'user-1');
 
       expect(result).toEqual([
-        { channel_id: baseChannel.id, unread_count: 3, mention_count: 1 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 3,
+          mention_count: 1,
+          last_read_at: null,
+        },
       ]);
     });
 
@@ -6441,29 +6456,54 @@ describe('ChatService', () => {
       };
       mockChannelRepo.findByIds.mockResolvedValue([baseChannel, dm]);
       mockReadReceiptRepo.getUnreadCounts.mockResolvedValue([
-        { channel_id: baseChannel.id, unread_count: 1, mention_count: 0 },
-        { channel_id: dm.id, unread_count: 3, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 1,
+          mention_count: 0,
+          last_read_at: null,
+        },
+        {
+          channel_id: dm.id,
+          unread_count: 3,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
       mockReadReceiptRepo.findHiddenChannelIds.mockResolvedValue(
         new Set([dm.id]),
       );
 
       await expect(service.getUnreadCounts('ch-1', 'user-1')).resolves.toEqual([
-        { channel_id: baseChannel.id, unread_count: 1, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 1,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
     });
 
     it('keeps every count when the hidden lookup fails', async () => {
       mockChannelRepo.findByIds.mockResolvedValue([baseChannel]);
       mockReadReceiptRepo.getUnreadCounts.mockResolvedValue([
-        { channel_id: baseChannel.id, unread_count: 2, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 2,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
       mockReadReceiptRepo.findHiddenChannelIds.mockRejectedValue(
         new Error('down'),
       );
 
       await expect(service.getUnreadCounts('ch-1', 'user-1')).resolves.toEqual([
-        { channel_id: baseChannel.id, unread_count: 2, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 2,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
     });
 
@@ -6471,11 +6511,21 @@ describe('ChatService', () => {
       // The list needs a row per channel to render; a zero is a real answer.
       mockChannelRepo.findByIds.mockResolvedValue([baseChannel]);
       mockReadReceiptRepo.getUnreadCounts.mockResolvedValue([
-        { channel_id: baseChannel.id, unread_count: 0, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 0,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
 
       await expect(service.getUnreadCounts('ch-1', 'user-1')).resolves.toEqual([
-        { channel_id: baseChannel.id, unread_count: 0, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 0,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
     });
 
@@ -6493,7 +6543,12 @@ describe('ChatService', () => {
       mockMemberRepo.findByUserAndChapter.mockResolvedValue(null);
       mockChannelRepo.findByIds.mockResolvedValue([baseChannel]);
       mockReadReceiptRepo.getUnreadCounts.mockResolvedValue([
-        { channel_id: baseChannel.id, unread_count: 5, mention_count: 0 },
+        {
+          channel_id: baseChannel.id,
+          unread_count: 5,
+          mention_count: 0,
+          last_read_at: null,
+        },
       ]);
 
       await expect(service.getUnreadCounts('ch-1', 'ghost')).resolves.toEqual(

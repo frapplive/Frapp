@@ -1836,6 +1836,33 @@ This follows WhatsApp's ticks; iMessage says the same in words under the bubble.
   It does not flip the moment the other member reads, since nothing pings the sender then; that, and "Read" under the viewer's own message inside the open conversation, are [#5532](https://github.com/pdcarlson/Frapp/issues/5532).
   A message still queued in the outbox is not on the row at all yet (the row is the server's latest), so there is no "sending" mark ([#5533](https://github.com/pdcarlson/Frapp/issues/5533)).
 
+### Where the unread start
+
+_(Added in [#6052](https://github.com/pdcarlson/Frapp/issues/6052), asked by Paul (`pdcarlson`) on 2026-11-25 from Winston's feedback: "like discord a new messages and a direction to indicate where the new messages are".)_
+
+A channel or DM opened with unread messages shows where they start, as Discord and Slack do, on web and the phone alike.
+The look is [`components.md` § New messages divider](../../ui/design-system/components.md#11-signature-surfaces) and the words [`writing.md`](../../ui/design-system/writing.md); the rules are `@repo/chat-core/new-messages`, and the per-visit state `useNewMessages` in `@repo/hooks`, which both threads use.
+
+- **Taken once, as the channel opens.**
+  Opening stamps the cursor to `now()` (above), and so does every message that lands while the member looks, so the thread does not read the live cursor.
+  It takes the count and the cursor from what `GET /v1/channels/unread` said as the channel opened (`last_read_at` on each row since `20261125020924`, the cursor the count was taken from), the answer the app already holds for the channel list, and keeps both for the visit.
+  No stamp after that moves the divider or changes the pill's count while the member reads.
+  A channel opened before the counts first answer takes the first answer, which may already include the open's own stamp; then it shows nothing, and a channel opened cold from a push shows nothing either.
+  The next visit takes them afresh.
+- **The divider** goes above the first message after that cursor that is someone else's and has something to read: the viewer's own messages, deleted messages and a blocked member's tombstones are skipped, as they never count.
+  Nothing is drawn when the count was zero, or for a channel the member never opened (no cursor): the server counts a never-opened channel's whole history, and a line above its first message would send a new member to the start of the channel, so it opens at its newest message as Slack does for a channel just joined.
+- **Opening** lands with the divider at the top of the screen when the first unread message is loaded, so a long stretch of unread starts where it starts, and a stretch shorter than a screen sits at the newest message as before (the list cannot scroll past its end).
+  When the unread start further back than the loaded history, the thread opens at its newest message and the pill points up.
+- **The pill** shows while the divider is off screen: `12 new messages` with an arrow toward it (up when it is above the screen or in history not loaded yet, down when the member scrolled back above it), and `Mark as read` beside it.
+  The count is the server's `unread_count` as the channel opened, never re-counted on the client, `99+` past 99.
+  Tapping it scrolls the divider to the top of the screen, reading older pages for it first when it is not loaded yet (up to ten pages of 100, then as far as it got).
+  It goes away for the rest of the visit once the member has seen the divider and then reached the newest message, since nothing new is left to point at.
+- **Mark as read** stamps the cursor again (opening already did) and takes the pill and the divider away for the visit, as Discord's does.
+- **With Jump to latest.**
+  Jump to latest keeps its corner and its job, the newest message and anything that lands below the reader ([`components.md`](../../ui/design-system/components.md) § New messages pill).
+  The pill sits at the top and goes to where the unread started.
+  Messages arriving while the member reads never move the divider or join the pill's count; they are Jump to latest's.
+
 ### Before the counts arrive (mobile)
 
 On open and on resume the counts request is one of several sent at once and can take seconds (#3728).

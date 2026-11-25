@@ -23,6 +23,11 @@ import { BlockedMessageTombstone } from "./blocked-message-tombstone";
 import { JumpToLatestButton } from "./jump-to-latest-button";
 import { useJumpToLatest } from "@/lib/chat/use-jump-to-latest";
 import type { LatestRow } from "@repo/chat-core/jump-to-latest";
+import type {
+  NewMessagesMark,
+  NewMessagesRow,
+} from "@repo/chat-core/new-messages";
+import { NewMessagesDivider, NewMessagesPill } from "./new-messages-pill";
 import {
   ImageViewer,
   ImageViewerProvider,
@@ -46,6 +51,7 @@ import {
   placeAskTurns,
   resolveAuthorAvatar,
   useAuthorAvatars,
+  useNewMessages,
 } from "@repo/hooks";
 import {
   AskChannelTurn,
@@ -606,6 +612,16 @@ export interface MessageTimelineProps {
    * `messages` and never becomes one. Omitted, nothing is drawn.
    */
   askTurns?: readonly AskChannelPlace[];
+  /**
+   * What the unread counts said as this channel opened (#6052): where the
+   * member had read to, and how many were new. Drawn as the "New messages"
+   * divider above the first unread message, and the pill pointing to it while
+   * it is off screen. Taken once per channel by the shell, so the read stamps
+   * that follow move neither. Omitted or `null`, neither is drawn.
+   */
+  newMessages?: NewMessagesMark | null;
+  /** The pill's Mark as read, which also takes the divider away. */
+  onMarkRead?: () => void;
 }
 
 /**
@@ -668,6 +684,8 @@ export const MessageTimeline = forwardRef<
     header,
     tapRevealed: sharedTapRevealed,
     askTurns,
+    newMessages = null,
+    onMarkRead,
   },
   ref,
 ) {
@@ -810,10 +828,18 @@ export const MessageTimeline = forwardRef<
     [decorated, askTurns],
   );
   const { firstItemIndex, prepended } = usePrependAwareFirstIndex(rowKeys);
+  /*
+    A channel that opened on its first unread message (#6052) is not on its
+    newest row, so nothing may pin it there until the list has settled on the
+    divider: a photo above it growing would otherwise read as growth to follow.
+    Per channel; cleared by the first range report with the divider on screen.
+  */
+  const [landingOn, setLandingOn] = useState<string | null>(null);
+  const landing = landingOn !== null && landingOn === channelId;
   const stickToBottom = useStickToBottom({
     virtuoso,
     rowCount: decorated.length,
-    hold: holdFollow,
+    hold: holdFollow || landing,
   });
 
   // The way back to the newest message once the member has read back through
@@ -837,6 +863,7 @@ export const MessageTimeline = forwardRef<
     followWithin: STICK_TO_BOTTOM_SLACK_PX,
   });
   const markNewest = jump.markNewest;
+  const measureJump = jump.measure;
   const pinToBottom = stickToBottom.pinned;
   const jumpToLatest = useCallback(() => {
     if (!virtuoso.current) return;
@@ -850,6 +877,54 @@ export const MessageTimeline = forwardRef<
     pinToBottom();
     markNewest();
   }, [markNewest, pinToBottom]);
+
+  // The "New messages" divider and the pill pointing to it (#6052), on the
+  // same rows the jump control reads, oldest first as the list draws them.
+  const newMessagesRows = useMemo<NewMessagesRow[]>(
+    () =>
+      decorated.map(({ message, visibility }) => ({
+        id: message.client_message_id ?? message.id,
+        createdAt: message.created_at,
+        own: viewerId !== null && message.sender_id === viewerId,
+        silent: visibility === "tombstone" || message.is_deleted === true,
+      })),
+    [decorated, viewerId],
+  );
+  // Puts a row at the top of the screen, a line of what came before showing
+  // above it. Instant, for the reason `scrollToMessage` gives.
+  const scrollRowToTop = useCallback(
+    (index: number) => {
+      if (!virtuoso.current) return;
+      virtuoso.current.scrollToIndex({
+        index,
+        align: "start",
+        behavior: "auto",
+      });
+      requestAnimationFrame(measureJump);
+    },
+    [measureJump],
+  );
+  const unread = useNewMessages({
+    channelKey: channelId ?? null,
+    mark: newMessages,
+    rows: newMessagesRows,
+    hasOlder,
+    isLoadingOlder,
+    olderError,
+    atNewest: jump.atNewest,
+    scrollToRow: scrollRowToTop,
+    loadOlder: onLoadOlder,
+    onMarkRead,
+  });
+  const dividerIndex = unread.dividerIndex;
+  // Where a list opens in this channel: on the divider when there is one,
+  // aligned to the top, so a short stretch of unread clamps to the newest
+  // message and a long one starts at the first unread, as Slack and Discord
+  // open. Read when the list mounts, or when it switches channel below.
+  const openingIndex =
+    dividerIndex >= 0
+      ? ({ index: dividerIndex, align: "start" } as const)
+      : Math.max(decorated.length - 1, 0);
 
   /*
     A question the member just asked Frapp brings the list to it, as their
@@ -1011,15 +1086,27 @@ export const MessageTimeline = forwardRef<
     if (seenChannel.current === channelId) return;
     seenChannel.current = channelId;
     if (!listMounted.current || !virtuoso.current || !channelId) return;
-    virtuoso.current.scrollToIndex({
-      index: "LAST",
-      align: "end",
-      behavior: "auto",
-    });
-    // The scroll above may not move the list (the new channel ends where the
-    // last one did), and then no scroll event says it is on its newest row.
-    stickToBottom.pinned();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- arms the channel the list was just switched to, after the imperative scroll above; the list's own at-top report cannot, because it never leaves a top it is not at
+    if (dividerIndex >= 0) {
+      // Opens on the first unread message instead (#6052), held off the
+      // bottom pin until it settles there.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pairs with the imperative scroll below, as the arming further down does
+      setLandingOn(channelId);
+      scrollRowToTop(dividerIndex);
+    } else {
+      virtuoso.current.scrollToIndex({
+        index: "LAST",
+        align: "end",
+        behavior: "auto",
+      });
+      // The scroll above may not move the list (the new channel ends where
+      // the last one did), and then no scroll event says it is on its newest
+      // row.
+      stickToBottom.pinned();
+      setLandingOn(null);
+    }
+    // Arms the channel the list was just switched to, after the imperative
+    // scroll above; the list's own at-top report cannot, because it never
+    // leaves a top it is not at.
     if (!atTop) setArmedFor(channelId);
     // `atTop` is read as of the switch on purpose; a change in it alone is
     // not a switch.
@@ -1030,6 +1117,20 @@ export const MessageTimeline = forwardRef<
   useEffect(() => {
     listMounted.current = virtuoso.current !== null;
   });
+  // A list that just mounted opened at `openingIndex`. On a divider (#6052)
+  // it holds the bottom pin off until it settles there, and the jump control
+  // learns it is not on the newest row. The list draws once the rows are
+  // readable and there are some (the branches below); a switch that keeps it
+  // mounted is the effect above's.
+  const listDrawn = readable && thread.rows.length > 0;
+  useEffect(() => {
+    if (!listDrawn || dividerIndex < 0 || !channelId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pairs with the scroll Virtuoso made on mounting, at `openingIndex`
+    setLandingOn(channelId);
+    requestAnimationFrame(measureJump);
+    // Once per mount of the list: the divider moving later is not a landing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listDrawn]);
   const firstRowKey = rowKeys[0];
   const lastTopLoad = useRef<{ arrival: number; firstRowKey?: string } | null>(
     null,
@@ -1120,12 +1221,29 @@ export const MessageTimeline = forwardRef<
     }
     onVisibleMessagesChange(ids);
   }, [decorated, firstItemIndex, onVisibleMessagesChange]);
+  const reportUnreadRange = unread.reportRange;
   const handleRangeChanged = useCallback(
     (range: ListRange) => {
       visibleRange.current = range;
       reportVisible();
+      const first = range.startIndex - firstItemIndex;
+      const last = range.endIndex - firstItemIndex;
+      reportUnreadRange(first, last);
+      // Settled on the divider the channel opened on: the pin may follow the
+      // member again from here, and the jump control reads where they are.
+      if (landing && dividerIndex >= first && dividerIndex <= last) {
+        setLandingOn(null);
+        measureJump();
+      }
     },
-    [reportVisible],
+    [
+      reportVisible,
+      reportUnreadRange,
+      firstItemIndex,
+      landing,
+      dividerIndex,
+      measureJump,
+    ],
   );
   // A channel switch keeps this component and its index space, so the last
   // channel's range would map onto the new channel's rows: forget it until
@@ -1320,7 +1438,7 @@ export const MessageTimeline = forwardRef<
           // the live page landing over the cached tail prepends rows; following
           // those is what keeps a cold open at the newest message.
           followOutput={holdFollow || (prepended && armed) ? false : "smooth"}
-          initialTopMostItemIndex={Math.max(decorated.length - 1, 0)}
+          initialTopMostItemIndex={openingIndex}
           atTopStateChange={handleAtTop}
           rangeChanged={handleRangeChanged}
           // Holds the open on its newest row while rows above it grow: a photo
@@ -1337,7 +1455,18 @@ export const MessageTimeline = forwardRef<
           itemContent={(_, entry) => (
             <>
               {entry === decorated[0] ? askTurnsAbove : null}
-              {entry.startsDay ? (
+              {(entry.message.client_message_id ?? entry.message.id) ===
+              unread.dividerKey ? (
+                // Above the first unread message (#6052), carrying the date
+                // when that message also starts a day.
+                <NewMessagesDivider
+                  dayLabel={
+                    entry.startsDay
+                      ? dayDividerLabel(entry.message.created_at)
+                      : undefined
+                  }
+                />
+              ) : entry.startsDay ? (
                 // components.md §11 § Grouping: a hairline either side of a
                 // centred 12.5 / 600 caption, and the only date in the thread.
                 <div
@@ -1448,6 +1577,14 @@ export const MessageTimeline = forwardRef<
             entry.message.client_message_id ?? entry.message.id
           }
         />
+        {unread.direction ? (
+          <NewMessagesPill
+            count={unread.count}
+            direction={unread.direction}
+            onJump={unread.jump}
+            onMarkRead={unread.markRead}
+          />
+        ) : null}
         {jump.showsJump ? (
           <JumpToLatestButton hasNew={jump.hasNewBelow} onJump={jumpToLatest} />
         ) : null}

@@ -144,6 +144,7 @@ export * from "./use-meetings";
 export * from "./use-members";
 export * from "./use-message-reminders";
 export * from "./use-minutes-request";
+export * from "./use-new-messages";
 export * from "./use-notifications";
 export * from "./use-now";
 export * from "./use-open-tasks";

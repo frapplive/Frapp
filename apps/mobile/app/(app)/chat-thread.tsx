@@ -72,6 +72,7 @@ import {
   useCurrentUser,
   claimViewedChannel,
   useMarkChannelRead,
+  useNewMessages,
   useMarkMessageUnread,
   holdChannelUnread,
   releaseChannelUnread,
@@ -113,7 +114,12 @@ import { ImportantStrip } from "@/components/chat/important-strip";
 import { WelcomeCard } from "@/components/onboarding/welcome-card";
 import { CatchUpStrip, useCatchUp } from "@/components/chat/catch-up";
 import { useAiSurfaces } from "@/lib/ai/availability";
-import { arrivalUnread } from "@/lib/chat/catch-up-arrival";
+import {
+  newMessagesMark,
+  readArrival,
+  type NewMessagesRow,
+} from "@repo/chat-core/new-messages";
+import { NewMessagesPill } from "@/components/chat/new-messages-pill";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { useComposerPlus } from "@/components/chat/use-composer-plus";
 import { useScheduleSend } from "@/components/chat/use-schedule-send";
@@ -848,14 +854,17 @@ function ChannelThreadScreen() {
     !!openChannel &&
     !isDirectChannel(openChannel.channel) &&
     !postCapability.isAuditLog;
-  // How many messages were new when this channel was opened, and when.
-  // Opening stamps it read, so the live count is gone by the time a member
-  // asks; the server finds the stretch again from this count and moment. Read
-  // once per channel from what Chat home already holds, never fetched here:
-  // a channel opened cold (from a push) offers the last 24 hours instead.
+  // How many messages were new when this channel was opened, when, and where
+  // the member had read to. Opening stamps it read, so the live count is gone
+  // by the time a member asks; the server finds the stretch again from this
+  // count and moment. The count and the cursor also draw the "New messages"
+  // divider and pill (#6052), which the stamps that follow must not move.
+  // Read once per channel from what Chat home already holds, never fetched
+  // here: a channel opened cold (from a push) offers the last 24 hours
+  // instead, and draws no divider.
   const [arrival, setArrival] = useState(() => ({
     channelId,
-    unread: arrivalUnread(
+    counted: readArrival(
       queryClient.getQueryData(CHANNEL_UNREAD_COUNTS_KEY),
       channelId,
     ),
@@ -865,7 +874,7 @@ function ChannelThreadScreen() {
   if (arrival.channelId !== channelId) {
     setArrival({
       channelId,
-      unread: arrivalUnread(
+      counted: readArrival(
         queryClient.getQueryData(CHANNEL_UNREAD_COUNTS_KEY),
         channelId,
       ),
@@ -879,17 +888,25 @@ function ChannelThreadScreen() {
   // so the observer carries the fetch function: TanStack console.errors on
   // every render of one without, which a development build shows as a red
   // toast (#4885).
-  const liveUnread = arrivalUnread(
+  const liveCounted = readArrival(
     useChannelUnreadCounts({ enabled: false }).data,
     channelId,
   );
   if (
     arrival.channelId === channelId &&
-    arrival.unread === null &&
-    liveUnread !== null
+    arrival.counted === null &&
+    liveCounted !== null
   ) {
-    setArrival({ ...arrival, unread: liveUnread });
+    setArrival({ ...arrival, counted: liveCounted });
   }
+  const arrivalUnread =
+    arrival.channelId === channelId ? (arrival.counted?.unread ?? null) : null;
+  const arrivalCounted =
+    arrival.channelId === channelId ? arrival.counted : null;
+  const newMessages = useMemo(
+    () => newMessagesMark(arrivalCounted),
+    [arrivalCounted],
+  );
   const openCatchUpPoint = useCallback(
     (point: ChatCatchUpPoint) => {
       // A reply lives in its thread, not on the timeline.
@@ -913,23 +930,22 @@ function ChannelThreadScreen() {
     startCatchUp({
       kind: "channel",
       channelId,
-      unread:
-        arrival.channelId === channelId && arrival.unread
-          ? {
-              // Capped to what a request may name by `useChatCatchUp`.
-              count: arrival.unread,
-              as_of: arrival.at,
-            }
-          : null,
+      unread: arrivalUnread
+        ? {
+            // Capped to what a request may name by `useChatCatchUp`.
+            count: arrivalUnread,
+            as_of: arrival.at,
+          }
+        : null,
     });
-  }, [channelId, openChannel, arrival, startCatchUp]);
+  }, [channelId, openChannel, arrivalUnread, arrival.at, startCatchUp]);
   const catchUpOffer =
     canCatchUpHere &&
     !catchUp.active &&
     arrival.channelId === channelId &&
     !arrival.offerDismissed &&
-    (arrival.unread ?? 0) >= CHAT_CATCH_UP_OFFER_AT
-      ? chatCatchUpOfferLine(arrival.unread ?? 0)
+    (arrivalUnread ?? 0) >= CHAT_CATCH_UP_OFFER_AT
+      ? chatCatchUpOfferLine(arrivalUnread ?? 0)
       : null;
   // Pinned, Saved and Links (#3723, #5779), web's channel-menu panels: one
   // tall sheet, retargeted per list, opened from the header's menu.
@@ -968,17 +984,33 @@ function ChannelThreadScreen() {
   useEffect(() => {
     reportVisibleRef.current = important.reportVisible;
   }, [important.reportVisible]);
+  // The rows on screen, for the "New messages" pill (#6052), in the thread's
+  // oldest-first order: the list draws newest first, so an index is turned
+  // round against the row count it was drawn with.
+  const reportRangeRef = useRef<(first: number, last: number) => void>(
+    () => {},
+  );
+  const rowCountRef = useRef(0);
   const [viewability] = useState(() => ({
     viewabilityConfig: { itemVisiblePercentThreshold: 50 },
     onViewableItemsChanged: ({
       viewableItems,
     }: {
-      viewableItems: { item?: ThreadRow | null }[];
+      viewableItems: { item?: ThreadRow | null; index?: number | null }[];
     }) => {
       reportVisibleRef.current(
         viewableItems.flatMap(({ item }) =>
           item && item.visibility !== "tombstone" ? [item.message.id] : [],
         ),
+      );
+      const indices = viewableItems.flatMap(({ index }) =>
+        typeof index === "number" ? [index] : [],
+      );
+      if (indices.length === 0) return;
+      const count = rowCountRef.current;
+      reportRangeRef.current(
+        count - 1 - Math.max(...indices),
+        count - 1 - Math.min(...indices),
       );
     },
   }));
@@ -1015,6 +1047,66 @@ function ChannelThreadScreen() {
   const handleLoadOlder = useCallback(() => {
     void loadOlder();
   }, [loadOlder]);
+
+  // The "New messages" divider and the pill pointing to it (#6052), from what
+  // the counts said as the channel opened (`arrival`), on the thread's rows
+  // oldest first. A row goes to the top of the screen through the jump a
+  // reply quote uses; the pill pages older history itself for a divider not
+  // loaded yet.
+  const newMessagesRows = useMemo<NewMessagesRow[]>(
+    () =>
+      thread.rows.map(({ message, visibility }) => ({
+        id: message.client_message_id,
+        createdAt: message.created_at,
+        own:
+          message._status !== "confirmed" ||
+          (viewerId !== null && message.sender_id === viewerId),
+        silent: visibility === "tombstone" || message.is_deleted,
+      })),
+    [thread.rows, viewerId],
+  );
+  const threadRows = thread.rows;
+  const scrollRowToTop = useCallback(
+    (index: number) => {
+      const row = threadRows[index];
+      // `viewPosition: 1` is the top of the screen on the inverted list.
+      if (row) jumpToMessage(row.message.id, { viewPosition: 1 });
+    },
+    [threadRows, jumpToMessage],
+  );
+  const markChannelRead = useCallback(() => {
+    if (channelId) markReadMutate(channelId);
+  }, [channelId, markReadMutate]);
+  const unread = useNewMessages({
+    channelKey: channelId,
+    mark: newMessages,
+    rows: newMessagesRows,
+    hasOlder,
+    isLoadingOlder,
+    olderError,
+    atNewest: latest.atNewest,
+    scrollToRow: scrollRowToTop,
+    loadOlder: handleLoadOlder,
+    onMarkRead: markChannelRead,
+  });
+  const reportUnreadRange = unread.reportRange;
+  useEffect(() => {
+    reportRangeRef.current = reportUnreadRange;
+    rowCountRef.current = newMessagesRows.length;
+  }, [reportUnreadRange, newMessagesRows.length]);
+  // Opens on the first unread message when there is one, as Slack and Discord
+  // do: at the top of the screen, which a short stretch of unread can't fill,
+  // so the list stays at its newest message then. Once per channel, when its
+  // first rows are in.
+  const landedFor = useRef<string | null>(null);
+  const dividerIndex = unread.dividerIndex;
+  useEffect(() => {
+    if (!channelId || landedFor.current === channelId) return;
+    if (newMessagesRows.length === 0) return;
+    landedFor.current = channelId;
+    if (dividerIndex >= 0) scrollRowToTop(dividerIndex);
+  }, [channelId, newMessagesRows.length, dividerIndex, scrollRowToTop]);
+  const dividerKey = unread.dividerKey;
   const historyEdge = useMemo(
     () => (
       <>
@@ -1599,6 +1691,7 @@ function ChannelThreadScreen() {
           startsRun={placement?.startsRun ?? true}
           endsRun={placement?.endsRun ?? true}
           startsDay={placement?.startsDay ?? false}
+          newMessagesAbove={item.message.client_message_id === dividerKey}
           viewerId={viewerId}
           nameFor={nameFor}
           roleColorFor={roleColorFor}
@@ -1676,6 +1769,7 @@ function ChannelThreadScreen() {
       threadUnread,
       memberAvatarFor,
       askPlacement,
+      dividerKey,
     ],
   );
 
@@ -2164,6 +2258,14 @@ function ChannelThreadScreen() {
                         contentContainerStyle={styles.listContent}
                         style={styles.flex}
                       />
+                      {unread.direction ? (
+                        <NewMessagesPill
+                          count={unread.count}
+                          direction={unread.direction}
+                          onJump={unread.jump}
+                          onMarkRead={unread.markRead}
+                        />
+                      ) : null}
                       {latest.showsJump ? (
                         <JumpToLatestButton
                           hasNew={latest.hasNewBelow}

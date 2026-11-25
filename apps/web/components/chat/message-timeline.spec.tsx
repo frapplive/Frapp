@@ -29,6 +29,7 @@ const virtuosoProps = vi.hoisted(() => ({
     scrollerRef?: (element: HTMLElement | Window | null) => void;
     totalListHeightChanged?: (height: number) => void;
     rangeChanged?: (range: { startIndex: number; endIndex: number }) => void;
+    initialTopMostItemIndex?: unknown;
   },
   // The handle's one method the timeline calls, for the cases that assert
   // where it scrolls.
@@ -75,6 +76,7 @@ vi.mock("react-virtuoso", async () => {
         scrollerRef,
         totalListHeightChanged,
         rangeChanged,
+        initialTopMostItemIndex,
         components,
         context,
       }: {
@@ -89,6 +91,7 @@ vi.mock("react-virtuoso", async () => {
           startIndex: number;
           endIndex: number;
         }) => void;
+        initialTopMostItemIndex?: unknown;
         components?: {
           Header?: (props: { context?: unknown }) => React.ReactNode;
         };
@@ -115,6 +118,7 @@ vi.mock("react-virtuoso", async () => {
         scrollerRef,
         totalListHeightChanged,
         rangeChanged,
+        initialTopMostItemIndex,
       };
       const Header = components?.Header;
       return (
@@ -2370,5 +2374,202 @@ describe("MessageTimeline draws the member's private Frapp turns (#4713)", () =>
       />,
     );
     expect(virtuosoProps.scrollToIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("MessageTimeline New messages divider and pill (#6052)", () => {
+  // Read up to 17:10; Bob and Alice posted after it, the viewer in between.
+  const READ_AT = new Date(2026, 7, 16, 17, 10).toISOString();
+  const at = (minute: number) =>
+    new Date(2026, 7, 16, 17, minute).toISOString();
+  const thread = [
+    message({ id: "m-1", client_message_id: "cm-1", created_at: at(5) }),
+    message({
+      id: "m-2",
+      client_message_id: "cm-2",
+      sender_id: VIEWER,
+      created_at: at(11),
+    }),
+    message({
+      id: "m-3",
+      client_message_id: "cm-3",
+      sender_id: BOB,
+      content: "first new",
+      created_at: at(12),
+    }),
+    message({
+      id: "m-4",
+      client_message_id: "cm-4",
+      created_at: at(13),
+    }),
+  ];
+  const mark = { lastReadAt: READ_AT, count: 2 };
+  const FIRST = 100_000_000; // the timeline's index base
+
+  function view(
+    messages: ChatMessage[],
+    overrides: Record<string, unknown> = {},
+  ) {
+    return (
+      <MessageTimeline
+        channelId="chan-1"
+        messages={messages}
+        viewerId={VIEWER}
+        nameFor={nameFor}
+        avatarFor={avatarFor}
+        isLoading={false}
+        loadError={null}
+        onReact={vi.fn()}
+        onUnreact={vi.fn()}
+        hasOlder
+        newMessages={mark}
+        {...timelineBlockProps(messages, VIEWER)}
+        {...overrides}
+      />
+    );
+  }
+
+  const divider = () =>
+    document.querySelector('[data-slot="new-messages-divider"]');
+  const pill = () =>
+    screen.queryByRole("button", { name: /new messages? (above|below)/ });
+  /** Reports rows `first..last` (0-based) on screen. */
+  const showRows = (first: number, last: number) =>
+    act(() =>
+      virtuosoProps.current.rangeChanged?.({
+        startIndex: FIRST + first,
+        endIndex: FIRST + last,
+      }),
+    );
+
+  beforeEach(() => virtuosoProps.scrollToIndex.mockClear());
+
+  it("draws the divider above someone else's first message after the cursor", () => {
+    render(view(thread));
+    const line = divider();
+    expect(line).toHaveAccessibleName("New messages");
+    // Above Bob's message, skipping the viewer's own one after the cursor.
+    const rowOf = (element: Element | null) =>
+      element?.closest("[data-index]")?.getAttribute("data-index");
+    expect(rowOf(line)).toBe(String(FIRST + 2));
+    expect(rowOf(screen.getByText("first new"))).toBe(String(FIRST + 2));
+  });
+
+  it("opens the list on the divider", () => {
+    render(view(thread));
+    expect(virtuosoProps.current.initialTopMostItemIndex).toEqual({
+      index: 2,
+      align: "start",
+    });
+  });
+
+  it("draws nothing without a mark, and opens at the newest row", () => {
+    render(view(thread, { newMessages: null }));
+    expect(divider()).toBeNull();
+    expect(pill()).toBeNull();
+    expect(virtuosoProps.current.initialTopMostItemIndex).toBe(3);
+  });
+
+  it("points up at the divider once the member reads down past it, and goes back to it", async () => {
+    const user = userEvent.setup();
+    const longer = [
+      ...thread,
+      message({ id: "m-5", client_message_id: "cm-5", created_at: at(14) }),
+      message({ id: "m-6", client_message_id: "cm-6", created_at: at(15) }),
+    ];
+    render(view(longer, { newMessages: { lastReadAt: READ_AT, count: 4 } }));
+    showRows(2, 3);
+    expect(pill()).toBeNull();
+
+    showRows(4, 4);
+    expect(pill()).toHaveAccessibleName(
+      "4 new messages above. Jump to the first one",
+    );
+    expect(pill()).toHaveTextContent("4 new messages");
+
+    await user.click(pill()!);
+    expect(virtuosoProps.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 2,
+      align: "start",
+      behavior: "auto",
+    });
+  });
+
+  it("retires once the member has seen the divider and reached the newest message", () => {
+    render(view(thread));
+    showRows(2, 3);
+    showRows(3, 3);
+    expect(pill()).toBeNull();
+    // Scrolling back above it brings nothing back: they have read it all.
+    showRows(0, 1);
+    expect(pill()).toBeNull();
+    expect(divider()).not.toBeNull();
+  });
+
+  it("points down at the divider when the member scrolls back above it", () => {
+    render(view(thread));
+    showRows(0, 1);
+    expect(pill()).toHaveAccessibleName(
+      "2 new messages below. Jump to the first one",
+    );
+  });
+
+  it("keeps the divider where it was when later stamps would have moved it", () => {
+    const { rerender } = render(view(thread));
+    rerender(
+      view([
+        ...thread,
+        message({ id: "m-5", client_message_id: "cm-5", created_at: at(20) }),
+      ]),
+    );
+    expect(divider()?.closest("[data-index]")?.getAttribute("data-index")).toBe(
+      String(FIRST + 2),
+    );
+  });
+
+  it("Mark as read takes the pill and the divider away", async () => {
+    const user = userEvent.setup();
+    const onMarkRead = vi.fn();
+    render(view(thread, { onMarkRead }));
+    showRows(3, 3);
+
+    await user.click(screen.getByRole("button", { name: "Mark as read" }));
+    expect(onMarkRead).toHaveBeenCalledTimes(1);
+    expect(pill()).toBeNull();
+    expect(divider()).toBeNull();
+  });
+
+  it("pages older history for a divider not loaded yet", async () => {
+    const user = userEvent.setup();
+    const onLoadOlder = vi.fn();
+    // Everything loaded is new, and there is more history above.
+    const allNew = thread.slice(2);
+    render(view(allNew, { onLoadOlder }));
+    expect(divider()).toBeNull();
+    expect(pill()).toHaveAccessibleName(
+      "2 new messages above. Jump to the first one",
+    );
+
+    await user.click(pill()!);
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the date on the divider when the first new message starts a day", () => {
+    const nextDay = new Date(2026, 7, 17, 9, 0).toISOString();
+    render(
+      view([
+        thread[0]!,
+        message({
+          id: "m-9",
+          client_message_id: "cm-9",
+          sender_id: BOB,
+          created_at: nextDay,
+        }),
+      ]),
+    );
+    expect(divider()).toHaveAccessibleName(/^New messages, /);
+    expect(document.querySelectorAll('[data-slot="day-divider"]')).toHaveLength(
+      1,
+    );
   });
 });

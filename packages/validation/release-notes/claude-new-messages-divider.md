@@ -1,0 +1,1 @@
+Opening a channel or a message with unread messages now takes you to the first one, under a "New messages" line, and a button at the top shows how many are new and takes you back to them, with Mark as read beside it.
