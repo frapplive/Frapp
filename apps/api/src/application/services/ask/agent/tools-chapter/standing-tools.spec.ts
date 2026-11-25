@@ -444,14 +444,23 @@ describe('service_hours', () => {
       duration_minutes: 180,
       description: 'Sorted cans at the pantry, call 555-0100',
       status: 'PENDING',
+      created_at: '2026-11-09T12:00:00.000Z',
       ...over,
     });
     const { tool, service } = build([], profiles, [
       entry({}),
       // Before the range: still waiting, so still listed.
-      entry({ user_id: 'user-2', date: '2026-09-30', duration_minutes: 120 }),
-      // No longer in the chapter.
-      entry({ user_id: 'user-gone' }),
+      entry({
+        user_id: 'user-2',
+        date: '2026-09-30',
+        duration_minutes: 120,
+        created_at: '2026-10-01T12:00:00.000Z',
+      }),
+      // No longer in the chapter: still in the queue, as in the app.
+      entry({ user_id: 'user-gone', created_at: '2026-11-10T12:00:00.000Z' }),
+      // The approver's own: not theirs to approve, so not in their queue,
+      // but it does mean they logged service.
+      entry({ user_id: 'user-1', created_at: '2026-11-11T12:00:00.000Z' }),
     ]);
     const approver = askerContext({
       enabledModules: { hours: true },
@@ -464,14 +473,16 @@ describe('service_hours', () => {
     });
     const lines = linesOf(result);
     expect(lines).toContain(
-      'Active members with nothing logged in that range, approved or waiting: 2 of 3.',
+      'Active members with nothing logged in that range, approved or waiting: 1 of 3.',
     );
-    expect(lines).toContain('Entries waiting for approval: 2, 5 hours in all.');
-    expect(lines).toContain(
+    expect(lines).toContain('Entries waiting for approval: 3, 8 hours in all.');
+    expect(lines.filter((line) => line.startsWith('Waiting for'))).toEqual([
       'Waiting for approval: Avery Lin, 2 hours on Wednesday, September 30, 2026.',
-    );
-    expect(lines).toContain(
       'Waiting for approval: Jordan Lee, 3 hours on Sunday, November 8, 2026.',
+      'Waiting for approval: A former member, 3 hours on Sunday, November 8, 2026.',
+    ]);
+    expect(lines).toContain(
+      'Dana Reyes: no approved service in that range; 1 entry waiting for approval.',
     );
     expect(lines).toContain(
       'Jordan Lee: no approved service in that range; 1 entry waiting for approval.',

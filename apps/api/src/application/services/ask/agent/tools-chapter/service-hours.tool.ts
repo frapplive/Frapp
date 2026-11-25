@@ -43,7 +43,8 @@ type Args = z.infer<typeof input>;
  *
  * A member who approves service (`service:approve`) is also shown the
  * approval queue they see in the app (`GET /v1/service-entries?status=
- * PENDING`): who logged what and is waiting on them. What a member wrote
+ * PENDING`, the read behind Activity's queue): who logged what and is
+ * waiting on them. What a member wrote
  * about the service, and their proof, stay on that page.
  */
 @Injectable()
@@ -91,12 +92,16 @@ export class ServiceHoursAgentTool implements AgentReadTool<Args> {
         (profile) => !profile.is_alumni && !withService.has(profile.user_id),
       )
       .sort((a, b) => a.display_name.localeCompare(b.display_name));
+    // The queue as Activity shows it (`ActivityService.readHoursApprovals`):
+    // oldest sent first, without the approver's own entry, which is not
+    // theirs to approve, and with an entry from someone who has since left,
+    // which still is.
     const waiting = pending
-      .filter((entry) => people.has(entry.user_id))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .filter((entry) => entry.user_id !== context.userId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
     /** Members whose only service in the range is still waiting. */
     const waitingInRange = new Map<string, number>();
-    for (const entry of waiting) {
+    for (const entry of pending) {
       if (entry.date < days.from || entry.date > days.to) continue;
       waitingInRange.set(
         entry.user_id,
