@@ -6,6 +6,7 @@ import {
   settingEntryById,
   settingWebPath,
   type SettingsSearchContext,
+  settingPhoneTarget,
 } from "./settings-search";
 import { buildFindResults } from "./find-results";
 
@@ -151,5 +152,44 @@ describe("settings search", () => {
       hint: "Chapter settings · Chapter",
       target: { type: "setting", settingId: "accent" },
     });
+  });
+});
+
+describe("the phone's Chapter tab targets (#6027)", () => {
+  const officer = ["chapter-config:view", "chapter-config:manage"];
+
+  it("opens the Chapter tab's fields on the phone for a chapter", () => {
+    const [match] = searchSettings("founded", {
+      permissions: officer,
+      platform: "phone",
+    });
+    expect(match?.entry.id).toBe("founded-year");
+    expect(match?.opensHere).toBe(true);
+    expect(settingPhoneTarget(match!.entry)).toEqual({
+      screen: "/chapter-identity",
+      anchor: "founded-year",
+      chapterOnly: true,
+    });
+  });
+
+  // A council's config read is refused (#5933): these open on the web.
+  it("sends a council to the web dashboard for them", () => {
+    const [match] = searchSettings("founded", {
+      permissions: officer,
+      platform: "phone",
+      chapterFeatures: false,
+    });
+    expect(match?.opensHere).toBe(false);
+    expect(
+      settingPhoneTarget(settingEntryById("vocab-pledge")!, {
+        chapterFeatures: false,
+      }),
+    ).toBeUndefined();
+    // A setting a council has on the phone keeps its target.
+    expect(
+      settingPhoneTarget(settingEntryById("accent")!, {
+        chapterFeatures: false,
+      }),
+    ).toBeDefined();
   });
 });

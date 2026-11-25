@@ -13,10 +13,8 @@ vi.mock("@repo/hooks", () => ({
   useChannels: () => channels.current,
 }));
 
-import {
-  offersBirthdayPosts,
-  SettingsBirthdayPosts,
-} from "./settings-birthday-posts";
+import { offersBirthdayPosts } from "@repo/hooks/chapter-tab";
+import { SettingsBirthdayPosts } from "./settings-birthday-posts";
 
 const LIST = [
   { id: "c-general", name: "general", type: "PUBLIC", archived_at: null },

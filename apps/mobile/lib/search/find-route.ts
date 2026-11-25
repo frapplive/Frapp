@@ -21,7 +21,10 @@ import type { NotificationTarget } from "@/lib/notifications/targets";
  * The routes are spelled `pathname: "…"` so `lib/routes.spec.ts` checks them
  * against the file tree (see `lib/notifications/targets.ts`).
  */
-export function findTargetRoute(target: FindTarget): NotificationTarget | null {
+export function findTargetRoute(
+  target: FindTarget,
+  options: { chapterFeatures?: boolean } = {},
+): NotificationTarget | null {
   switch (target.type) {
     case "channel":
       return target.channelId
@@ -47,7 +50,7 @@ export function findTargetRoute(target: FindTarget): NotificationTarget | null {
       return null;
     case "setting": {
       const entry = settingEntryById(target.settingId);
-      return entry ? settingPhoneRoute(entry) : null;
+      return entry ? settingPhoneRoute(entry, options) : null;
     }
   }
 }

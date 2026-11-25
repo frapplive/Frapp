@@ -3,7 +3,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { ChapterLogoUpload } from "@repo/hooks";
-import { orgHidingGreekLettersIn } from "@repo/org-archetypes";
+import {
+  CHAPTER_TAB_COPY,
+  chapterLettersHidden,
+  chapterMarkBrandingDiff,
+} from "@repo/hooks/chapter-tab";
 import {
   CHAPTER_SHORT_NAME_MAX_LENGTH,
   acceptAttribute,
@@ -79,7 +83,7 @@ export function SettingsChapterMarkCard({
   // An organization that never displays its letters (FIJI) gets no switch:
   // its letters stay off, and the next save writes that down even for a
   // chapter created before the profile turned them off.
-  const lettersHidden = orgHidingGreekLettersIn(name) !== undefined;
+  const lettersHidden = chapterLettersHidden(name);
   const [shortName, setShortName] = useState(branding.short_name ?? "");
   const [showLetters, setShowLetters] = useState(greekLettersShown(branding));
 
@@ -103,25 +107,22 @@ export function SettingsChapterMarkCard({
 
   function saveMark(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmed = shortName.trim();
-    const brandingDiff: ChapterMarkBrandingDraft = {
-      show_greek_letters: showLetters && !lettersHidden,
-    };
-    // The config PATCH deep-merges, so leaving the key out keeps a stored
-    // short name. An empty string is how a cleared field is removed.
-    if (trimmed || branding.short_name) brandingDiff.short_name = trimmed;
-    void onPatchConfig({ branding: brandingDiff });
+    // The switch always; the short name only to keep or clear one.
+    void onPatchConfig({
+      branding: chapterMarkBrandingDiff({
+        shortName,
+        showLetters,
+        lettersHidden,
+        stored: branding,
+      }),
+    });
   }
 
   return (
     <ProfileSection
       id="settings-chapter-mark"
       title="Chapter mark"
-      hint={
-        lettersHidden
-          ? "Shown in the nav and on mobile's Chat home: your logo, or else your short name."
-          : "Shown in the nav and on mobile's Chat home: your logo, or else your short name, or else your Greek letters."
-      }
+      hint={CHAPTER_TAB_COPY.markHint(lettersHidden)}
     >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -157,8 +158,7 @@ export function SettingsChapterMarkCard({
               <Label htmlFor="chapter-show-letters" className="font-normal">
                 Show Greek letters
                 <span className="block text-xs text-muted-foreground">
-                  Off hides them wherever Frapp would show them. The letters
-                  stay saved under Identity &amp; founding.
+                  {CHAPTER_TAB_COPY.showLettersLine}
                 </span>
               </Label>
               <Switch
