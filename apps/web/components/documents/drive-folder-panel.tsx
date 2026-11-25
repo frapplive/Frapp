@@ -813,7 +813,7 @@ function ConnectedView({
                 {fileCount(connection.skipped_count)}
                 <span className="block text-caption text-muted-foreground">
                   Forms and shortcuts, file types Documents doesn&apos;t take,
-                  files over 25 MB, and files past the first 500.
+                  files over 25 MB, and files past the first 5,000.
                 </span>
               </dd>
             </>
@@ -825,9 +825,9 @@ function ConnectedView({
                 {folderCount(connection.folders_left_out)}
                 <span className="block text-caption text-muted-foreground">
                   These, and any folders inside them, are past Frapp&apos;s
-                  limit of 10 levels or 300 folders, so their files aren&apos;t
-                  in Documents. Move them higher up in Drive, or connect a
-                  smaller folder.
+                  limit of 10 levels or 1,000 folders, so their files
+                  aren&apos;t in Documents. Move them higher up in Drive, or
+                  connect a smaller folder.
                 </span>
               </dd>
             </>
