@@ -46613,7 +46613,7 @@
           },
           "folders_left_out": {
             "type": "number",
-            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
+            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
           },
           "syncing": {
             "type": "boolean",
