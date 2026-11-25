@@ -38,8 +38,9 @@
 // For the production channel it also requires a clean tree at exactly the commit production
 // serves (the latest `v*` tag, `scripts/ci/lib/release-tag.mjs`, the same rule store builds
 // follow), and refuses unless every store build recorded for this runtime (`apps/mobile/store/
-// shipped-builds.json`) has the same native inputs as HEAD: `app.json`, `app.config.js`, and the
-// lockfile version of every installed package that carries native code. That is how far an
+// shipped-builds.json`) has the same native inputs as HEAD: `app.json`, `app.config.js`, the
+// native source under `apps/mobile/targets/`, and the lockfile version of every installed package
+// that carries native code. That is how far an
 // update reaches, and a mismatch means bump `expo.version` and ship a store build instead.
 //
 // After a successful production publish it uploads the bundle's source maps to Sentry when
@@ -78,6 +79,12 @@ export const STAGING_RUNTIME_ENV = "FRAPP_STAGING_RUNTIME";
 export const EAS_JSON = "apps/mobile/eas.json";
 export const APP_JSON = "apps/mobile/app.json";
 export const APP_CONFIG = "apps/mobile/app.config.js";
+/**
+ * Native source the app's own repo holds, compiled into the binary and never into an update: the
+ * Xcode targets `@bacons/apple-targets` adds at prebuild, such as the Notification Service
+ * Extension (#6024). A change here needs a store build as surely as a native package's does.
+ */
+export const NATIVE_SOURCE_DIRS = ["apps/mobile/targets"];
 export const SHIPPED_BUILDS = REGISTRY_PATH;
 export const GUARD_PATH = "scripts/eas-update.mjs";
 export const LOCKFILE = "package-lock.json";
@@ -268,7 +275,8 @@ export function buildLabel(build) {
 
 /**
  * For each recorded store build, which native inputs differ between its commit and `head`:
- * `app.json`, `app.config.js`, and the lockfile version of every native package (`isNative` reads
+ * `app.json`, `app.config.js`, each of {@link NATIVE_SOURCE_DIRS}, and the lockfile version of
+ * every native package (`isNative` reads
  * the installed tree, so it describes `head`'s install). `headLock` is `head`'s parsed lockfile.
  * A build may carry its own `label` (the PR check compares against its base commit this way).
  * Returns `[{ build, label, changed: string[], error? }]`, one per build, in order. The guard, the
@@ -287,7 +295,7 @@ export function compareNativeInputs({ builds, git, headLock, isNative, head = "H
       }
     }
     const changed = [];
-    for (const file of [APP_JSON, APP_CONFIG]) {
+    for (const file of [APP_JSON, APP_CONFIG, ...NATIVE_SOURCE_DIRS]) {
       if (git(["diff", "--quiet", build.sha, head, "--", file]).status !== 0) changed.push(file);
     }
     const buildLockText = git(["show", `${build.sha}:${LOCKFILE}`]);
@@ -303,8 +311,9 @@ export function compareNativeInputs({ builds, git, headLock, isNative, head = "H
 
 /**
  * The staging variant's runtime version: `expo.version`, a dash, and twelve hex digits of a hash
- * over its native inputs, the same three the production comparison reads (`app.json`,
- * `app.config.js`, and the lockfile version of every installed package that carries native code).
+ * over its native inputs, the same ones the production comparison reads (`app.json`,
+ * `app.config.js`, the lockfile version of every installed package that carries native code, and
+ * the files under {@link NATIVE_SOURCE_DIRS}).
  *
  * WHY. The store app's runtime is `expo.version` alone, and a person bumps it with each native
  * change. The staging app follows `main`, where native inputs move between bumps, so its binary
@@ -321,6 +330,7 @@ export function compareNativeInputs({ builds, git, headLock, isNative, head = "H
 export function stagingRuntimeVersion({
   readFile = (p) => readFileSync(path.join(ROOT, p), "utf8"),
   isNative = (lockPath) => isNativePackage(path.join(ROOT, lockPath)),
+  nativeSources = () => listNativeSources(),
 } = {}) {
   const appJson = readFile(APP_JSON);
   const version = JSON.parse(appJson)?.expo?.version;
@@ -350,10 +360,29 @@ export function stagingRuntimeVersion({
   const hash = createHash("sha256");
   // Line endings are a checkout setting (`core.autocrlf` on Windows), not a native input.
   const text = (t) => String(t).replace(/\r\n/g, "\n");
-  for (const part of [text(appJson), text(readFile(APP_CONFIG)), [...new Set(native)].sort().join("\n")]) {
+  // Each native source file by its path and text, in path order, so a rename moves it too.
+  const sources = nativeSources()
+    .sort()
+    .map((file) => `${file}\0${text(readFile(file))}`)
+    .join("\0");
+  for (const part of [text(appJson), text(readFile(APP_CONFIG)), [...new Set(native)].sort().join("\n"), sources]) {
     hash.update(String(part.length)).update("\0").update(part).update("\0");
   }
   return { runtime: `${version}-${hash.digest("hex").slice(0, 12)}` };
+}
+
+/**
+ * Every tracked file under {@link NATIVE_SOURCE_DIRS}, as repo-relative paths. Tracked only, the
+ * way `compareNativeInputs` sees them through `git diff`: an untracked or ignored file (a Finder
+ * `.DS_Store`, an editor's swap file) would otherwise move a laptop's hash away from the one CI
+ * computed for the binary built from the same commit, and its update would reach no phone.
+ */
+export function listNativeSources({ git = gitIn(ROOT) } = {}) {
+  const result = git(["ls-files", "-z", "--", ...NATIVE_SOURCE_DIRS]);
+  if (result.status !== 0) {
+    throw new Error(`git ls-files ${NATIVE_SOURCE_DIRS.join(" ")} failed: ${result.stderr.trim()}`);
+  }
+  return result.stdout.split("\0").filter(Boolean);
 }
 
 /** A git runner in `dir` that never throws: `(args) => { status, stdout, stderr }`. */

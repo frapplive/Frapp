@@ -41,7 +41,14 @@ import {
 export type SettingsArea = "chapter" | "personal";
 
 export type SettingPhoneScreen =
-  "/chapter-settings" | "/chapter-roles" | "/chapter-logs" | "/preferences";
+  | "/chapter-settings"
+  | "/chapter-mark"
+  | "/chapter-identity"
+  | "/chapter-type"
+  | "/chapter-vocabulary"
+  | "/chapter-roles"
+  | "/chapter-logs"
+  | "/preferences";
 
 export type SettingEntry = {
   /** Stable; it is the `?setting=` value a link carries. */
@@ -77,6 +84,12 @@ export type SettingEntry = {
     screen: SettingPhoneScreen;
     page?: PhoneSettingsPage;
     anchor?: string;
+    /**
+     * Drawn only for a chapter: the phone's Chapter tab parts that read the
+     * chapter's config, which a council's routes refuse (#5933). A council
+     * is sent to the web dashboard for it instead (`settingPhoneTarget`).
+     */
+    chapterOnly?: true;
   };
 };
 
@@ -185,6 +198,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["name", "rename", "organization name", "fraternity", "sorority"],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-name" },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "chapter-name",
+      chapterOnly: true,
+    },
   },
   {
     id: "university",
@@ -194,6 +212,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["school", "college", "campus"],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-university" },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "university",
+      chapterOnly: true,
+    },
   },
   {
     id: "donation-link",
@@ -211,6 +234,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: CONFIG,
     web: { page: "org", anchor: "chapter-donation" },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "donation-link",
+      chapterOnly: true,
+    },
   },
   {
     id: "logo",
@@ -224,6 +252,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-chapter-mark",
       params: { page: "mark" },
     },
+    phone: {
+      screen: "/chapter-mark",
+      anchor: "logo",
+      chapterOnly: true,
+    },
   },
   {
     id: "short-name",
@@ -236,6 +269,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "org",
       anchor: "chapter-short-name",
       params: { page: "mark" },
+    },
+    phone: {
+      screen: "/chapter-mark",
+      anchor: "short-name",
+      chapterOnly: true,
     },
   },
   {
@@ -267,6 +305,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["letters", "symbols"],
     requires: CONFIG,
     web: { page: "org", anchor: "greek-letters", params: { page: "identity" } },
+    phone: {
+      screen: "/chapter-identity",
+      anchor: "greek-letters",
+      chapterOnly: true,
+    },
   },
   {
     id: "designation",
@@ -276,6 +319,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["chapter letters", "which chapter"],
     requires: CONFIG,
     web: { page: "org", anchor: "designation", params: { page: "identity" } },
+    phone: {
+      screen: "/chapter-identity",
+      anchor: "designation",
+      chapterOnly: true,
+    },
   },
   {
     id: "school-short",
@@ -285,6 +333,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["school abbreviation", "university short name"],
     requires: CONFIG,
     web: { page: "org", anchor: "school-short", params: { page: "identity" } },
+    phone: {
+      screen: "/chapter-identity",
+      anchor: "school-short",
+      chapterOnly: true,
+    },
   },
   {
     id: "founded-year",
@@ -294,6 +347,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["founding", "founded", "established", "charter", "since"],
     requires: CONFIG,
     web: { page: "org", anchor: "founded-year", params: { page: "identity" } },
+    phone: {
+      screen: "/chapter-identity",
+      anchor: "founded-year",
+      chapterOnly: true,
+    },
   },
   {
     id: "organization-type",
@@ -317,6 +375,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-archetype",
       params: { page: "type" },
     },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "organization-type",
+      chapterOnly: true,
+    },
   },
   {
     id: "vocabulary",
@@ -330,6 +393,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "settings-vocabulary",
       params: { page: "vocabulary" },
     },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "vocabulary",
+      chapterOnly: true,
+    },
   },
   {
     id: "vocab-recruitment",
@@ -342,6 +410,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       page: "org",
       anchor: "vocab-recruitment",
       params: { page: "vocabulary" },
+    },
+    phone: {
+      screen: "/chapter-vocabulary",
+      anchor: "vocab-recruitment",
+      chapterOnly: true,
     },
   },
   {
@@ -363,6 +436,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
       anchor: "vocab-pledge",
       params: { page: "vocabulary" },
     },
+    phone: {
+      screen: "/chapter-vocabulary",
+      anchor: "vocab-pledge",
+      chapterOnly: true,
+    },
   },
   {
     id: "vocab-class",
@@ -372,6 +450,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["pledge class", "line", "class", "cohort", "vocabulary"],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-class", params: { page: "vocabulary" } },
+    phone: {
+      screen: "/chapter-vocabulary",
+      anchor: "vocab-class",
+      chapterOnly: true,
+    },
   },
   {
     id: "vocab-order",
@@ -388,6 +471,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     ],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-order", params: { page: "vocabulary" } },
+    phone: {
+      screen: "/chapter-vocabulary",
+      anchor: "vocab-order",
+      chapterOnly: true,
+    },
   },
   {
     id: "vocab-tier",
@@ -397,6 +485,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["tier", "rank", "officer level", "vocabulary"],
     requires: CONFIG,
     web: { page: "org", anchor: "vocab-tier", params: { page: "vocabulary" } },
+    phone: {
+      screen: "/chapter-vocabulary",
+      anchor: "vocab-tier",
+      chapterOnly: true,
+    },
   },
   {
     id: "birthday-posts",
@@ -406,6 +499,11 @@ const CHAPTER_ENTRIES: readonly SettingEntry[] = [
     keywords: ["birthday", "birthdays", "celebrate", "birthday channel"],
     requires: CONFIG,
     web: { page: "org", anchor: "birthday-channel" },
+    phone: {
+      screen: "/chapter-settings",
+      anchor: "birthday-posts",
+      chapterOnly: true,
+    },
   },
   {
     id: "member-names",
@@ -994,7 +1092,24 @@ export type SettingsSearchContext = {
   isModuleEnabled?: (moduleKey: string) => boolean;
   /** Only this area, for a page that searches its own settings. */
   area?: SettingsArea;
+  /** False for a council: its phone has no Chapter tab pages (`chapterOnly`). */
+  chapterFeatures?: boolean;
 };
+
+/**
+ * Where a setting opens on the phone for this tenant, or `undefined` when
+ * only the web dashboard has it there: a council has no Chapter tab parts
+ * that read the chapter's config (`chapterOnly`).
+ */
+export function settingPhoneTarget(
+  entry: SettingEntry,
+  options: { chapterFeatures?: boolean } = {},
+): SettingEntry["phone"] {
+  if (entry.phone?.chapterOnly && options.chapterFeatures === false) {
+    return undefined;
+  }
+  return entry.phone;
+}
 
 /** Whether this viewer could change it, on this platform or on the web. */
 export function isSettingListed(
@@ -1142,7 +1257,12 @@ export function searchSettings(
     .map(({ entry }) => ({
       entry,
       hint: settingHint(entry),
-      opensHere: ctx.platform === "web" ? !!entry.web : !!entry.phone,
+      opensHere:
+        ctx.platform === "web"
+          ? !!entry.web
+          : !!settingPhoneTarget(entry, {
+              chapterFeatures: ctx.chapterFeatures,
+            }),
     }));
 }
 

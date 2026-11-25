@@ -93,6 +93,7 @@ import {
 import { MarkAttendanceSheet } from "@/components/minutes/mark-attendance-sheet";
 import { MinutesBody, MinutesJumpBar } from "@/components/minutes/minutes-body";
 import { ComingUpDates } from "@/components/minutes/coming-up-dates";
+import { useActionItemTaskMenu } from "@/components/minutes/action-item-task";
 import { ComingUpPostReview } from "@/components/minutes/coming-up-post-review";
 import { LinkMeetingSheet } from "@/components/minutes/link-meeting-sheet";
 import { MinutesDetailsSheet } from "@/components/minutes/minutes-details-sheet";
@@ -246,6 +247,9 @@ function MinutesDetailsScreenBody() {
   );
 }
 
+/** No suggestions read yet, kept one array so the matching stays memoized. */
+const EMPTY_SUGGESTIONS: never[] = [];
+
 function LoadedMinutes({
   meeting,
   autoRecord,
@@ -387,6 +391,13 @@ function LoadedMinutes({
       ),
     [actionTasksQuery.data],
   );
+  // An action item's long-press: Create task from its waiting suggestion,
+  // or Open task once it is one (#6051).
+  const actionItemTask = useActionItemTaskMenu({
+    items: content.action_items,
+    suggestions: suggestions.data?.items ?? EMPTY_SUGGESTIONS,
+    handleFor: menu.handleFor,
+  });
   // Without drafting the note is the minutes' Summary, typed and posted here
   // (#5288); Edit minutes writes the other sections. Only once the AI
   // reads have answered that drafting is off: while they load, or when one
@@ -902,6 +913,7 @@ function LoadedMinutes({
         nameFor={names.nameFor}
         viewerId={viewerId}
         tasks={actionTasks}
+        actionItemMenu={editing ? undefined : actionItemTask.menuFor}
         onSectionLayout={(key, y) => sectionY.current.set(key, y)}
         renderDates={(dates) => (
           <ComingUpDates
@@ -1182,6 +1194,7 @@ function LoadedMinutes({
       {recorder.sheets}
       {consentSheet}
       {menu.element}
+      {actionItemTask.sheet}
       {meeting.can_edit ? (
         <MinutesDetailsSheet
           ref={detailsSheetRef}

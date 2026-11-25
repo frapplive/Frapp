@@ -19,7 +19,7 @@ import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface'
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type {
   RushCandidate,
-  RushCandidateRow,
+  RushCandidateTableRow,
 } from '#domain/entities/rush-candidate.entity';
 import { RbacService } from './rbac.service';
 import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
@@ -106,7 +106,7 @@ describe('RushPipelineService', () => {
   };
 
   /** The same candidate as the pipeline's own reads return it. */
-  const baseRow: RushCandidateRow = {
+  const baseRow: RushCandidateTableRow = {
     ...baseCandidate,
     owner_id: null,
     last_contact_on: null,
@@ -124,6 +124,8 @@ describe('RushPipelineService', () => {
     bid_answered_via: null,
     bid_rescind_reason: null,
     bid_invite_sent: null,
+    pnm_id: null,
+    origin: 'manual',
   };
 
   beforeEach(async () => {
@@ -470,7 +472,14 @@ describe('RushPipelineService', () => {
     beforeEach(() => {
       pipelineRepo.listCandidates.mockResolvedValue([
         baseRow,
-        { ...baseRow, id: 'cand-2', display_name: 'Sam Roe' },
+        {
+          ...baseRow,
+          id: 'cand-2',
+          display_name: 'Sam Roe',
+          pnm_id: 'pnm-1',
+          origin: 'pnm',
+          created_by: null,
+        },
       ]);
       pipelineRepo.listTags.mockResolvedValue([tag('t1', 'Legacy')]);
       pipelineRepo.listCandidateTags.mockResolvedValue([
@@ -520,9 +529,14 @@ describe('RushPipelineService', () => {
         viewer_rating: 4,
         viewer_has_voted: true,
       });
+      expect(first).toMatchObject({ origin: 'manual' });
+      // A candidate the PNM's interest form created names no adder (#5977).
       expect(second).toMatchObject({
         id: 'cand-2',
         tag_ids: [],
+        created_by: null,
+        created_by_name: null,
+        origin: 'pnm',
         viewer_rating: null,
         viewer_has_voted: false,
       });

@@ -354,6 +354,26 @@ describe("ChannelList reorder", () => {
     }
   });
 
+  // #6053: the heading's ⋯ goes while anything is held, as the + does, so
+  // the heading under the pointer stays the whole drop target.
+  it("hides a heading's ⋯ while a row is held", () => {
+    const { container } = setup({ withSidebar: true });
+    expect(
+      screen.queryAllByRole("button", { name: /^More for / }).length,
+    ).toBeGreaterThan(0);
+    const restore = hold(
+      rowOf(container, "c-gen")!,
+      rowOf(container, "c-rand")!,
+    );
+    try {
+      expect(screen.queryAllByRole("button", { name: /^More for / })).toEqual(
+        [],
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it("folds every category to its heading while a category is dragged", () => {
     const { container } = setup();
     const heading = container.querySelector<HTMLElement>(

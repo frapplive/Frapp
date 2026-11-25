@@ -36,6 +36,7 @@ import type {
   PnmSource,
   RecruitmentSeasonStatus,
 } from '#domain/entities/pnm.entity';
+import { InterestFormService } from './interest-form.service';
 
 /** The fields a master-list row shows, as logged (`council_pnm_access_log.fields`). */
 const LIST_FIELDS = ['name', 'school_email', 'class_year'];
@@ -69,7 +70,10 @@ export interface MasterListView {
   season: CouncilRecruitmentSeason;
   /** True while counts stand in for which chapters (the season isn't closed). */
   counts_only: boolean;
-  /** Per accepted chapter: how many PNMs on this list showed interest. */
+  /**
+   * Per accepted chapter: how many PNMs on this list showed interest. Empty
+   * until the season closes (Winston, 2026-11-24).
+   */
   chapter_totals: { chapter_id: string; name: string; interested: number }[];
   pnms: MasterListRow[];
 }
@@ -113,6 +117,7 @@ export class PnmService {
     @Inject(AFFILIATION_REPOSITORY)
     private readonly affiliations: IAffiliationRepository,
     @Inject(CHAPTER_REPOSITORY) private readonly chapters: IChapterRepository,
+    private readonly interestForms: InterestFormService,
   ) {}
 
   // Seasons --------------------------------------------------------------------
@@ -147,6 +152,8 @@ export class PnmService {
         message: `Your council already has a ${term} season.`,
       });
     }
+    // After the answer: the officer doesn't wait on the emails.
+    if (created.status === 'open') void this.pushUpChapters(councilId);
     return created;
   }
 
@@ -171,6 +178,9 @@ export class PnmService {
     );
     const updated = await this.pnms.updateSeason(councilId, term, patch);
     if (!updated) throw seasonNotFound();
+    if (updated.status === 'open' && current.status !== 'open') {
+      void this.pushUpChapters(councilId);
+    }
     return updated;
   }
 
@@ -227,11 +237,16 @@ export class PnmService {
     return {
       season,
       counts_only: countsOnly,
-      chapter_totals: accepted.map((chapter) => ({
-        chapter_id: chapter.id,
-        name: chapter.name,
-        interested: interests.filter((i) => i.chapter_id === chapter.id).length,
-      })),
+      // Per-chapter totals wait for the close too: beside each PNM's count
+      // they can tell where a PNM signed up (Winston, 2026-11-24).
+      chapter_totals: countsOnly
+        ? []
+        : accepted.map((chapter) => ({
+            chapter_id: chapter.id,
+            name: chapter.name,
+            interested: interests.filter((i) => i.chapter_id === chapter.id)
+              .length,
+          })),
       pnms: records
         .map((pnm) => {
           const chapterIds = chaptersByPnm.get(pnm.id) ?? [];
@@ -436,6 +451,18 @@ export class PnmService {
     const season = await this.pnms.findSeason(councilId, term);
     if (!season) throw seasonNotFound();
     return season;
+  }
+
+  /**
+   * A season opened: each accepted chapter's interest-form PNMs join the
+   * master list (#5977, `ifc-recruitment.md` § Before the chapter's council
+   * link is accepted). Never throws.
+   */
+  private async pushUpChapters(councilId: string): Promise<void> {
+    const chapters = await this.acceptedChapters(councilId).catch(() => []);
+    for (const chapter of chapters) {
+      await this.interestForms.pushUpChapter(chapter.id);
+    }
   }
 
   private async acceptedChapters(

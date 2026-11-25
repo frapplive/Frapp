@@ -51,6 +51,7 @@ const EXEC_BOARD = [
   'events:update',
   'groups:manage',
   'meetings:record',
+  'members:timeout',
   'polls:view_all',
   'predictions:manage',
   'roles:manage',
@@ -98,6 +99,8 @@ describe('DEFAULT_SYSTEM_ROLES permissions', () => {
       'channels:create',
       'channels:manage',
       'groups:manage',
+      // Chat timeouts (#6006): whoever manages channels.
+      'members:timeout',
       // Reading recruitment notes (#5924).
       'rush:read_notes',
       'service:approve',

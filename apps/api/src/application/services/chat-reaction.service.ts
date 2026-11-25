@@ -88,13 +88,17 @@ const SIGNUPS_CLOSED = 'Sign-ups are closed';
  * either, but open to every reader, as the cards on web and the phone offer
  * them. A vote is not `'vote'`, which would also apply who can post and so
  * refuse a member a poll in `#announcements` that the card lets them tap.
- * An emoji reaction stays a `'read'`.
+ * An emoji reaction is a `'react'`: any reader may react, but a chat timeout
+ * refuses it (#6006). Anything else (an RSVP) stays a `'read'`.
  */
-function cardActionOperation(actionType: string): 'answer' | 'read' {
-  return actionType === CARD_VOTE_ACTION_TYPE ||
+function cardActionOperation(actionType: string): 'answer' | 'react' | 'read' {
+  if (
+    actionType === CARD_VOTE_ACTION_TYPE ||
     actionType === SIGNUP_ACTION_TYPE
-    ? 'answer'
-    : 'read';
+  ) {
+    return 'answer';
+  }
+  return isReactionActionType(actionType) ? 'react' : 'read';
 }
 
 /**
@@ -122,7 +126,13 @@ export class ChatReactionService {
     userId: string,
     emoji: string,
   ) {
-    await this.channelAccess.assertMessageAccess(messageId, chapterId, userId);
+    // A reaction, which a chat timeout refuses (#6006).
+    await this.channelAccess.assertMessageAccess(
+      messageId,
+      chapterId,
+      userId,
+      'react',
+    );
 
     const existing = await this.reactionRepo.findOne(messageId, userId, emoji);
 

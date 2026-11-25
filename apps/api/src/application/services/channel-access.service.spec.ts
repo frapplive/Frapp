@@ -142,6 +142,8 @@ describe('ChannelAccessService', () => {
     };
     mockMemberRepo = {
       completeOnboarding: jest.fn(),
+      clearChatTimeout: jest.fn(),
+      findEndedChatTimeouts: jest.fn(),
       findById: jest.fn(),
       findByUser: jest.fn(),
       findByUserAndChapter: jest.fn(),
@@ -1345,6 +1347,128 @@ describe('ChannelAccessService', () => {
 
       expect(result.map((c) => c.can_post)).toEqual([true, false]);
       expect(mockRbac.getChannelAccessHolder).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Chat timeouts (#6006, spec/behavior/chat/README.md § Timeouts).
+  describe('assertChannelAccess — chat timeout', () => {
+    const NOW = Date.parse('2026-11-25T15:00:00.000Z');
+    const timedOut = {
+      ...member,
+      chat_timeout_until: '2026-11-25T15:40:00.000Z',
+      chat_timeout_reason: 'spamming',
+    } as Member;
+    const dm: ChatChannel = {
+      ...publicChannel,
+      id: 'ch-dm',
+      type: 'DM',
+      member_ids: ['user-1', 'user-2'],
+    };
+    const groupDm: ChatChannel = { ...dm, id: 'ch-gdm', type: 'GROUP_DM' };
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW });
+      mockRbac.getChannelAccessHolder.mockResolvedValue(EMPTY_ACCESS_HOLDER);
+      mockMemberRepo.findByUserAndChapter.mockResolvedValue(timedOut);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    const refusal = (promise: Promise<unknown>) =>
+      promise.then(
+        () => null,
+        (error: ForbiddenException) => ({
+          status: error.getStatus(),
+          body: error.getResponse(),
+        }),
+      );
+
+    it.each(['post', 'thread', 'react'] as const)(
+      'refuses a %s in a channel with the coded 403',
+      async (operation) => {
+        mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+        await expect(
+          refusal(
+            service.assertChannelAccess(
+              'ch-public',
+              'chap-1',
+              'user-1',
+              operation,
+            ),
+          ),
+        ).resolves.toEqual({
+          status: 403,
+          body: expect.objectContaining({ code: 'chat.timed_out' }),
+        });
+      },
+    );
+
+    it.each(['read', 'vote', 'answer', 'close', 'modify'] as const)(
+      'still allows a %s in a channel',
+      async (operation) => {
+        mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+        await expect(
+          service.assertChannelAccess(
+            'ch-public',
+            'chap-1',
+            'user-1',
+            operation,
+          ),
+        ).resolves.toBe(publicChannel);
+      },
+    );
+
+    it.each([dm, groupDm])(
+      'leaves posting and reacting in a $type alone',
+      async (channel) => {
+        mockChannelRepo.findById.mockResolvedValue(channel);
+
+        for (const operation of ['post', 'react'] as const) {
+          await expect(
+            service.assertChannelAccess(
+              channel.id,
+              'chap-1',
+              'user-1',
+              operation,
+            ),
+          ).resolves.toBe(channel);
+        }
+      },
+    );
+
+    it('lets the member post again once the time has passed', async () => {
+      mockChannelRepo.findById.mockResolvedValue(publicChannel);
+      jest.setSystemTime(Date.parse('2026-11-25T15:40:00.001Z'));
+
+      await expect(
+        service.assertChannelAccess('ch-public', 'chap-1', 'user-1', 'post'),
+      ).resolves.toBe(publicChannel);
+    });
+
+    it('answers a channel the member cannot see as no access, not a timeout', async () => {
+      mockChannelRepo.findById.mockResolvedValue(privateChannel);
+
+      await expect(
+        service.assertChannelAccess('ch-private', 'chap-1', 'user-1', 'post'),
+      ).rejects.toThrow('You do not have access to this channel');
+    });
+
+    it('refuses a reaction on a message in a channel', async () => {
+      mockMessageRepo.findById.mockResolvedValue({
+        id: 'msg-1',
+        channel_id: 'ch-public',
+      } as ChatMessage);
+      mockChannelRepo.findById.mockResolvedValue(publicChannel);
+
+      await expect(
+        refusal(
+          service.assertMessageAccess('msg-1', 'chap-1', 'user-1', 'react'),
+        ),
+      ).resolves.toMatchObject({ status: 403 });
+      await expect(
+        service.assertMessageAccess('msg-1', 'chap-1', 'user-1', 'read'),
+      ).resolves.toMatchObject({ id: 'msg-1' });
     });
   });
 });

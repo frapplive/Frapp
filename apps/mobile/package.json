@@ -13,6 +13,7 @@
     "test:cov": "vitest run --coverage"
   },
   "dependencies": {
+    "@bacons/apple-targets": "~5.0.0",
     "@expo-google-fonts/figtree": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -92,5 +93,12 @@
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^4.1.10"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "@bacons/apple-targets"
+      ]
+    }
+  }
 }

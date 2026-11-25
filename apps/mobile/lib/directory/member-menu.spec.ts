@@ -25,6 +25,26 @@ describe("memberMenuActions", () => {
     ).toEqual(["block", "remove"]);
   });
 
+  it("offers Time out, or Lift timeout while one runs, before Block (#6006)", () => {
+    expect(
+      memberMenuActions({
+        canTimeOut: true,
+        canBlock: true,
+        isBlocked: false,
+        canRemove: true,
+      }),
+    ).toEqual(["time-out", "block", "remove"]);
+    expect(
+      memberMenuActions({
+        canTimeOut: true,
+        timedOut: true,
+        canBlock: true,
+        isBlocked: false,
+        canRemove: false,
+      }),
+    ).toEqual(["lift-timeout", "block"]);
+  });
+
   it("offers Unblock for a member you blocked", () => {
     expect(
       memberMenuActions({ canBlock: true, isBlocked: true, canRemove: false }),

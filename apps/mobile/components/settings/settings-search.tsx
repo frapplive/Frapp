@@ -13,6 +13,7 @@ import {
   openSetting,
   usePhoneSettingsSearch,
 } from "@/lib/settings/settings-search";
+import { useIsCouncil } from "@/lib/tenant-kind";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -76,6 +77,8 @@ function SettingsSearchResults({
   const { tokens } = useFrappTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   const find = usePhoneSettingsSearch();
+  // A council's Chapter tab settings open on the web (#5933).
+  const chapterFeatures = !useIsCouncil();
   const matches = useMemo(() => find(query), [find, query]);
   const [browserFailed, setBrowserFailed] = useState(false);
 
@@ -110,6 +113,7 @@ function SettingsSearchResults({
               openSetting(router, match.entry, {
                 here,
                 jumpHere,
+                chapterFeatures,
                 onBrowserFailed: () => setBrowserFailed(true),
               });
             }}

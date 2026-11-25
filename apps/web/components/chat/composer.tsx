@@ -36,6 +36,7 @@ import {
   type CommandFormOutcome,
 } from "./composer-shell";
 import { SlashChoicePicker } from "./slash-choice-picker";
+import { ChatTimeoutNotice } from "./chat-timeout-notice";
 import { AUDIT_LOG_COMPOSER_NOTE } from "@repo/chat-core/audit-log-copy";
 import { cn } from "@/lib/utils";
 import { compactControlClassName } from "@/components/shared/table-controls";
@@ -206,6 +207,13 @@ interface ComposerBaseProps {
    * response goes through the list projection.
    */
   canPost?: boolean;
+  /**
+   * The member's chat timeout in this channel (#6006), from
+   * `chatTimeoutNotice`: while set, the banner stands where the editor
+   * would, as the read-only line does. `null` in a DM, which a timeout
+   * doesn't reach, and when there is none.
+   */
+  timeoutNotice?: { title: string; detail: string | null } | null;
   /**
    * Where the chat column's drop target (#4143, `ChatDropTarget`) finds this
    * composer's attach path. Set while the composer is live and cleared when it
@@ -684,6 +692,7 @@ export function Composer({
   isReadOnly,
   isAuditLog = false,
   canPost,
+  timeoutNotice = null,
   draft,
   onChangeDraft,
   onSend,
@@ -782,7 +791,9 @@ export function Composer({
   // Hoisted above `useEditor` so `onCreate` can honour it — the early return
   // that reads it next is ~400 lines down, but Tiptap builds the editor from
   // here regardless of whether anything ever renders it. See `onCreate`.
-  const resolvedCanPost = composerCanPost({ isAuditLog, canPost, isReadOnly });
+  // A timeout (#6006) takes the composer away as a refused post would.
+  const resolvedCanPost =
+    !timeoutNotice && composerCanPost({ isAuditLog, canPost, isReadOnly });
   const sendRef = useRef<() => void>(() => {});
   /*
     The attach path, for the editor's paste handler (#2246). `editorProps` is
@@ -1774,6 +1785,7 @@ export function Composer({
   // must still get the old read-only-blocks-everyone behavior rather than a
   // falsely-live composer. (`resolvedCanPost` is computed near `useEditor`
   // above, which needs it too.)
+  if (timeoutNotice) return <ChatTimeoutNotice notice={timeoutNotice} />;
   if (!resolvedCanPost) {
     return (
       <div className="flex items-center gap-3 border-t border-border px-4 py-3">

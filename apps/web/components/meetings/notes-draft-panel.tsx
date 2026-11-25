@@ -751,7 +751,7 @@ export function NotesDraftPanel({
                 key={index}
                 className="space-y-2 rounded-lg border border-warning/30 p-3"
               >
-                <p className="text-caption font-semibold text-warning-text">
+                <p className="text-caption font-semibold text-warning">
                   {conflict.settled_by
                     ? MEETING_NOTE_TAKERS_COPY.settledBy[conflict.settled_by]
                     : MEETING_NOTE_TAKERS_COPY.youDecide}

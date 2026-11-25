@@ -11,6 +11,7 @@ import {
   MINUTES_READ_COPY,
   meetingTabledFromLabel,
   minutesActionMeta,
+  minutesActionOwner,
   minutesActionRows,
   minutesActionStatePrefix,
   minutesAttendanceDetail,
@@ -33,6 +34,7 @@ import { FOCUS_RING_OFFSET } from "@/components/ui/focus";
 import { ViewLabels } from "@/components/shared/view-labels";
 import { cn } from "@/lib/utils";
 import { meetingDueLabel, voteLine } from "@/components/meetings/meeting-copy";
+import type { ActionItemTaskRowRenderer } from "@/components/meetings/action-item-task";
 
 /**
  * The minutes as members read them (#5562; Paul, 2026-11-19: "Scrolling
@@ -261,19 +263,23 @@ export function DecisionsView({
  * The action items as a checklist, ticked as each item's task is done
  * (Paul, 2026-11-18). The reader's own come first, then the ones with a due
  * day; Mine narrows to the reader's own, so a chair finds theirs among 27.
- * The boxes only show: an item is checked off by doing its task.
+ * The boxes only show: an item is checked off by doing its task. An
+ * officer gets each item's Create task or Open task (#6051, `taskRow`).
  */
 export function ActionChecklist({
   items,
   nameFor,
   viewerId,
   tasks,
+  taskRow,
 }: {
   items: readonly MeetingActionItem[];
   nameFor: (userId: string) => string | null;
   viewerId: string | null;
   /** The tasks the items became, by their place in the stored list. */
   tasks: ReadonlyMap<number, MeetingActionItemTask>;
+  /** Each item's way to a task, for an officer (`useActionItemTaskRow`). */
+  taskRow?: ActionItemTaskRowRenderer;
 }) {
   const rows = minutesActionRows(items, viewerId);
   const mineCount = rows.filter((row) => row.mine).length;
@@ -315,15 +321,20 @@ export function ActionChecklist({
           const task = tasks.get(index);
           const isDone = task?.done ?? false;
           const meta = minutesActionMeta({
-            owner: item.owner_user_id
-              ? memberLabel(nameFor(item.owner_user_id), item.owner_user_id)
-              : MINUTES_READ_COPY.nobodyNamed,
+            // Who the task went to once an officer made it one, else who
+            // the minutes named (#6051).
+            owner: minutesActionOwner({
+              ownerId: item.owner_user_id,
+              task: task?.task ?? null,
+              group: task?.group ?? null,
+              nameOf: (userId) => memberLabel(nameFor(userId), userId),
+            }),
             dueLabel: item.due_date ? meetingDueLabel(item.due_date) : null,
             group: task?.group ?? null,
             done: isDone,
           });
-          return (
-            <li key={index} className="flex gap-3">
+          const draw = (actions: ReactNode, below: ReactNode) => (
+            <li key={index} className="group flex gap-3">
               <span
                 aria-hidden="true"
                 className={cn(
@@ -351,9 +362,16 @@ export function ActionChecklist({
                   {mine ? <Badge>{MINUTES_READ_COPY.yours}</Badge> : null}
                 </div>
                 <p className="text-caption text-muted-foreground">{meta}</p>
+                {below}
               </div>
+              {actions ? (
+                <div className="flex shrink-0 items-start gap-1">{actions}</div>
+              ) : null}
             </li>
           );
+          return taskRow
+            ? taskRow({ index, item, task }, draw)
+            : draw(null, null);
         })}
       </ul>
       {list.cut ? (

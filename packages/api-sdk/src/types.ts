@@ -4163,7 +4163,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft */
+        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051) */
         get: operations["MeetingActionItemTasksController_list_v1"];
         put?: never;
         post?: never;
@@ -4414,6 +4414,41 @@ export interface paths {
         post: operations["ChapterGroupController_addMember_v1"];
         /** Take one member out of a manual group */
         delete: operations["ChapterGroupController_removeMember_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls */
+        get: operations["ChatTimeoutController_mine_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/{id}/chat-timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President. */
+        put: operations["ChatTimeoutController_timeOut_v1"];
+        post?: never;
+        /** Lift a member's chat timeout early. Under the same rank rule as setting one. */
+        delete: operations["ChatTimeoutController_lift_v1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4829,6 +4864,212 @@ export interface paths {
         put?: never;
         /** The PNM confirms the acceptance a member recorded, with one tap from the emailed link */
         post: operations["RushBidConfirmationController_confirm_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/interest-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The chapter's interest form, its QR codes and who it tells
+         * @description Written closed on the first read, as the form exists once Rush is on. `offered: false` for an NPHC chapter, which never gets one.
+         */
+        get: operations["InterestFormController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Open or close the form, or change its blurb, questions or contacts */
+        patch: operations["InterestFormController_update_v1"];
+        trace?: never;
+    };
+    "/v1/rush/interest-form/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a QR source label */
+        post: operations["InterestFormController_addLabel_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/interest-form/labels/{labelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a QR source label */
+        delete: operations["InterestFormController_removeLabel_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/interest-form/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace the form: a new link, the old link and QR codes stop working */
+        post: operations["InterestFormController_replace_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A candidate's newest interest-form submission: contact details and answers */
+        get: operations["InterestFormController_candidateForm_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/withdrawal/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What the "Withdraw or delete my info" link is for: the chapter, with no account needed
+         * @description The token rides the body, never a URL a log keeps. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.
+         */
+        post: operations["PublicInterestFormController_previewWithdrawal_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/withdrawal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw from the chapter, or delete the recruitment information everywhere
+         * @description Spends the token. 400 `interest_form.withdraw.invalid` for an unknown, spent or expired token.
+         */
+        post: operations["PublicInterestFormController_withdraw_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An interest form's public fields, with no account needed */
+        get: operations["PublicInterestFormController_get_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a one-time code to the address, before the form shows
+         * @description 409 `interest_form.closed`; 400 `interest_form.email.invalid` or `interest_form.email.wrong_domain` (an address off the chapter's school domains); 409 `interest_form.verification_unavailable`; 429 `interest_form.code.cooldown` or `interest_form.code.rate_limited`; 503 `interest_form.code.send_failed`.
+         */
+        post: operations["PublicInterestFormController_startCode_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the code; answers the proof the submission spends
+         * @description 400 `interest_form.code.missing`, `interest_form.code.expired` or `interest_form.code.wrong`; 429 `interest_form.code.too_many_attempts`.
+         */
+        post: operations["PublicInterestFormController_verify_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/interest-forms/{slug}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the form: the PNM joins the chapter's pipeline, and the council's master list once the link is accepted
+         * @description 400 `interest_form.proof.invalid` (expired or spent: verify again), `interest_form.consent.required` or `interest_form.answers.invalid`; 409 `interest_form.closed`.
+         */
+        post: operations["PublicInterestFormController_submit_v1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5307,6 +5548,23 @@ export interface paths {
         put?: never;
         /** What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone */
         post: operations["FrappLinkController_resolve_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/updates/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A desktop release file or update feed: redirects to a time-limited download link */
+        get: operations["DesktopUpdateController_file_v1"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7163,7 +7421,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, once, then copies its files into Documents and keeps them in sync. Picking the connected folder again after it was unshared shares it again. */
+        /** Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, then copies its files into Documents and keeps them in sync. Google allows that share only for an empty folder: for any other the answer is 409 `google_drive.share_by_hand`, and once the officer has shared it in Drive the same request connects it. */
         post: operations["GoogleDriveController_connectPicked_v1"];
         delete?: never;
         options?: never;
@@ -8590,6 +8848,15 @@ export interface components {
             viewer_can_remove?: boolean;
             /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads. */
             viewer_can_edit_profile?: boolean;
+            /** @description Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads. */
+            viewer_can_timeout?: boolean;
+            /**
+             * Format: date-time
+             * @description Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout.
+             */
+            chat_timeout_until?: string | null;
+            /** @description The reason the officer gave, under the same rule. */
+            chat_timeout_reason?: string | null;
         };
         MemberRosterEntryDto: {
             /** @description users.id — the id chat carries as sender_id */
@@ -10291,7 +10558,7 @@ export interface components {
              */
             status: "pending" | "failed";
             /**
-             * @description Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message; `send_failed` it kept failing.
+             * @description Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message, or the author was timed out when it came due; `send_failed` it kept failing.
              * @enum {string|null}
              */
             failure_reason: "no_access" | "chapter_locked" | "not_sendable" | "send_failed" | null;
@@ -11842,6 +12109,22 @@ export interface components {
             done: number;
             total: number;
         };
+        ActionItemTaskWhoDto: {
+            /**
+             * @description A task for everyone’s audience; null for a task for one member.
+             * @enum {string|null}
+             */
+            audience: "everyone" | "people" | "role" | "group" | "tier" | null;
+            /** @description The role’s, group’s or tier’s name, when it went to one. */
+            audience_name: string | null;
+            /** @description The member, or the named people of a task for several. Empty for a role, group, tier or everyone. */
+            assignee_ids: string[];
+        };
+        ActionItemTaskRefDto: {
+            /** Format: uuid */
+            id: string;
+            who: components["schemas"]["ActionItemTaskWhoDto"];
+        };
         MeetingActionItemTaskDto: {
             /** @description The action item’s place in the minutes’ list, from 0. */
             index: number;
@@ -11849,6 +12132,8 @@ export interface components {
             done: boolean;
             /** @description A task for everyone: how many of its copies are done. */
             group: components["schemas"]["ActionItemTaskGroupDto"] | null;
+            /** @description The task and who it went to, for a caller with `tasks:manage`; null for everyone else. */
+            task: components["schemas"]["ActionItemTaskRefDto"] | null;
         };
         OpenActionItemDto: {
             /** @description The action item’s place in its minutes’ list, from 0. */
@@ -12077,6 +12362,33 @@ export interface components {
             /** @description The group's whole member list, as `users.id`s of members of the chapter. Replaces the list, all or none. */
             member_ids: string[];
         };
+        ChatTimeoutStateDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+        };
+        SetChatTimeoutDto: {
+            /**
+             * @description 5 minutes, 1 hour, 1 day or 1 week.
+             * @enum {string}
+             */
+            duration: "5m" | "1h" | "1d" | "1w";
+            /** @description Shown to the member and to officers who can time out. Optional. */
+            reason?: string | null;
+        };
+        MemberChatTimeoutDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+            /** Format: uuid */
+            member_id: string;
+        };
         RushCandidateViewDto: {
             /** Format: uuid */
             id: string;
@@ -12102,8 +12414,11 @@ export interface components {
              * @enum {string}
              */
             bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
-            /** Format: uuid */
-            created_by: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
+             */
+            created_by: string | null;
             /** Format: date-time */
             created_at: string;
             /** @description Ballot count. Voter names are never returned. Absent when the caller lacks `rush:view_results` (#4084); a client shows no count then, never 0. */
@@ -12156,8 +12471,11 @@ export interface components {
              * @enum {string}
              */
             bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
-            /** Format: uuid */
-            created_by: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
+             */
+            created_by: string | null;
             /** Format: date-time */
             created_at: string;
             /** @description Whether the accompanying chat card was posted. Only an explicit `false` is actionable: the candidate row committed and the card did not. Absent means no card was attempted. Full contract: `spec/behavior/chat/integrations.md` § Slash command dispatch. */
@@ -12202,10 +12520,18 @@ export interface components {
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
             /** @enum {string} */
             bid_status: "none" | "extended";
-            /** Format: uuid */
-            created_by: string;
-            /** @description Who added the candidate, by current name. */
-            created_by_name: string;
+            /**
+             * Format: uuid
+             * @description Who added the candidate; null for one the PNM's own interest form created.
+             */
+            created_by: string | null;
+            /** @description Who added the candidate, by current name; null with `created_by`. */
+            created_by_name: string | null;
+            /**
+             * @description `manual` when a member added them, `pnm` when their interest form did (#5977).
+             * @enum {string}
+             */
+            origin: "manual" | "pnm";
             /** Format: date-time */
             created_at: string;
             tag_ids: string[];
@@ -12516,6 +12842,202 @@ export interface components {
             status: "waiting" | "confirmed" | "closed";
             /** @description On the tap that confirmed it: whether the invite to join went out. */
             invite_sent?: boolean;
+        };
+        InterestFormOptionDto: {
+            id: string;
+            label: string;
+        };
+        InterestFormQuestionDto: {
+            id: string;
+            /** @enum {string} */
+            type: "short_answer" | "paragraph" | "multiple_choice" | "checkboxes" | "dropdown" | "yes_no";
+            title: string;
+            required: boolean;
+            options?: components["schemas"]["InterestFormOptionDto"][];
+        };
+        InterestFormDto: {
+            /** Format: uuid */
+            id: string;
+            /** @description The public page is `/f/<slug>`. */
+            slug: string;
+            /** @example /f/k3mz8qpt2a */
+            path: string;
+            is_open: boolean;
+            blurb: string | null;
+            questions: components["schemas"]["InterestFormQuestionDto"][];
+            ask_referrer: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        InterestFormLabelDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example tabling-quad */
+            label: string;
+            /**
+             * @description The path the label's QR code opens.
+             * @example /f/k3mz8qpt2a?src=tabling-quad
+             */
+            path: string;
+        };
+        InterestFormSettingsDto: {
+            /** @description False for an NPHC chapter, which never gets an interest form. */
+            offered: boolean;
+            form: components["schemas"]["InterestFormDto"] | null;
+            labels: components["schemas"]["InterestFormLabelDto"][];
+        };
+        UpdateInterestFormDto: {
+            /** @description Open or close the public page. */
+            is_open?: boolean;
+            /** @description A few lines at the top of the form; empty or null clears it. */
+            blurb?: string | null;
+            /** @description The chapter's own questions, replacing the list: the chat form card's question shape (`id`, `type`, `title`, `required`, `options`). A question on a topic Frapp never collects is refused with 400 `interest_form.question.sensitive`. */
+            questions?: components["schemas"]["InterestFormQuestionDto"][];
+            /** @description Ask "Who referred you?". */
+            ask_referrer?: boolean;
+        };
+        AddInterestFormLabelDto: {
+            /** @description A QR source label, such as `tabling-quad`. Spaces and capitals are folded to dashes and lowercase. */
+            label: string;
+        };
+        CandidateFormReferrerDto: {
+            /** Format: uuid */
+            user_id: string;
+            display_name: string;
+        };
+        CandidateFormAnswerDto: {
+            question: string;
+            answer: string;
+        };
+        CandidateFormSubmissionDto: {
+            /** Format: date-time */
+            submitted_at: string;
+            email: string;
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            class_year: number | null;
+            phone: string | null;
+            source_label: string | null;
+            referrer_text: string | null;
+            /** @description The member the referrer text names, when exactly one does. */
+            referrer_suggestion: components["schemas"]["CandidateFormReferrerDto"] | null;
+            answers: components["schemas"]["CandidateFormAnswerDto"][];
+        };
+        CandidateFormDto: {
+            /** @description The candidate's newest form submission; null for none. */
+            submission: components["schemas"]["CandidateFormSubmissionDto"] | null;
+        };
+        InterestFormWithdrawTokenDto: {
+            /** @description The token from the "Withdraw or delete my info" link in the confirmation email. */
+            token: string;
+        };
+        InterestFormWithdrawalPreviewDto: {
+            chapter_name: string;
+            /** @description Whether the address has a school-wide recruitment record that `everywhere` deletes. */
+            at_school: boolean;
+        };
+        InterestFormWithdrawDto: {
+            /** @description The token from the "Withdraw or delete my info" link in the confirmation email. */
+            token: string;
+            /**
+             * @description `chapter` withdraws from the form's chapter; `everywhere` deletes the recruitment information.
+             * @enum {string}
+             */
+            scope: "chapter" | "everywhere";
+        };
+        PublicInterestFormChapterDto: {
+            name: string;
+            university: string;
+            mark_text: string | null;
+            accent_color: string | null;
+        };
+        PublicInterestFormVerifyDto: {
+            /** @description The school whose address gets the code; null takes any address. */
+            school_name: string | null;
+            domains: string[];
+        };
+        ConsentRunDto: {
+            text: string;
+            /** @description A name shown in bold. */
+            strong?: boolean;
+        };
+        PublicInterestFormConsentDto: {
+            /** @description Stored with each submission. */
+            version: string;
+            /** @description The approved consent text (`ifc-recruitment.md` § Consent and privacy text), shown above the submit button. */
+            runs: components["schemas"]["ConsentRunDto"][];
+            /** @example I agree, and I'm 18 or older */
+            agree_label: string;
+        };
+        PublicInterestFormDto: {
+            slug: string;
+            /** @description False shows "Recruitment isn't open". */
+            is_open: boolean;
+            chapter: components["schemas"]["PublicInterestFormChapterDto"];
+            blurb: string | null;
+            /** @description Empty while the form is closed. */
+            questions: components["schemas"]["InterestFormQuestionDto"][];
+            ask_referrer: boolean;
+            /** @description The `src` label, when it's one of the form's QR codes. */
+            source_label: string | null;
+            verify: components["schemas"]["PublicInterestFormVerifyDto"];
+            consent: components["schemas"]["PublicInterestFormConsentDto"];
+        };
+        StartInterestFormCodeDto: {
+            /**
+             * @description The PNM's address. At a chapter with a school, only an address on one of the school's verified domains is sent a code.
+             * @example student@rpi.edu
+             */
+            email: string;
+        };
+        InterestFormCodeSentDto: {
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+            resend_after_seconds: number;
+        };
+        ConfirmInterestFormCodeDto: {
+            email: string;
+            /** @description The six-digit code from the email. */
+            code: string;
+        };
+        InterestFormPrefillDto: {
+            first_name: string;
+            last_name: string;
+            preferred_name: string | null;
+            class_year: number | null;
+            phone: string | null;
+        };
+        InterestFormVerifiedDto: {
+            email: string;
+            /** @description Send with the submission. Good for 30 minutes and spent once. */
+            proof: string;
+            /** @description The details this address last gave, filled in only after the code matched. */
+            prefill: components["schemas"]["InterestFormPrefillDto"] | null;
+        };
+        SubmitInterestFormDto: {
+            /** @description The proof a matched code answered (`POST …/verify`). Spent by this submission. */
+            proof: string;
+            first_name: string;
+            last_name: string;
+            preferred_name?: string | null;
+            /** @example 2030 */
+            class_year?: number | null;
+            phone?: string | null;
+            /** @description Answers to the chapter's questions keyed by question id, as a chat form card's answers are. */
+            answers?: {
+                [key: string]: string | string[];
+            };
+            /** @description "Who referred you?", free text. */
+            referrer?: string | null;
+            /** @description The QR code's source label; one the form doesn't have is recorded as none. */
+            source_label?: string | null;
+            /** @description "I agree, and I'm 18 or older": must be true. */
+            agree: boolean;
+        };
+        InterestFormSubmittedDto: {
+            chapter_name: string;
         };
         GeofenceCircleDto: {
             lat: number;
@@ -14946,7 +15468,7 @@ export interface components {
             synced_count: number;
             /** @description Files the last sync left out: a type Documents does not take, over 25 MB, or past 500 files */
             skipped_count: number;
-            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
+            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
             folders_left_out: number;
             /** @description Whether a sync is due or running now */
             syncing: boolean;
@@ -14958,7 +15480,7 @@ export interface components {
             available: boolean;
             /** @description The address a chapter shares its folder with */
             service_account_email: string | null;
-            /** @description Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself. Null, the folder is connected by its link. */
+            /** @description Google's folder picker, when this server offers it: the officer signs in with Google and picks the folder, and Frapp shares it with itself, or (Google allows that only for an empty folder) the officer shares it by hand. Null, the folder is connected by its link. */
             picker: components["schemas"]["GoogleDrivePickerDto"] | null;
             connection: components["schemas"]["GoogleDriveConnectionDto"] | null;
         };
@@ -14977,7 +15499,7 @@ export interface components {
              * @example 1AbCdEfGhIjKlMnOp
              */
             folder_id: string;
-            /** @description The access token the officer's Google sign-in gave the picker (drive.file). Used once to share the folder with Frapp, never stored. */
+            /** @description The access token the officer's Google sign-in gave the picker (drive.file). Used to share the folder with Frapp, or to connect it once the officer has shared it by hand; never stored. */
             access_token: string;
             /** @description Who sees what the folder brings in (#5220), as when connecting by link. Ignored when the folder is the one already connected, picked again to share it with Frapp again. */
             who_can_see?: string[] | null;
@@ -15388,6 +15910,7 @@ export interface components {
             season: components["schemas"]["RecruitmentSeasonDto"];
             /** @description True while the season isn't closed: interests are counts only. */
             counts_only: boolean;
+            /** @description Interest per accepted chapter. Empty until the season is closed: beside each PNM's count, totals could tell where a PNM signed up. */
             chapter_totals: components["schemas"]["ChapterTotalDto"][];
             pnms: components["schemas"]["MasterListRowDto"][];
         };
@@ -25368,6 +25891,98 @@ export interface operations {
             };
         };
     };
+    ChatTimeoutController_mine_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatTimeoutStateDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_timeOut_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetChatTimeoutDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_lift_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     RushController_lookup_v1: {
         parameters: {
             query: {
@@ -26413,6 +27028,383 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_get_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_update_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInterestFormDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_addLabel_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddInterestFormLabelDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_removeLabel_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_replace_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSettingsDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InterestFormController_candidateForm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateFormDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_previewWithdrawal_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterestFormWithdrawTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormWithdrawalPreviewDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_withdraw_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterestFormWithdrawDto"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_get_v1: {
+        parameters: {
+            query?: {
+                /** @description The QR code's source label. */
+                src?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicInterestFormDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_startCode_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartInterestFormCodeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormCodeSentDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_verify_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmInterestFormCodeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormVerifiedDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PublicInterestFormController_submit_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitInterestFormDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterestFormSubmittedDto"];
+                };
             };
             /** @description Error */
             default: {
@@ -27604,6 +28596,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ResolveFrappLinksResponseDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DesktopUpdateController_file_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names */
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download link, in `Location` */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a file a release publishes */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This API cannot reach the releases bucket */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

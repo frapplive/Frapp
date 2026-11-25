@@ -100,6 +100,12 @@ These cause most of the iterations, so they come first.
   own 48px header at `lg` (1024px) and wider, paired with chat's channel header (1056px until 11-24,
   #5946). Top-level pages show the title alone, no chapter-name prefix; only Settings pages read
   "Settings › X". (11-05, 11-11)
+- **A page beside chat works at every width chat leaves it, down to the 375px floor.** "yikes", on Rush's
+  board with chat open: four fixed columns cut the one holding prospects off mid-card, the header's views
+  ran under its count and the title vanished. The title and the views keep their room and the actions
+  fold first (glyphs, then one View menu); a board's columns share the width and empty ones fold; a table
+  drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
+  The widths to capture are in [`review-checklist.md`](review-checklist.md) § 1. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
   its tools inside itself, not in drawers. (11-11, 11-12) *Changed 11-25 by Paul (#6032): both Settings
   pages, Chapter settings and the member's own, take the full width, so a rail stands as a column.*
@@ -162,6 +168,9 @@ These cause most of the iterations, so they come first.
   channel. Long names truncate as designed, chips cap at one or two plus a count, lists over about 15 get
   search or grouping, counts stop at 99+. (P5)
 - **Search results are dated**, and Find is a centred dialog on web. (11-05)
+- **No made-up school logo.** A school is drawn by its name and short name: no initials on a colored
+  tile standing in for its logo, and no real logo either, which is the school's trademark. "Get rid of it
+  or make it real." (11-25, #6066)
 
 ## 4. Controls and forms
 
