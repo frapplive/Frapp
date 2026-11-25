@@ -233,6 +233,22 @@ class FakeNotes {
   }
 }
 
+/** A notes pass that wrote the meeting up, so the first pass is not asked to. */
+const WRITTEN_NOTES = {
+  // No summary of its own, so each test's draft keeps the one it scripts.
+  summary: '',
+  topics: [
+    {
+      title: 'Formal',
+      points: [{ text: 'Approved up to $1,200 for a DJ.', details: [] }],
+    },
+  ],
+};
+const WRITTEN: ScriptedReply = {
+  text: JSON.stringify(WRITTEN_NOTES),
+  object: WRITTEN_NOTES,
+};
+
 interface Setup {
   reply?: ScriptedReply | ((request: LanguageModelRequest) => ScriptedReply);
   consent?: Awaited<ReturnType<IAiConsentCheck['check']>>;
@@ -514,7 +530,7 @@ describe('MeetingDraftService', () => {
 
   describe('the run', () => {
     it('puts the checked draft into the minutes the officer asked on', async () => {
-      const { ask, work, meetings, drafts, seen } = setup();
+      const { ask, work, meetings, drafts, seen } = setup({ notes: WRITTEN });
       await ask();
       const result = await work();
 
@@ -553,7 +569,7 @@ describe('MeetingDraftService', () => {
             due_date: null,
           },
         ],
-        discussion_log: '',
+        discussion_log: 'Formal\n- Approved up to $1,200 for a DJ.',
       });
       expect(drafts.row?.status).toBe('applied');
       expect(result).toEqual({
@@ -735,6 +751,7 @@ describe('MeetingDraftService', () => {
         open_questions: [],
       };
       const { ask, work, meetings, seen } = setup({
+        notes: WRITTEN,
         reply: (request) =>
           String(request.messages[0].content).includes('Candidates (D =')
             ? { text: JSON.stringify(reviewed), object: reviewed }
@@ -875,6 +892,59 @@ describe('MeetingDraftService', () => {
         'The chapter approved a DJ for formal.',
       );
     });
+
+    it('leaves the notes to the notes pass, so they are written once (#6058)', async () => {
+      const { ask, work, meetings, seen } = setup({ notes: WRITTEN });
+      await ask();
+      await work();
+      // Neither the first pass nor the editor's read is asked for them.
+      expect(seen).toHaveLength(2);
+      const firstPass = String(seen[0].messages[0].content);
+      expect(firstPass).toContain('- summary:');
+      expect(firstPass).not.toContain('- discussion_log:');
+      expect(String(seen[1].messages[0].content)).not.toMatch(
+        /Sections to fill: .*discussion_log/,
+      );
+      const [, , , save] = meetings.update.mock.calls[0];
+      expect(save.content.discussion_log).toBe(
+        'Formal\n- Approved up to $1,200 for a DJ.',
+      );
+    });
+
+    it.each([
+      ['fails', { text: 'not json', object: undefined }],
+      ['writes no topics', { text: '{}', object: { summary: '', topics: [] } }],
+    ])(
+      'has the first pass write the notes when the notes pass %s',
+      async (_why, notes) => {
+        const log = 'Formal\n- Approved up to $1,200 for a DJ.';
+        const { ask, work, meetings, seen } = setup({
+          notes,
+          reply: (request) => {
+            const prompt = String(request.messages[0].content);
+            if (prompt.includes('Candidates (D =')) {
+              const reviewed = scriptedReview(prompt);
+              return { text: JSON.stringify(reviewed), object: reviewed };
+            }
+            const drafted = prompt.includes('- discussion_log:')
+              ? { ...DRAFTED, discussion_log: log }
+              : DRAFTED;
+            return { text: JSON.stringify(drafted), object: drafted };
+          },
+        });
+        await ask();
+        await work();
+        // The first pass, the editor's read, then the notes on their own.
+        expect(seen).toHaveLength(3);
+        const again = String(seen[2].messages[0].content);
+        expect(again).toContain('- discussion_log:');
+        expect(again).not.toContain('- summary:');
+        const [, , , save] = meetings.update.mock.calls[0];
+        expect(save.content.discussion_log).toBe(log);
+        // The rest of the draft is the checked one, not the second answer.
+        expect(save.content.decisions).toHaveLength(1);
+      },
+    );
 
     it('stops the notes pass when a part of the draft fails', async () => {
       const talk = Array.from(
