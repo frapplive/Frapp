@@ -1109,6 +1109,29 @@ const MONTHS = [
 ] as const;
 
 /**
+ * The zone an update's `date` is a day in: the team's, where members are. The
+ * fold bot runs on CI's UTC clock, which dated a US evening's update tomorrow
+ * (#6054), so it reads the day here instead, as does anything comparing a
+ * moment with an entry's date.
+ */
+export const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `at`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteDay(at: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(at)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+/**
  * `"2026-11-07"` → `"November 7, 2026"`. Written out per the product's date
  * rule (no "Nov 7"), and computed from the string itself so it reads the same
  * day in every time zone and on every JavaScript engine.

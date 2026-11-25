@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   RELEASE_NOTES,
   formatReleaseNoteDate,
+  releaseNoteDay,
   releaseNoteText,
   releaseNoteVersion,
   parseReleaseNoteVersion,
@@ -20,18 +21,30 @@ import {
   type ReleaseNote,
 } from "./release-notes";
 
-// #6054: web and the phone both label an update with this, so a date-only
-// value reads as its own day whatever the clock or the zone says.
-describe("formatReleaseNoteDate", () => {
-  afterEach(() => {
-    vi.useRealTimers();
+// #6054: at 8:31 PM Eastern on Nov 24 it was already Nov 25 in UTC, and the
+// update read "November 25". Each instant is pinned, never the clock.
+describe("releaseNoteDay", () => {
+  const day = (iso: string) => releaseNoteDay(new Date(iso));
+
+  it("is the Eastern day, not the UTC one", () => {
+    expect(day("2026-11-25T01:31:00Z")).toBe("2026-11-24");
+    expect(day("2026-11-25T04:59:00Z")).toBe("2026-11-24");
+    expect(day("2026-11-25T05:00:00Z")).toBe("2026-11-25");
+    expect(day("2026-07-04T03:59:00Z")).toBe("2026-07-03");
+    expect(day("2026-07-04T04:00:00Z")).toBe("2026-07-04");
   });
 
-  it("keeps the day on an Eastern evening that is tomorrow in UTC", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-25T01:31:00Z"));
-    expect(formatReleaseNoteDate("2026-11-24")).toBe("November 24, 2026");
-    expect(formatReleaseNoteDate("2026-11-25")).toBe("November 25, 2026");
+  it("turns over at local midnight on both switchover days", () => {
+    // Clocks spring forward at 2 AM on Mar 8, 2026: midnight is still EST.
+    expect(day("2026-03-08T04:59:00Z")).toBe("2026-03-07");
+    expect(day("2026-03-08T05:00:00Z")).toBe("2026-03-08");
+    expect(day("2026-03-09T03:59:00Z")).toBe("2026-03-08");
+    expect(day("2026-03-09T04:00:00Z")).toBe("2026-03-09");
+    // Clocks fall back at 2 AM on Nov 1, 2026: midnight is still EDT.
+    expect(day("2026-11-01T03:59:00Z")).toBe("2026-10-31");
+    expect(day("2026-11-01T04:00:00Z")).toBe("2026-11-01");
+    expect(day("2026-11-02T04:59:00Z")).toBe("2026-11-01");
+    expect(day("2026-11-02T05:00:00Z")).toBe("2026-11-02");
   });
 });
 
