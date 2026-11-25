@@ -13,16 +13,59 @@
 /** The Chat page: channels, categories, background and the report queue. */
 export const CHAT_SETTINGS_PATH = "/settings?tab=chat";
 
-/** One channel's own settings, opened in place of the Chat page. */
-export function channelSettingsPath(channelId: string): string {
-  return `${CHAT_SETTINGS_PATH}&channel=${encodeURIComponent(channelId)}`;
+/**
+ * The pages a channel's rows open (#6031), each with a way back to the
+ * channel: one question of its access, its pins, the reports filed in it.
+ */
+export const CHANNEL_SETTINGS_PAGES = [
+  "see",
+  "post",
+  "pins",
+  "reports",
+] as const;
+export type ChannelSettingsPage = (typeof CHANNEL_SETTINGS_PAGES)[number];
+
+function isChannelSettingsPage(
+  value: string | null | undefined,
+): value is ChannelSettingsPage {
+  return (CHANNEL_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
 }
 
-/** The anchor the report queue scrolls to when a notification opens it. */
+/** One channel's own settings, opened in place of the Chat page, or one of its pages. */
+export function channelSettingsPath(
+  channelId: string,
+  page: ChannelSettingsPage | null = null,
+): string {
+  const channel = `${CHAT_SETTINGS_PATH}&channel=${encodeURIComponent(channelId)}`;
+  return page ? `${channel}&page=${page}` : channel;
+}
+
+/**
+ * The pages the Chat page's own rows open (#6031): the chapter's chat
+ * background and the whole report queue.
+ */
+export const CHAT_SETTINGS_PAGES = ["background", "reports"] as const;
+export type ChatSettingsPage = (typeof CHAT_SETTINGS_PAGES)[number];
+
+function isChatSettingsPage(
+  value: string | null | undefined,
+): value is ChatSettingsPage {
+  return (CHAT_SETTINGS_PAGES as readonly string[]).includes(value ?? "");
+}
+
+/** One of the Chat page's own pages. */
+export function chatSettingsPagePath(page: ChatSettingsPage): string {
+  return `${CHAT_SETTINGS_PATH}&page=${page}`;
+}
+
+/**
+ * The anchor a new-report link carried before the queue had a page of its
+ * own (#6031). A Chat page address with it still opens the queue's page.
+ */
 export const CHAT_REPORTS_ANCHOR = "reported-messages";
 
 /** The report queue, where a new-report notification lands. */
-export const CHAT_REPORTS_SETTINGS_PATH = `${CHAT_SETTINGS_PATH}#${CHAT_REPORTS_ANCHOR}`;
+export const CHAT_REPORTS_SETTINGS_PATH = chatSettingsPagePath("reports");
 
 /** `?tool=` value that opens Discord import in place of the Chat page. */
 const DISCORD_IMPORT_TOOL = "discord-import";
@@ -116,25 +159,46 @@ export function settingsRedirectPath(
 
 /** A page drawn in place of a module page of Chapter settings. */
 export type SettingsSubpage =
-  { kind: "channel"; channelId: string } | { kind: "discord-import" };
+  | {
+      kind: "channel";
+      channelId: string;
+      /** One of the channel's own pages, or null for its settings. */
+      page: ChannelSettingsPage | null;
+    }
+  | { kind: "discord-import" }
+  | { kind: "chat-page"; page: ChatSettingsPage };
 
 /**
- * Which page, if any, `?channel=` or `?tool=` opens in place of module page
- * `moduleKey`. Only for a viewer who holds the tool behind it (`holdsTool`
- * takes a `SETTINGS_TOOLS` id): anyone else gets the module page, as a link
- * to a tool they lack never opened it either.
+ * Which page, if any, `?channel=`, `?tool=` or `?page=` opens in place of
+ * module page `moduleKey`. Only for a viewer who holds the tool behind it
+ * (`holdsTool` takes a `SETTINGS_TOOLS` id): anyone else gets the module
+ * page, as a link to a tool they lack never opened it either.
  */
 export function settingsSubpageFor(
   moduleKey: string,
-  params: { channel: string | null; tool: string | null },
+  params: {
+    channel: string | null;
+    tool: string | null;
+    page?: string | null;
+  },
   holdsTool: (toolId: string) => boolean,
 ): SettingsSubpage | null {
   if (moduleKey !== "chat") return null;
   if (params.channel && holdsTool("chat-admin")) {
-    return { kind: "channel", channelId: params.channel };
+    return {
+      kind: "channel",
+      channelId: params.channel,
+      page: isChannelSettingsPage(params.page) ? params.page : null,
+    };
   }
   if (params.tool === DISCORD_IMPORT_TOOL && holdsTool("discord-import")) {
     return { kind: "discord-import" };
+  }
+  // Each page gates itself as its section on the Chat page did: the
+  // background for whoever edits the chapter profile, the queue for report
+  // reviewers.
+  if (isChatSettingsPage(params.page) && holdsTool("chat-admin")) {
+    return { kind: "chat-page", page: params.page };
   }
   return null;
 }

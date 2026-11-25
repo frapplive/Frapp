@@ -69,6 +69,7 @@ import {
   SettingsToolSubpage,
 } from "@/components/settings/settings-tool-views";
 import {
+  CHAT_REPORTS_ANCHOR,
   SETTINGS_SUBPAGE_PARAMS,
   chapterSettingsHref,
   isChapterSettingsPage,
@@ -229,6 +230,17 @@ function SettingsPageContent() {
     url.searchParams.set("page", chapterPage);
     window.history.replaceState(null, "", url.toString());
   }, [chapterPage]);
+  // A new-report link from before the queue had a page of its own (#6031)
+  // carried `#reported-messages` on the Chat page: it opens the queue's page.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.hash !== `#${CHAT_REPORTS_ANCHOR}`) return;
+    if (url.searchParams.get("tab") !== "chat") return;
+    if (url.searchParams.has("channel") || url.searchParams.has("page")) return;
+    url.searchParams.set("page", "reports");
+    url.hash = "";
+    window.history.replaceState(null, "", url.toString());
+  }, []);
   // Switching rows starts the panel at its top, not wherever the last one
   // was scrolled to: the panel scrolls inside the shell's tool pane. The
   // address follows the row, without the params that opened a page inside
@@ -660,7 +672,7 @@ function SettingsPageContent() {
   const subpageFor = (key: string) =>
     settingsSubpageFor(
       key,
-      { channel: channelParam, tool: toolParam },
+      { channel: channelParam, tool: toolParam, page: searchParams.get("page") },
       holdsTool,
     );
 
@@ -714,7 +726,7 @@ function SettingsPageContent() {
             // settings, Discord import) and goes back to the row's own page.
             if (
               value === shownTab &&
-              (channelParam || toolParam || chapterPage)
+              (channelParam || toolParam || searchParams.get("page"))
             ) {
               changeTab(value);
             }

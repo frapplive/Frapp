@@ -97,10 +97,16 @@ import { CHAT_REPORTS_ANCHOR } from "@/components/settings/settings-paths";
  */
 export function ChatReportsCard({
   channelId,
+  full = false,
 }: {
   // One channel's reports, beside that channel's settings. Omitted, the whole
   // chapter's queue: the only place a report about a DM appears.
   channelId?: string;
+  /**
+   * The queue's own page (`?page=reports`, #6031): shown whole even with
+   * nothing open, under the page's title rather than a heading of its own.
+   */
+  full?: boolean;
 } = {}) {
   return (
     <Can
@@ -115,7 +121,7 @@ export function ChatReportsCard({
         />
       )}
     >
-      <ChatReportsQueue channelId={channelId} />
+      <ChatReportsQueue channelId={channelId} full={full} />
     </Can>
   );
 }
@@ -203,7 +209,13 @@ function namesAuditLogEntry(
   );
 }
 
-function ChatReportsQueue({ channelId }: { channelId?: string }) {
+function ChatReportsQueue({
+  channelId,
+  full,
+}: {
+  channelId?: string;
+  full: boolean;
+}) {
   // Kept out of the way (Paul, 2026-11-11: "just not showing reports if
   // there's no reported messages ... it doesn't need to be staring you right
   // in the face"). With no open report the queue folds to one quiet link to
@@ -213,8 +225,9 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
   const openQuery = useChatReports("open", channelId);
   const [historyShown, setHistoryShown] = useState(
     () =>
-      typeof window !== "undefined" &&
-      window.location.hash === `#${CHAT_REPORTS_ANCHOR}`,
+      full ||
+      (typeof window !== "undefined" &&
+        window.location.hash === `#${CHAT_REPORTS_ANCHOR}`),
   );
   const nothingOpen =
     Array.isArray(openQuery.data) && openQuery.data.length === 0;
@@ -337,7 +350,11 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
       <div className="space-y-1">
         <h2
           id="chat-reports-label"
-          className={`${EYEBROW} text-muted-foreground`}
+          className={cn(
+            `${EYEBROW} text-muted-foreground`,
+            // On its own page the page's title names it.
+            full && "sr-only",
+          )}
         >
           {copy.title}
         </h2>

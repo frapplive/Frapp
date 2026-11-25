@@ -69,6 +69,12 @@ export interface ChannelAccessSheetProps {
   locked?: readonly string[];
   /** Who passes every list, said under the switch; the President by default. */
   alwaysLine?: string;
+  /**
+   * The sheet closed, however it closed: a channel's own settings screen
+   * saves the answer then (#6031), where the New channel form saves with
+   * its own button.
+   */
+  onDismiss?: () => void;
 }
 
 /**
@@ -104,6 +110,7 @@ export const ChannelAccessSheet = forwardRef<
       backgroundStyle={backgroundStyle}
       handleComponent={SheetGrabber}
       backdropComponent={SheetScrim}
+      onDismiss={props.onDismiss}
     >
       <SheetBackToClose onClose={close} />
       {/* gorhom mounts a modal's children only while it is presented, so the

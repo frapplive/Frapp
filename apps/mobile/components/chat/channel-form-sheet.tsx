@@ -1,7 +1,6 @@
 import { forwardRef, useCallback, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
-import { DELETE_CHANNEL_LABEL } from "@repo/hooks";
 import {
   describeChannelAccess,
   isEmptyChannelAccessChoice,
@@ -9,7 +8,7 @@ import {
   type ChannelAccessOption,
   type ChannelAccessQuestion,
 } from "@repo/hooks/channel-access";
-import { sameChannelAccessList } from "@repo/validation";
+import { CHANNEL_SETTINGS_COPY } from "@repo/validation";
 import { SignetTokens } from "@repo/theme/signet";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import {
@@ -28,7 +27,7 @@ import {
   useSheetClose,
   useSheetVisit,
 } from "@/components/sheet-scaffold";
-import { FilterChips } from "@/components/filter-chips";
+import { OptionSheet } from "@/components/option-sheet";
 import { ForwardGlyph } from "@/components/control-glyphs";
 import {
   CHANNEL_ACCESS_TITLE,
@@ -38,7 +37,7 @@ import { Toggle } from "@/components/toggle";
 import { successHaptic } from "@/lib/haptics";
 import { BottomSheetScrollView } from "@/lib/sheet-scrollables";
 
-/** The chip for "no category"; FilterChips keeps `null` for an "all" chip. */
+/** The option for "no category"; the option sheet keeps `null` for "any". */
 const NO_CATEGORY = "__none__";
 
 export interface ChannelFormCategory {
@@ -49,24 +48,11 @@ export interface ChannelFormCategory {
   who_can_post?: string[] | null;
 }
 
-/** What the sheet is for: a new channel in a category, or one channel's edit. */
-export type ChannelFormMode =
-  | { kind: "create"; categoryId: string | null }
-  | {
-      kind: "edit";
-      channel: {
-        id: string;
-        name: string;
-        description?: string | null;
-        category_id: string | null;
-        /** `#chapter-audit`: the server refuses a rename (#3909). */
-        is_audit_log?: boolean;
-        type?: string;
-        /** Absent when the list didn't say; then the sheet doesn't ask. */
-        who_can_see?: string[] | null;
-        who_can_post?: string[] | null;
-      };
-    };
+/**
+ * What the sheet is for: a new channel, in the category it was opened from.
+ * Editing one is its own screen since #6031 (`channel-settings-screen.tsx`).
+ */
+export type ChannelFormMode = { kind: "create"; categoryId: string | null };
 
 export interface ChannelFormValues {
   name: string;
@@ -76,15 +62,12 @@ export interface ChannelFormValues {
   /** Create only: a private channel's members are added by hand. */
   isPrivate: boolean;
   /**
-   * Who can see and who can post, as the request sends them: only a list
-   * the officer changed (a save of the name must not write back lists the
-   * category, or another officer, just moved), or `match_category_access`.
-   * Empty when nothing about access changed.
+   * Who can see and who can post, when the officer changed either: left
+   * out, the server copies the category's lists.
    */
   access: {
     who_can_see?: string[] | null;
     who_can_post?: string[] | null;
-    match_category_access?: true;
   };
 }
 
@@ -98,24 +81,21 @@ const ACCESS_INCOMPLETE =
   "Add a tier, role or group to each chosen list, or pick Everyone.";
 
 /**
- * New channel and Edit channel, on the phone (#3838; Shawn, 2026-11-11: "I
- * should be able to create new channels directly on the channel list"). One
- * sheet for both, as web's Create a channel panel and a channel's settings
- * page ask the same questions: the name, a description, and the category.
- * A new channel can be private; its type is fixed after that, so Edit doesn't
- * ask.
+ * New channel, on the phone (#3838; Shawn, 2026-11-11: "I should be able to
+ * create new channels directly on the channel list"), as web's Create a
+ * channel panel asks: the name, a description, the category, and whether it
+ * is private, which is fixed after that. Editing a channel is its own screen
+ * since #6031 (`channel-settings-screen.tsx`), as on web.
  *
  * Who can see and who can post (#3702): two rows, each opening a tall step
  * (`channel-access-sheet.tsx`) with web's two answers, Everyone or chosen
  * tiers and roles. A new channel starts with its category's answers and
  * follows a change of category until the officer changes one, as web's
- * Create a channel panel does. An existing channel says whether it matches
- * its category, and offers Match <category> when it doesn't, as Chat
- * settings does. A private channel, a DM's sort, carries no lists.
+ * Create a channel panel does. A private channel carries no lists.
  *
- * Edit ends with Delete channel, which hands off to the typed-name sheet.
- * The host mounts a new sheet per channel or category (`key`), so a draft
- * never carries from one to another.
+ * The category is a row that opens the shared option sheet (rulebook § 9:
+ * never filter chips as a form picker). The host mounts a new sheet per
+ * opening (`key`), so a draft never carries to the next.
  */
 export const ChannelFormSheet = forwardRef<
   BottomSheetModal,
@@ -124,14 +104,12 @@ export const ChannelFormSheet = forwardRef<
     categories: readonly ChannelFormCategory[];
     /** Saves; rejects with the line to show when the server refuses. */
     onSubmit: (values: ChannelFormValues) => Promise<void>;
-    /** Edit only: opens the typed-name delete sheet. */
-    onDelete?: () => void;
     /** What the lists can name: `GET /v1/channels/access-options`. */
     accessOptions: readonly ChannelAccessOption[];
     accessOptionsState: "ready" | "loading" | "error";
   }
 >(function ChannelFormSheet(
-  { mode, categories, onSubmit, onDelete, accessOptions, accessOptionsState },
+  { mode, categories, onSubmit, accessOptions, accessOptionsState },
   ref,
 ) {
   const { tokens } = useFrappTheme();
@@ -142,43 +120,32 @@ export const ChannelFormSheet = forwardRef<
   const { onAnimate, markClosed, dismiss, visit, isSameVisit } =
     useSheetVisit(ref);
 
-  const editing = mode.kind === "edit" ? mode.channel : null;
-  const [name, setName] = useState(editing?.name ?? "");
-  const [description, setDescription] = useState(editing?.description ?? "");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string>(
-    (mode.kind === "edit" ? mode.channel.category_id : mode.categoryId) ??
-      NO_CATEGORY,
+    mode.categoryId ?? NO_CATEGORY,
   );
   const [isPrivate, setIsPrivate] = useState(false);
 
-  // Who can see and post. Edit starts from the channel's lists; create from
-  // its category's, and follows the category until the officer changes one.
+  // Who can see and post: the category's, followed until the officer
+  // changes one.
   const categoryOf = (id: string) =>
     id === NO_CATEGORY
       ? null
       : (categories.find((category) => category.id === id) ?? null);
-  const [seed] = useState<AccessDraft>(() => {
-    if (editing) {
-      return {
-        see: editing.who_can_see ?? null,
-        post: editing.who_can_post ?? null,
-      };
-    }
-    const category =
-      mode.kind === "create" && mode.categoryId
-        ? (categories.find((c) => c.id === mode.categoryId) ?? null)
-        : null;
+  const [access, setAccess] = useState<AccessDraft>(() => {
+    const category = mode.categoryId
+      ? (categories.find((c) => c.id === mode.categoryId) ?? null)
+      : null;
     return {
       see: category?.who_can_see ?? null,
       post: category?.who_can_post ?? null,
     };
   });
-  const [access, setAccess] = useState<AccessDraft>(seed);
   const [accessTouched, setAccessTouched] = useState(false);
-  // Match <category> pressed: the save asks the server to copy the lists.
-  const [matchAsked, setMatchAsked] = useState(false);
   const [question, setQuestion] = useState<ChannelAccessQuestion>("see");
   const accessSheetRef = useRef<BottomSheetModal>(null);
+  const categorySheetRef = useRef<BottomSheetModal>(null);
   const [focused, setFocused] = useState<"name" | "description" | null>(null);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -188,41 +155,34 @@ export const ChannelFormSheet = forwardRef<
 
   const trimmed = name.trim();
   const canSave = trimmed.length > 0 && !saving;
-  const nameLocked = editing?.is_audit_log === true;
 
   /** Whether the sheet asks who can see and post at all. */
-  const takesLists = editing
-    ? editing.is_audit_log !== true &&
-      (editing.type === "PUBLIC" || editing.type === "ROLE_GATED") &&
-      editing.who_can_see !== undefined
-    : !isPrivate;
+  const takesLists = !isPrivate;
   const draftCategory = categoryOf(categoryId);
-  const seeChanged = !sameChannelAccessList(access.see, seed.see);
-  const postChanged = !sameChannelAccessList(access.post, seed.post);
-  const matches =
-    matchAsked || matchesCategoryAccess(access.see, access.post, draftCategory);
-  // Only a list the officer changed must name someone: an empty list the
-  // channel already had doesn't block saving its name (as on web).
+  const matches = matchesCategoryAccess(access.see, access.post, draftCategory);
   const accessIncomplete =
     takesLists &&
-    (((editing ? seeChanged : true) &&
-      isEmptyChannelAccessChoice(access.see)) ||
-      ((editing ? postChanged : true) &&
-        isEmptyChannelAccessChoice(access.post)));
+    (isEmptyChannelAccessChoice(access.see) ||
+      isEmptyChannelAccessChoice(access.post));
 
   function accessBody(): ChannelFormValues["access"] {
     if (!takesLists) return {};
-    if (editing) {
-      if (matchAsked && draftCategory) return { match_category_access: true };
-      return {
-        ...(seeChanged ? { who_can_see: access.see } : {}),
-        ...(postChanged ? { who_can_post: access.post } : {}),
-      };
-    }
     // Left out, a new channel copies its category's lists on the server.
     return accessTouched
       ? { who_can_see: access.see, who_can_post: access.post }
       : {};
+  }
+
+  function pickCategory(value: string) {
+    setCategoryId(value);
+    // A new channel follows its category until a list is changed.
+    if (!accessTouched) {
+      const category = categoryOf(value);
+      setAccess({
+        see: category?.who_can_see ?? null,
+        post: category?.who_can_post ?? null,
+      });
+    }
   }
 
   function changeAccess(next: string[] | null) {
@@ -232,7 +192,6 @@ export const ChannelFormSheet = forwardRef<
         : { ...current, post: next },
     );
     setAccessTouched(true);
-    setMatchAsked(false);
     setFailure(null);
   }
 
@@ -274,9 +233,7 @@ export const ChannelFormSheet = forwardRef<
         setFailure(
           error instanceof Error && error.message
             ? error.message
-            : editing
-              ? "Couldn't save the channel. Try again."
-              : "Couldn't create the channel. Try again.",
+            : "Couldn't create the channel. Try again.",
         );
       })
       .finally(() => {
@@ -290,7 +247,6 @@ export const ChannelFormSheet = forwardRef<
     accessIncomplete,
     access,
     accessTouched,
-    matchAsked,
     visit,
     onSubmit,
     trimmed,
@@ -299,16 +255,16 @@ export const ChannelFormSheet = forwardRef<
     isPrivate,
     isSameVisit,
     dismiss,
-    editing,
   ]);
 
-  const chips = [
-    { value: NO_CATEGORY, label: "No category" },
+  const categoryOptions = [
+    { value: NO_CATEGORY, label: CHANNEL_SETTINGS_COPY.noCategory },
     ...categories.map((category) => ({
       value: category.id,
       label: category.name,
     })),
   ];
+  const categoryName = draftCategory?.name ?? CHANNEL_SETTINGS_COPY.noCategory;
 
   return (
     <>
@@ -330,7 +286,7 @@ export const ChannelFormSheet = forwardRef<
           keyboardShouldPersistTaps="handled"
         >
           <SheetHeader
-            title={editing ? "Edit channel" : "New channel"}
+            title="New channel"
             onCancel={closeSheet}
             cancelDisabled={saving}
           />
@@ -347,7 +303,7 @@ export const ChannelFormSheet = forwardRef<
               }}
               onFocus={() => setFocused("name")}
               onBlur={() => setFocused(null)}
-              editable={!saving && !nameLocked}
+              editable={!saving}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="announcements"
@@ -360,11 +316,6 @@ export const ChannelFormSheet = forwardRef<
               ]}
             />
           </View>
-          {nameLocked ? (
-            <Text style={styles.caption}>
-              Frapp names the audit log, so it can&apos;t be renamed.
-            </Text>
-          ) : null}
 
           <Text style={styles.groupLabel}>Description</Text>
           <View
@@ -395,47 +346,42 @@ export const ChannelFormSheet = forwardRef<
             />
           </View>
 
-          <Text style={styles.groupLabel}>Category</Text>
-          <FilterChips
-            accessibilityLabel="Category"
-            chips={chips}
-            selected={categoryId}
-            onSelect={(value) => {
-              if (saving || value === null) return;
-              setCategoryId(value);
-              // A new channel follows its category until a list is changed,
-              // and Match follows the category the channel ends up in (the
-              // server copies from that one).
-              const category = categoryOf(value);
-              if (matchAsked && !category) {
-                // Nothing to match without a category: back to its own lists.
-                setMatchAsked(false);
-                setAccess(seed);
-              } else if ((!editing && !accessTouched) || matchAsked) {
-                setAccess({
-                  see: category?.who_can_see ?? null,
-                  post: category?.who_can_post ?? null,
-                });
-              }
-            }}
-          />
+          <View style={styles.group}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${CHANNEL_SETTINGS_COPY.category}: ${categoryName}`}
+              accessibilityState={{ disabled: saving }}
+              disabled={saving}
+              onPress={() => {
+                Keyboard.dismiss();
+                categorySheetRef.current?.present?.();
+              }}
+              style={styles.optionRow}
+            >
+              <Text style={styles.optionLabel}>
+                {CHANNEL_SETTINGS_COPY.category}
+              </Text>
+              <Text style={styles.optionValue} numberOfLines={1}>
+                {categoryName}
+              </Text>
+              <ForwardGlyph color={tokens.color.text.mutedForeground} />
+            </Pressable>
+          </View>
 
-          {editing ? null : (
-            <View style={styles.toggleRow}>
-              <View style={styles.toggleText}>
-                <Text style={styles.toggleLabel}>Private channel</Text>
-                <Text style={styles.caption}>
-                  Only people you add can see it, starting with you. This
-                  can&apos;t be changed later.
-                </Text>
-              </View>
-              <Toggle
-                value={isPrivate}
-                onValueChange={setIsPrivate}
-                accessibilityLabel="Private channel"
-              />
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleText}>
+              <Text style={styles.toggleLabel}>Private channel</Text>
+              <Text style={styles.caption}>
+                Only people you add can see it, starting with you. This
+                can&apos;t be changed later.
+              </Text>
             </View>
-          )}
+            <Toggle
+              value={isPrivate}
+              onValueChange={setIsPrivate}
+              accessibilityLabel="Private channel"
+            />
+          </View>
 
           {takesLists ? (
             <>
@@ -473,46 +419,15 @@ export const ChannelFormSheet = forwardRef<
                   );
                 })}
               </View>
-              {draftCategory ? (
-                matches ? (
-                  <Text style={styles.caption}>
-                    {editing
-                      ? `Matches ${draftCategory.name}. Changes to it reach this channel too.`
-                      : `Same as ${draftCategory.name}.`}
-                  </Text>
-                ) : editing ? (
-                  <View style={styles.matchRow}>
-                    <Text style={[styles.caption, styles.matchText]}>
-                      Custom. {draftCategory.name} is set differently.
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={saving}
-                      hitSlop={8}
-                      onPress={() => {
-                        setAccess({
-                          see: draftCategory.who_can_see ?? null,
-                          post: draftCategory.who_can_post ?? null,
-                        });
-                        setMatchAsked(true);
-                        setFailure(null);
-                      }}
-                    >
-                      <Text style={styles.matchLabel}>
-                        Match {draftCategory.name}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null
+              {draftCategory && matches ? (
+                <Text style={styles.caption}>
+                  Same as {draftCategory.name}.
+                </Text>
               ) : null}
             </>
           ) : (
             <Text style={styles.caption}>
-              {editing
-                ? editing.is_audit_log
-                  ? "Frapp writes the audit log, and officers read it."
-                  : "Private. Only the people added to it can see it and post."
-                : "You can add people once it's created."}
+              You can add people once it&apos;s created.
             </Text>
           )}
 
@@ -523,7 +438,7 @@ export const ChannelFormSheet = forwardRef<
           ) : null}
 
           <SheetPrimaryButton
-            label={editing ? "Save" : "Create channel"}
+            label="Create channel"
             onPress={save}
             disabled={!canSave}
             busy={saving}
@@ -531,18 +446,6 @@ export const ChannelFormSheet = forwardRef<
             accent={brand.accent}
             onAccent={tokens.color.gold.onHouse}
           />
-
-          {editing && onDelete && !editing.is_audit_log ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
-              onPress={onDelete}
-              hitSlop={8}
-              style={styles.deleteRow}
-            >
-              <Text style={styles.deleteLabel}>{DELETE_CHANNEL_LABEL}</Text>
-            </Pressable>
-          ) : null}
         </BottomSheetScrollView>
       </BottomSheetModal>
       {/* A sibling, as Who's coming is to New event: it stacks over this
@@ -557,6 +460,15 @@ export const ChannelFormSheet = forwardRef<
           optionsState={accessOptionsState}
         />
       ) : null}
+      <OptionSheet
+        ref={categorySheetRef}
+        title={CHANNEL_SETTINGS_COPY.category}
+        options={categoryOptions}
+        selected={categoryId}
+        onSelect={(value) => {
+          if (value !== null) pickCategory(value);
+        }}
+      />
     </>
   );
 });
@@ -626,25 +538,6 @@ function createStyles(tokens: SignetTokens, brand: ChapterBranding) {
       textAlign: "right",
       ...typeRole(tokens.typography.role.body),
       color: tokens.color.text.mutedForeground,
-    },
-    matchRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing.sm,
-    },
-    matchText: { flex: 1 },
-    matchLabel: {
-      ...typeRole(tokens.typography.role.label),
-      color: brand.accent,
-    },
-    deleteRow: {
-      minHeight: tokens.touch.minimum,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    deleteLabel: {
-      ...typeRole(tokens.typography.role.label),
-      color: tokens.color.semantic.destructiveText,
     },
   });
 }

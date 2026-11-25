@@ -124,6 +124,12 @@ export function SettingsRow(
     /** Its label greys while the setting it waits on is off. */
     muted?: boolean;
     /**
+     * A destructive row (Delete channel), red and alone in the last group,
+     * as Discord's channel settings and iOS Settings end with one. It opens a
+     * confirm, so it draws no chevron.
+     */
+    destructive?: boolean;
+    /**
      * A glyph before the label, for a row that opens a page of its own
      * (Discord's channel settings, iOS Settings). A switch row goes without.
      */
@@ -132,7 +138,13 @@ export function SettingsRow(
     id?: string;
   } & Trailing,
 ) {
-  const { label, description, nested = false, muted = false } = props;
+  const {
+    label,
+    description,
+    nested = false,
+    muted = false,
+    destructive = false,
+  } = props;
   const Icon = props.icon;
   const row = cn(ROW, nested && "pl-10");
   const labelId = useId();
@@ -155,7 +167,11 @@ export function SettingsRow(
         htmlFor={isSwitch ? switchId : undefined}
         className={cn(
           "text-sm font-medium",
-          muted ? "text-muted-foreground" : "text-foreground",
+          destructive
+            ? "text-destructive"
+            : muted
+              ? "text-muted-foreground"
+              : "text-foreground",
         )}
       >
         {label}
@@ -207,10 +223,12 @@ export function SettingsRow(
           {glyph}
           {text}
           <span className="text-sm text-muted-foreground">{props.value}</span>
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
+          {destructive ? null : (
+            <ChevronRight
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          )}
         </button>
       </li>
     );

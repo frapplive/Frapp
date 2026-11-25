@@ -84,6 +84,9 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     href: DISCORD_IMPORT_SETTINGS_PATH,
     permission: "channels:manage",
     page: "chat",
+    // Its row, with the import's state, is in the Chat body's Moderation
+    // group (#6031), so the page lists no separate Tools row for it.
+    embedded: true,
   },
   {
     // The chapter's points ledger, with Adjust points for a role that may

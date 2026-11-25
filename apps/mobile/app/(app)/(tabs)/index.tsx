@@ -58,11 +58,9 @@ import {
   useTasks,
   useViewerUserId,
   channelRowActions,
-  errorCopy,
   MANAGE_CHANNELS_PERMISSION,
   useChannelAccessOptions,
   useDeleteChannel,
-  useUpdateChannel,
   useMarkChannelRead,
   usePermissionList,
   useSetChannelNotificationLevel,
@@ -294,14 +292,14 @@ export default function ChatHomeScreen() {
   const setNotificationLevel = useSetChannelNotificationLevel();
   const deleteChannel = useDeleteChannel();
   const createChannelAndOpen = useCreateChannelAndOpen();
-  const updateChannel = useUpdateChannel();
   const canManageChannels = can(MANAGE_CHANNELS_PERMISSION, permissions);
   // New channel asks for what the create route and the sheet's lists take
   // (`canCreateChannel`, #5296), not `channels:manage` alone, which offered a
   // form whose save the server refused without `channels:create`.
   const canCreateChannels = canCreateChannel(permissions);
-  // New channel and Edit channel (#3838): one sheet, mounted fresh for each
-  // opening (`formKey`), so a draft never carries to another channel.
+  // New channel (#3838): one sheet, mounted fresh for each opening
+  // (`formKey`), so a draft never carries to the next. Edit channel is its
+  // own screen since #6031.
   const channelFormRef = useRef<BottomSheetModal>(null);
   const [channelForm, setChannelForm] = useState<{
     mode: ChannelFormMode;
@@ -334,34 +332,9 @@ export default function ChatHomeScreen() {
       const mode = channelForm?.mode;
       if (!mode) return;
       // Creates it and opens it, as Chapter settings' New channel does.
-      if (mode.kind === "create") return createChannelAndOpen(values);
-      try {
-        const channel = mode.channel;
-        await updateChannel.mutateAsync({
-          id: channel.id,
-          body: {
-            ...(values.name !== channel.name ? { name: values.name } : {}),
-            // Sent only when changed: a blank never-set description must
-            // not become '' (see Chat settings on web).
-            ...(values.description !== (channel.description ?? "")
-              ? { description: values.description }
-              : {}),
-            ...(values.categoryId !== channel.category_id
-              ? { category_id: values.categoryId }
-              : {}),
-            ...values.access,
-          },
-        });
-      } catch (error) {
-        throw new Error(
-          errorCopy(
-            error,
-            "Couldn't save the channel. Check your connection and try again.",
-          ),
-        );
-      }
+      return createChannelAndOpen(values);
     },
-    [channelForm, createChannelAndOpen, updateChannel],
+    [channelForm, createChannelAndOpen],
   );
   // A level pick is a queueless write, so the menu locks it offline the way
   // the thread header's level control does (connection-state.md).
@@ -389,11 +362,14 @@ export default function ChatHomeScreen() {
       case "toggle-pin":
         target.onTogglePin();
         return;
-      case "edit": {
-        const channel = channels.find((c) => c.id === target.channelId);
-        if (channel) openChannelForm({ kind: "edit", channel });
+      case "edit":
+        // A channel's settings are a screen of their own (#6031), as web's
+        // channel page is.
+        router.push({
+          pathname: "/channel-settings",
+          params: { channelId: target.channelId },
+        });
         return;
-      }
       case "arrange":
         router.push("/arrange-channels");
         return;
@@ -1137,21 +1113,6 @@ export default function ChatHomeScreen() {
           onSubmit={submitChannelForm}
           accessOptions={accessOptions}
           accessOptionsState={accessOptionsStateOf(accessOptionsQuery)}
-          onDelete={
-            channelForm.mode.kind === "edit"
-              ? () => {
-                  const { id, name } = (
-                    channelForm.mode as Extract<
-                      ChannelFormMode,
-                      { kind: "edit" }
-                    >
-                  ).channel;
-                  setDeleteTarget({ id, name });
-                  // Stacks over the form (`push`), so Cancel goes back to it.
-                  deleteSheetRef.current?.present?.();
-                }
-              : undefined
-          }
         />
       ) : null}
       {/* Only an officer can delete, so only theirs carries the sheet. */}
@@ -1161,8 +1122,6 @@ export default function ChatHomeScreen() {
           channel={deleteTarget}
           onDelete={async (channelId) => {
             await deleteChannel.mutateAsync(channelId);
-            // The form it may have come from is about a channel that's gone.
-            channelFormRef.current?.dismiss?.();
           }}
         />
       ) : null}

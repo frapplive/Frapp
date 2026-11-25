@@ -241,14 +241,14 @@ describe("Settings shows each viewer what they can use", () => {
     ]);
   });
 
-  it("draws Chat admin on the Chat page, with Discord import a row inside Settings (#3837)", () => {
+  it("draws Chat admin on the Chat page, whose body carries the Discord import row (#3837, #6031)", () => {
     permissions.current = ["*"];
     search.current = "tab=chat";
     render(<SettingsPage />);
     expect(screen.getByText("chat-admin body")).toBeInTheDocument();
-    expect(tools()).toEqual([
-      ["Discord import", "/settings?tab=chat&tool=discord-import"],
-    ]);
+    // Its row is in the Chat body's Moderation group, with the import's
+    // state, so the frame lists no separate Tools row for it.
+    expect(tools()).toEqual([]);
   });
 
   it("opens a channel's settings and Discord import in place of the Chat page", () => {
