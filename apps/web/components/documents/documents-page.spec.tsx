@@ -3679,4 +3679,35 @@ describe("DocumentsPage with a long library (#6088)", () => {
     });
     expect(drawnRows()).toBe(RENDER_WINDOW.first + RENDER_WINDOW.step);
   });
+
+  it("watches afresh after each page, so a sentinel still in view keeps the list growing", () => {
+    render(<DocumentsPage />);
+    const reach = () =>
+      act(() => {
+        observers.at(-1)!.callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+    reach();
+    const watched = observers.length;
+    reach();
+
+    expect(observers.length).toBeGreaterThan(watched);
+    expect(drawnRows()).toBe(RENDER_WINDOW.first + 2 * RENDER_WINDOW.step);
+  });
+
+  it("draws the viewer's document wherever it sits, so closing can hand focus back to its row", async () => {
+    linkedDocument.current = "doc-300";
+    try {
+      render(<DocumentsPage />);
+      await screen.findByRole("dialog", { name: "Doc 300" });
+
+      expect(
+        document.querySelector('[data-document-open="doc-300"]'),
+      ).not.toBeNull();
+    } finally {
+      linkedDocument.current = null;
+    }
+  });
 });

@@ -2106,6 +2106,30 @@ describe("a long library (#6088)", () => {
     );
   });
 
+  it("grows again after a new search starts the list over at the same height", () => {
+    documentRows = many(400);
+    const tree = render();
+    scrollTo(tree, 3000, 4000);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(
+      RENDER_WINDOW.first + RENDER_WINDOW.step,
+    );
+
+    // Every title matches, so the new list's first page lays out exactly as
+    // the old one did when it grew.
+    const [field] = tree.root.findAll(
+      (node) =>
+        typeof node.props.onChangeText === "function" &&
+        node.props.accessibilityLabel !== undefined,
+    );
+    act(() => field!.props.onChangeText("Doc"));
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(RENDER_WINDOW.first);
+
+    scrollTo(tree, 3000, 4000);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(
+      RENDER_WINDOW.first + RENDER_WINDOW.step,
+    );
+  });
+
   it("draws a short library whole", () => {
     documentRows = many(12);
     const tree = render();

@@ -56,6 +56,55 @@ describe("useRenderWindow (#6088)", () => {
   });
 });
 
+describe("useRenderWindow, after review (#6088)", () => {
+  it("starts over on a key it has had before, rather than at that key's old depth", () => {
+    const items = rows(400);
+    let key = "all";
+    const { result, rerender } = renderHook(() => useRenderWindow(items, key));
+    act(() => result.current.showMore());
+    act(() => result.current.showMore());
+
+    key = "search:a";
+    rerender();
+    key = "all";
+    rerender();
+    expect(result.current.shown).toHaveLength(RENDER_WINDOW.first);
+  });
+
+  it("adds one step for calls made before the new rows render", () => {
+    const items = rows(400);
+    const { result } = renderHook(() => useRenderWindow(items, "all"));
+    const { showMore } = result.current;
+    act(() => {
+      showMore();
+      showMore();
+      showMore();
+    });
+
+    expect(result.current.shown).toHaveLength(
+      RENDER_WINDOW.first + RENDER_WINDOW.step,
+    );
+  });
+
+  it("stretches to draw a row it is told to reveal, and grows on from there", () => {
+    const items = rows(400);
+    let reveal: number | null = 150;
+    const { result, rerender } = renderHook(() =>
+      useRenderWindow(items, "all", {
+        reveal: (item) => item === reveal,
+      }),
+    );
+    expect(result.current.shown).toHaveLength(151);
+
+    act(() => result.current.showMore());
+    expect(result.current.shown).toHaveLength(151 + RENDER_WINDOW.step);
+
+    reveal = null;
+    rerender();
+    expect(result.current.shown).toHaveLength(151 + RENDER_WINDOW.step);
+  });
+});
+
 describe("nearScrollEnd", () => {
   it("is true within a screen of the end, and for a list shorter than its view", () => {
     expect(nearScrollEnd({ y: 0, viewport: 800, content: 4000 })).toBe(false);

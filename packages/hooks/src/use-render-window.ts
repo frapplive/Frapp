@@ -11,36 +11,66 @@ export interface RenderWindow<T> {
   shown: readonly T[];
   /** Whether rows past `shown` are waiting to be drawn. */
   hasMore: boolean;
-  /** Draws the next step of rows; nothing when every row is drawn. */
+  /**
+   * Draws the next step of rows. Calls before the new rows render add one
+   * step, not one each, and it is a new function once they have, so a caller
+   * that watches it (the web sentinel) asks again for the next step.
+   */
   showMore: () => void;
+}
+
+export interface RenderWindowOptions<T> {
+  size?: { first: number; step: number };
+  /**
+   * A row that must be drawn wherever it sits: the window stretches to the
+   * last one it matches. For a row focus has to come back to, such as one
+   * whose Star just moved it, or the file a viewer stepped to.
+   */
+  reveal?: (item: T) => boolean;
 }
 
 /**
  * A long list drawn a page at a time (#6088). The Documents screen mounted a
  * row for every file before it painted any: 400 rows for 400 files, so a
- * chapter with a few hundred sat on a blank list while the phone built
+ * chapter with a few hundred sat on a blank list while the screen built
  * them all. Now it draws the first {@link RENDER_WINDOW.first} and adds
  * {@link RENDER_WINDOW.step} more as the reader nears the end.
  *
- * The window goes back to its first page only when `resetKey` changes (a new
- * folder, search, filter or order: a different list), never because the rows
- * were rebuilt, so starring a file deep in the list doesn't throw the reader
- * back to the top.
+ * The window goes back to its first page whenever `resetKey` changes (a new
+ * folder, search, filter or order: a different list), and only then, never
+ * because the rows were rebuilt, so starring a file deep in the list doesn't
+ * throw the reader back to the top.
  */
 export function useRenderWindow<T>(
   items: readonly T[],
   resetKey: string,
-  size: { first: number; step: number } = RENDER_WINDOW,
+  options: RenderWindowOptions<T> = {},
 ): RenderWindow<T> {
-  const [state, setState] = useState({ key: resetKey, count: size.first });
-  const count = state.key === resetKey ? state.count : size.first;
+  const { first, step } = options.size ?? RENDER_WINDOW;
+  const [state, setState] = useState({ key: resetKey, count: first });
+  // A new list starts over at once, so coming back to an earlier key later
+  // doesn't bring back how deep the reader had gone in it.
+  if (state.key !== resetKey) setState({ key: resetKey, count: first });
+  const base = state.key === resetKey ? state.count : first;
+  const { reveal } = options;
+  let through = -1;
+  if (reveal) {
+    for (let i = items.length - 1; i >= base; i--) {
+      if (reveal(items[i]!)) {
+        through = i;
+        break;
+      }
+    }
+  }
+  const count = Math.max(base, through + 1);
   const hasMore = items.length > count;
   const showMore = useCallback(() => {
-    setState((previous) => {
-      const from = previous.key === resetKey ? previous.count : size.first;
-      return { key: resetKey, count: from + size.step };
-    });
-  }, [resetKey, size.first, size.step]);
+    setState((previous) =>
+      previous.key === resetKey && previous.count > count
+        ? previous
+        : { key: resetKey, count: count + step },
+    );
+  }, [resetKey, count, step]);
   const shown = useMemo(
     () => (hasMore ? items.slice(0, count) : items),
     [items, count, hasMore],

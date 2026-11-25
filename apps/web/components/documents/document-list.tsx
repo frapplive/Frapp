@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +69,7 @@ export function DocumentList({
   folderPicker,
   folderLine,
   folderHue,
+  revealId = null,
 }: {
   listState: DocumentListState;
   /** The failed read behind `listState === "error"`, for its wording. */
@@ -136,15 +137,26 @@ export function DocumentList({
   folderLine?: ReactNode;
   /** The hue a file's tile wears, by its folder (#5576). */
   folderHue: (folder: string | null) => string;
+  /**
+   * The document the viewer is showing, whose row is drawn wherever it sits
+   * so closing the viewer can hand focus back to it (#6088).
+   */
+  revealId?: string | null;
 }) {
   // Starring a file inside a folder or a search moves its row to the head of
   // the list; this keeps focus on the Star that moved it (#3934).
   const { rootRef, remember } = useKeepFocus<HTMLElement>();
   // A page of rows at a time (#6088), the next drawn as the reader nears
   // the end; a new folder, search, filter or order starts over.
+  // The row whose Star or Pin was just pressed stays drawn wherever its new
+  // place is, so `useKeepFocus` finds it; the viewer's document likewise.
+  const [markedRowId, setMarkedRowId] = useState<string | null>(null);
   const rowWindow = useRenderWindow(
     visible,
     JSON.stringify([activeFolder, deferredSearch, filters, sort]),
+    {
+      reveal: ({ doc }) => doc.id === markedRowId || doc.id === revealId,
+    },
   );
   return (
     // Its own container (#4022): the rows break on the list's width, which
@@ -374,6 +386,7 @@ export function DocumentList({
                   onDelete,
                   onToggleStar: (row: ChapterDocument) => {
                     onHoldRow?.(row.id);
+                    setMarkedRowId(row.id);
                     remember(`star:${row.id}`);
                     marks.toggleStar(
                       { kind: "document", id: row.id },
@@ -382,6 +395,7 @@ export function DocumentList({
                   },
                   onTogglePin: (row: ChapterDocument) => {
                     onHoldRow?.(row.id);
+                    setMarkedRowId(row.id);
                     remember(`pin:${row.id}`);
                     void marks.setPinned(
                       { kind: "document", id: row.id },

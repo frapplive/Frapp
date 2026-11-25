@@ -431,14 +431,23 @@ export default function DocumentsScreen() {
   // screen painted is what kept a chapter with a few hundred on a blank
   // list. The next page is drawn as the reader nears the end of the shell's
   // scroll, and a new folder, search, filter, order or layout starts over.
-  const rowWindow = useRenderWindow(
-    rows,
-    JSON.stringify([folder, deferredSearch, sort, filters, layout]),
-  );
+  const listKey = JSON.stringify([
+    folder,
+    deferredSearch,
+    sort,
+    filters,
+    layout,
+  ]);
+  const rowWindow = useRenderWindow(rows, listKey);
   const { showMore } = rowWindow;
   // One page per growth of the content: the scroll reports every 16 ms, and
   // several reports before the new rows lay out would add several pages.
+  // Forgotten with each new list, whose first page may lay out at the very
+  // height the last growth was asked at, and would then never grow.
   const grownAt = useRef(-1);
+  useEffect(() => {
+    grownAt.current = -1;
+  }, [listKey]);
   const watchScroll = useCallback(
     (scroll: ScreenScroll) => {
       if (scroll.content === grownAt.current || !nearScrollEnd(scroll)) return;
