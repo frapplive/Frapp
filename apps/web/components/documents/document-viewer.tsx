@@ -7,7 +7,12 @@ import {
   selectForcedDownloadUrl,
   useDocument,
 } from "@repo/hooks";
-import { classifyFile, driveLink } from "@repo/hooks/document-library";
+import {
+  classifyFile,
+  driveLink,
+  isDriveCopy,
+  uploadedLine,
+} from "@repo/hooks/document-library";
 import { describeLoadFailure } from "@repo/hooks/error-copy";
 import { isViewableImage } from "@repo/chat-core/attachments";
 import { formatDay } from "@repo/formatting";
@@ -21,7 +26,7 @@ import { useDocumentDownload } from "@/components/documents/use-document-downloa
 import { DriveGlyph } from "@/components/documents/resources-glyphs";
 import type { ChapterDocument } from "@/components/documents/document-types";
 import { destroyPdf, loadPdf, renderPagePreview } from "@/lib/backwork-bulk/pdf";
-import { cn, labelled } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /** The attribute each row's open control carries, for focus to find it on close. */
 export const OPEN_DOCUMENT_ATTRIBUTE = "data-document-open";
@@ -150,7 +155,9 @@ function OpenDocumentViewer({
 
   const { label } = classifyFile(doc);
   const drive = driveLink(doc);
-  const meta = [label, labelled("Uploaded", formatDay(doc.created_at)), doc.folder]
+  // A Drive copy says where it came from, as its row does (#6055).
+  const added = uploadedLine(formatDay(doc.created_at), null, isDriveCopy(doc));
+  const meta = [label, added, doc.folder]
     .filter(Boolean)
     .join(" · ");
 
