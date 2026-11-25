@@ -81,7 +81,8 @@ import {
  *   announcement push URGENT, and URGENT skips the category preference
  *   (#1041), so the switch would suppress nothing; it ships once routine
  *   announcements can be told apart from emergency ones (#1323). The
- *   group's footnote says they always arrive.
+ *   group's footnote says they can't be switched off here, and never that
+ *   they always arrive: a channel level or a block still stops one.
  * - **"Mandatory events only" is still not built.** It has no backing field
  *   on `events` and no preference key.
  * - **Nudges on Activity** is phone only: web's Activity has no nudge card
@@ -358,9 +359,11 @@ function pushToggleLabel(push: PushState): string {
 
 function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
+    // The tone `ListSection`'s own footnote takes, so a line under a group
+    // reads the same as the group's footnote beside it.
     footnote: {
       ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.muted,
+      color: tokens.color.text.mutedForeground,
       paddingHorizontal: tokens.spacing.xs,
     },
     footnoteError: {

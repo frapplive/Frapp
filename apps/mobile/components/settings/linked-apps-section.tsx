@@ -36,8 +36,14 @@ import { useDiscordLinkConnection } from "@/lib/settings/discord-link-connect";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useFrappTheme } from "@/lib/theme";
 
-/** Settings' own address: Google's and Discord's sign-ins come back here. */
-const SETTINGS_RETURN_PATH = "preferences";
+/**
+ * Settings → Linked apps' own address: Google's and Discord's sign-ins come
+ * back here, so a return the system hands the app as a link (Android) opens
+ * the page the member started on, not Settings' first page (#6032). The API
+ * matches the route without its query (`isAppReturnUrl`) and appends its own
+ * params after it.
+ */
+const SETTINGS_RETURN_PATH = "preferences?page=apps";
 /** Discord's blurple: a trademark color, never a theme token. */
 const DISCORD_BLURPLE = "#5865F2";
 const MARK_SIZE = 18;
@@ -205,7 +211,6 @@ export function LinkedAppsSection() {
   );
 }
 
-/** The check, hollow circle or alert at a row's end. */
 /**
  * Settings → Account → Sign in: email and password, Google, Apple, as the
  * account has them, each with its state drawn at the end (#5407; on Linked
@@ -248,6 +253,7 @@ export function SignInSection() {
   );
 }
 
+/** The check, hollow circle or alert at a row's end. */
 function LinkedStatusMark({ tone }: { tone: LinkedAppTone }) {
   const { tokens } = useFrappTheme();
   const size = MARK_SIZE;

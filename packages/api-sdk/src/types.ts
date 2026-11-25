@@ -14903,7 +14903,7 @@ export interface components {
              */
             return_url?: string;
             /**
-             * @description For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps or Settings → Calendar.
+             * @description For `web`: the screen the sign-in started on and comes back to. Events (the default), or Settings → Linked apps. `calendar` is the retired Settings → Calendar address, which now opens Linked apps.
              * @enum {string}
              */
             web_return?: "events" | "linked_apps" | "calendar";

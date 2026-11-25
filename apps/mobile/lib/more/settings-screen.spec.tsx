@@ -47,6 +47,9 @@ const state = vi.hoisted(() => ({
   permissions: [] as string[],
   // Whether the tenant is known to be a chapter (`useServesChapterFeatures`).
   chapterFeatures: false,
+  // Whether it is known to be a council (`useIsCouncil`, #5933).
+  council: false,
+  signOut: vi.fn(async () => undefined),
   pushReason: null as string | null,
   quietHoursEnabled: false,
   // `null` is a signed-in member whose token names no chapter (#5104).
@@ -139,17 +142,18 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
 // Linked apps has its own spec (`components/settings/linked-apps-section.spec.tsx`);
 // this one only checks the rest of Settings.
 vi.mock("@/components/settings/linked-apps-section", () => ({
-  LinkedAppsSection: () => null,
+  LinkedAppsSection: "LinkedAppsSection",
   SignInSection: () => null,
 }));
 
 vi.mock("@/lib/tenant-kind", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/tenant-kind")>()),
   useServesChapterFeatures: () => state.chapterFeatures,
+  useIsCouncil: () => state.council,
 }));
 
 vi.mock("@/lib/auth-session", () => ({
-  useAuthSession: () => ({ signOut: vi.fn() }),
+  useAuthSession: () => ({ signOut: state.signOut }),
 }));
 
 vi.mock("@/lib/account/delete-account-prompt", () => ({
@@ -232,6 +236,7 @@ vi.mock("@/lib/chapter-branding", () => ({
 }));
 
 import SettingsScreen from "@/app/(app)/preferences";
+import { confirmDeleteAccount } from "@/lib/account/delete-account-prompt";
 import { AnalyticsContext } from "@/lib/analytics-provider";
 
 const mounted: ReactTestRenderer[] = [];
@@ -262,6 +267,8 @@ function render(
 
 beforeEach(() => {
   vi.mocked(useLocalSearchParams).mockReturnValue({});
+  state.chapterFeatures = false;
+  state.council = false;
   state.permissions = [];
   state.pushReason = null;
   state.quietHoursEnabled = false;
@@ -384,6 +391,72 @@ describe("Settings first page", () => {
 
   it("has no Linked apps row until the tenant is known to be a chapter (#5933)", () => {
     expect(screenText(render(null, null))).not.toContain("Linked apps");
+  });
+
+  it("holds the Linked apps page's chapter reads back from a council, which a search can still open (#5933)", () => {
+    const linkedApps = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) => (node.type as unknown) === "LinkedAppsSection",
+      );
+    state.chapterFeatures = true;
+    expect(linkedApps(render(null, "apps"))).toHaveLength(1);
+
+    state.chapterFeatures = false;
+    state.council = true;
+    const council = render(null, "apps");
+    expect(linkedApps(council)).toHaveLength(0);
+    expect(screenText(council)).toContain("A council has no linked apps.");
+
+    // While the tenant's kind is still being read, nothing is sent and
+    // nothing is claimed.
+    state.council = false;
+    const unknown = render(null, "apps");
+    expect(linkedApps(unknown)).toHaveLength(0);
+    expect(screenText(unknown)).not.toContain("council");
+  });
+});
+
+/**
+ * Settings → Account (#6032): Sign out and Delete account, moved off the
+ * first page with their words and behaviour unchanged.
+ */
+describe("Settings account page", () => {
+  const accountRow = (tree: ReactTestRenderer, label: string) =>
+    tree.root.find(
+      (node) =>
+        node.props.label === label && typeof node.props.onPress === "function",
+    );
+
+  it("signs out and returns to sign-in", async () => {
+    const replace = vi.mocked(useRouter().replace);
+    replace.mockClear();
+    state.signOut.mockClear();
+    const tree = render(null, "account");
+    await act(async () => {
+      accountRow(tree, "Sign out").props.onPress();
+    });
+    expect(state.signOut).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/(auth)/sign-in");
+  });
+
+  it("asks before deleting the account, and signs out once it is deleted", async () => {
+    const confirm = vi.mocked(confirmDeleteAccount);
+    confirm.mockClear();
+    state.signOut.mockClear();
+    const tree = render(null, "account");
+    const row = accountRow(tree, "Delete account");
+    expect(row.props.destructive).toBe(true);
+    expect(row.props.accessibilityHint).toBe(
+      "Permanently deletes your account. You'll be asked to confirm.",
+    );
+    act(() => row.props.onPress());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    // Nothing is deleted until the prompt is confirmed.
+    expect(state.signOut).not.toHaveBeenCalled();
+    await act(async () => {
+      confirm.mock.calls[0]![0].onDeleted();
+    });
+    expect(state.signOut).toHaveBeenCalledTimes(1);
   });
 
   it("pushes each page as its own stack entry", () => {

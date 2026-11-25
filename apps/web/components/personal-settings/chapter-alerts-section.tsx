@@ -217,7 +217,7 @@ export function ChapterAlertsSection() {
             active chapter in place (`use-claim-chapter-sync.ts`), and a save
             still in flight for the old chapter must not show, or fail,
             under the new one. */}
-        <ChatLevelRow key={chapterId} />
+        <ChatLevelRow key={chapterId} offlineNote={false} />
         {shownNotificationCategories(permissions).map((category) => {
           const switchId = `notification-category-${category.key}`;
           const descriptionId = `${switchId}-description`;

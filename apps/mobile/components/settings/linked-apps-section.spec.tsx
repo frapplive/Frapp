@@ -147,17 +147,17 @@ describe("Phone Settings → Linked apps (#5407)", () => {
     vi.mocked(Alert.alert).mockClear();
   });
 
-  it("connects Google from Settings and has the sign-in come back to Settings", async () => {
+  it("connects Google from Settings and has the sign-in come back to Linked apps (#6032)", async () => {
     const tree = await render();
     await act(async () => {
       row(tree, "Google Calendar").props.onPress();
     });
     expect(state.start).toHaveBeenCalledWith({
       client: "mobile",
-      returnUrl: expect.stringContaining("preferences"),
+      returnUrl: expect.stringContaining("preferences?page=apps"),
     });
     // The Calendar apps sheet opened from here comes back here too.
-    expect(state.sheetReturnPaths.at(-1)).toBe("preferences");
+    expect(state.sheetReturnPaths.at(-1)).toBe("preferences?page=apps");
   });
 
   it("offers Reconnect and Disconnect on an expired connection", async () => {
@@ -233,11 +233,11 @@ describe("Phone Settings → Linked apps (#5407)", () => {
 
     expect(state.discordBegin).toHaveBeenCalledWith({
       client: "mobile",
-      returnUrl: "frapp://preferences",
+      returnUrl: "frapp://preferences?page=apps",
     });
     expect(state.authSession).toHaveBeenCalledWith(
       "https://discord.com/oauth2/authorize?x",
-      "frapp://preferences",
+      "frapp://preferences?page=apps",
     );
     expect(state.discordConfirm).toHaveBeenCalledWith({
       handshake: "11111111-1111-4111-8111-111111111111",

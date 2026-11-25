@@ -37,8 +37,10 @@ const GOOGLE_CALENDAR_CALLBACK_PATH = '/v1/google-calendar/callback';
 /**
  * Where the web app finishes a sign-in: the screen it started on, so the
  * member lands on the row that now shows Connected (#5407). Events holds the
- * Subscribe menu; Settings holds Linked apps and Calendar. A fixed list,
- * never a path from the request.
+ * Subscribe menu; Settings holds Linked apps. `calendar` was Settings →
+ * Calendar, folded into Linked apps in #6032; the web app opens Linked apps
+ * for it, so a sign-in started before then still lands. A fixed list, never
+ * a path from the request.
  */
 export const GOOGLE_CALENDAR_WEB_RETURNS = {
   events: '/events',

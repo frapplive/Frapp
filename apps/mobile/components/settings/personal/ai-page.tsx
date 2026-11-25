@@ -126,9 +126,11 @@ export function AiSettingsPage() {
 
 function createStyles(tokens: SignetTokens) {
   return StyleSheet.create({
+    // The tone `ListSection`'s own footnote takes, so a line under a group
+    // reads the same as the group's footnote beside it.
     footnote: {
       ...typeRole(tokens.typography.role.caption),
-      color: tokens.color.text.muted,
+      color: tokens.color.text.mutedForeground,
       paddingHorizontal: tokens.spacing.xs,
     },
     footnoteLink: {

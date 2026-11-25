@@ -1003,7 +1003,7 @@ Onboarding's notifications step never shows these: it is skipped when push is un
 
 ### Notification preferences (mobile, s16)
 
-The status footnote under Settings' notification switches (`notificationsMeta` in `apps/mobile/app/(app)/preferences.tsx`).
+The status footnote under Settings' notification switches (`notificationsMeta` in `apps/mobile/components/settings/personal/notifications-page.tsx`, Settings → Notifications).
 It shows the first row that applies, in this order, so a write in flight reads as saving even while the first read is still out.
 Once synced it shows nothing: the steady state needs no line.
 

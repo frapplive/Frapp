@@ -33,6 +33,16 @@ export const PERSONAL_SETTINGS_PAGES = [
 export type PersonalSettingsPage =
   (typeof PERSONAL_SETTINGS_PAGES)[number]["value"];
 
+/**
+ * The pages the phone's Settings screen pushes (`/preferences?page=…`).
+ * Blocked members opens a sheet from the first page, and My invoices is web
+ * only, so neither is one.
+ */
+export type PhoneSettingsPage = Exclude<
+  PersonalSettingsPage,
+  "blocked" | "invoices"
+>;
+
 export type PersonalSettingsGroup =
   (typeof PERSONAL_SETTINGS_PAGES)[number]["group"];
 

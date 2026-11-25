@@ -76,17 +76,17 @@ export function openSetting(
   entry: SettingEntry,
   options: {
     here?: SettingPhoneScreen;
-    /** The page of `here` that is showing, when it is one of its pushed pages. */
-    herePage?: string;
     jumpHere?: (settingId: string) => void;
     onBrowserFailed?: () => void;
   } = {},
 ): void {
   const route = settingPhoneRoute(entry);
   if (route) {
+    // Only the first page carries a search field, so a match on one of its
+    // pushed pages opens that page rather than lighting it in place.
     if (
       options.here === entry.phone?.screen &&
-      options.herePage === entry.phone?.page &&
+      !entry.phone?.page &&
       options.jumpHere
     ) {
       options.jumpHere(entry.id);

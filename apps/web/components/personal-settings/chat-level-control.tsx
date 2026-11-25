@@ -36,7 +36,17 @@ const PICKER_ID = "chat-level-legend";
  * is read: "All messages" as a stand-in would state a level the server may
  * not hold.
  */
-export function ChatLevelRow() {
+export function ChatLevelRow({
+  offlineNote = true,
+}: {
+  /**
+   * Whether the row says it can't be changed offline. Off when the group's
+   * footnote already says so for every row in it (Notifications' chapter
+   * group); on when the row stands alone, while the alert switches load or
+   * failed.
+   */
+  offlineNote?: boolean;
+} = {}) {
   const { toast } = useToast();
   const { isOffline } = useNetwork();
   const levelQuery = useChapterChatLevel();
@@ -90,6 +100,8 @@ export function ChatLevelRow() {
     );
   } else if (isOffline && unknown) {
     note = "Reconnect to load this setting.";
+  } else if (isOffline && offlineNote) {
+    note = "You're offline, so this can't be changed right now.";
   }
 
   return (

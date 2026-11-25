@@ -654,7 +654,8 @@ export function AuthSessionProvider({
         await supabase.auth.signOut();
       }
     } catch {
-      // Never propagate. Callers navigate away on return (`preferences.tsx`), so a
+      // Never propagate. Callers navigate away on return (Settings → Account,
+      // `components/settings/personal/account-page.tsx`), so a
       // thrown network error would strand the member on an authenticated screen
       // while the local session below is already gone.
     }

@@ -14,6 +14,7 @@ import {
   PERSONAL_SETTINGS_COPY,
   personalSettingsGroupLabel,
   personalSettingsPageLabel,
+  type PhoneSettingsPage,
 } from "@repo/validation";
 import { chatDensityLabel } from "@repo/chat-core/density";
 import { ScreenShell } from "@/components/screen-shell";
@@ -97,7 +98,7 @@ import { useWhatsNewQuiet } from "@/lib/whats-new";
  *   the website.
  */
 export default function PreferencesScreen() {
-  const { page } = useLocalSearchParams<{ page?: string }>();
+  const { page } = useLocalSearchParams<{ page?: PhoneSettingsPage }>();
   switch (page) {
     case "notifications":
       return <NotificationsSettingsPage />;
@@ -113,9 +114,6 @@ export default function PreferencesScreen() {
       return <SettingsHome />;
   }
 }
-
-/** A row's push to one of Settings' pages. */
-type SettingsPageValue = "notifications" | "chat" | "apps" | "ai" | "account";
 
 function SettingsHome() {
   const router = useRouter();
@@ -166,7 +164,7 @@ function SettingsHome() {
       : "Off"
     : null;
 
-  function open(page: SettingsPageValue) {
+  function open(page: PhoneSettingsPage) {
     router.push({ pathname: "/preferences", params: { page } });
   }
 

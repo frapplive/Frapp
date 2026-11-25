@@ -114,6 +114,17 @@ describe("ChatLevelRow", () => {
     expect(mocks.toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: "You're offline" }),
     );
+    expect(
+      screen.getByText("You're offline, so this can't be changed right now."),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the offline sentence to its group's footnote when told to", () => {
+    mockOffline.value = true;
+    render(<ChatLevelRow offlineNote={false} />);
+    expect(
+      screen.queryByText("You're offline, so this can't be changed right now."),
+    ).toBeNull();
   });
 
   it("offers a retry when the level can't be read", () => {

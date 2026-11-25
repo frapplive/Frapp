@@ -3,6 +3,7 @@ import {
   CHAPTER_LOGS_PERMISSIONS,
   canAll,
   isBetaOffModule,
+  type PhoneSettingsPage,
 } from "@repo/validation";
 
 /**
@@ -72,7 +73,11 @@ export type SettingEntry = {
    * `?page=`, the same address as web's `?section=`); without one the row is
    * on the screen's first page.
    */
-  phone?: { screen: SettingPhoneScreen; page?: string; anchor?: string };
+  phone?: {
+    screen: SettingPhoneScreen;
+    page?: PhoneSettingsPage;
+    anchor?: string;
+  };
 };
 
 const CONFIG = ["chapter-config:view", "chapter-config:manage"] as const;
