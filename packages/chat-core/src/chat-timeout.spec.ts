@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TIMED_OUT_REFUSAL } from "@repo/validation";
-import { classifyChatError } from "./chat-client";
+import { QueryClient } from "@tanstack/react-query";
+import { vi } from "vitest";
+import { classifyChatError, refreshTimeoutIfRefused } from "./chat-client";
 import {
   canTimeOutSender,
   chatTimeoutNotice,
-  isChatTimedOutError,
+  runningTimeoutLine,
   timeOutOfferedIn,
   timeoutEndLabel,
 } from "./chat-timeout";
@@ -16,13 +18,13 @@ describe("timeoutEndLabel", () => {
   it("says the time today, tomorrow, the weekday, then the date", () => {
     expect(timeoutEndLabel("2026-11-25T23:40:00.000Z", NOW)).toBe("3:40 PM");
     expect(timeoutEndLabel("2026-11-26T20:00:00.000Z", NOW)).toBe(
-      "tomorrow at 12:00 PM",
+      "tomorrow at 12 PM",
     );
     expect(timeoutEndLabel("2026-11-28T20:00:00.000Z", NOW)).toBe(
-      "Saturday at 12:00 PM",
+      "Saturday at 12 PM",
     );
-    expect(timeoutEndLabel("2026-12-02T20:00:00.000Z", NOW)).toBe(
-      "December 2 at 12:00 PM",
+    expect(timeoutEndLabel("2026-12-02T20:30:00.000Z", NOW)).toBe(
+      "December 2 at 12:30 PM",
     );
   });
 });
@@ -94,24 +96,43 @@ describe("Time out on a message", () => {
   });
 });
 
+describe("runningTimeoutLine", () => {
+  it("says until when and why, or nothing once it has passed", () => {
+    expect(
+      runningTimeoutLine("2026-11-25T23:40:00.000Z", " spamming ", NOW),
+    ).toBe("Timed out until 3:40 PM · spamming");
+    expect(runningTimeoutLine("2026-11-25T23:40:00.000Z", null, NOW)).toBe(
+      "Timed out until 3:40 PM",
+    );
+    expect(
+      runningTimeoutLine("2026-11-25T19:00:00.000Z", "spamming", NOW),
+    ).toBeNull();
+    expect(runningTimeoutLine(null, null, NOW)).toBeNull();
+  });
+});
+
 describe("a refused send", () => {
-  const refusal = {
+  const body = {
     statusCode: 403,
     code: "chat.timed_out",
     message: "whatever the server says",
   };
 
-  it("is recognised by its code", () => {
-    expect(isChatTimedOutError(refusal)).toBe(true);
-    expect(isChatTimedOutError({ statusCode: 403 })).toBe(false);
-  });
-
   it("fails terminally with the timeout sentence", () => {
-    expect(classifyChatError(refusal)).toEqual({
+    expect(classifyChatError(body)).toEqual({
       terminal: true,
       status: 403,
       message: CHAT_TIMED_OUT_REFUSAL,
       busy: false,
     });
+  });
+
+  it("re-reads the member's own timeout only for a timeout refusal", () => {
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    refreshTimeoutIfRefused(queryClient, { statusCode: 403 });
+    expect(invalidate).not.toHaveBeenCalled();
+    refreshTimeoutIfRefused(queryClient, body);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["chat-timeout"] });
   });
 });

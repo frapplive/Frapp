@@ -1120,8 +1120,8 @@ export function MessageThreadScreen({
                   : timedOutHint
                     ? timedOutHint
                     : writeBlockedReason
-                    ? THREAD_OFFLINE_HINT
-                    : sendError
+                      ? THREAD_OFFLINE_HINT
+                      : sendError
             }
             hintTone={
               !writeBlockedReason &&
@@ -1160,7 +1160,9 @@ export function MessageThreadScreen({
         onUnreact={onUnreact}
         onSetSaved={setSaved}
         onRemind={remind}
+        onTimeOut={timeoutHere.open}
       />
+      {timeoutHere.sheet}
       <FormFillPage state={formFill} message={filledRow} nameFor={nameFor} />
     </SafeAreaView>
   );

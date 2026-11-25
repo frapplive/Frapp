@@ -8,6 +8,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { errorCodeOf } from '#domain/utils/error-code';
 import {
   CHAT_TIMED_OUT_CODE,
   isDirectChannel,
@@ -485,7 +486,7 @@ function refusalReason(error: unknown): ChatScheduledMessageFailure | null {
   // edit or send again, as for any other refusal.
   if (
     error instanceof ForbiddenException &&
-    codeOfHttpException(error) === CHAT_TIMED_OUT_CODE
+    errorCodeOf(error.getResponse()) === CHAT_TIMED_OUT_CODE
   ) {
     return 'not_sendable';
   }
@@ -494,16 +495,6 @@ function refusalReason(error: unknown): ChatScheduledMessageFailure | null {
     const status = error.getStatus();
     if (status === 404) return 'no_access';
     if (status >= 400 && status < 500 && status !== 429) return 'not_sendable';
-  }
-  return null;
-}
-
-/** The structured `code` an `HttpException` was thrown with, if any. */
-function codeOfHttpException(error: HttpException): string | null {
-  const response = error.getResponse();
-  if (response && typeof response === 'object' && 'code' in response) {
-    const { code } = response as { code?: unknown };
-    return typeof code === 'string' ? code : null;
   }
   return null;
 }

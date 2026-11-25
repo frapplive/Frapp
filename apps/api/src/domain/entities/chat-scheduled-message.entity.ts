@@ -11,7 +11,8 @@ export type ChatScheduledMessageStatus = 'pending' | 'failed';
  * (canceled, or past due beyond grace), as a live post would be refused.
  * `not_sendable`: the
  * send refused the message itself (the channel was deleted, the message is no
- * longer valid there). `send_failed`: it kept failing for some other reason.
+ * longer valid there), or a chat timeout held the author when it came due
+ * (#6006), which ends, so the row stays to send again. `send_failed`: it kept failing for some other reason.
  */
 export type ChatScheduledMessageFailure =
   'no_access' | 'chapter_locked' | 'not_sendable' | 'send_failed';

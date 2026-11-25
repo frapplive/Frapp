@@ -9,11 +9,13 @@ import {
   useTimeOutMember,
 } from "@repo/hooks";
 import { errorCopy } from "@repo/hooks/error-copy";
-import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
 import {
   CHAT_TIMEOUT_DURATIONS,
   CHAT_TIMEOUT_REASON_MAX,
-  isChatTimeoutActive,
   type ChatTimeoutDurationKey,
 } from "@repo/validation";
 import { typeRole, useFrappTheme } from "@/lib/theme";
@@ -95,11 +97,11 @@ export const TimeoutMemberSheet = forwardRef<
   const member = profile.data;
   const memberId = member?.id ?? null;
   const allowed = member?.viewer_can_timeout === true;
-  const runningUntil =
-    member?.chat_timeout_until &&
-    isChatTimeoutActive(member.chat_timeout_until, now.getTime())
-      ? member.chat_timeout_until
-      : null;
+  const runningLine = runningTimeoutLine(
+    member?.chat_timeout_until,
+    member?.chat_timeout_reason,
+    now,
+  );
   const pending = timeOut.isPending || lift.isPending;
 
   function run(write: "time-out" | "lift") {
@@ -156,14 +158,7 @@ export const TimeoutMemberSheet = forwardRef<
         />
         <Text style={styles.note}>{CHAT_TIMEOUT_COPY.effect}</Text>
 
-        {runningUntil ? (
-          <Text style={styles.running}>
-            {CHAT_TIMEOUT_COPY.until(runningUntil, now)}
-            {member?.chat_timeout_reason
-              ? ` · ${member.chat_timeout_reason}`
-              : ""}
-          </Text>
-        ) : null}
+        {runningLine ? <Text style={styles.running}>{runningLine}</Text> : null}
 
         {member && !allowed ? (
           <Text accessibilityRole="alert" style={styles.note}>
@@ -215,7 +210,7 @@ export const TimeoutMemberSheet = forwardRef<
             onAccent={tokens.color.gold.onHouse}
           />
         ) : null}
-        {runningUntil && allowed ? (
+        {runningLine && allowed ? (
           <ListSection>
             <ListRow
               label={CHAT_TIMEOUT_COPY.lift}

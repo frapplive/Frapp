@@ -1,6 +1,6 @@
 import type { Member } from '#domain/entities/member.entity';
 import { canCorrectProfileAt, canReach } from '#domain/utils/role-rank';
-import { memberRankIn } from '#domain/utils/rank-context';
+import { memberRankIn, rankContextFrom } from '#domain/utils/rank-context';
 import type { RankContext } from './rbac.service';
 
 /**
@@ -59,4 +59,21 @@ export function chatTimeoutBlock(
   if (member.user_id === actorUserId) return 'self';
   if (memberHoldsWildcard) return 'wildcard';
   return rankBlock(member, actorUserId, context, 'below');
+}
+
+/**
+ * Whether `member` holds `*` (the President), read off a rank context already
+ * in hand: its `roles` are every role in the chapter, so this costs no query.
+ * The same flattening the context uses for the actor (`rankContextFrom`).
+ */
+export function memberHoldsWildcard(
+  context: RankContext,
+  member: Pick<Member, 'id' | 'chapter_id' | 'role_ids'>,
+): boolean {
+  return rankContextFrom(
+    member.chapter_id,
+    member,
+    context.roles,
+    context.tiers,
+  ).reach.wildcard;
 }

@@ -5,10 +5,12 @@ import { Loader2 } from "lucide-react";
 import {
   CHAT_TIMEOUT_DURATIONS,
   CHAT_TIMEOUT_REASON_MAX,
-  isChatTimeoutActive,
   type ChatTimeoutDurationKey,
 } from "@repo/validation";
-import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
 import {
   useLiftChatTimeout,
   useMemberByUserId,
@@ -84,11 +86,11 @@ export function TimeoutMemberDialog({
   const member = profile.data;
   const memberId = member?.id ?? null;
   const allowed = member?.viewer_can_timeout === true;
-  const runningUntil =
-    member?.chat_timeout_until &&
-    isChatTimeoutActive(member.chat_timeout_until, now.getTime())
-      ? member.chat_timeout_until
-      : null;
+  const runningLine = runningTimeoutLine(
+    member?.chat_timeout_until,
+    member?.chat_timeout_reason,
+    now,
+  );
 
   async function submit() {
     if (!memberId || !allowed || pending) return;
@@ -141,16 +143,8 @@ export function TimeoutMemberDialog({
             </DialogTitle>
             <DialogDescription>{CHAT_TIMEOUT_COPY.effect}</DialogDescription>
           </DialogHeader>
-          {runningUntil ? (
-            <p className="text-sm text-foreground">
-              {CHAT_TIMEOUT_COPY.until(runningUntil, now)}
-              {member?.chat_timeout_reason ? (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {member.chat_timeout_reason}
-                </span>
-              ) : null}
-            </p>
+          {runningLine ? (
+            <p className="text-sm text-foreground">{runningLine}</p>
           ) : null}
           {member && !allowed ? (
             <p role="alert" className="text-sm text-muted-foreground">
@@ -188,7 +182,7 @@ export function TimeoutMemberDialog({
             </p>
           ) : null}
           <DialogFooter>
-            {runningUntil && allowed ? (
+            {runningLine && allowed ? (
               <Button
                 type="button"
                 variant="secondary"

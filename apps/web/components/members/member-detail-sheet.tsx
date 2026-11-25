@@ -20,14 +20,16 @@ import {
   useRemoveMember,
 } from "@repo/hooks";
 import { errorCopy } from "@repo/hooks/error-copy";
-import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
 import { TimeoutMemberDialog } from "./timeout-member-dialog";
 import {
   BIRTHDAY_COPY,
   can,
   CORRECTION_MENU_LABEL,
   formatBirthday,
-  isChatTimeoutActive,
   phoneHref,
 } from "@repo/validation";
 import {
@@ -360,12 +362,11 @@ export function MemberDetailSheet({
     !memberQuery.isError &&
     fetched?.viewer_can_timeout === true &&
     dmTargetUserId !== currentUserId;
-  const storedTimeout = stringField(fetched, "chat_timeout_until");
-  const timedOutUntil =
-    storedTimeout && isChatTimeoutActive(storedTimeout, now.getTime())
-      ? storedTimeout
-      : null;
-  const timeoutReason = stringField(fetched, "chat_timeout_reason");
+  const timeoutLine = runningTimeoutLine(
+    stringField(fetched, "chat_timeout_until"),
+    stringField(fetched, "chat_timeout_reason"),
+    now,
+  );
 
   async function handleLiftTimeout() {
     if (!memberId) return;
@@ -477,7 +478,7 @@ export function MemberDetailSheet({
                   // Moderation, before the removal it stops short of.
                   ...(canTimeOut
                     ? [
-                        timedOutUntil
+                        timeoutLine
                           ? {
                               type: "item" as const,
                               key: "lift-timeout",
@@ -535,11 +536,8 @@ export function MemberDetailSheet({
             {meta ? (
               <p className="text-caption text-muted-foreground">{meta}</p>
             ) : null}
-            {timedOutUntil ? (
-              <p className="text-caption text-warning">
-                {CHAT_TIMEOUT_COPY.until(timedOutUntil, now)}
-                {timeoutReason ? ` · ${timeoutReason}` : ""}
-              </p>
+            {timeoutLine ? (
+              <p className="text-caption text-warning">{timeoutLine}</p>
             ) : null}
           </div>
 

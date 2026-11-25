@@ -8,13 +8,8 @@
  * reaches) live in `@repo/validation`, which the API enforces from.
  */
 
-import { codeOf } from "@repo/api-sdk";
-import { dayDelta, formatDay, formatTimeOfDay } from "@repo/formatting";
-import {
-  CHAT_TIMED_OUT_CODE,
-  chatTimeoutApplies,
-  isChatTimeoutActive,
-} from "@repo/validation";
+import { dayDelta, formatClockShort, formatDayWords } from "@repo/formatting";
+import { chatTimeoutApplies, isChatTimeoutActive } from "@repo/validation";
 import { isBlockableSender } from "./blocks";
 import { canReportMessage } from "./message-actions";
 import type { ChatMessage } from "./types";
@@ -51,20 +46,30 @@ export const CHAT_TIMEOUT_COPY = {
 } as const;
 
 /**
- * When a timeout ends, the way a member reads a time: `"3:40 PM"` today,
- * `"tomorrow at 3:40 PM"`, the weekday within the week (`"Friday at 3:40
- * PM"`), else the date (`"December 2 at 3:40 PM"`).
+ * When a timeout ends, the way a member reads a time, in the due labels' words
+ * (`formatDayWords`, `formatClockShort`): `"3:40 PM"` today, `"tomorrow at 3
+ * PM"`, the weekday within the week (`"Friday at 6 PM"`), else the date
+ * (`"December 2 at 6 PM"`).
  */
 export function timeoutEndLabel(until: string, now: Date = new Date()): string {
-  const at = new Date(until);
-  const clock = formatTimeOfDay(at);
-  const days = dayDelta(now, at);
-  if (days <= 0) return clock;
-  if (days === 1) return `tomorrow at ${clock}`;
-  if (days < 7) {
-    return `${at.toLocaleDateString(undefined, { weekday: "long" })} at ${clock}`;
-  }
-  return `${formatDay(at, now) ?? ""} at ${clock}`;
+  const clock = formatClockShort(until);
+  if (dayDelta(now, new Date(until)) <= 0) return clock;
+  return `${formatDayWords(until, now)} at ${clock}`;
+}
+
+/**
+ * The line a profile and the timeout form show while a member is timed out:
+ * `"Timed out until 3:40 PM · Spamming #general"`, or `null` with none
+ * running. The member and whoever can time out read it.
+ */
+export function runningTimeoutLine(
+  until: string | null | undefined,
+  reason: string | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (!until || !isChatTimeoutActive(until, now.getTime())) return null;
+  const why = reason?.trim();
+  return `${CHAT_TIMEOUT_COPY.until(until, now)}${why ? ` · ${why}` : ""}`;
 }
 
 /**
@@ -83,11 +88,6 @@ export function chatTimeoutNotice(
     title: `You're timed out until ${timeoutEndLabel(timeout.until, now)}`,
     detail: timeout.reason?.trim() ? `Reason: ${timeout.reason.trim()}` : null,
   };
-}
-
-/** Whether an API failure is a timeout's refusal (the coded 403). */
-export function isChatTimedOutError(error: unknown): boolean {
-  return codeOf(error) === CHAT_TIMED_OUT_CODE;
 }
 
 /**

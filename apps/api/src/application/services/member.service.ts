@@ -42,7 +42,12 @@ import {
 } from '#domain/constants/permissions';
 import { CustomFieldService } from './custom-field.service';
 import { RbacService, type RankContext } from './rbac.service';
-import { chatTimeoutBlock, rankBlock, rankContextOrSkip } from './member-rank';
+import {
+  chatTimeoutBlock,
+  memberHoldsWildcard,
+  rankBlock,
+  rankContextOrSkip,
+} from './member-rank';
 import {
   stateOf as chatTimeoutStateOf,
   withoutChatTimeout,
@@ -996,21 +1001,29 @@ export class MemberService {
       return false;
     }
     try {
-      const [memberPermissions, context] = await Promise.all([
-        this.rbacService.getEffectivePermissions(
-          member.chapter_id,
-          member.user_id,
-        ),
-        // A `*` holder outranks everyone but themselves: no rank read.
-        wildcard ? null : rankContextOrSkip(member, viewerUserId, rankContext),
-      ]);
-      const memberHoldsWildcard = memberPermissions.includes(
-        SystemPermissions.WILDCARD,
+      // A `*` viewer reads no rank context (it outranks everyone), so one
+      // permissions read says whether the member is the President. Anyone
+      // else reads the context, which holds every role and answers that too.
+      if (wildcard) {
+        const memberPermissions =
+          await this.rbacService.getEffectivePermissions(
+            member.chapter_id,
+            member.user_id,
+          );
+        return !memberPermissions.includes(SystemPermissions.WILDCARD);
+      }
+      const context = await rankContextOrSkip(
+        member,
+        viewerUserId,
+        rankContext,
       );
-      if (wildcard) return !memberHoldsWildcard;
       return (
-        chatTimeoutBlock(member, viewerUserId, memberHoldsWildcard, context) ===
-        null
+        chatTimeoutBlock(
+          member,
+          viewerUserId,
+          context ? memberHoldsWildcard(context, member) : false,
+          context,
+        ) === null
       );
     } catch (error) {
       logThrowable(

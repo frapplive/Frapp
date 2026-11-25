@@ -36,12 +36,14 @@ import {
   type AssignmentChip,
 } from "@repo/hooks";
 import {
-  isChatTimeoutActive,
   PHONE_REACH_LABEL,
   phoneReachLastOpened,
   phoneReachSummary,
 } from "@repo/validation";
-import { CHAT_TIMEOUT_COPY } from "@repo/chat-core/chat-timeout";
+import {
+  CHAT_TIMEOUT_COPY,
+  runningTimeoutLine,
+} from "@repo/chat-core/chat-timeout";
 import {
   TimeoutMemberSheet,
   type TimeoutSheetTarget,
@@ -285,15 +287,16 @@ export function MemberProfile({
     useState<MemberCorrectionSession | null>(null);
   // Time out (#6006): the sheet a message's long-press opens too.
   const timeoutSheetRef = useRef<BottomSheetModal>(null);
-  const [timeoutTarget, setTimeoutTarget] =
-    useState<TimeoutSheetTarget | null>(null);
+  const [timeoutTarget, setTimeoutTarget] = useState<TimeoutSheetTarget | null>(
+    null,
+  );
   const liftTimeout = useLiftChatTimeout();
   const now = useNowDate();
-  const timedOutUntil =
-    detail?.chatTimeoutUntil &&
-    isChatTimeoutActive(detail.chatTimeoutUntil, now.getTime())
-      ? detail.chatTimeoutUntil
-      : null;
+  const timeoutLine = runningTimeoutLine(
+    detail?.chatTimeoutUntil,
+    detail?.chatTimeoutReason,
+    now,
+  );
   // Folded on every visit: logistics are a tap away, not the first read.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Distinct from "no role" (`[]` once the read has settled): while it is
@@ -320,7 +323,7 @@ export function MemberProfile({
       !!detail?.canEditProfile && !!detail.memberId && otherMemberId !== null,
     canTimeOut:
       !!detail?.canTimeOut && !!detail.memberId && otherMemberId !== null,
-    timedOut: timedOutUntil !== null,
+    timedOut: timeoutLine !== null,
     canBlock: blockTarget !== null,
     isBlocked,
     // The server's answer already excludes the viewer's own profile; the
@@ -551,12 +554,9 @@ export function MemberProfile({
               {statusLine}
             </Text>
           ) : null}
-          {timedOutUntil ? (
+          {timeoutLine ? (
             // The member and whoever can time out see it (#6006), as on web.
-            <Text style={styles.timeoutLine}>
-              {CHAT_TIMEOUT_COPY.until(timedOutUntil, now)}
-              {detail.chatTimeoutReason ? ` · ${detail.chatTimeoutReason}` : ""}
-            </Text>
+            <Text style={styles.timeoutLine}>{timeoutLine}</Text>
           ) : null}
 
           {messageRow.kind !== "hidden" ? (

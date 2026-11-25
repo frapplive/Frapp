@@ -27,6 +27,14 @@ export const CHAT_TIMEOUT_DURATION_KEYS: readonly ChatTimeoutDurationKey[] =
 /** The longest reason an officer can give. The column's check holds the same. */
 export const CHAT_TIMEOUT_REASON_MAX = 200;
 
+/**
+ * The first segment of the React Query key the member's own timeout is cached
+ * under (`useMyChatTimeout` in `@repo/hooks`). Chat-core invalidates it when a
+ * write comes back refused for a timeout, so the composer's banner shows at
+ * once rather than at the next poll.
+ */
+export const MY_CHAT_TIMEOUT_QUERY_ROOT = "chat-timeout";
+
 /** The code on the API's 403 for a write a timeout refuses. */
 export const CHAT_TIMED_OUT_CODE = "chat.timed_out";
 

@@ -20,6 +20,7 @@ import { ChapterGuard } from '../guards/chapter.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
 import { RequirePermissions } from '../decorators/permissions.decorator';
 import { FreeTier } from '../decorators/subscription.decorator';
+import { TenantKinds } from '../decorators/tenant-kinds.decorator';
 import {
   CurrentChapterId,
   CurrentUser,
@@ -46,6 +47,9 @@ import {
 @UseGuards(SupabaseAuthGuard, ChapterGuard, PermissionsGuard)
 @RequirePermissions(SystemPermissions.MEMBERS_VIEW)
 @FreeTier()
+// Councils too (#5933): a council's channels are moderated the same way, and
+// its profile read serves `viewer_can_timeout` like a chapter's.
+@TenantKinds('chapter', 'council')
 @Controller()
 export class ChatTimeoutController {
   constructor(private readonly timeouts: ChatTimeoutService) {}

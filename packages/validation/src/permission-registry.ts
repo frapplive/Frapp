@@ -484,6 +484,8 @@ export const COUNCIL_SHARED_PERMISSIONS: ReadonlySet<string> = new Set([
   "members:view",
   "members:invite",
   "members:remove",
+  // Chat timeouts (#6006): a council's channels are chat like a chapter's.
+  "members:timeout",
   "groups:manage",
   "channels:create",
   "channels:manage",

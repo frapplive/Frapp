@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CHAT_TIMEOUT_REASON_MAX,
   chatTimeoutDuration,
   isChatTimeoutActive,
   type ChatTimeoutDurationKey,
@@ -16,11 +17,10 @@ import type { IMemberRepository } from '#domain/repositories/member.repository.i
 import { USER_REPOSITORY } from '#domain/repositories/user.repository.interface';
 import type { IUserRepository } from '#domain/repositories/user.repository.interface';
 import type { Member } from '#domain/entities/member.entity';
-import { SystemPermissions } from '#domain/constants/permissions';
 import { ChapterAuditLogService } from './chapter-audit-log.service';
 import { NotificationService } from './notification.service';
 import { RbacService } from './rbac.service';
-import { chatTimeoutBlock, rankContextOrSkip } from './member-rank';
+import { chatTimeoutBlock, memberHoldsWildcard } from './member-rank';
 import { reportCaughtFailure } from '../../infrastructure/observability/report-caught-failure';
 
 /**
@@ -104,6 +104,14 @@ export class ChatTimeoutService {
     await this.assertCanModerate(member, input.chapterId, input.actorUserId);
 
     const reason = input.reason?.trim() || null;
+    // Counted in code points, as the column's check (`char_length`) counts:
+    // the DTO's `MaxLength` discounts emoji variation selectors, so a reason
+    // it lets through could still break the check (a 500, not this 400).
+    if (reason && [...reason].length > CHAT_TIMEOUT_REASON_MAX) {
+      throw new BadRequestException(
+        `A reason can be at most ${CHAT_TIMEOUT_REASON_MAX} characters`,
+      );
+    }
     const until = new Date(
       (input.now ?? Date.now()) + duration.minutes * 60_000,
     ).toISOString();
@@ -119,11 +127,13 @@ export class ChatTimeoutService {
       action: 'member_timed_out',
       targetType: 'member',
       targetId: member.id,
+      // No reason: Logs is read by `chapter-config:view` holders who may not
+      // be able to time out, and the reason is the member's and the
+      // moderators' (`spec/behavior/chat/README.md` § Timeouts).
       diff: {
         user_id: member.user_id,
         duration: duration.label,
         until,
-        ...(reason ? { reason } : {}),
       },
     });
 
@@ -209,17 +219,14 @@ export class ChatTimeoutService {
     actorUserId: string,
   ): Promise<string | null> {
     if (member.user_id === actorUserId) return CHAT_TIMEOUT_REFUSALS.self;
-    const [targetPermissions, context] = await Promise.all([
-      this.rbac.getEffectivePermissions(chapterId, member.user_id),
-      rankContextOrSkip(member, actorUserId, () =>
-        this.rbac.getRankContext(chapterId, actorUserId),
-      ),
-    ]);
+    // The rank context holds every role in the chapter, so it answers whether
+    // the member holds `*` too, with no read of their permissions.
+    const context = await this.rbac.getRankContext(chapterId, actorUserId);
     switch (
       chatTimeoutBlock(
         member,
         actorUserId,
-        targetPermissions.includes(SystemPermissions.WILDCARD),
+        memberHoldsWildcard(context, member),
         context,
       )
     ) {

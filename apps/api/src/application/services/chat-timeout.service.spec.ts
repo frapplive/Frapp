@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CHAT_TIMEOUT_NOTIFICATION_CATEGORY,
   CHAT_TIMEOUT_REFUSALS,
@@ -155,6 +159,34 @@ describe('ChatTimeoutService', () => {
         }),
       );
       expect(result.member_id).toBe(MEMBER.brother);
+    });
+
+    it('keeps the reason out of the audit row, which Logs readers see', async () => {
+      await service.timeOut({
+        chapterId: CHAPTER_ID,
+        memberId: MEMBER.brother,
+        actorUserId: USER.vicePresident,
+        duration: '1d',
+        reason: 'spamming',
+        now: NOW,
+      });
+      expect(auditLog.record.mock.calls[0][0].diff).not.toHaveProperty(
+        'reason',
+      );
+    });
+
+    it('counts the reason in code points, as the column does', async () => {
+      // 200 "☺️" is 200 by the DTO's count and 400 by Postgres's.
+      await expect(
+        service.timeOut({
+          chapterId: CHAPTER_ID,
+          memberId: MEMBER.brother,
+          actorUserId: USER.vicePresident,
+          duration: '5m',
+          reason: '\u263A\uFE0F'.repeat(200),
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(memberRepo.update).not.toHaveBeenCalled();
     });
 
     it('writes nothing for a refused caller', async () => {

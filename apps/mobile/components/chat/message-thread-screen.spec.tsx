@@ -4,7 +4,7 @@ import { act } from "react";
 import { Alert } from "react-native";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHAT_CATCH_UP_COPY,
   chatCatchUpThreadOfferLine,
@@ -298,9 +298,7 @@ vi.mock("@/lib/ai/availability", () => ({
   }),
 }));
 vi.mock("@/components/chat/catch-up", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/components/chat/catch-up")
-  >()),
+  ...(await importOriginal<typeof import("@/components/chat/catch-up")>()),
   useCatchUp: (options: { onOpenPoint: (point: unknown) => void }) => {
     catchUp.options = options;
     return {
@@ -771,6 +769,52 @@ describe("MessageThreadScreen (#3785)", () => {
     const composer = tree.root.findByType(ChatComposer);
     expect(composer.props.canSend).toBe(false);
     expect(composer.props.disabledHint).toBe(THREAD_NO_REPLY_HINT);
+    act(() => tree.unmount());
+  });
+
+  // Chat timeouts (#6006): a thread reply is in its channel, so a timed-out
+  // viewer's composer is held there, with the line that says until when; a
+  // DM's thread is untouched.
+  describe("while the viewer is timed out", () => {
+    beforeEach(() => {
+      chatTimeout.current = {
+        until: new Date(Date.now() + 60 * 60_000).toISOString(),
+        reason: "spamming",
+      };
+    });
+    afterEach(() => {
+      chatTimeout.current = { until: null, reason: null };
+    });
+
+    it("holds the composer in a channel, saying until when", () => {
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(false);
+      expect(composer.props.plusDisabled).toBe(true);
+      expect(composer.props.onSchedule).toBeUndefined();
+      expect(composer.props.disabledHint).toMatch(
+        /^You're timed out until .+ · Reason: spamming$/,
+      );
+      act(() => tree.unmount());
+    });
+
+    it("leaves a group DM's thread alone", () => {
+      channelRow = { ...channelRow, type: "GROUP_DM" };
+      const tree = render();
+      const composer = tree.root.findByType(ChatComposer);
+      expect(composer.props.canSend).toBe(true);
+      expect(composer.props.disabledHint ?? "").not.toMatch(/timed out/);
+      act(() => tree.unmount());
+    });
+  });
+
+  it("offers Time out on the long-press sheet to a moderator (#6006)", () => {
+    permissions = ["members:timeout"];
+    const tree = render();
+    const sheet = tree.root.find(
+      (node) => (node.type as unknown) === "MessageActionsSheet",
+    );
+    expect(typeof sheet.props.onTimeOut).toBe("function");
     act(() => tree.unmount());
   });
 

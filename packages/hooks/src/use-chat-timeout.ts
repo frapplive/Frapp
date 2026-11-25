@@ -7,41 +7,38 @@
  * rules in `@repo/validation`.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ChatTimeoutDurationKey } from "@repo/validation";
+import {
+  isChatTimeoutActive,
+  MY_CHAT_TIMEOUT_QUERY_ROOT,
+  type ChatTimeoutDurationKey,
+} from "@repo/validation";
 import { useActiveChapterId, useFrappClient } from "./use-frapp-client";
-
-const MY_TIMEOUT = "chat-timeout";
 
 /**
  * The caller's own timeout in the active chapter. A chapter with nothing
  * running reads `{ until: null, reason: null }`. A failed read (a council,
- * which serves no timeouts, or an older API) reads as none: the server still
- * refuses a timed-out write, and that refusal refetches this.
+ * or an older API) reads as none: the server still refuses a timed-out write,
+ * and chat-core's `refreshTimeoutIfRefused` re-reads this when it does.
  */
 export function useMyChatTimeout() {
   const client = useFrappClient();
   const chapterId = useActiveChapterId();
   return useQuery({
-    queryKey: [MY_TIMEOUT, chapterId, "me"],
+    queryKey: [MY_CHAT_TIMEOUT_QUERY_ROOT, chapterId, "me"],
     queryFn: async ({ signal }) => {
       const { data, error } = await client.GET("/v1/chat/timeout", { signal });
       if (error) return { until: null, reason: null };
       return data;
     },
     // Read again on focus and every few minutes, so a timeout an officer set
-    // while the app sat open shows up without a refused send first.
+    // while the app sat open shows up without a refused send first; every
+    // minute while one runs, so a lift reaches the composer within a minute
+    // (the member's own clock ends it on time on its own).
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: (query) =>
+      isChatTimeoutActive(query.state.data?.until) ? 60_000 : 5 * 60_000,
     enabled: !!chapterId,
   });
-}
-
-/** Re-read the caller's own timeout, after a send the server refused for one. */
-export function useRefreshMyChatTimeout() {
-  const queryClient = useQueryClient();
-  const chapterId = useActiveChapterId();
-  return () =>
-    queryClient.invalidateQueries({ queryKey: [MY_TIMEOUT, chapterId] });
 }
 
 /**
