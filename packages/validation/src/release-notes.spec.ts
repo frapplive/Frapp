@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RELEASE_NOTES,
   formatReleaseNoteDate,
@@ -19,6 +19,21 @@ import {
   freshReleaseNoteLines,
   type ReleaseNote,
 } from "./release-notes";
+
+// #6054: web and the phone both label an update with this, so a date-only
+// value reads as its own day whatever the clock or the zone says.
+describe("formatReleaseNoteDate", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps the day on an Eastern evening that is tomorrow in UTC", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-25T01:31:00Z"));
+    expect(formatReleaseNoteDate("2026-11-24")).toBe("November 24, 2026");
+    expect(formatReleaseNoteDate("2026-11-25")).toBe("November 25, 2026");
+  });
+});
 
 describe("RELEASE_NOTES", () => {
   it("is newest first, one entry per day", () => {

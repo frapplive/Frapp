@@ -4,9 +4,11 @@
 // how the What's new fold workflow uses this: that folder's README.
 //
 // Where a line goes: the newest entry when it is dated `--date` (default:
-// today, UTC) or later, after its last line, which the notes file's rule
-// allows ("a second release on the same day appends lines"); otherwise a new
-// entry dated `--date` at the top, under a plain title anyone may reword.
+// today in America/New_York, the team's zone, not CI's UTC clock, which dated
+// a US evening fold tomorrow, #6054) or later, after its last line, which the
+// notes file's rule allows ("a second release on the same day appends
+// lines"); otherwise a new entry dated `--date` at the top, under a plain
+// title anyone may reword.
 // Lines fold in file-name order.
 //
 // Which list it joins is its folder: `web/` and `phone/` hold lines only true
@@ -305,8 +307,22 @@ export function foldLines(source, lines, date) {
   return source.slice(0, after) + entry + source.slice(after);
 }
 
-export function todayUtc(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+/** The zone an update's date is read in: the team's, where members are. */
+const RELEASE_NOTE_TIME_ZONE = "America/New_York";
+
+/** `now`'s calendar day in {@link RELEASE_NOTE_TIME_ZONE}, as `YYYY-MM-DD`. */
+export function releaseNoteToday(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: RELEASE_NOTE_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(now)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 export function runCli(
@@ -319,7 +335,7 @@ export function runCli(
   } = {},
 ) {
   const dateAt = argv.indexOf("--date");
-  const date = dateAt === -1 ? todayUtc(now) : argv[dateAt + 1];
+  const date = dateAt === -1 ? releaseNoteToday(now) : argv[dateAt + 1];
   const lines = readLines(dir);
   if (argv.includes("--check")) {
     log(

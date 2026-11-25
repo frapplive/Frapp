@@ -26,7 +26,7 @@ import {
   placeOf,
   readLines,
   runCli,
-  todayUtc,
+  releaseNoteToday,
 } from "../../release-notes-fold.mjs";
 import { newestReleaseNote } from "../release-notes-freshness.mjs";
 
@@ -334,7 +334,7 @@ describe("runCli", () => {
   };
 
   it("folds web/ and phone/ files into their lists and deletes them", () => {
-    const opts = { ...setup(), now: new Date("2026-11-12T03:00:00Z") };
+    const opts = { ...setup(), now: new Date("2026-11-12T15:00:00Z") };
     mkdirSync(join(opts.dir, "web"));
     writeFileSync(join(opts.dir, "web", "c.md"), "C.\n");
     writeFileSync(join(opts.dir, "d.md"), "On your phone, d.\n");
@@ -346,8 +346,8 @@ describe("runCli", () => {
     assert.deepEqual(readdirSync(join(opts.dir, "web")), []);
   });
 
-  it("folds under today's UTC date and deletes only the line files", () => {
-    const opts = { ...setup(), now: new Date("2026-11-12T03:00:00Z") };
+  it("folds under today's Eastern date and deletes only the line files", () => {
+    const opts = { ...setup(), now: new Date("2026-11-12T15:00:00Z") };
     assert.equal(runCli([], opts), 0);
     const notes = parseNotes(readFileSync(opts.notesPath, "utf8"));
     assert.deepEqual(notes[0], {
@@ -374,8 +374,24 @@ describe("runCli", () => {
     assert.ok(existsSync(join(opts.dir, "a.md")));
   });
 
-  it("todayUtc is the UTC day", () => {
-    assert.equal(todayUtc(new Date("2026-11-12T23:30:00-05:00")), "2026-11-13");
+  // #6054: at 8:31 PM Eastern on Nov 24 it was already Nov 25 in UTC, and
+  // the update read "November 25". Each instant is pinned, never the clock.
+  it("releaseNoteToday is the Eastern day, not the UTC one", () => {
+    const day = (iso) => releaseNoteToday(new Date(iso));
+    assert.equal(day("2026-11-25T01:31:00Z"), "2026-11-24");
+    assert.equal(day("2026-11-12T23:30:00-05:00"), "2026-11-12");
+    assert.equal(day("2026-11-25T04:59:00Z"), "2026-11-24");
+    assert.equal(day("2026-11-25T05:00:00Z"), "2026-11-25");
+    // Daylight time: midnight Eastern is 04:00Z.
+    assert.equal(day("2026-07-04T03:59:00Z"), "2026-07-03");
+    assert.equal(day("2026-07-04T04:00:00Z"), "2026-07-04");
+  });
+
+  it("dates an evening Eastern fold on that evening's day", () => {
+    const opts = { ...setup(), now: new Date("2026-11-25T01:31:00Z") };
+    runCli([], opts);
+    const [newest] = parseNotes(readFileSync(opts.notesPath, "utf8"));
+    assert.equal(newest.date, "2026-11-24");
   });
 });
 
