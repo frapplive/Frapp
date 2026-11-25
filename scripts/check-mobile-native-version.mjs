@@ -10,8 +10,8 @@
 // (spec/environments/README.md § Mobile (EAS), Native changes).
 //
 // THE RULE. Native inputs are what the guard compares: `apps/mobile/app.json`,
-// `apps/mobile/app.config.js`, and the lockfile version of every installed package that carries
-// native code. When HEAD's native inputs differ from a store build of HEAD's `expo.version`
+// `apps/mobile/app.config.js`, the native source under `apps/mobile/targets/`, and the lockfile
+// version of every installed package that carries native code. When HEAD's native inputs differ from a store build of HEAD's `expo.version`
 // recorded in `apps/mobile/store/shipped-builds.json`:
 //   * on a pull request (`BASE_SHA` set) whose own change differs natively from its base, fail;
 //   * otherwise (the difference was already on the base, or a push to `main`), warn and pass. A
