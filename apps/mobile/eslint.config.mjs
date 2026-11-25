@@ -16,7 +16,9 @@ const nativeModuleImport = {
 export default [
   ...reactInternalConfig,
   {
-    files: ["*.js"],
+    // CommonJS config files Node loads: the app's own, and each Xcode
+    // target's `expo-target.config.js` (#6024).
+    files: ["*.js", "targets/*/expo-target.config.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
       "no-undef": "off",
