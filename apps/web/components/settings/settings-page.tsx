@@ -680,10 +680,11 @@ function SettingsPageContent() {
           visibleTabs={visibleTabs}
           onRowClick={(value) => {
             // The lit row closes a page opened inside it (a channel's
-            // settings, Discord import) and goes back to the row's own page.
+            // settings, Discord import, the plan table) and goes back to the
+            // row's own page.
             if (
               value === shownTab &&
-              (channelParam || toolParam || chapterPage)
+              (channelParam || toolParam || searchParams.get("page"))
             ) {
               changeTab(value);
             }
@@ -791,7 +792,7 @@ function SettingsPageContent() {
             it reads the billing record and invoices, not chapter config.
           */}
           <TabsContent value="billing" className="mt-0">
-            <PlanAndBilling />
+            <PlanAndBilling page={searchParams.get("page")} />
           </TabsContent>
 
           {/*

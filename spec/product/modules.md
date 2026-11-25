@@ -213,8 +213,8 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Chat | `chat` | Channels, DMs, reactions, pins, threads |
 | Members | `members` | Roster, profiles, custom fields, alumni status |
 | Announcements | `announcements` | Exec-write, member-read broadcast channel |
-| Audit Log | `audit-log` | Member-visible officer action history |
-| Chapter Settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
+| Logs | `audit-log` | Member-visible officer action history |
+| Chapter settings | `chapter-settings` | Archetype, branding, modules, roles, workflows, dues |
 
 ## Paid integrations (gated by subscription)
 
@@ -231,7 +231,7 @@ Not every paid module has a slash command: a module gets one only when it has a 
 | Documents | `documents` | Chapter-level docs (bylaws, policies, uploads), with posted minutes filed inside ([`chapter-docs.md` § Minutes](../behavior/chapter-docs.md#minutes)) |
 | Reports | `reports` | Health dashboard, nationals export, advisor digest |
 | Onboarding | `onboarding` | Structured new-member pathway |
-| Geofences | `geofences` | Study zones: the places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
+| Study zones | `geofences` | The places where a study session counts ([`spec/behavior/study-sessions.md`](../behavior/study-sessions.md)). An event's own check-in zone is drawn on the event and is not gated by this key |
 | Meetings | `meetings` | Minutes written by hand, or drafted from notes or a recording, with suggested tasks and one template per chapter ([`spec/behavior/meetings.md`](../behavior/meetings.md)) |
 | AI Q&A | `ai` | Ask-anything over meeting minutes, documents, structured data, announcements, and channel messages from members who agreed ([`spec/behavior/ai.md`](../behavior/ai.md)) |
 

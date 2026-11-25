@@ -151,7 +151,7 @@ type BillingStatusPreview = {
  * while everything else is locked: `spec/ui/design-system/README.md` §5 rule 3,
  * "never gate a user out of the screen that ungates them".
  */
-export function PlanPanel({ invoicesHref }: { invoicesHref?: string }) {
+export function PlanPanel() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -374,37 +374,29 @@ export function PlanPanel({ invoicesHref }: { invoicesHref?: string }) {
 
   return (
     /*
-      `--surface-1` at radius 16 with a hairline, which is `4d`'s own
-      `#1A1A1A` / `rgba(255,255,255,.08)` / `border-radius:16px` and **not** the
-      `<Card>` primitive: `card.tsx` paints `--card`, one rung up
-      the ladder from what the board draws here. This is the only framed block
-      the board puts on the page, and it earns the frame by being the one thing
-      on the screen that is not a list.
+      A row of the settings groups (#6031, GitHub's, Linear's and Slack's
+      billing pages): the group's own frame (`SettingsGroup`), the plan's name
+      and chip, the meta line under them, and the one action at the row's end,
+      sized to its label. It was a framed panel of its own (`4d`), the one
+      block on the page that was not a list, until the page took the
+      settings-row shape.
     */
     <section
       aria-labelledby="plan-panel-heading"
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface-1 p-5 @xl:flex-row @xl:items-center @xl:gap-6"
+      className="flex flex-col gap-3 rounded-[14px] border border-border bg-card px-4 py-3 @xl:flex-row @xl:items-center @xl:gap-6"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
           {/*
-            22/700, which is `4d`'s plan name (`:245`). **No `-0.3px`**: an
-            earlier cut carried it here on the strength of a comment claiming
-            it belonged to the plan name, and it does not — the board puts it
-            on the 24px *page title* one line up (`:244`, the word
-            "Subscription"), and its 22px plan name has no `letter-spacing` at
-            all. The title that tracking belongs to is not rendered on this
-            route anyway; the top bar supplies the heading, at `label`/700.
-
-            An `<h2>`, not the route's `<h1>`: the top bar owns that, and one
-            typographic anchor per screen is its whole contract.
+            An `<h3>` under the page's own "Plan and billing" heading, at a
+            row label's weight one step up, since it names the chapter's plan.
           */}
-          <h2
+          <h3
             id="plan-panel-heading"
-            className="text-[22px] font-bold leading-tight"
+            className="text-base font-semibold leading-tight text-foreground"
           >
             {planName(status)}
-          </h2>
+          </h3>
           {/*
             The semantic chip, which `4d` note 4 swaps to destructive when the
             chapter lapses. `subscriptionStatusKind` already does exactly that
@@ -421,7 +413,6 @@ export function PlanPanel({ invoicesHref }: { invoicesHref?: string }) {
         <PlanMeta
           status={status}
           pastDueSince={pastDueSince}
-          invoicesHref={invoicesHref}
           complimentary={complimentary}
         />
 
@@ -551,12 +542,10 @@ export function PlanPanel({ invoicesHref }: { invoicesHref?: string }) {
 function PlanMeta({
   status,
   pastDueSince,
-  invoicesHref,
   complimentary = false,
 }: {
   status: string | null;
   pastDueSince: string | null;
-  invoicesHref?: string;
   complimentary?: boolean;
 }) {
   const lapsedOn =
@@ -584,20 +573,6 @@ function PlanMeta({
       node: <>Turned on by Frapp. No card on file and nothing to pay.</>,
     });
   }
-  if (invoicesHref) {
-    items.push({
-      key: "invoices",
-      node: (
-        <a
-          href={invoicesHref}
-          className="font-semibold underline underline-offset-4"
-        >
-          Invoices
-        </a>
-      ),
-    });
-  }
-
   if (items.length === 0) return null;
 
   return (

@@ -65,7 +65,18 @@ describe("PlanMatrix", () => {
     // Study Zones left the nav for the Settings rail (#2946) and dropped out of
     // a derivation that read only nav rows.
     render(<PlanMatrix />);
-    for (const key of ["events", "tasks", "points", "hours", "polls", "documents", "backwork", "reports", "geofences", "dues"]) {
+    for (const key of [
+      "events",
+      "tasks",
+      "points",
+      "hours",
+      "polls",
+      "documents",
+      "backwork",
+      "reports",
+      "geofences",
+      "dues",
+    ]) {
       const entry = MODULE_CATALOG.find((m) => m.key === key);
       expect(entry, `${key} is not in the catalog`).toBeDefined();
       if (entry?.tier !== "paid") continue;
@@ -217,5 +228,12 @@ describe("ProChip", () => {
     expect(chip.className).toContain("rounded-[5px]");
     expect(chip.className).toContain("text-[10.5px]");
     expect(chip.className).toContain("tracking-[0.04em]");
+  });
+});
+
+describe("the row that opens the table (#6031)", () => {
+  it("counts the modules the table lists, free and Pro", async () => {
+    const { planMatrixModuleCount } = await import("./plan-matrix");
+    expect(planMatrixModuleCount()).toBe(FREE.length + PAID.length);
   });
 });
