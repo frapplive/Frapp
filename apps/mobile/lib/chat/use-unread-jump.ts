@@ -44,8 +44,7 @@ const SETTLE_MS = 180;
 
 /**
  * The pills, from the targets' spans and where the body is scrolled. A row
- * under the pinned heading or the floating bar is out of view; a heading
- * pinned at the top is in it.
+ * under the pinned heading or the floating bar is out of view.
  */
 export function phoneUnreadJumpState(
   targets: readonly UnreadJumpTarget[],
@@ -58,11 +57,7 @@ export function phoneUnreadJumpState(
   return unreadJumpState(targets, (target) => {
     const span = spans.get(target.key);
     if (!span) return null;
-    const isHead = target.key.startsWith("head:");
-    return unreadJumpEdgeOf(span, {
-      top: scroll.y + (isHead ? 0 : insets.top),
-      bottom,
-    });
+    return unreadJumpEdgeOf(span, { top: scroll.y + insets.top, bottom });
   });
 }
 

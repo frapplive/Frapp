@@ -105,7 +105,9 @@ describe("unreadJumpTargets", () => {
     ).toEqual(["row:pinged"]);
   });
 
-  it("stands a folded heading with an unread total in for its rows", () => {
+  // #6053: a folded section keeps its rows with something new in view, so
+  // they are the targets, never the heading.
+  it("points at the unread rows a folded section keeps in view", () => {
     const { arranged, unread, muted } = arrange(
       [
         { key: "channels", rows: [ch("a")] },
@@ -121,14 +123,14 @@ describe("unreadJumpTargets", () => {
         collapsed: ["category:x", "category:y"],
       },
     );
-    // y's only unread is muted, so its heading reads as read and isn't one.
+    // e's only unread is muted, so it folds away and isn't one.
     expect(
       unreadJumpTargets(arranged, {
         unreadByChannelId: unread,
         mutedChannelIds: muted,
         activeChannelId: null,
       }),
-    ).toEqual([{ key: "head:category:x", addressed: true }]);
+    ).toEqual([{ key: "row:b", addressed: true }]);
   });
 
   it("counts a channel whose listed thread has new replies, never the open channel", () => {
@@ -146,7 +148,7 @@ describe("unreadJumpTargets", () => {
     ).toEqual([{ key: "row:t", addressed: false }]);
   });
 
-  it("leaves the open channel's share out of a folded heading", () => {
+  it("never points at the open channel under a folded heading", () => {
     const sections = [
       { key: "category:x" as const, rows: [ch("open"), ch("b")] },
     ];
@@ -177,7 +179,7 @@ describe("unreadJumpTargets", () => {
         mutedChannelIds: withOther.muted,
         activeChannelId: "open",
       }),
-    ).toEqual([{ key: "head:category:x", addressed: false }]);
+    ).toEqual([{ key: "row:b", addressed: false }]);
   });
 
   it("has none while the counts are unknown", () => {

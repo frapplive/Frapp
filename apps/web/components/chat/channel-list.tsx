@@ -33,7 +33,10 @@ import {
   HIDDEN_CONVERSATIONS_LABEL,
   FILTER_CHANNELS_LABEL,
   FILTER_CHANNELS_ON_LABEL,
-  foldedSectionAnnouncement,
+  FOLD_ALL_LABEL,
+  UNFOLD_ALL_LABEL,
+  foldAllWrites,
+  foldSectionLabel,
   HIDE_MUTED_LABEL,
   isAddressed,
   countsLookUnread,
@@ -43,7 +46,6 @@ import {
   SHOW_ALL_CHANNELS_LABEL,
   sidebarSections,
   UNREAD_ONLY_LABEL,
-  unreadJumpHeadKey,
   unreadJumpRowKey,
   unreadJumpTargets,
   withUnreadThreadChannels,
@@ -65,7 +67,11 @@ import {
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { compactControlClassName } from "@/components/shared/table-controls";
+import {
+  compactControlClassName,
+  headingControlClassName,
+} from "@/components/shared/table-controls";
+import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AuditGlyph, LockGlyph, MuteGlyph } from "./chat-glyphs";
 import { ChannelRowMenu, type ChannelRowActions } from "./channel-row-menu";
@@ -431,7 +437,7 @@ export interface ChannelListProps {
    * Threads under their channel (#5300): each channel's active threads, as
    * `sidebarThreadsByChannel` (`@repo/chat-core/threads`) picks them, drawn
    * indented under its row. A channel with a thread with new replies also
-   * counts as unread for Unread only and a folded section, as on the phone,
+   * counts as unread for Unread only and stays in view under a folded heading, as on the phone,
    * since thread replies never count toward the channel's own unread. Absent,
    * no row has threads under it.
    */
@@ -669,8 +675,8 @@ export function ChannelList({
    */
   // What the arrangement reads as unread: the server's counts, plus a channel
   // whose listed thread has new replies (#5300, the phone's rule since #5277),
-  // so Unread only keeps it and its threads, and a folded section reads unread
-  // over it. The rows' own weight and badges read the server's counts alone.
+  // so Unread only keeps it and its threads, and a folded section keeps it in
+  // view. The rows' own weight and badges read the server's counts alone.
   const threadsByChannel = threads?.byChannel;
   // One set for the arrangement and the New unreads pills, so a folded
   // heading and the pill never disagree on what is unread.
@@ -966,19 +972,19 @@ export function ChannelList({
     // @-mentions only (the RPC filters on `m.mentions`), so a DM
     // has to be folded in here or the one signal the fixed red
     // exists for never fires for the most personal channel there is.
-    // `isAddressed` is the rule the arrangement's header totals use too.
+    // `isAddressed` is the rule the arrangement's folding uses too.
     const hasMention = isAddressed(channel, counts);
     // A mention implies an unread row even if the two counts ever
     // disagree — a red badge on a read-styled row is a contradiction
     // on screen.
     const isUnread = countsKnown && (counts.unreadCount > 0 || hasMention);
     // `countsLookUnread` is the rule the phone's row and the arrangement's
-    // header totals and Unread only read too (#3999): a muted channel reads as
+    // folding and Unread only read too (#3999): a muted channel reads as
     // unread only when it addresses the member, and otherwise sits quietly in
     // `--muted`. It quiets from the arrangement's own muted set, as the phone's
     // row does, so a failed refetch of the levels (which `channel.muted` rides
-    // out on the last good answer) can't leave a read-looking row under a lit
-    // folded header. Without the sidebar there is no header to disagree with.
+    // out on the last good answer) can't keep a read-looking row in view under
+    // a folded heading. Without the sidebar nothing folds to disagree with.
     const isMuted = !!channel.muted;
     const quietedByMute = sidebar
       ? (mutedChannelIds?.has(channel.id) ?? false)
@@ -1327,7 +1333,10 @@ export function ChannelList({
         className={cn(
           // `mb-1` matches the heading's own bottom padding, so the + sits
           // on the label's line.
-          "mb-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-card hover:text-foreground",
+          cn(
+            headingControlClassName,
+            "mb-1 flex shrink-0 items-center justify-center",
+          ),
           "opacity-0 focus-visible:opacity-100 group-hover/head:opacity-100",
         )}
       >
@@ -1470,6 +1479,49 @@ export function ChannelList({
       : null;
 
   // The list's own control (`headingControl`) rides its first heading.
+  // A heading's menu (#6053): fold this section, or every section of the
+  // channel list at once. Fold all folds the headings drawn; Unfold all
+  // unfolds every folded section; each writes only what it changes
+  // (`foldAllWrites`, one rule with the phone).
+  const foldEntries = (
+    key: SidebarSectionKey,
+    label: string,
+    collapsed: boolean,
+  ): RowMenuEntry[] => {
+    if (!sidebar) return [];
+    const setAll = (fold: boolean) => {
+      for (const sectionKey of foldAllWrites({
+        drawn: arranged.sections,
+        all: inputSections,
+        collapsed: preferences.collapsed,
+        fold,
+      })) {
+        sidebar.onSetCollapsed(sectionKey, fold);
+      }
+    };
+    return [
+      {
+        type: "item",
+        key: "fold",
+        label: foldSectionLabel(label, collapsed),
+        onSelect: () => sidebar.onSetCollapsed(key, !collapsed),
+      },
+      { type: "separator", key: "all" },
+      {
+        type: "item",
+        key: "fold-all",
+        label: FOLD_ALL_LABEL,
+        onSelect: () => setAll(true),
+      },
+      {
+        type: "item",
+        key: "unfold-all",
+        label: UNFOLD_ALL_LABEL,
+        onSelect: () => setAll(false),
+      },
+    ];
+  };
+
   const firstSectionKey = drawOrder.find(
     (entry): entry is Extract<DrawEntry, { kind: "section" }> =>
       entry.kind === "section",
@@ -1536,6 +1588,70 @@ export function ChannelList({
             draggingCategory && categoryId
               ? []
               : rowsWithSlot(section.key, section.rows);
+          const sidebarHeading = (foldMenu: ReactNode) => (
+            <div
+              className={cn(
+                "group group/head flex items-center gap-1 pr-2",
+                // Pinned to the top of the rail while its rows scroll under
+                // it, until the next heading pushes it off (owner
+                // 2026-11-07). The rail's own surface, so no row shows
+                // through; the 4px pulled up and padded back keeps the
+                // resting layout and gives the pinned label room. On the
+                // row, not the fold button, so the heading's + stays with it.
+                "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
+              )}
+            >
+              <button
+                type="button"
+                id={headerId}
+                data-flip={`head:${section.key}`}
+                {...headerProps}
+                aria-expanded={!section.collapsed}
+                onClick={() =>
+                  sidebar?.onSetCollapsed(section.key, !section.collapsed)
+                }
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
+                  EYEBROW,
+                )}
+              >
+                {section.collapsed ? (
+                  <ChevronRight
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ChevronDown
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="truncate">{section.label}</span>
+              </button>
+              {/* Gone while anything is held, as the + is, so the heading under
+                the pointer stays the whole drop target. */}
+              {foldMenu && !dragging ? (
+                <span className="mb-1 flex shrink-0 items-center">
+                  {foldMenu}
+                </span>
+              ) : null}
+              {headingControl && section.key === firstSectionKey ? (
+                <span
+                  data-heading-control=""
+                  className={cn(
+                    // On the label's line, as the + beside it is.
+                    "mb-1 flex shrink-0 items-center",
+                    "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
+                    // Open, or saying a filter is on: it stays.
+                    "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                  )}
+                >
+                  {headingControl}
+                </span>
+              ) : null}
+              {createButtonFor(section.key, section.label)}
+            </div>
+          );
           return (
             <div key={section.key} {...blockProps(section.key)}>
               {/*
@@ -1545,92 +1661,27 @@ export function ChannelList({
               group it belongs to.
 
               With `sidebar`, the header is also the fold control (#2877), a
-              disclosure button. Folded, it carries the section's own unread
-              total, red when anything inside addresses the member, so folding
-              never hides a mention.
+              disclosure button. Folded, it keeps every channel with
+              something new in view under it (#6053), so it carries no count
+              of its own, and its menu folds or unfolds every section at once.
             */}
               {kind === "direct" &&
               section.key === "direct" ? null : sidebar ? (
-                <div
-                  className={cn(
-                    "group/head flex items-center gap-1 pr-2",
-                    // Pinned to the top of the rail while its rows scroll under
-                    // it, until the next heading pushes it off (owner
-                    // 2026-11-07). The rail's own surface, so no row shows
-                    // through; the 4px pulled up and padded back keeps the
-                    // resting layout and gives the pinned label room. On the
-                    // row, not the fold button, so the heading's + stays with it.
-                    "sticky top-0 z-10 -mt-1 bg-surface-1 pt-1",
-                  )}
-                >
-                  <button
-                    type="button"
-                    id={headerId}
-                    data-flip={`head:${section.key}`}
-                    {...headerProps}
-                    aria-expanded={!section.collapsed}
-                    onClick={() =>
-                      sidebar.onSetCollapsed(section.key, !section.collapsed)
-                    }
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center gap-1 px-2 pb-1 text-left text-muted-foreground hover:text-foreground",
-                      EYEBROW,
-                      // Folded with something unread inside, it reads as an
-                      // unread row does, since only a mention carries a number:
-                      // `--foreground` bold (foundations.md §5), as mobile draws it.
-                      section.collapsed &&
-                        section.unreadCount > 0 &&
-                        "font-bold text-foreground",
-                      // Lit for a moment where the New unreads pill landed.
-                      unreadJump.litKey === unreadJumpHeadKey(section.key) &&
-                        "rounded-xs bg-card",
+                kind === "direct" ? (
+                  sidebarHeading(null)
+                ) : (
+                  <RowMenu
+                    entries={foldEntries(
+                      section.key,
+                      section.label,
+                      section.collapsed,
                     )}
+                    label={`More for ${section.label}`}
+                    size="heading"
                   >
-                    {section.collapsed ? (
-                      <ChevronRight
-                        className="h-3.5 w-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ChevronDown
-                        className="h-3.5 w-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span className="truncate">{section.label}</span>
-                    {section.collapsed && section.addressed ? (
-                      <Badge
-                        variant="mention"
-                        className="ml-auto h-6 justify-center px-2 normal-case tracking-normal"
-                        aria-label={foldedSectionAnnouncement(section)}
-                      >
-                        {badgeLabel(
-                          section.addressedCount,
-                          section.mentionCount,
-                        )}
-                      </Badge>
-                    ) : section.collapsed && section.unreadCount > 0 ? (
-                      <span className="sr-only">
-                        {foldedSectionAnnouncement(section)}
-                      </span>
-                    ) : null}
-                  </button>
-                  {headingControl && section.key === firstSectionKey ? (
-                    <span
-                      data-heading-control=""
-                      className={cn(
-                        // On the label's line, as the + beside it is.
-                        "mb-1 flex shrink-0 items-center",
-                        "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
-                        // Open, or saying a filter is on: it stays.
-                        "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
-                      )}
-                    >
-                      {headingControl}
-                    </span>
-                  ) : null}
-                  {createButtonFor(section.key, section.label)}
-                </div>
+                    {sidebarHeading}
+                  </RowMenu>
+                )
               ) : (
                 <p
                   id={headerId}
@@ -1787,7 +1838,7 @@ export function ChannelFilters({
           className={cn(
             "relative",
             heading
-              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              ? cn(headingControlClassName, "p-0")
               : cn(compactControlClassName, "ml-auto"),
           )}
           aria-label={active ? FILTER_CHANNELS_ON_LABEL : FILTER_CHANNELS_LABEL}

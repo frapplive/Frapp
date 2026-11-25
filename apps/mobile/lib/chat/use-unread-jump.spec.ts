@@ -26,16 +26,10 @@ describe("phoneUnreadJumpState", () => {
   // bottom 100, so rows read in view from y + 44 to y + 500.
   const spans = new Map<string, ContentSpan>([
     ["row:a", { top: 100, bottom: 150 }],
-    ["head:category:x", { top: 300, bottom: 344 }],
     ["row:b", { top: 1000, bottom: 1050 }],
     ["row:c", { top: 1400, bottom: 1450 }],
   ]);
-  const targets = [
-    t("row:a"),
-    t("head:category:x"),
-    t("row:b"),
-    t("row:c", true),
-  ];
+  const targets = [t("row:a"), t("row:b"), t("row:c", true)];
 
   it("has a pill only on the sides with an unread out of view", () => {
     const state = phoneUnreadJumpState(
@@ -58,14 +52,14 @@ describe("phoneUnreadJumpState", () => {
     expect(state.below?.next.key).toBe("row:low");
   });
 
-  it("counts a row under the pinned heading as out of view, but not a heading pinned there", () => {
+  it("counts a row under the pinned heading as out of view", () => {
     const state = phoneUnreadJumpState(
       targets,
       spans,
       { y: 290, viewport: 600, content: 2000 },
       INSETS,
     );
-    // row:a is far above; the heading at 300 sits just under the top edge.
+    // row:a is far above the pinned heading's bottom edge at 334.
     expect(state.above).toEqual({ next: t("row:a"), addressed: false });
   });
 

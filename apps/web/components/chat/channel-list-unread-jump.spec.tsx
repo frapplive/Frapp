@@ -216,7 +216,9 @@ describe("New unreads pills (#6045)", () => {
     expect(pill("below")).toHaveAttribute("data-addressed");
   });
 
-  it("counts a folded heading's unread total, and takes the member to the heading", () => {
+  // #6053: a folded section keeps its unread rows in view, so the pill takes
+  // the member to the row itself, not to the heading.
+  it("takes the member to an unread row a folded section keeps in view", () => {
     const folded = sidebar({
       preferences: {
         pinnedIds: new Set(["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7"]),
@@ -224,13 +226,13 @@ describe("New unreads pills (#6045)", () => {
         filters: { unreadOnly: false, hideMuted: false },
       },
     });
-    // Pinned's heading and eight rows, then the folded Channels heading at
-    // 288px, below the view, folding c9's mention.
+    // Pinned's heading and eight rows, then the folded Channels heading,
+    // below the view, with c9's mention still drawn under it.
     render(list(counts({ c9: { unreadCount: 2, mentionCount: 1 } }), folded));
     expect(pill("below")).toHaveAttribute("data-addressed");
     fireEvent.click(pill("below")!);
     expect(scrollIntoView.mock.contexts[0]).toBe(
-      document.querySelector('[data-flip="head:channels"]'),
+      document.querySelector('[data-flip="row:c9"]'),
     );
   });
 

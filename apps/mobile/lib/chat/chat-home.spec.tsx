@@ -236,7 +236,6 @@ vi.mock("@repo/hooks", async () => {
     // New unreads pills (#6045): the rule and its words run for real.
     unreadJumpTargets: actual.unreadJumpTargets,
     unreadJumpRowKey: actual.unreadJumpRowKey,
-    unreadJumpHeadKey: actual.unreadJumpHeadKey,
     unreadJumpEdgeOf: actual.unreadJumpEdgeOf,
     unreadJumpState: actual.unreadJumpState,
     sameUnreadJumpState: actual.sameUnreadJumpState,
@@ -258,7 +257,11 @@ vi.mock("@repo/hooks", async () => {
     sidebarSections: actual.sidebarSections,
     countsAddressMember: actual.countsAddressMember,
     countsLookUnread: actual.countsLookUnread,
-    foldedSectionAnnouncement: actual.foldedSectionAnnouncement,
+    // #6053: a heading's menu, for real.
+    foldAllWrites: actual.foldAllWrites,
+    foldSectionLabel: actual.foldSectionLabel,
+    FOLD_ALL_LABEL: actual.FOLD_ALL_LABEL,
+    UNFOLD_ALL_LABEL: actual.UNFOLD_ALL_LABEL,
     sidebarMutedChannelIds: actual.sidebarMutedChannelIds,
     sidebarUnreadCounts: actual.sidebarUnreadCounts,
     // #5277, #5300: threads with new replies count for arranging, for real.
@@ -391,6 +394,13 @@ vi.mock("@/lib/chat/prefetch-channel", () => ({
   usePrefetchUnreadChannels: () => undefined,
 }));
 
+// A heading's long press opens the glass menu (#6053).
+vi.mock("@/components/item-actions-menu", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/components/item-actions-menu")>();
+  return { ...actual, openItemMenu: vi.fn(actual.openItemMenu) };
+});
+
 vi.mock("@/lib/chapter-branding", () => ({
   useChapterBranding: () => branding.current,
 }));
@@ -435,11 +445,8 @@ import {
   WELCOME_DUE_STORAGE_KEY,
   resetWelcomeLandingForTests,
 } from "@/lib/onboarding/welcome-due";
-import {
-  ChannelListSkeleton,
-  ChannelRow,
-  UnreadBadge,
-} from "@/components/chat/channel-row";
+import { ChannelListSkeleton, ChannelRow } from "@/components/chat/channel-row";
+import { openItemMenu } from "@/components/item-actions-menu";
 import {
   ChannelFilterButton,
   ChannelFilterMenu,
@@ -793,7 +800,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     expect(layout(tree)).toEqual([["Channels", ["general", "social"]]]);
   });
 
-  it("folds a section from its header, keeping its total on the header", () => {
+  it("folds a section from its header, keeping what's new in view under it (#6053)", () => {
     channelsData.value = [general, social];
     unreadData.value = [
       { channel_id: general.id, unread_count: 2, mention_count: 1 },
@@ -804,26 +811,22 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     };
     const tree = render();
 
-    // The label carries the folded total, since the badge is not read alone.
-    // The label says it is folded and carries the total, since iOS announces
-    // neither the collapsed state nor the badge; the hint says what a
-    // double-tap does, since a header has no button trait.
-    const header = pressableLabelled(
-      tree,
-      "Channels, folded, 1 mention, 2 unread",
-    );
+    // The label says it is folded, since iOS doesn't announce the collapsed
+    // state; the hint says what a double-tap does, since a header has no
+    // button trait. It carries no count: what is new is drawn under it.
+    const header = pressableLabelled(tree, "Channels, folded");
     expect(header.props.accessibilityRole).toBe("header");
     expect(header.props.accessibilityHint).toBe(
-      "Double-tap to show its channels.",
+      "Double-tap to show all its channels.",
     );
     expect(header.props.accessibilityState).toEqual({ expanded: false });
-    expect(rows(tree)).toHaveLength(0);
+    expect(rows(tree).map((row) => row.props.name)).toEqual(["general"]);
     expect(
       header.findAll(
         (node) =>
           (node.type as unknown) === "Text" && node.props.children === "@ 1",
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     act(() => header.props.onPress());
     expect(setCollapsed).toHaveBeenCalledWith({
@@ -1485,7 +1488,7 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     ).toBe(signetDarkTokens.spacing.sm);
   });
 
-  it("draws a folded heading as name, chevron, then its count at the right (#4679)", () => {
+  it("draws a folded heading as its name, then the chevron, with no count (#4679, #6053)", () => {
     channelsData.value = [general];
     unreadData.value = [
       { channel_id: general.id, unread_count: 2, mention_count: 1 },
@@ -1500,24 +1503,117 @@ describe("Chat home sidebar arrangement (#2877)", () => {
     const order = header
       .findAll(
         (node) =>
-          (node.type as unknown) === "Text" ||
-          node.type === DisclosureGlyph ||
-          node.type === UnreadBadge,
+          (node.type as unknown) === "Text" || node.type === DisclosureGlyph,
         { deep: false },
       )
-      .map((node) =>
-        node.type === DisclosureGlyph
-          ? "chevron"
-          : node.type === UnreadBadge
-            ? "count"
-            : "name",
+      .map((node) => (node.type === DisclosureGlyph ? "chevron" : "name"));
+    expect(order).toEqual(["name", "chevron"]);
+  });
+
+  describe("a heading's long press (#6053)", () => {
+    const exec = {
+      id: "c-exec",
+      name: "exec-board",
+      type: "PUBLIC",
+      category_id: "cat-exec",
+    };
+    function renderWithCategory() {
+      categoriesData.value = [{ id: "cat-exec", name: "Executive" }];
+      channelsData.value = [general, exec];
+      sidebarPrefs.value = {
+        ...sidebarPrefs.value,
+        collapsed: new Set(["category:cat-exec"]),
+      };
+      return render();
+    }
+    const menuOf = () =>
+      vi.mocked(openItemMenu).mock.calls.at(-1)![0] as {
+        title: string;
+        actions: { key: string; label: string; run: () => void }[];
+      };
+
+    it("opens the glass menu: fold it, or every section at once", () => {
+      const tree = renderWithCategory();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      const menu = menuOf();
+      expect(menu.title).toBe("Channels");
+      expect(menu.actions.map((action) => action.label)).toEqual([
+        "Fold Channels",
+        "Fold all categories",
+        "Unfold all categories",
+      ]);
+    });
+
+    it("writes only the sections Fold all and Unfold all change", () => {
+      const tree = renderWithCategory();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[1]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[2]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "category:cat-exec", collapsed: false }],
+      ]);
+    });
+
+    it("runs the heading's own entry: Fold, or Unfold once folded", () => {
+      const tree = renderWithCategory();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[0]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+      act(() =>
+        pressableLabelled(tree, "Executive, folded").props.onLongPress(),
       );
-    expect(order).toEqual(["name", "chevron", "count"]);
-    // Pushed to the heading's right, away from the chevron.
-    const badge = header.findByType(UnreadBadge);
-    let box = badge.parent!;
-    while ((box.type as unknown) !== "View") box = box.parent!;
-    expect(StyleSheet.flatten(box.props.style).marginLeft).toBe("auto");
+      setCollapsed.mockClear();
+      expect(menuOf().actions[0]!.label).toBe("Unfold Executive");
+      act(() => menuOf().actions[0]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "category:cat-exec", collapsed: false }],
+      ]);
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", () => {
+      // Every channel of Executive is pinned: it draws no heading, so
+      // folding it would hide what comes back once the member unpins.
+      categoriesData.value = [{ id: "cat-exec", name: "Executive" }];
+      channelsData.value = [general, exec];
+      sidebarPrefs.value = {
+        ...sidebarPrefs.value,
+        pinnedIds: new Set([exec.id]),
+        collapsed: new Set(),
+      };
+      const tree = render();
+      act(() => pressableLabelled(tree, "Channels").props.onLongPress());
+      setCollapsed.mockClear();
+      act(() => menuOf().actions[1]!.run());
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+    });
+
+    it("offers Fold all and Unfold all to a screen reader as actions", () => {
+      const tree = renderWithCategory();
+      const header = pressableLabelled(tree, "Executive, folded");
+      expect(header.props.accessibilityActions).toEqual([
+        { name: "fold-all", label: "Fold all categories" },
+        { name: "unfold-all", label: "Unfold all categories" },
+      ]);
+      setCollapsed.mockClear();
+      act(() =>
+        header.props.onAccessibilityAction({
+          nativeEvent: { actionName: "fold-all" },
+        }),
+      );
+      expect(setCollapsed.mock.calls).toEqual([
+        [{ sectionKey: "channels", collapsed: true }],
+      ]);
+    });
   });
 
   it("puts a New channel + on section headings for officers only (#3838)", async () => {
@@ -1624,9 +1720,29 @@ describe("Chat home sidebar arrangement (#2877)", () => {
       expect(vi.mocked(Alert.alert)).toHaveBeenLastCalledWith(
         "Couldn't save your channel list",
         "Nothing changed. Check your connection and try again.",
+        expect.any(Array),
+        expect.any(Object),
       );
     },
   );
+
+  // #6053: Fold all sends a write per section; a failed batch is one alert.
+  it("shows one alert while it's up, however many writes fail", () => {
+    channelsData.value = [general];
+    render();
+    vi.mocked(Alert.alert).mockClear();
+    writeOptions.fold?.onError?.();
+    writeOptions.fold?.onError?.();
+    writeOptions.pin?.onError?.();
+    expect(vi.mocked(Alert.alert)).toHaveBeenCalledTimes(1);
+    // Dismissed, the next failure says so again.
+    const buttons = vi.mocked(Alert.alert).mock.calls[0]![2] as {
+      onPress?: () => void;
+    }[];
+    act(() => buttons[0]!.onPress?.());
+    writeOptions.fold?.onError?.();
+    expect(vi.mocked(Alert.alert)).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("Chat home filters on unknown data (#2877)", () => {
@@ -1745,7 +1861,7 @@ describe("Chat home filters on unknown data (#2877)", () => {
     const folded = render();
     expect(
       pressableLabelled(folded, "Channels, folded").props.accessibilityHint,
-    ).toBe("Double-tap to show its channels.");
+    ).toBe("Double-tap to show all its channels.");
 
     sidebarPrefs.value = { ...sidebarPrefs.value, collapsed: new Set() };
     const open = render();
@@ -2749,7 +2865,7 @@ describe("Chat home's New unreads pills (#6045)", () => {
     expect(unreadJumpHook.refKeys.has(`row:${social.id}`)).toBe(true);
   });
 
-  it("points at a folded heading for its unread rows", () => {
+  it("points at the unread rows a folded section keeps in view (#6053)", () => {
     channelsData.value = [general, social];
     unreadData.value = [
       { channel_id: social.id, unread_count: 3, mention_count: 0 },
@@ -2759,8 +2875,10 @@ describe("Chat home's New unreads pills (#6045)", () => {
       collapsed: new Set(["channels"]),
     };
     render({ createNodeMock: () => ({}) });
-    expect(lastTargets()).toEqual([{ key: "head:channels", addressed: false }]);
-    expect(unreadJumpHook.refKeys.has("head:channels")).toBe(true);
+    expect(lastTargets()).toEqual([
+      { key: `row:${social.id}`, addressed: false },
+    ]);
+    expect(unreadJumpHook.refKeys.has(`row:${social.id}`)).toBe(true);
   });
 
   it("has nothing to point at on counts the phone saved (#4006)", async () => {

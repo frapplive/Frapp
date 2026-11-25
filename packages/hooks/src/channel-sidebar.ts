@@ -16,7 +16,7 @@ import type { ChannelSections, GroupableChannel } from "./channel-sections";
  * Pure: every number it reads (unread, mentions, mute) is the server's, passed
  * in. One exception derives an unread count: `withUnreadThreadChannels` counts
  * a read channel whose thread has new replies as one unread, for arranging
- * only (#5277, #5300), so a folded section's total can include those.
+ * only (#5277, #5300), so a folded section keeps those in view too.
  */
 
 /** The fields of a channel row the arrangement reads. */
@@ -75,19 +75,14 @@ export interface ArrangeSidebarInput<C extends SidebarChannelLike> {
 export interface ArrangedSidebarSection<C extends SidebarChannelLike> {
   key: SidebarSectionKey;
   label: string;
-  /** The rows to draw: everything that passed the filters, or, while folded, only the open channel if it is here. */
+  /**
+   * The rows to draw: everything that passed the filters, or, while folded,
+   * the open channel and every channel with something new for the member
+   * (#6053). A folded heading therefore carries no count of its own: what it
+   * holds that is new is drawn under it.
+   */
   rows: C[];
   collapsed: boolean;
-  /** Totals over every row that passed the filters, folded or not, for the header badge. */
-  unreadCount: number;
-  mentionCount: number;
-  /** Some row here addresses the member: an @-mention, or an unread DM. */
-  addressed: boolean;
-  /**
-   * The numbers the rows here would draw, summed (`addressedCount`): what the
-   * folded header's badge counts, so a busy channel adds nothing to it.
-   */
-  addressedCount: number;
 }
 
 export interface ArrangedSidebar<C extends SidebarChannelLike> {
@@ -146,27 +141,6 @@ export function sidebarMutedChannelIds(
       .filter((row) => row.level === "off")
       .map((row) => row.channel_id),
   );
-}
-
-/**
- * What a screen reader hears for a folded section's badge. It names the
- * mentions when there are any. Without mentions, it says when the red badge
- * comes from direct messages, since that red means the same thing a mention
- * badge does.
- */
-export function foldedSectionAnnouncement(
-  section: Pick<
-    ArrangedSidebarSection<SidebarChannelLike>,
-    "unreadCount" | "mentionCount" | "addressed"
-  >,
-): string {
-  const plural = (n: number, word: string) =>
-    `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (section.mentionCount > 0) {
-    return `${plural(section.mentionCount, "mention")}, ${section.unreadCount} unread`;
-  }
-  const unread = plural(section.unreadCount, "unread message");
-  return section.addressed ? `${unread}, including direct messages` : unread;
 }
 
 /**
@@ -312,8 +286,8 @@ export function countsAddressMember(
  * Whether a row draws as unread (bold name, unread dot). A muted channel
  * stays quiet unless it addresses the member: a mention, or a direct
  * message, gets past a mute as it does for push. Shawn, 2026-11-13 (#3999):
- * the same rule decides what a folded header counts and what Unread only
- * keeps, so the header never lights for a channel whose row reads as read.
+ * the same rule decides what a folded section keeps in view and what Unread
+ * only keeps, so neither holds a channel whose row reads as read.
  */
 export function countsLookUnread(
   isDirect: boolean,
@@ -331,8 +305,8 @@ export function countsLookUnread(
  * Which channels hold a thread, among those listed under it
  * (`sidebarThreadsByChannel`), with replies new to the member (#5277). Thread
  * replies never count toward a channel's own unread (chat README § Message
- * threads), so the rail's Unread only filter and a folded section's total read
- * this too, or the only sign of those replies would be filtered away. One rule
+ * threads), so the rail's Unread only filter and a folded section read this
+ * too, or the only sign of those replies would be filtered away. One rule
  * for the phone's channel list and web's rail (#5300).
  */
 export function channelsWithUnreadThreads(
@@ -348,7 +322,7 @@ export function channelsWithUnreadThreads(
 /**
  * What the arrangement reads as unread (#5277): the server's counts, plus one
  * for a channel whose listed thread has new replies, so Unread only keeps that
- * channel and its thread rows, and a folded section reads unread over it. A
+ * channel and its thread rows, and a folded section keeps it in view. A
  * row's own badge still reads the server's counts alone. `undefined` (counts
  * unknown) stays `undefined`, so no filter hides a row on missing data.
  */
@@ -383,10 +357,10 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
     mutedChannelIds,
   } = input;
 
-  // The counts the filters and the folded headers read (rows read the
-  // server's counts directly). A muted channel's plain unread is quiet here
-  // (#3999, Shawn 2026-11-13): it adds nothing to a folded header and Unread
-  // only drops it, as its row (`countsLookUnread`) reads as read. Nothing here
+  // The counts the filters and folding read (rows read the server's counts
+  // directly). A muted channel's plain unread is quiet here (#3999, Shawn
+  // 2026-11-13): a folded section doesn't keep it in view and Unread only
+  // drops it, as its row (`countsLookUnread`) reads as read. Nothing here
   // changes what the server holds.
   const countsOf = (channel: C): SidebarUnreadCounts => {
     const counts = unreadByChannelId?.get(channel.id) ?? NO_UNREAD;
@@ -405,13 +379,15 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
   const applyUnreadOnly = filters.unreadOnly && unreadByChannelId !== undefined;
   const applyHideMuted = filters.hideMuted && mutedChannelIds !== undefined;
 
+  const hasSomethingNew = (channel: C) => {
+    const counts = countsOf(channel);
+    return counts.unreadCount > 0 || isAddressed(channel, counts);
+  };
+
   const passes = (channel: C, pinned: boolean) => {
     if (pinned || channel.id === activeChannelId) return true;
-    const counts = countsOf(channel);
-    const addressed = isAddressed(channel, counts);
-    if (applyUnreadOnly && counts.unreadCount === 0 && !addressed) {
-      return false;
-    }
+    if (applyUnreadOnly && !hasSomethingNew(channel)) return false;
+    const addressed = isAddressed(channel, countsOf(channel));
     // A mention gets past a mute, the same way it does for push.
     if (applyHideMuted && mutedChannelIds.has(channel.id) && !addressed) {
       return false;
@@ -455,29 +431,19 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
       .filter((c) => passes(c, isPinned))
       .sort(sortRows(isPinned));
     if (kept.length === 0) return null;
-    let unreadCount = 0;
-    let mentionCount = 0;
-    let addressed = false;
-    let addressedTotal = 0;
-    for (const channel of kept) {
-      const counts = countsOf(channel);
-      unreadCount += counts.unreadCount;
-      mentionCount += counts.mentionCount;
-      addressed ||= isAddressed(channel, counts);
-      addressedTotal += addressedCount(isDirectChannel(channel), counts);
-    }
     const folded = collapsed.has(key);
     return {
       key,
       label,
-      // The open channel stays in view under a folded header, so the list
-      // always has a row marked current.
-      rows: folded ? kept.filter((c) => c.id === activeChannelId) : kept,
+      // Folding hides what the member has read, never what is new (#6053,
+      // Discord's collapsed categories): the open channel, so the list always
+      // has a row marked current, and every channel with an unread the
+      // member would see on its row. A muted channel's plain unread is quiet
+      // (`countsOf`), so it folds away like a read one; a mention still shows.
+      rows: folded
+        ? kept.filter((c) => c.id === activeChannelId || hasSomethingNew(c))
+        : kept,
       collapsed: folded,
-      unreadCount,
-      mentionCount,
-      addressed,
-      addressedCount: addressedTotal,
     };
   };
 
@@ -494,6 +460,35 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
   };
 }
 
+/**
+ * The sections Fold all or Unfold all writes (#6053), one per section whose
+ * state it changes. Fold all folds the headings the member sees (`drawn`, the
+ * arrangement's sections), never a section hidden by a pin or a filter, which
+ * would otherwise come back folded once unpinned or unfiltered. Unfold all
+ * unfolds every folded section of the list (`all`, the arrangement's input),
+ * hidden ones included, so nothing stays folded out of sight. Both leave out
+ * Pinned, which holds what the member chose to keep in view, and Direct
+ * messages, which web lists on its own page and the phone on its Messages tab.
+ */
+export function foldAllWrites({
+  drawn,
+  all,
+  collapsed,
+  fold,
+}: {
+  drawn: readonly { key: SidebarSectionKey }[];
+  all: readonly { key: SidebarSectionKey }[];
+  collapsed: ReadonlySet<string>;
+  fold: boolean;
+}): SidebarSectionKey[] {
+  return (fold ? drawn : all)
+    .map((section) => section.key)
+    .filter(
+      (key) =>
+        key !== "pinned" && key !== "direct" && collapsed.has(key) !== fold,
+    );
+}
+
 // ── Copy ─────────────────────────────────────────────────────────────────────
 //
 // One wording for both clients, rostered in `spec/ui/design-system/writing.md`
@@ -503,6 +498,16 @@ export function arrangeChannelSidebar<C extends SidebarChannelLike>(
 
 export const PIN_TO_TOP_LABEL = "Pin to top";
 export const UNPIN_FROM_TOP_LABEL = "Unpin from top";
+
+/**
+ * A heading's menu (#6053): fold or unfold this section, or every section of
+ * the channel list at once. Folding hides only what the member has read.
+ */
+export const FOLD_ALL_LABEL = "Fold all categories";
+export const UNFOLD_ALL_LABEL = "Unfold all categories";
+export function foldSectionLabel(label: string, collapsed: boolean): string {
+  return collapsed ? `Unfold ${label}` : `Fold ${label}`;
+}
 
 export const UNREAD_ONLY_LABEL = "Unread only";
 export const HIDE_MUTED_LABEL = "Hide muted";

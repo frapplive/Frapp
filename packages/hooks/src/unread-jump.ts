@@ -1,9 +1,7 @@
 import { isDirectChannel } from "@repo/validation";
 import {
-  addressedCount,
   countsLookUnread,
   isAddressed,
-  withUnreadThreadChannels,
   type ArrangedSidebar,
   type SidebarChannelLike,
   type SidebarUnreadCounts,
@@ -20,14 +18,14 @@ import {
  * It counts nothing of its own. A row counts when it reads unread on screen
  * (`countsLookUnread`, so a muted channel's plain unread doesn't), or when a
  * thread listed under it has new replies (its thread row reads unread). A
- * folded heading counts when it shows an unread total (the arrangement's own
- * totals). A hidden conversation is never in the arrangement, and the open
- * channel is the one being read.
+ * folded section keeps every such row in view under its heading (#6053), so
+ * a heading is never a target of its own. A hidden conversation is never in
+ * the arrangement, and the open channel is the one being read.
  */
 
 /** One place the pill can take the member to, in the list's order. */
 export interface UnreadJumpTarget {
-  /** `unreadJumpRowKey` or `unreadJumpHeadKey`: what the client draws it as. */
+  /** `unreadJumpRowKey`: the row the client draws it as. */
   key: string;
   /** It addresses the member (an @-mention, a reply to them, or a DM): the mention red. */
   addressed: boolean;
@@ -36,11 +34,6 @@ export interface UnreadJumpTarget {
 /** A channel row's key. */
 export function unreadJumpRowKey(channelId: string): string {
   return `row:${channelId}`;
-}
-
-/** A folded section heading's key. */
-export function unreadJumpHeadKey(sectionKey: string): string {
-  return `head:${sectionKey}`;
 }
 
 const NO_UNREAD: SidebarUnreadCounts = { unreadCount: 0, mentionCount: 0 };
@@ -68,39 +61,8 @@ export function unreadJumpTargets<C extends SidebarChannelLike>(
   const { unreadByChannelId, mutedChannelIds, activeChannelId } = input;
   if (!unreadByChannelId) return [];
   const threadIds = input.unreadThreadChannelIds;
-  // What the arrangement summed into each folded total: the server's counts
-  // plus one for a channel whose thread has new replies.
-  const arrangedCounts = withUnreadThreadChannels(
-    unreadByChannelId,
-    threadIds ?? new Set(),
-  );
   const targets: UnreadJumpTarget[] = [];
   for (const section of arranged.sections) {
-    // A folded heading shows the unread total of what it folds (the
-    // arrangement's, a muted plain unread left out), so it stands for them,
-    // less the open channel's share: that one is on screen.
-    if (section.collapsed) {
-      let unread = section.unreadCount;
-      let addressedTotal = section.addressedCount;
-      const open = section.rows.find((c) => c.id === activeChannelId);
-      if (open) {
-        const own = arrangedCounts?.get(open.id) ?? NO_UNREAD;
-        const isDirect = isDirectChannel(open);
-        const quiet =
-          (mutedChannelIds?.has(open.id) ?? false) &&
-          !countsLookUnread(isDirect, own, true);
-        if (!quiet) {
-          unread -= own.unreadCount;
-          addressedTotal -= addressedCount(isDirect, own);
-        }
-      }
-      if (unread > 0 || addressedTotal > 0) {
-        targets.push({
-          key: unreadJumpHeadKey(section.key),
-          addressed: addressedTotal > 0,
-        });
-      }
-    }
     for (const channel of section.rows) {
       if (channel.id === activeChannelId) continue;
       const counts = unreadByChannelId.get(channel.id) ?? NO_UNREAD;

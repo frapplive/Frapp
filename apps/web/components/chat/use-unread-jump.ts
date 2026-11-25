@@ -27,10 +27,9 @@ import { scrollerOf } from "./use-rail-reorder";
  * phone's rule too; this hook only measures where each one is drawn.
  *
  * A target is found by the `data-flip` key the rail already puts on every row
- * (`row:<id>`) and heading (`head:<key>`), which hold ids and section keys
- * only, so they go into the selector unescaped. The part of the list on screen is
- * its nearest scrolling ancestor, less the pinned section heading over its
- * top for a row (a heading pinned there is itself in view).
+ * (`row:<id>`), which holds an id only, so it goes into the selector unescaped.
+ * The part of the list on screen is its nearest scrolling ancestor, less the
+ * pinned section heading over its top.
  */
 export function useUnreadJump(
   listRef: RefObject<HTMLElement | null>,
@@ -71,9 +70,8 @@ export function useUnreadJump(
       const el = list.querySelector<HTMLElement>(`[data-flip="${target.key}"]`);
       if (!el) return null;
       const rect = el.getBoundingClientRect();
-      const isHead = target.key.startsWith("head:");
       return unreadJumpEdgeOf(rect, {
-        top: view.top + (isHead ? 0 : (pinnedHead ?? 0)),
+        top: view.top + (pinnedHead ?? 0),
         bottom: view.bottom,
       });
     });
