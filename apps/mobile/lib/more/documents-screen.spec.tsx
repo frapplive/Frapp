@@ -9,6 +9,7 @@ import { FloatingCreateButton } from "@/components/floating-create-button";
 import { DocumentsGlyph, MinutesGlyph } from "@/components/more/more-glyphs";
 import { FrappThemeProvider } from "@/lib/theme";
 import { screenText } from "@/test/screen-text";
+import { RENDER_WINDOW } from "@repo/hooks/use-render-window";
 
 /**
  * #3399. s12 draws its floating Upload document button only for a viewer who
@@ -2059,5 +2060,56 @@ describe("Documents with a Google Drive folder (#5583)", () => {
     };
     const tree = render();
     expect(driveRow(tree)).toBeUndefined();
+  });
+});
+
+describe("a long library (#6088)", () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `d${i}`,
+      title: `Doc ${String(i).padStart(3, "0")}`,
+      created_at: new Date(Date.UTC(2026, 9, 1) - i * 60_000).toISOString(),
+    }));
+
+  // The shell's scroll view: the one carrying the handler `useBarScroll`
+  // spreads, which reports to the screen's scroll watch.
+  const scrollTo = (tree: ReactTestRenderer, y: number, content: number) => {
+    const [view] = tree.root.findAll(
+      (node) =>
+        typeof node.props.onScroll === "function" &&
+        typeof node.props.onContentSizeChange === "function",
+    );
+    act(() => {
+      view!.props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y },
+          layoutMeasurement: { width: 400, height: 800 },
+          contentSize: { width: 400, height: content },
+        },
+      });
+    });
+  };
+
+  it("mounts one page of rows, not one per file, and draws more near the end", () => {
+    documentRows = many(400);
+    const tree = render();
+
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(RENDER_WINDOW.first);
+
+    // Near the top: nothing more yet.
+    scrollTo(tree, 0, 4000);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(RENDER_WINDOW.first);
+
+    scrollTo(tree, 3000, 4000);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(
+      RENDER_WINDOW.first + RENDER_WINDOW.step,
+    );
+  });
+
+  it("draws a short library whole", () => {
+    documentRows = many(12);
+    const tree = render();
+
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(12);
   });
 });

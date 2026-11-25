@@ -123,6 +123,7 @@ export * from "./use-discord-connection";
 export * from "./use-discord-import";
 export * from "./use-document-library";
 export * from "./use-documents";
+export * from "./use-render-window";
 export * from "./use-event-agenda";
 export * from "./use-event-excuses";
 export * from "./use-event-invitees";
