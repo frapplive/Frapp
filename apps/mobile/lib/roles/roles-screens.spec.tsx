@@ -111,6 +111,9 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useUpdateChapter: () => ({ mutate: vi.fn(), isPending: false }),
     useChannels: () => ok([]),
     useCategories: () => ok([]),
+    // The Recruitment module is off here, so the interest form stays hidden.
+    useInterestFormSettings: () => ok(undefined),
+    useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
     useChannelAccessOptions: () => ok([]),
     useCreateChannel: () => ({
       mutateAsync: h.createChannel,

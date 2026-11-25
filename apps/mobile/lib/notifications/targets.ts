@@ -79,6 +79,7 @@ const ROUTES: Record<
   // The weekly recap push (#4985): Activity, where the "Last week" card is.
   activity: { pathname: "/activity" },
   // A recruitment follow-up or stale alert (#5934): the prospect's screen.
+  // A new interest-form submission (#5977): that prospect's screen.
   rush: { pathname: "/rush-prospect", param: "candidateId" },
 };
 

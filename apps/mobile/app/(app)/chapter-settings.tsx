@@ -54,6 +54,7 @@ import {
 } from "@/components/settings/setting-anchor";
 import { useSettingsSearchField } from "@/components/settings/settings-search";
 import { Toggle } from "@/components/toggle";
+import { InterestFormSettingsSection } from "@/components/rush/interest-form-settings-section";
 import { PlusGlyph } from "@/components/control-glyphs";
 import {
   ChannelFormSheet,
@@ -477,6 +478,15 @@ export default function ChapterSettingsScreen() {
         {access.newChannel ? (
           <ChatSection searching={search.searching} />
         ) : null}
+        {search.searching ? null : (
+          <InterestFormSettingsSection
+            permissions={permissions}
+            moduleOn={isModuleEnabled(
+              chapterQuery.data?.enabled_modules,
+              "rush",
+            )}
+          />
+        )}
         {access.roles ? (
           access.newRole ? (
             <PeopleSectionWithNewRole searching={search.searching} />

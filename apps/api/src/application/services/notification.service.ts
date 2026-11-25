@@ -17,7 +17,10 @@ import type { IUserSettingsRepository } from '#domain/repositories/notification.
 import { MEMBER_REPOSITORY } from '#domain/repositories/member.repository.interface';
 import type { IMemberRepository } from '#domain/repositories/member.repository.interface';
 import { NOTIFICATION_PROVIDER } from '#domain/adapters/notification.interface';
-import type { INotificationProvider } from '#domain/adapters/notification.interface';
+import type {
+  INotificationProvider,
+  PushCommunication,
+} from '#domain/adapters/notification.interface';
 import type {
   Notification,
   PushToken,
@@ -159,6 +162,8 @@ export type NotifyPayload = {
   threadId?: string;
   /** The push's action buttons (`PushPayload.categoryId`). Not stored on the in-app row. */
   categoryId?: string;
+  /** Who a chat push is from (`PushPayload.communication`). Not stored on the in-app row. */
+  communication?: PushCommunication;
   /**
    * The one chat message this notification quotes (#4418): stored as the
    * row's `chat_message_id`, so deleting the message deletes the row and an
@@ -707,6 +712,7 @@ export class NotificationService {
         category,
         threadId: payload.threadId,
         categoryId: payload.categoryId,
+        communication: payload.communication,
       },
     );
 

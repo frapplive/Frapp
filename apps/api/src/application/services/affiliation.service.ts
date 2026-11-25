@@ -34,6 +34,7 @@ import type {
   CouncilChapterStatus,
 } from '#domain/entities/council-chapter.entity';
 import type { SchoolChapterStatus } from '#domain/entities/school.entity';
+import { InterestFormService } from './interest-form.service';
 
 export interface AffiliationSchoolView {
   link_id: string;
@@ -108,6 +109,7 @@ export class AffiliationService {
     private readonly chapters: IChapterRepository,
     @Inject(SCHOOL_REPOSITORY)
     private readonly schools: ISchoolRepository,
+    private readonly interestForms: InterestFormService,
   ) {}
 
   // The chapter's side ---------------------------------------------------------
@@ -352,6 +354,12 @@ export class AffiliationService {
       linkId,
     );
     if (!result.ok) throw refusal(result.reason);
+    // Accepted: the chapter's interest-form PNMs join the council's master
+    // list, as the consent text they agreed to said (#5977). Never throws.
+    // It runs after the answer: the officer doesn't wait on the emails.
+    if (result.link.status === 'accepted') {
+      void this.interestForms.pushUpChapter(chapterId);
+    }
     return linkView(result.link);
   }
 }

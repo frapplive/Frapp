@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import type { InterestFormService } from './interest-form.service';
 import { AffiliationService } from './affiliation.service';
 import type { IAffiliationRepository } from '#domain/repositories/affiliation.repository.interface';
 import type { IChapterRepository } from '#domain/repositories/chapter.repository.interface';
@@ -97,12 +98,14 @@ function setup() {
     findById: jest.fn().mockResolvedValue(school),
     findByIds: jest.fn().mockResolvedValue([school]),
   };
+  const interestForms = { pushUpChapter: jest.fn().mockResolvedValue(0) };
   const service = new AffiliationService(
     repo,
     chapters as unknown as IChapterRepository,
     schools as unknown as ISchoolRepository,
+    interestForms as unknown as InterestFormService,
   );
-  return { service, repo, chapters, schools };
+  return { service, repo, chapters, schools, interestForms };
 }
 
 describe('AffiliationService — the chapter side', () => {
@@ -323,5 +326,23 @@ describe('AffiliationService — the council side', () => {
       'cl-1',
     );
     expect(link.status).toBe('suspended');
+  });
+
+  it("pushes the chapter's form PNMs up once a link is accepted, and not before (#5977)", async () => {
+    const { service, repo, interestForms } = setup();
+    repo.findCouncilLink.mockResolvedValue(councilLink({ status: 'proposed' }));
+    repo.setCouncilLinkStatus.mockResolvedValue({
+      ok: true,
+      link: councilLink({ status: 'declined' }),
+    });
+    await service.decideForCouncil(COUNCIL, ACTOR, 'cl-1', 'declined');
+    expect(interestForms.pushUpChapter).not.toHaveBeenCalled();
+
+    repo.setCouncilLinkStatus.mockResolvedValue({
+      ok: true,
+      link: councilLink({ status: 'accepted' }),
+    });
+    await service.decideForCouncil(COUNCIL, ACTOR, 'cl-1', 'accepted');
+    expect(interestForms.pushUpChapter).toHaveBeenCalledWith(CHAPTER);
   });
 });
