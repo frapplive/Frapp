@@ -32,6 +32,7 @@ export * from "./field-reveal";
 export * from "./find-results";
 export * from "./fraternal-order";
 export * from "./google-drive-line";
+export * from "./held-row-saves";
 export * from "./hide-conversation";
 export * from "./invite-card";
 export * from "./invite-role-choices";

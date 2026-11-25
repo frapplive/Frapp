@@ -79,7 +79,7 @@ export interface ChannelAccessSheetProps {
 
 /**
  * Who can see a channel, or who can post in it (#3702), on the phone: a tall
- * step stacked over the Edit channel or New channel sheet, as Who's coming
+ * step stacked over Channel settings or the New channel sheet, as Who's coming
  * stacks over New event. Same two answers as web's Chat settings
  * (`channel-access-field.tsx`): Everyone, or chosen tiers and roles.
  *

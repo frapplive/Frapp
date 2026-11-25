@@ -301,7 +301,7 @@ describe("NotificationsPopover — report queue freshness", () => {
     const link = screen.getByRole("link", { name: /Message Reported/ });
     expect(link).toHaveAttribute(
       "href",
-      "/settings?tab=chat#reported-messages",
+      "/settings?tab=chat&page=reports",
     );
     await user.click(link);
 

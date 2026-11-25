@@ -96,8 +96,6 @@ export const chatReportCopy = {
   offlineTitle: "Reports unavailable offline",
   offlineDescription: "Reconnect to review reported messages.",
   noChapter: "Pick an active chapter to review its reports.",
-  /** The queue folded to one link when nothing is open (Paul, 2026-11-11). */
-  historyLink: "Report history",
   noContent: "This message had no text.",
   detailsLabel: "Reporter's note",
   /**

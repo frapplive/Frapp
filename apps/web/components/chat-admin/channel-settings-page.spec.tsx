@@ -38,8 +38,10 @@ const {
   mockPins,
   toast,
   router,
+  search,
 } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
+  search: { current: new URLSearchParams() },
   toast: vi.fn(),
   mockOffline: { value: false },
   permissions: { current: [] as string[] },
@@ -61,7 +63,10 @@ const {
   },
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+  useSearchParams: () => search.current,
+}));
 
 vi.mock("@repo/hooks", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/hooks")>();
@@ -219,6 +224,7 @@ const saveButton = () => screen.getByRole("button", { name: "Save channel" });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  search.current = new URLSearchParams();
   mockOffline.value = false;
   permissions.current = [];
   updateChannel.mutateAsync = () => Promise.resolve();
@@ -336,6 +342,18 @@ describe("ChannelSettingsPage — the page", () => {
 });
 
 describe("ChannelSettingsPage — the name and description", () => {
+  it("focuses Description when a channel start's Add a description opened it", () => {
+    search.current = new URLSearchParams("tab=chat&channel=ch-1&focus=description");
+    render(page("ch-1"));
+    expect(descriptionField()).toHaveFocus();
+  });
+
+  it("focuses nothing when opened any other way", () => {
+    render(page("ch-1"));
+    expect(descriptionField()).not.toHaveFocus();
+    expect(nameField()).not.toHaveFocus();
+  });
+
   it("keeps Save channel off until a field changes, and Revert only while one has", () => {
     render(page("ch-1"));
     expect(saveButton()).toBeDisabled();
@@ -668,6 +686,31 @@ describe("ChannelSettingsPage — rows that save on their own", () => {
     expect(
       screen.getByRole("switch", { name: "Leave out of Activity" }),
     ).toBeEnabled();
+  });
+
+  it("keeps a saved answer showing until the channel list agrees, rather than flipping back", async () => {
+    const spy = saveSpy();
+    const { rerender } = render(page("ch-1"));
+    const defaultSwitch = () =>
+      screen.getByRole("switch", { name: "Chapter default channel" });
+    fireEvent.click(defaultSwitch());
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    // The save landed but the list hasn't refetched: still on, still enabled.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("switch", { name: "Leave out of Activity" }),
+      ).toBeEnabled(),
+    );
+    expect(defaultSwitch()).toBeChecked();
+
+    // The refetch agrees, then a change made elsewhere shows as it arrives.
+    reads.channels = withGeneral({ is_default: true });
+    rerender(page("ch-1"));
+    expect(defaultSwitch()).toBeChecked();
+    reads.channels = withGeneral({ is_default: false });
+    rerender(page("ch-1"));
+    expect(defaultSwitch()).not.toBeChecked();
   });
 
   it("says why a row's save failed", async () => {

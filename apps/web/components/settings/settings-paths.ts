@@ -7,7 +7,7 @@
  * and brought chat back beside it (Paul, 2026-11-12: "I DO NOT WANT" that,
  * "phase those out"). Their old routes only redirect here now, so anything
  * that links to a tool links to one of these instead of bouncing through the
- * redirect, which would lose a `#reported-messages` anchor on the way.
+ * redirect.
  */
 
 /** The Chat page: channels, categories, background and the report queue. */
@@ -38,6 +38,16 @@ export function channelSettingsPath(
 ): string {
   const channel = `${CHAT_SETTINGS_PATH}&channel=${encodeURIComponent(channelId)}`;
   return page ? `${channel}&page=${page}` : channel;
+}
+
+/**
+ * A channel's settings with its Description field focused: a channel start's
+ * "Add a description" opens it (#6031), so the officer lands where it sent
+ * them. Any other way in focuses nothing.
+ */
+export const FOCUS_DESCRIPTION_PARAM = "focus";
+export function channelDescriptionPath(channelId: string): string {
+  return `${channelSettingsPath(channelId)}&${FOCUS_DESCRIPTION_PARAM}=description`;
 }
 
 /**
@@ -109,6 +119,8 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "module",
   // A page opened from one of the Chapter tab's rows.
   "page",
+  // A channel's Description focused, from "Add a description" (#6031).
+  FOCUS_DESCRIPTION_PARAM,
   // The points ledger's member, from a member's card.
   LEDGER_MEMBER_PARAM,
 ] as const;

@@ -720,16 +720,15 @@ Channel seeding happens at chapter onboarding and has no billing prerequisite; [
 
 ### Chat Admin — channels and categories (dashboard)
 
-The channel structure in Settings → Chat (`/settings?tab=chat`), above the report queue.
-Its states stand where both of its sections would be, so they name channels, not the page: the report queue below them reads and fails on its own.
+The Channels group in Settings → Chat (`/settings?tab=chat`), and one channel's page and its pins page (`?channel=<id>`, `&page=pins`; #6031).
+Its states stand where the group would be, so they name channels, not the page: the Look and Moderation rows under it, and the report queue's own page, read and fail on their own.
 
 | State | Title | Description |
 |---|---|---|
 | Loading | — | `Loading channels...` |
-| Empty (channels) | — | `No channels yet. Create the first one above.` (one line) |
-| Empty (categories) | — | `No categories yet. Channels without one are listed under Uncategorized.` (one line) |
+| Empty (channels) | — | `No channels yet.` (one line, under the group, whose last row is `New category`) |
 | Empty (a category opened out) | — | `No channels in this category.` (one line, under the category's row) |
-| Nothing selected (edit pane) | — | `Pick a channel to edit it.` (one line) |
+| Channel gone | — | `This channel isn't here anymore. It may have been deleted.` · `Chat` (a channel's page whose channel is not in the list) |
 | Loading (pins) | — | `Loading pins...` |
 | Empty (pins) | — | `Nothing pinned. Pin a message from the channel.` (one line) |
 | Stale (pins) | — | `Couldn't refresh the pins. These are the last ones that loaded.` · `Try again` (a background refresh failed; the loaded pins stay) |
@@ -738,15 +737,15 @@ Its states stand where both of its sections would be, so they name channels, not
 | Loading (permission grid) | — | `Loading permissions…` |
 | Unavailable (permission grid) | — | `Couldn't load the permission list, which needs a role that can see the full directory. Your current selections are unaffected.` (nothing loaded; a failed refresh keeps the loaded grid) |
 | Offline (permission grid) | — | `Can't load the permission list while offline. Existing selections are unaffected; reconnect to change them.` |
-| Error | `Couldn't load channels` | the load-failure line (§ copy rules) |
+| Error | `Couldn't load channels` (the Chat page) / `Couldn't load the channel` (a channel's page) | the load-failure line (§ copy rules) |
 | Stale | — | `Couldn't refresh the channels. These are the last ones that loaded.` · `Try again` (a background refresh failed; the loaded channels and categories stay) |
-| Offline | `Channels unavailable offline` | `Reconnect to manage channels, categories and pins.` |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage chat channels.` |
+| Offline | `Channels unavailable offline` | `Reconnect to manage channels and categories.` (the Chat page); `Reconnect to change this channel's settings.` (a channel's page) |
+| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can manage chat channels.` (the Chat page); `Reconnect to check whether you can change this channel's settings.` (a channel's page) |
 | Permission denied | — | `Your role can't manage channels. Ask your chapter president for access.` |
 
 The permission grid is the role-gated channel's, shared with the import wizard's channel step, which shows the same three lines.
 
-Implementation: inline in `apps/web/components/chat-admin/chat-admin-page.tsx`; the permission grid's in `apps/web/components/shared/permission-checkbox-grid.tsx`.
+Implementation: inline in `apps/web/components/chat-admin/chat-admin-page.tsx` (the Chat page) and `channel-settings-page.tsx` (a channel's page and its pins); the permission grid's in `apps/web/components/shared/permission-checkbox-grid.tsx`.
 
 ### Chat Admin — reported messages (dashboard)
 

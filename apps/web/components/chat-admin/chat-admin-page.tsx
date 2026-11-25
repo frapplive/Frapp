@@ -241,7 +241,11 @@ function ModerationGroup({
   );
 }
 
-/** One of the Chat page's own pages (`?page=`), in place of the page. */
+/**
+ * One of the Chat page's own pages (`?page=`), in place of the page. Its row
+ * shows only to a viewer who may use it; one who reaches the address anyway
+ * (an old or shared link) gets the plain denied line, never a titled blank.
+ */
 export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
   if (page === "background") {
     return (
@@ -250,7 +254,17 @@ export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
         backLabel="Chat"
         title="Chat background"
       >
-        <ChatBackgroundDefaultCard />
+        <Can
+          allOf={CHAPTER_PROFILE_PERMISSIONS}
+          deniedFallback={
+            <p className="text-sm text-muted-foreground">
+              Your role can&apos;t change the chat background. Ask your
+              chapter president for access.
+            </p>
+          }
+        >
+          <ChatBackgroundDefaultCard />
+        </Can>
       </SettingsSubpage>
     );
   }
@@ -260,9 +274,19 @@ export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
       backLabel="Chat"
       title={CHANNEL_SETTINGS_COPY.reports}
     >
-      {/* Opening the report queue reads the new-report notices. */}
-      <MarkScreensSeen screens={[CHAT_REPORTS_NOTIFICATION_SCREEN]} />
-      <ChatReportsCard full />
+      <Can
+        allOf={CHAT_REPORT_QUEUE_PERMISSIONS}
+        deniedFallback={
+          <p className="text-sm text-muted-foreground">
+            Your role can&apos;t review reported messages. Ask your chapter
+            president for access.
+          </p>
+        }
+      >
+        {/* Opening the report queue reads the new-report notices. */}
+        <MarkScreensSeen screens={[CHAT_REPORTS_NOTIFICATION_SCREEN]} />
+        <ChatReportsCard />
+      </Can>
     </SettingsSubpage>
   );
 }

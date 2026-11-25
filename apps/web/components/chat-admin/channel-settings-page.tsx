@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Bell,
@@ -23,6 +23,7 @@ import {
   useChannels,
   useChatReports,
   useMemberDisplayNames,
+  useHeldRowSaves,
   usePermissionList,
   usePinnedMessages,
   useUnpinMessage,
@@ -45,6 +46,7 @@ import {
   CHAT_REPORT_QUEUE_PERMISSIONS,
   matchCategoryLabel,
   openReportsValue,
+  pinnedMessagesValue,
   sameChannelAccessList,
   standardLevelLabel,
   type ChatNotificationLevel,
@@ -97,6 +99,7 @@ import {
 import {
   CHAT_SETTINGS_PATH,
   channelSettingsPath,
+  FOCUS_DESCRIPTION_PARAM,
   type ChannelSettingsPage,
 } from "@/components/settings/settings-paths";
 import { useNetwork } from "@/lib/providers/network-provider";
@@ -289,8 +292,18 @@ function ChannelSettings({
   const category = categories.find((c) => c.id === channel.category_id) ?? null;
   const takesLists = takesAccessLists(channel);
   const audit = channel.is_audit_log === true;
-  const see = channel.who_can_see ?? null;
-  const post = channel.who_can_post ?? null;
+  // Each row shows what it was set to from the moment it changes until the
+  // refetched channel agrees (`useHeldRowSaves`).
+  const rows = useHeldRowSaves({
+    category_id: channel.category_id ?? null,
+    who_can_see: channel.who_can_see ?? null,
+    who_can_post: channel.who_can_post ?? null,
+    default_notification_level: channel.default_notification_level ?? null,
+    is_default: channel.is_default === true,
+    activity_excluded: channel.activity_excluded === true,
+  });
+  const see = rows.shown<string[] | null>("who_can_see");
+  const post = rows.shown<string[] | null>("who_can_post");
   const matches = takesLists && matchesCategoryAccess(see, post, category);
 
   // ── The typed fields: Save channel covers these two only ────────────────
@@ -316,6 +329,10 @@ function ChannelSettings({
       setDescriptionDraft(channel.description ?? "");
     }
   }
+  // "Add a description" on the channel's start sends the officer here to
+  // type one: the field takes focus once, on that way in only.
+  const focusDescription =
+    useSearchParams().get(FOCUS_DESCRIPTION_PARAM) === "description";
   const nameChanged = nameDraft.trim() !== channel.name;
   const descriptionChanged = descriptionDraft.trim() !== descriptionSeed;
   const fieldsDirty = nameChanged || descriptionChanged;
@@ -358,34 +375,22 @@ function ChannelSettings({
   }
 
   // ── A row's own save ────────────────────────────────────────────────────
-  // One field at a time, the moment it changes. `saving` names the row in
-  // flight so it shows its new answer and takes no second change meanwhile.
-  const [saving, setSaving] = useState<{
-    field: string;
-    value: unknown;
-  } | null>(null);
-
+  // One change at a time, the moment it's made: `values` are what the rows
+  // show meanwhile, `body` what the request sends.
   async function saveRow(
-    field: string,
-    value: unknown,
+    values: Record<string, unknown>,
     body: Record<string, unknown>,
   ): Promise<boolean> {
-    setSaving({ field, value });
-    try {
-      await updateChannel.mutateAsync({ id: channel.id, body });
-      return true;
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        description: getErrorMessage(error, copy.saveFailed),
-      });
-      return false;
-    } finally {
-      setSaving(null);
-    }
+    const error = await rows.save(values, () =>
+      updateChannel.mutateAsync({ id: channel.id, body }),
+    );
+    if (!error) return true;
+    toast({
+      variant: "destructive",
+      description: getErrorMessage(error, copy.saveFailed),
+    });
+    return false;
   }
-  const pendingValue = <T,>(field: string, live: T): T =>
-    saving?.field === field ? (saving.value as T) : live;
 
   // ── Who can see and who can post: one page each, with its own Save ─────
   // The draft lives here, above the page, so it outlives going back to the
@@ -407,7 +412,7 @@ function ChannelSettings({
     const key = question === "see" ? "who_can_see" : "who_can_post";
     const saved = sameChannelAccessList(draft, liveList(question))
       ? true
-      : await saveRow(key, draft, { [key]: draft });
+      : await saveRow({ [key]: draft }, { [key]: draft });
     if (!saved) return;
     setAccessDrafts((current) => {
       const next = { ...current };
@@ -449,9 +454,9 @@ function ChannelSettings({
           <div className="flex justify-end">
             <Button
               onClick={() => void saveAccess(question)}
-              disabled={!changed || saving !== null}
+              disabled={!changed || rows.busy}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {rows.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Save
             </Button>
           </div>
@@ -479,19 +484,14 @@ function ChannelSettings({
         backLabel={channelTitle}
         title={copy.reports}
       >
-        <ChatReportsCard channelId={channel.id} full />
+        <ChatReportsCard channelId={channel.id} />
       </SettingsSubpage>
     );
   }
 
-  const categoryValue = pendingValue(
-    "category_id",
-    channel.category_id ?? NO_CATEGORY,
-  );
-  const levelValue = pendingValue(
-    "default_notification_level",
-    channel.default_notification_level ?? BUILT_IN_LEVEL,
-  );
+  const categoryValue = rows.shown<string | null>("category_id") ?? NO_CATEGORY;
+  const levelValue =
+    rows.shown<string | null>("default_notification_level") ?? BUILT_IN_LEVEL;
   const builtIn = builtInChannelDefault({
     name: channel.name,
     type: channel.type,
@@ -532,6 +532,7 @@ function ChannelSettings({
           <Label htmlFor="channel-description">{copy.description}</Label>
           <Textarea
             id="channel-description"
+            autoFocus={focusDescription}
             value={descriptionDraft}
             maxLength={500}
             rows={2}
@@ -573,11 +574,12 @@ function ChannelSettings({
           control={
             <Select
               value={categoryValue}
-              disabled={saving !== null}
+              disabled={rows.busy}
               onValueChange={(next) =>
-                void saveRow("category_id", next, {
-                  category_id: next === NO_CATEGORY ? null : next,
-                })
+                void saveRow(
+                  { category_id: next === NO_CATEGORY ? null : next },
+                  { category_id: next === NO_CATEGORY ? null : next },
+                )
               }
             >
               <SelectTrigger
@@ -615,14 +617,20 @@ function ChannelSettings({
               <SettingsRow
                 label={matchCategoryLabel(category.name)}
                 value=""
-                disabled={saving !== null}
+                disabled={rows.busy}
                 onClick={() =>
-                  void saveRow("match", true, { match_category_access: true })
+                  void saveRow(
+                    {
+                      who_can_see: category.who_can_see ?? null,
+                      who_can_post: category.who_can_post ?? null,
+                    },
+                    { match_category_access: true },
+                  )
                 }
               />
             ) : null}
           </>
-        ) : audit ? null : (
+        ) : channel.type !== "PRIVATE" ? null : (
           <>
             <SettingsRow
               icon={Eye}
@@ -651,11 +659,11 @@ function ChannelSettings({
             */}
             {post !== null ? (
               <SettingsRow
-                label="Let everyone in it post"
+                label={copy.letEveryonePost}
                 value=""
-                disabled={saving !== null}
+                disabled={rows.busy}
                 onClick={() =>
-                  void saveRow("who_can_post", null, { who_can_post: null })
+                  void saveRow({ who_can_post: null }, { who_can_post: null })
                 }
               />
             ) : null}
@@ -670,14 +678,20 @@ function ChannelSettings({
           control={
             <Select
               value={levelValue}
-              disabled={saving !== null}
+              disabled={rows.busy}
               onValueChange={(next) =>
-                void saveRow("default_notification_level", next, {
-                  default_notification_level:
-                    next === BUILT_IN_LEVEL
-                      ? null
-                      : (next as ChatNotificationLevel),
-                })
+                void saveRow(
+                  {
+                    default_notification_level:
+                      next === BUILT_IN_LEVEL ? null : next,
+                  },
+                  {
+                    default_notification_level:
+                      next === BUILT_IN_LEVEL
+                        ? null
+                        : (next as ChatNotificationLevel),
+                  },
+                )
               }
             >
               <SelectTrigger
@@ -706,22 +720,22 @@ function ChannelSettings({
         <SettingsRow
           label={copy.defaultChannel}
           description={copy.defaultChannelLine}
-          checked={pendingValue("is_default", channel.is_default === true)}
-          disabled={saving !== null}
+          checked={rows.shown<boolean>("is_default")}
+          disabled={rows.busy}
           onCheckedChange={(next) =>
-            void saveRow("is_default", next, { is_default: next })
+            void saveRow({ is_default: next }, { is_default: next })
           }
         />
         <SettingsRow
           label={copy.leaveOutOfActivity}
           description={copy.leaveOutOfActivityLine}
-          checked={pendingValue(
-            "activity_excluded",
-            channel.activity_excluded === true,
-          )}
-          disabled={saving !== null}
+          checked={rows.shown<boolean>("activity_excluded")}
+          disabled={rows.busy}
           onCheckedChange={(next) =>
-            void saveRow("activity_excluded", next, { activity_excluded: next })
+            void saveRow(
+              { activity_excluded: next },
+              { activity_excluded: next },
+            )
           }
         />
       </SettingsGroup>
@@ -730,13 +744,7 @@ function ChannelSettings({
         <SettingsRow
           icon={Pin}
           label={copy.pinnedMessages}
-          value={
-            pinCount === null
-              ? undefined
-              : pinCount === 0
-                ? "None"
-                : String(pinCount)
-          }
+          value={pinCount === null ? undefined : pinnedMessagesValue(pinCount)}
           href={channelSettingsPath(channel.id, "pins")}
         />
         {canReviewReports ? (

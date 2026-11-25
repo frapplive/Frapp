@@ -218,8 +218,8 @@ export function deepLinkFor(notification: Notification): string {
         ? `/rush?prospect=${encodeURIComponent(target.candidateId)}`
         : "/rush";
     // The officer report queue (#2257): the API's new-report notification
-    // targets it with a bare screen, and the queue sits last on Chapter
-    // settings' Chat page (#3837).
+    // targets it with a bare screen, and the queue is a page of Chapter
+    // settings' Chat page (#3837, #6031).
     case CHAT_REPORTS_NOTIFICATION_SCREEN:
       return CHAT_REPORTS_SETTINGS_PATH;
     // A Discord import that finished or stopped on an error, sent to the

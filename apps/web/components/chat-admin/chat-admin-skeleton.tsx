@@ -74,34 +74,10 @@ function ChannelsBody() {
   );
 }
 
-/** The channels body, for its own load under the report queue. */
+/** The Channels group, for its own load on the Chat page and a channel's page. */
 export function ChannelsSkeleton() {
   return (
     <SectionSkeleton label="Loading channels">
-      <ChannelsBody />
-    </SectionSkeleton>
-  );
-}
-
-/**
- * Everything `/chat-admin` draws: the report queue (label, its
- * caption, the status tabs, rows) over the channels body. The permission
- * check and the route loader both show this.
- */
-export function ChatAdminBodySkeleton() {
-  return (
-    <SectionSkeleton label="Loading chat admin">
-      <section aria-hidden="true" className="space-y-3">
-        <SkeletonSectionLabel width="w-36" />
-        <Skeleton className="h-[11px] w-[40%]" />
-        <div className="flex h-11 items-center gap-6 border-b border-border">
-          <Skeleton className="h-[13px] w-10" />
-          <Skeleton className="h-[13px] w-16" />
-          <Skeleton className="h-[13px] w-16" />
-          <Skeleton className="h-[13px] w-16" />
-        </div>
-        <ReportRows />
-      </section>
       <ChannelsBody />
     </SectionSkeleton>
   );

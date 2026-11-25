@@ -10,15 +10,18 @@ import {
   useChannels,
   useDeleteChannel,
   useMemberDisplayNames,
-  usePermissionList,
+  useHeldRowSaves,
+  useMyPermissions,
   usePinnedMessages,
   useUpdateChannel,
 } from "@repo/hooks";
 import {
   describeChannelAccess,
   isEmptyChannelAccessChoice,
+  isSettingsChannel,
   matchesCategoryAccess,
   selectChannelAccessOptions,
+  takesChannelAccessLists,
   type ChannelAccessQuestion,
 } from "@repo/hooks/channel-access";
 import {
@@ -28,10 +31,12 @@ import {
   CHANNEL_SETTINGS_COPY as copy,
   channelAccessFootnote,
   matchCategoryLabel,
+  pinnedMessagesValue,
   sameChannelAccessList,
   standardLevelLabel,
   type ChatNotificationLevel,
 } from "@repo/validation";
+import { AUDIT_LOG_SETTINGS_NOTE } from "@repo/chat-core/audit-log-copy";
 import { SignetTokens } from "@repo/theme/signet";
 import { ScreenShell } from "@/components/screen-shell";
 import { BACK_TO_CHAT } from "@/components/back-row";
@@ -98,15 +103,22 @@ const NONE = null;
 export default function ChannelSettingsScreen() {
   const params = useLocalSearchParams<{ channelId?: string | string[] }>();
   const channelId = firstParam(params.channelId);
-  const permissions = usePermissionList();
-  const canManage = can("channels:manage", permissions);
+  // The permission read decides, so "still loading" and "failed" are never
+  // read as "your role can't" (as `invite.tsx` waits for it).
+  const permissionsQuery = useMyPermissions();
+  const permissionsKnown = permissionsQuery.data !== undefined;
+  const canManage = can(
+    "channels:manage",
+    Array.isArray(permissionsQuery.data?.permissions)
+      ? permissionsQuery.data.permissions
+      : [],
+  );
   const channelsQuery = useChannels();
   const categoriesQuery = useCategories();
   const channel = useMemo(
     () =>
       selectChannels(channelsQuery.data).find(
-        (row) =>
-          row.id === channelId && row.type !== "DM" && row.type !== "GROUP_DM",
+        (row) => row.id === channelId && isSettingsChannel(row),
       ) ?? null,
     [channelsQuery.data, channelId],
   );
@@ -115,7 +127,18 @@ export default function ChannelSettingsScreen() {
     [categoriesQuery.data],
   );
 
-  if (!canManage) {
+  if (permissionsQuery.isError && !permissionsKnown) {
+    return (
+      <ScreenShell back={BACK_TO_CHAT} title="Channel settings">
+        <ErrorState
+          title="Couldn't check your access"
+          body="Check your connection and try again."
+          onRetry={() => void permissionsQuery.refetch()}
+        />
+      </ScreenShell>
+    );
+  }
+  if (permissionsKnown && !canManage) {
     return (
       <ScreenShell back={BACK_TO_CHAT} title="Channel settings">
         <InlineNote>
@@ -125,7 +148,11 @@ export default function ChannelSettingsScreen() {
       </ScreenShell>
     );
   }
-  if (channelsQuery.isPending || categoriesQuery.isPending) {
+  if (
+    !permissionsKnown ||
+    channelsQuery.isPending ||
+    categoriesQuery.isPending
+  ) {
     // The loaded screen's shape: its three groups, captions as drawn.
     return (
       <ScreenShell back={BACK_TO_CHAT} title="Channel settings">
@@ -205,10 +232,21 @@ function ChannelSettings({
 
   const category = categories.find((c) => c.id === channel.category_id) ?? null;
   const audit = channel.is_audit_log === true;
-  const takesLists =
-    !audit && (channel.type === "PUBLIC" || channel.type === "ROLE_GATED");
-  const see = channel.who_can_see ?? null;
-  const post = channel.who_can_post ?? null;
+  const takesLists = takesChannelAccessLists(channel);
+  // Its members decide who sees and posts, so there is nothing to pick.
+  const isPrivate = channel.type === "PRIVATE";
+  // Each row shows what it was set to from the moment it changes until the
+  // refetched channel agrees (`useHeldRowSaves`, shared with web).
+  const rows = useHeldRowSaves({
+    category_id: channel.category_id ?? null,
+    who_can_see: channel.who_can_see ?? null,
+    who_can_post: channel.who_can_post ?? null,
+    default_notification_level: channel.default_notification_level ?? null,
+    is_default: channel.is_default === true,
+    activity_excluded: channel.activity_excluded === true,
+  });
+  const see = rows.shown<string[] | null>("who_can_see");
+  const post = rows.shown<string[] | null>("who_can_post");
   const matches = takesLists && matchesCategoryAccess(see, post, category);
 
   // ── The typed fields, saved together by the glass bar ──────────────────
@@ -263,29 +301,19 @@ function ChannelSettings({
   }
 
   // ── A row's own save ────────────────────────────────────────────────────
-  const [saving, setSaving] = useState<{
-    field: string;
-    value: unknown;
-  } | null>(null);
+  // `values` are what the rows show meanwhile, `body` what the request sends.
   async function saveRow(
-    field: string,
-    value: unknown,
+    values: Record<string, unknown>,
     body: Record<string, unknown>,
   ): Promise<boolean> {
-    setSaving({ field, value });
     setFailure(null);
-    try {
-      await updateChannel.mutateAsync({ id: channel.id, body });
-      return true;
-    } catch (error) {
-      setFailure(errorCopy(error, copy.saveFailed));
-      return false;
-    } finally {
-      setSaving(null);
-    }
+    const error = await rows.save(values, () =>
+      updateChannel.mutateAsync({ id: channel.id, body }),
+    );
+    if (!error) return true;
+    setFailure(errorCopy(error, copy.saveFailed));
+    return false;
   }
-  const pending = <T,>(field: string, live: T): T =>
-    saving?.field === field ? (saving.value as T) : live;
 
   // ── Who can see and post: a sheet each, saved when it closes ────────────
   const accessSheetRef = useRef<BottomSheetModal>(null);
@@ -312,7 +340,7 @@ function ChannelSettings({
       return;
     }
     const key = question === "see" ? "who_can_see" : "who_can_post";
-    if (await saveRow(key, draft, { [key]: draft })) setAccessDraft({});
+    if (await saveRow({ [key]: draft }, { [key]: draft })) setAccessDraft({});
   }
   const shownList = (which: ChannelAccessQuestion) => {
     const draft = accessDraft[which];
@@ -342,17 +370,16 @@ function ChannelSettings({
       label: CHANNEL_DEFAULT_LEVEL_LABELS[level],
     })),
   ];
-  const categoryId = pending("category_id", channel.category_id);
-  const level = pending(
+  const categoryId = rows.shown<string | null>("category_id");
+  const level = rows.shown<ChatNotificationLevel | null>(
     "default_notification_level",
-    channel.default_notification_level ?? null,
   );
   const levelLabel =
     level === null
       ? standardLevelLabel(builtIn)
       : CHANNEL_DEFAULT_LEVEL_LABELS[level as ChatNotificationLevel];
   const pinCount = Array.isArray(pins.data) ? pins.data.length : null;
-  const busy = saving !== null;
+  const busy = rows.busy;
 
   return (
     <>
@@ -383,9 +410,7 @@ function ChannelSettings({
               ]}
             />
             {audit ? (
-              <Text style={styles.caption}>
-                Frapp names the audit log, so it can&apos;t be renamed.
-              </Text>
+              <Text style={styles.caption}>{AUDIT_LOG_SETTINGS_NOTE}</Text>
             ) : null}
           </View>
           <View style={styles.field}>
@@ -448,7 +473,7 @@ function ChannelSettings({
               disabled={busy}
               onPress={() => openAccess("see")}
             />
-          ) : audit ? null : (
+          ) : !isPrivate ? null : (
             <ListRow
               leading={<EyeGlyph color={glyph} />}
               label={copy.whoCanSee}
@@ -468,7 +493,7 @@ function ChannelSettings({
               disabled={busy}
               onPress={() => openAccess("post")}
             />
-          ) : audit ? null : (
+          ) : !isPrivate ? null : (
             <ListRow
               leading={<MessageSquareGlyph color={glyph} />}
               label={copy.whoCanPost}
@@ -486,18 +511,24 @@ function ChannelSettings({
               action
               disabled={busy}
               onPress={() =>
-                void saveRow("match", true, { match_category_access: true })
+                void saveRow(
+                  {
+                    who_can_see: category.who_can_see ?? null,
+                    who_can_post: category.who_can_post ?? null,
+                  },
+                  { match_category_access: true },
+                )
               }
             />
           ) : null}
           {/* A private channel made read-only before #3722 can open up. */}
-          {!takesLists && !audit && post !== null ? (
+          {isPrivate && post !== null ? (
             <ListRow
-              label="Let everyone in it post"
+              label={copy.letEveryonePost}
               action
               disabled={busy}
               onPress={() =>
-                void saveRow("who_can_post", null, { who_can_post: null })
+                void saveRow({ who_can_post: null }, { who_can_post: null })
               }
             />
           ) : null}
@@ -517,11 +548,11 @@ function ChannelSettings({
             description={copy.defaultChannelLine}
             trailing={
               <Toggle
-                value={pending("is_default", channel.is_default === true)}
+                value={rows.shown<boolean>("is_default")}
                 disabled={busy}
                 accessibilityLabel={copy.defaultChannel}
                 onValueChange={(next) =>
-                  void saveRow("is_default", next, { is_default: next })
+                  void saveRow({ is_default: next }, { is_default: next })
                 }
               />
             }
@@ -531,16 +562,14 @@ function ChannelSettings({
             description={copy.leaveOutOfActivityLine}
             trailing={
               <Toggle
-                value={pending(
-                  "activity_excluded",
-                  channel.activity_excluded === true,
-                )}
+                value={rows.shown<boolean>("activity_excluded")}
                 disabled={busy}
                 accessibilityLabel={copy.leaveOutOfActivity}
                 onValueChange={(next) =>
-                  void saveRow("activity_excluded", next, {
-                    activity_excluded: next,
-                  })
+                  void saveRow(
+                    { activity_excluded: next },
+                    { activity_excluded: next },
+                  )
                 }
               />
             }
@@ -552,13 +581,7 @@ function ChannelSettings({
           <ListRow
             leading={<PinGlyph color={glyph} />}
             label={copy.pinnedMessages}
-            value={
-              pinCount === null
-                ? null
-                : pinCount === 0
-                  ? "None"
-                  : String(pinCount)
-            }
+            value={pinCount === null ? null : pinnedMessagesValue(pinCount)}
             onPress={() => pinsSheetRef.current?.present?.()}
           />
         </ListSection>
@@ -597,20 +620,21 @@ function ChannelSettings({
         ref={categorySheetRef}
         title={copy.category}
         options={categoryOptions}
-        selected={channel.category_id}
+        selected={categoryId}
         onSelect={(next) =>
-          void saveRow("category_id", next, { category_id: next })
+          void saveRow({ category_id: next }, { category_id: next })
         }
       />
       <OptionSheet
         ref={levelSheetRef}
         title={copy.defaultNotifications}
         options={levelOptions}
-        selected={channel.default_notification_level ?? null}
+        selected={level}
         onSelect={(next) =>
-          void saveRow("default_notification_level", next, {
-            default_notification_level: next,
-          })
+          void saveRow(
+            { default_notification_level: next },
+            { default_notification_level: next },
+          )
         }
       />
       {takesLists ? (

@@ -75,8 +75,8 @@ export interface ChannelSummary {
   /**
    * Who can see and who can post (#3722): `null` is everyone (who can post:
    * everyone who can see it), a list names `tier:` and `role:` entries.
-   * Absent when the row doesn't say, so the Edit channel sheet (#3702) never
-   * mistakes an older API's row for "everyone".
+   * Absent when the row doesn't say, so Channel settings (#3702, #6031)
+   * never mistakes an older API's row for "everyone".
    */
   who_can_see?: string[] | null;
   who_can_post?: string[] | null;

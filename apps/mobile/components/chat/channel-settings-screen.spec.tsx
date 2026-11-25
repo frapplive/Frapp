@@ -15,7 +15,9 @@ import { screenText } from "@/test/screen-text";
  * the screen handed them.
  */
 const h = vi.hoisted(() => ({
-  permissions: ["channels:manage"] as string[],
+  permissions: ["channels:manage"] as string[] | undefined,
+  permissionsError: false,
+  refetchPermissions: vi.fn(),
   channels: [] as unknown[],
   categories: [] as unknown[],
   update: vi.fn<(input: unknown) => Promise<object>>(async () => ({})),
@@ -41,7 +43,11 @@ vi.mock("@repo/hooks", async (importOriginal) => {
   const real = await importOriginal<typeof import("@repo/hooks")>();
   return {
     ...real,
-    usePermissionList: () => h.permissions,
+    useMyPermissions: () => ({
+      data: h.permissions ? { permissions: h.permissions } : undefined,
+      isError: h.permissionsError,
+      refetch: h.refetchPermissions,
+    }),
     useChannels: () => ok(h.channels),
     useCategories: () => ok(h.categories),
     useChannelAccessOptions: () => ok([]),
@@ -153,6 +159,8 @@ const inputs = (tree: ReactTestRenderer) =>
 
 beforeEach(() => {
   h.permissions = ["channels:manage"];
+  h.permissionsError = false;
+  h.refetchPermissions.mockClear();
   h.channels = [channel()];
   h.categories = [CATEGORY];
   h.sheets = {};
@@ -306,6 +314,34 @@ describe("Channel settings on the phone (#6031)", () => {
     const text = screenText(render());
     expect(text).toContain("Your role can't manage channels.");
     expect(text).not.toContain(copy.access);
+  });
+
+  it("draws no answer about access while the permission read is out", () => {
+    h.permissions = undefined;
+    const text = screenText(render());
+    expect(text).not.toContain("Your role can't manage channels.");
+    // The skeleton draws the group headings, but no rows.
+    expect(text).not.toContain(copy.whoCanSee);
+  });
+
+  it("says the permission read failed rather than that the role can't, with a retry", () => {
+    h.permissions = undefined;
+    h.permissionsError = true;
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("Couldn't check your access");
+    expect(text).not.toContain("Your role can't manage channels.");
+  });
+
+  it("offers no who-can rows when the row doesn't carry its lists", () => {
+    const bare: Record<string, unknown> = channel();
+    delete bare.who_can_see;
+    delete bare.who_can_post;
+    h.channels = [bare];
+    const text = screenText(render());
+    expect(text).toContain(copy.access);
+    expect(text).not.toContain(copy.whoCanSee);
+    expect(text).not.toContain(copy.whoCanPost);
   });
 
   it("opens a pinned message in its channel", () => {

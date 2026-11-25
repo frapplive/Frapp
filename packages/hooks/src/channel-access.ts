@@ -2,7 +2,7 @@ import { sameChannelAccessList } from "@repo/validation";
 
 /**
  * Reading a channel's who-can-see and who-can-post lists (#3722), shared by
- * web's Chat settings and the phone's Edit channel sheet (#3702), so the two
+ * web's Chat settings and the phone's Channel settings (#3702, #6031), so the two
  * say the same thing about the same list.
  */
 
@@ -147,4 +147,34 @@ export function isEmptyChannelAccessChoice(
   list: readonly string[] | null,
 ): boolean {
   return list !== null && list.length === 0;
+}
+
+/** A channel row as a channel's settings read it (#6031), on either app. */
+interface SettingsChannelRow {
+  type: string;
+  is_audit_log?: boolean;
+  /** Absent when the API row didn't carry it (`selectChannels` on the phone). */
+  who_can_see?: readonly string[] | null;
+}
+
+/**
+ * Whether a channel is one Chat settings lists: DMs and group DMs are
+ * members' own, not settings, on both apps.
+ */
+export function isSettingsChannel(channel: { type: string }): boolean {
+  return channel.type !== "DM" && channel.type !== "GROUP_DM";
+}
+
+/**
+ * Whether a channel's settings ask who can see and post it: public and
+ * role-gated channels, not a private one (its members decide), not the audit
+ * log (Frapp writes it), and only when the row carries its lists, so a row
+ * from an API that left them out is never read as "everyone" and saved over.
+ */
+export function takesChannelAccessLists(channel: SettingsChannelRow): boolean {
+  return (
+    (channel.type === "PUBLIC" || channel.type === "ROLE_GATED") &&
+    channel.is_audit_log !== true &&
+    channel.who_can_see !== undefined
+  );
 }

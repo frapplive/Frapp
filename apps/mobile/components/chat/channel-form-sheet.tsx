@@ -77,9 +77,6 @@ interface AccessDraft {
   post: string[] | null;
 }
 
-const ACCESS_INCOMPLETE =
-  "Add a tier, role or group to each chosen list, or pick Everyone.";
-
 /**
  * New channel, on the phone (#3838; Shawn, 2026-11-11: "I should be able to
  * create new channels directly on the channel list"), as web's Create a
@@ -210,7 +207,7 @@ export const ChannelFormSheet = forwardRef<
   const save = useCallback(() => {
     if (!canSave || sending.current) return;
     if (accessIncomplete) {
-      setFailure(ACCESS_INCOMPLETE);
+      setFailure(CHANNEL_SETTINGS_COPY.accessIncomplete);
       return;
     }
     sending.current = true;

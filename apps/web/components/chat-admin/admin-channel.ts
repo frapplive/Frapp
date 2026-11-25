@@ -52,18 +52,11 @@ export interface AdminCategory {
   who_can_post?: string[] | null;
 }
 
-/** DMs and group DMs are members' own, not settings: neither page lists them. */
-export function isAdminChannel(channel: AdminChannel): boolean {
-  return channel.type !== "DM" && channel.type !== "GROUP_DM";
-}
-
 /**
- * The channel answers who can see and post itself: not private (its members
- * decide), not a DM, not the audit log (Frapp writes it).
+ * Which channels Chat settings lists, and which ask who can see and post:
+ * one rule for both apps, in `@repo/hooks/channel-access`.
  */
-export function takesAccessLists(channel: AdminChannel): boolean {
-  return (
-    (channel.type === "PUBLIC" || channel.type === "ROLE_GATED") &&
-    channel.is_audit_log !== true
-  );
-}
+export {
+  isSettingsChannel as isAdminChannel,
+  takesChannelAccessLists as takesAccessLists,
+} from "@repo/hooks/channel-access";

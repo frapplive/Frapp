@@ -23,6 +23,8 @@ export const CHANNEL_SETTINGS_COPY = {
   /** A private channel's answers: its members decide, so there is nothing to pick. */
   privateSee: "Only people added",
   privatePost: "Everyone in it",
+  /** A private channel made read-only before #3722 opens to everyone in it. */
+  letEveryonePost: "Let everyone in it post",
   defaults: "Defaults",
   defaultNotifications: "Default notifications",
   defaultChannel: "Chapter default channel",
@@ -54,6 +56,11 @@ export function channelAccessFootnote(
 /** The row that puts a channel back on its category's answers. */
 export function matchCategoryLabel(categoryName: string): string {
   return `Match ${categoryName}`;
+}
+
+/** A channel's pinned messages as a row's value. */
+export function pinnedMessagesValue(count: number): string {
+  return count === 0 ? "None" : String(count);
 }
 
 /** A count of open reports as a row's value. */

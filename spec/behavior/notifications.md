@@ -91,7 +91,7 @@ came from (`/meetings/<sourceId>` when `sourceType` is `meeting`), where they ar
 the action items, the Events page when `sourceType` is `event` (an event from this time last year, #3930), and otherwise the Tasks board's Suggested list; mobile opens its one Suggested list for all three
 ([`../ui/mobile/screens.md`](../ui/mobile/screens.md), Suggested; corrected 2026-11-12: it fell through to the notification list until #4415 built the list). `chat_reports` names the officer report queue
 (the new-report notification, [`chat/README.md`](./chat/README.md#report)); web
-resolves it to `/settings?tab=chat#reported-messages`, the queue at the foot of Chapter settings' Chat page (#3837), and mobile, which has no queue, falls through to the
+resolves it to `/settings?tab=chat&page=reports`, the queue's own page, which Chapter settings' Chat page reaches from its Reports row (#6031; `#reported-messages` at the foot of the Chat page until then, #3837, and a link with that anchor still lands on the queue's page), and mobile, which has no queue, falls through to the
 notification list like any screen it does not route. `discord_import` is the notice
 that a Discord import finished or stopped on an error, sent to the admin who set it up
 ([`chat/README.md`](./chat/README.md#imported-archive-messages)); web resolves it to
