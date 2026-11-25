@@ -7,7 +7,6 @@ import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
-  Download,
   Flag,
   Pencil,
   Plus,
@@ -26,7 +25,6 @@ import {
   useChatReports,
   useCreateCategory,
   useDeleteCategory,
-  useDiscordImports,
   usePermissionList,
   useUpdateCategory,
 } from "@repo/hooks";
@@ -86,12 +84,10 @@ import {
   CHAT_SETTINGS_PATH,
   channelSettingsPath,
   chatSettingsPagePath,
-  DISCORD_IMPORT_SETTINGS_PATH,
   type ChatSettingsPage,
 } from "@/components/settings/settings-paths";
 import { SettingsSubpage } from "@/components/settings/settings-subpage";
 import { MarkScreensSeen } from "@/lib/notifications/mark-screens-seen";
-import { discordImportSummary } from "@/components/discord-import/current-import";
 
 /** The tree's key for channels in no category, as the chat rail splits them. */
 const NO_CATEGORY = "__none__";
@@ -126,9 +122,9 @@ function channelSeenBy(
 }
 
 /**
- * The body of Chapter settings' Chat page (#6031), under the module frame's
- * header, in the settings-row shape of Discord's server settings and iOS
- * Settings (Paul, 2026-11-20):
+ * Chat admin, opened from the Chat page of Chapter settings (#3837, #6030:
+ * `?tab=chat&page=chat-admin`), in the settings-row shape of Discord's server
+ * settings and iOS Settings (#6031, Paul 2026-11-20):
  *
  * - **Channels**: every channel under its category, each category a row that
  *   folds out (#5727) with its rename, access and delete in a ⋯ menu and on
@@ -136,20 +132,16 @@ function channelSeenBy(
  *   opens that channel's own page (`channel-settings-page.tsx`).
  * - **Look**: the chapter's chat background, a row with its current choice
  *   that opens the picker as a page of its own.
- * - **Moderation**: the report queue and Discord import, each a row with its
- *   state that opens its page, so the queue stays out of the way (Paul,
- *   2026-11-11) and still says when something is waiting.
+ * - **Moderation**: the report queue, a row with its open count that opens
+ *   its page, so the queue stays out of the way (Paul, 2026-11-11) and still
+ *   says when something is waiting. Discord import is a row on the Chat page
+ *   itself (#6030).
  *
  * Each group carries its own gate: channels for `channels:manage`, the
  * background for whoever edits the chapter profile (#3973), the queue for
  * report reviewers.
  */
-export function ChatAdminPage({
-  holdsDiscordImport = false,
-}: {
-  /** The viewer holds Discord import (`SETTINGS_TOOLS`), so its row shows. */
-  holdsDiscordImport?: boolean;
-} = {}) {
+export function ChatAdminPage() {
   const permissions = usePermissionList();
   const canEditProfile = canAll(CHAPTER_PROFILE_PERMISSIONS, permissions);
   const canReviewReports = canAll(CHAT_REPORT_QUEUE_PERMISSIONS, permissions);
@@ -174,12 +166,7 @@ export function ChatAdminPage({
         <ChannelsGroup />
       </Can>
       {canEditProfile ? <LookGroup /> : null}
-      {canReviewReports || holdsDiscordImport ? (
-        <ModerationGroup
-          reports={canReviewReports}
-          discordImport={holdsDiscordImport}
-        />
-      ) : null}
+      {canReviewReports ? <ModerationGroup /> : null}
     </div>
   );
 }
@@ -204,45 +191,25 @@ function LookGroup() {
   );
 }
 
-function ModerationGroup({
-  reports,
-  discordImport,
-}: {
-  reports: boolean;
-  discordImport: boolean;
-}) {
-  const openReports = useChatReports("open", undefined, reports);
-  const imports = useDiscordImports({ enabled: discordImport });
+function ModerationGroup() {
+  const openReports = useChatReports("open");
   const openCount = Array.isArray(openReports.data)
     ? openReports.data.length
     : null;
-  const importValue = imports.data
-    ? discordImportSummary(asArray(imports.data))
-    : undefined;
   return (
     <SettingsGroup heading={CHANNEL_SETTINGS_COPY.moderation}>
-      {reports ? (
-        <SettingsRow
-          icon={Flag}
-          label={CHANNEL_SETTINGS_COPY.reports}
-          value={openCount === null ? undefined : openReportsValue(openCount)}
-          href={chatSettingsPagePath("reports")}
-        />
-      ) : null}
-      {discordImport ? (
-        <SettingsRow
-          icon={Download}
-          label="Discord import"
-          value={importValue}
-          href={DISCORD_IMPORT_SETTINGS_PATH}
-        />
-      ) : null}
+      <SettingsRow
+        icon={Flag}
+        label={CHANNEL_SETTINGS_COPY.reports}
+        value={openCount === null ? undefined : openReportsValue(openCount)}
+        href={chatSettingsPagePath("reports")}
+      />
     </SettingsGroup>
   );
 }
 
 /**
- * One of the Chat page's own pages (`?page=`), in place of the page. Its row
+ * One of Chat admin's own pages (`?page=`), in place of the Chat page. Its row
  * shows only to a viewer who may use it; one who reaches the address anyway
  * (an old or shared link) gets the plain denied line, never a titled blank.
  */
@@ -251,7 +218,7 @@ export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
     return (
       <SettingsSubpage
         backHref={CHAT_SETTINGS_PATH}
-        backLabel="Chat"
+        backLabel="Chat admin"
         title="Chat background"
       >
         <Can
@@ -271,7 +238,7 @@ export function ChatSettingsSubpage({ page }: { page: ChatSettingsPage }) {
   return (
     <SettingsSubpage
       backHref={CHAT_SETTINGS_PATH}
-      backLabel="Chat"
+      backLabel="Chat admin"
       title={CHANNEL_SETTINGS_COPY.reports}
     >
       <Can

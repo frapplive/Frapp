@@ -134,7 +134,10 @@ export function SettingsRow(
      * (Discord's channel settings, iOS Settings). A switch row goes without.
      */
     icon?: LucideIcon;
-    /** The id of the row's link or button, for focus to come back to. */
+    /**
+     * The id of the row's link, button or switch, for focus to come back to
+     * and for a deep link or a search result to land on.
+     */
     id?: string;
   } & Trailing,
 ) {
@@ -149,7 +152,8 @@ export function SettingsRow(
   const row = cn(ROW, nested && "pl-10");
   const labelId = useId();
   const descriptionId = useId();
-  const switchId = useId();
+  const generatedSwitchId = useId();
+  const switchId = props.id ?? generatedSwitchId;
   const isSwitch = "onCheckedChange" in props && !!props.onCheckedChange;
   // A switch row's label is a real <label>, so clicking the words flips it.
   const LabelTag = isSwitch ? "label" : "span";

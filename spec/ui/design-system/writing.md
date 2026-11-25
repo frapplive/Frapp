@@ -720,7 +720,7 @@ Channel seeding happens at chapter onboarding and has no billing prerequisite; [
 
 ### Chat Admin — channels and categories (dashboard)
 
-The Channels group in Settings → Chat (`/settings?tab=chat`), and one channel's page and its pins page (`?channel=<id>`, `&page=pins`; #6031).
+The Channels group in Settings → Chat → Chat admin (`/settings?tab=chat&page=chat-admin`), and one channel's page and its pins page (`&channel=<id>`, `&page=pins`; #6031).
 Its states stand where the group would be, so they name channels, not the page: the Look and Moderation rows under it, and the report queue's own page, read and fail on their own.
 
 | State | Title | Description |

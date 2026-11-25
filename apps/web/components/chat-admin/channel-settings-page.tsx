@@ -129,7 +129,7 @@ interface PinnedMessageRow {
 
 /**
  * One channel's settings (#6031), drawn in place of Chapter settings' Chat
- * page at `/settings?tab=chat&channel=<id>`, in the shape of Discord's
+ * page at `/settings?tab=chat&page=chat-admin&channel=<id>`, in the shape of Discord's
  * channel settings (Paul, 2026-11-20): the name and description on top, then
  * three groups of rows (Access, Defaults, Moderation), then Delete channel,
  * red and alone, last. The phone's Channel settings screen draws the same
@@ -244,7 +244,7 @@ function ChannelSettingsBody({
         <Button asChild variant="secondary" size="sm" className="gap-1.5">
           <Link href={CHAT_SETTINGS_PATH}>
             <ArrowLeft className="h-4 w-4" aria-hidden />
-            Chat
+            Chat admin
           </Link>
         </Button>
       </div>
@@ -506,7 +506,7 @@ function ChannelSettings({
     <div className="@container space-y-8">
       {confirmDialog}
       <header className="space-y-1 border-b border-border pb-6">
-        <SettingsBackLink href={CHAT_SETTINGS_PATH} label="Chat" />
+        <SettingsBackLink href={CHAT_SETTINGS_PATH} label="Chat admin" />
         <h2 className="min-w-0 truncate text-title text-foreground">
           {channelTitle}
         </h2>

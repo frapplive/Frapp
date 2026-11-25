@@ -18,7 +18,7 @@ import type { ChannelSettingsPage as Page } from "@/components/settings/settings
 
 /*
  * One channel's own settings (#6031), drawn in place of Chapter settings'
- * Chat page at `?tab=chat&channel=<id>`: the name and description with Save
+ * Chat admin at `?tab=chat&page=chat-admin&channel=<id>`: the name and description with Save
  * channel, then Access, Defaults and Moderation rows that each save on their
  * own, then Delete channel; and the pages its rows open (`&page=`).
  *
@@ -242,9 +242,9 @@ describe("ChannelSettingsPage — the page", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "#general" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat",
+      "/settings?tab=chat&page=chat-admin",
     );
     // The settings groups' own lists are the only surfaces.
     for (const el of cardFilledContainers(container)) {
@@ -284,9 +284,9 @@ describe("ChannelSettingsPage — the page", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat",
+      "/settings?tab=chat&page=chat-admin",
     );
   });
 
@@ -344,7 +344,7 @@ describe("ChannelSettingsPage — the page", () => {
 describe("ChannelSettingsPage — the name and description", () => {
   it("focuses Description when a channel start's Add a description opened it", () => {
     search.current = new URLSearchParams(
-      "tab=chat&channel=ch-1&focus=description",
+      "tab=chat&page=chat-admin&channel=ch-1&focus=description",
     );
     render(page("ch-1"));
     expect(descriptionField()).toHaveFocus();
@@ -740,12 +740,12 @@ describe("ChannelSettingsPage — access", () => {
     const see = within(access).getByRole("link", { name: /^Who can see/ });
     expect(see).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-3&page=see",
+      "/settings?tab=chat&page=see&channel=ch-3",
     );
     expect(see).toHaveTextContent("Executive board");
     expect(
       within(access).getByRole("link", { name: /^Who can post/ }),
-    ).toHaveAttribute("href", "/settings?tab=chat&channel=ch-3&page=post");
+    ).toHaveAttribute("href", "/settings?tab=chat&page=post&channel=ch-3");
   });
 
   it("says a channel matching its category matches it, with no Match row", () => {
@@ -844,7 +844,7 @@ describe("ChannelSettingsPage — the who can see and who can post pages", () =>
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "#general" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-1",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
     );
     expect(screen.getByRole("group", { name: "Who can see" })).toBeVisible();
     expect(screen.queryByRole("group", { name: "Who can post" })).toBeNull();
@@ -872,7 +872,7 @@ describe("ChannelSettingsPage — the who can see and who can post pages", () =>
     });
     await waitFor(() =>
       expect(router.push).toHaveBeenCalledWith(
-        "/settings?tab=chat&channel=ch-1",
+        "/settings?tab=chat&page=chat-admin&channel=ch-1",
       ),
     );
   });
@@ -986,7 +986,7 @@ describe("ChannelSettingsPage — the audit log", () => {
 });
 
 describe("ChannelSettingsPage — Delete channel", () => {
-  it("deletes the channel once its name is typed, then goes back to Chat", async () => {
+  it("deletes the channel once its name is typed, then goes back to Chat admin", async () => {
     mockDeleteChannel.mockResolvedValue({});
     render(page("ch-1"));
 
@@ -1003,7 +1003,9 @@ describe("ChannelSettingsPage — Delete channel", () => {
 
     await waitFor(() => expect(mockDeleteChannel).toHaveBeenCalledWith("ch-1"));
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/settings?tab=chat"),
+      expect(router.replace).toHaveBeenCalledWith(
+        "/settings?tab=chat&page=chat-admin",
+      ),
     );
   });
 });
@@ -1016,7 +1018,7 @@ describe("ChannelSettingsPage — Moderation", () => {
     const row = screen.getByRole("link", { name: /^Pinned messages/ });
     expect(row).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-2&page=pins",
+      "/settings?tab=chat&page=pins&channel=ch-2",
     );
     expect(row).toHaveTextContent("1");
     expect(mockPins).toHaveBeenCalledWith("ch-2");
@@ -1043,7 +1045,7 @@ describe("ChannelSettingsPage — Moderation", () => {
     const row = screen.getByRole("link", { name: /^Reports/ });
     expect(row).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-2&page=reports",
+      "/settings?tab=chat&page=reports&channel=ch-2",
     );
     expect(row).toHaveTextContent("1 open");
     expect(mockChatReports).toHaveBeenCalledWith("open", "ch-2", true);
@@ -1067,7 +1069,7 @@ describe("ChannelSettingsPage — the reports page", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "#exec" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-2",
+      "/settings?tab=chat&page=chat-admin&channel=ch-2",
     );
     expect(screen.getByTestId("report-queue")).toHaveAttribute(
       "data-channel",
@@ -1089,7 +1091,7 @@ describe("ChannelSettingsPage — the pins page", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "#exec" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-2",
+      "/settings?tab=chat&page=chat-admin&channel=ch-2",
     );
     expect(screen.getByText("Dues are due Friday")).toBeInTheDocument();
     expect(screen.getByText("Treasurer")).toBeInTheDocument();

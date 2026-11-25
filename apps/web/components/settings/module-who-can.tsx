@@ -1,17 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
+import { useMemo, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProfileSection } from "@/components/profile/profile-section";
-import {
-  InlineNote,
-  inlineNoteActionClassName,
-} from "@/components/shared/inline-note";
+import { InlineNote } from "@/components/shared/inline-note";
 import { FOCUS_RING } from "@/components/ui/focus";
 import { modulePermissions } from "@/components/settings/settings-modules";
 import { SearchablePicker } from "@/components/shared/searchable-picker";
+import { SettingsGroup, SettingsRow } from "@/components/shared/settings-row";
 import {
   useRolePermissionToggle,
   useTierPermissionToggle,
@@ -26,218 +22,264 @@ import {
   type TierRow,
   type TieredRole,
 } from "@repo/hooks/role-tiers";
-
-/** A tier or a role, as a chip and as a choice under "Add". */
-type Holder = {
-  kind: "tier" | "role";
-  id: string;
-  name: string;
-  color: string | null;
-  permissions: readonly string[];
-};
+import { CANT_GIVE } from "@repo/hooks/use-roles-data";
+import {
+  whoCanHolders,
+  whoCanPageId,
+  whoCanSummary,
+} from "@repo/hooks/module-settings";
+import { WHO_CAN_FOOTNOTE, WHO_CAN_ROLES_FOOTNOTE } from "@repo/validation";
 
 /**
- * A module page's "Who can" block (#4073): each of the module's permissions,
- * in the registry's words, with the tiers and roles that have it, edited
- * right here.
+ * A module page's Who can (#4073, in the settings-rows shape since #6030):
+ * one row per permission of the module, in the registry's words, showing
+ * the tiers and roles that hold it, and opening that permission's page.
  *
  * An officer setting up Events asks "who can create events?" on the Events
- * page, so the answer and the change sit together. Since the tiers rebuild
- * (#3990) the answer is mostly tiers: a chapter with a hundred roles reads
- * "Exec board, Officers and chairs" rather than forty role chips. A role
- * shows on its own only where it differs from its tier, or sits outside the
- * tiers, which is the same rule the role's own page marks. A chip's × takes
- * the permission away and "Add" grants it, saved on click through the same
- * writers as the tier and role pages (`use-role-permission-toggle.ts`).
- * Discord's channel permissions and Slack's per-feature "who can" pickers
- * both edit in place for the same reason.
- *
- * Editing needs `roles:manage`, the guard on both writes; without it the
- * chips are read-only. The rank rules (#4071) disable what the API would
- * refuse: a tier or role at or above the caller's own, and granting a
- * permission the caller doesn't hold. The President's wildcard is said once
- * in the hint rather than drawn as a chip on every row.
+ * page, so the answer sits in the row's value and the change one page away,
+ * the way Slack's admin Permissions lists "Who can create channels" with its
+ * answer and Discord's channel settings open Permissions as a page. Since
+ * the tiers rebuild (#3990) the answer is mostly tiers, so a chapter with a
+ * hundred roles reads "Exec board, Officers and chairs" rather than forty
+ * role names.
  */
-export function ModuleWhoCan({
-  moduleKey,
-  moduleLabel,
-  canEdit,
-}: {
-  moduleKey: string;
-  moduleLabel: string;
-  /** Whether the viewer holds `roles:manage`. */
-  canEdit: boolean;
-}) {
-  const { rolesQuery, tiersQuery, roles, tiers, reach, words } =
-    useRolesData();
-  const tierToggle = useTierPermissionToggle(tiers);
+
+/** The roles a Who can answer can name: every role but the President's. */
+function useWhoCanData() {
+  const data = useRolesData();
+  const tierToggle = useTierPermissionToggle(data.tiers);
   const editableRoles = useMemo(
-    () => roles.filter((role) => !isWildcardRole(role)).sort(byDisplayOrder),
-    [roles],
+    () =>
+      data.roles.filter((role) => !isWildcardRole(role)).sort(byDisplayOrder),
+    [data.roles],
   );
   const roleToggle = useRolePermissionToggle(editableRoles);
-  const permissions = modulePermissions(moduleKey);
-  if (permissions.length === 0) return null;
-
   const tierHas = (tier: TierRow, permission: string) =>
     tierToggle.permissionsOf(tier).includes(permission);
   const roleHas = (role: TieredRole, permission: string) =>
     roleToggle.permissionsOf(role).includes(permission);
-
-  const tierHolder = (tier: TierRow): Holder => ({
-    kind: "tier",
-    id: tier.id,
-    name: tier.name,
-    color: null,
-    permissions: tier.permissions,
-  });
-  const roleHolder = (role: TieredRole): Holder => ({
-    kind: "role",
-    id: role.id,
-    name: role.name,
-    color: role.color,
-    permissions: role.permissions,
-  });
-
-  const mayEdit = (holder: Holder) => {
-    if (!canEdit) return false;
-    if (holder.kind === "tier") {
-      const tier = tiers.find((candidate) => candidate.id === holder.id);
-      return !!tier && reachesTier(reach, tier);
-    }
-    const role = roles.find((candidate) => candidate.id === holder.id);
-    return !!role && reachesRole(reach, role, tiers);
+  const holdersOf = (permission: string) =>
+    whoCanHolders(permission, data.tiers, editableRoles, tierHas, roleHas);
+  return {
+    ...data,
+    editableRoles,
+    tierToggle,
+    roleToggle,
+    tierHas,
+    roleHas,
+    holdersOf,
+    loading: data.rolesQuery.isPending || data.tiersQuery.isPending,
+    failed: data.rolesQuery.isError || data.tiersQuery.isError,
   };
+}
 
-  const flip = (holder: Holder, permission: string, held: boolean) => {
-    if (holder.kind === "tier") {
-      const tier = tiers.find((candidate) => candidate.id === holder.id);
-      if (tier) void tierToggle.toggle(tier, permission, held);
-      return;
-    }
-    const role = editableRoles.find((candidate) => candidate.id === holder.id);
-    if (role) void roleToggle.toggle(role, permission, held);
-  };
-
-  const isSaving = (holder: Holder, permission: string) => {
-    const pending =
-      holder.kind === "tier" ? tierToggle.pending : roleToggle.pending;
-    return pending?.id === holder.id && pending.permission === permission;
-  };
-
-  const rolesLink = (
-    <Link href="/settings?tab=roles" className={inlineNoteActionClassName}>
-      {canEdit ? "See everything in Roles" : "Change in Roles"}
-    </Link>
+/** The module page's Who can group: a row per permission, with its answer. */
+export function ModuleWhoCanGroup({
+  moduleKey,
+  pageHref,
+}: {
+  moduleKey: string;
+  /** Where a permission's page is: the module page with `?page=`. */
+  pageHref: (page: string) => string;
+}) {
+  const data = useWhoCanData();
+  const permissions = modulePermissions(moduleKey);
+  if (permissions.length === 0) return null;
+  if (data.failed) {
+    return (
+      <SettingsGroup heading="Who can">
+        <li className="px-4 py-3">
+          <InlineNote>Couldn&apos;t load your chapter&apos;s roles.</InlineNote>
+        </li>
+      </SettingsGroup>
+    );
+  }
+  return (
+    <SettingsGroup heading="Who can" footnote={WHO_CAN_FOOTNOTE}>
+      {permissions.map((entry) => {
+        const page = whoCanPageId(entry.permission);
+        const holders = data.holdersOf(entry.permission);
+        const names = [
+          ...holders.tiers.map((tier) => tier.name),
+          ...holders.roles.map((role) => role.name),
+        ];
+        return (
+          <SettingsRow
+            key={entry.permission}
+            id={`module-row-${page}`}
+            label={entry.label}
+            value={data.loading ? "Loading" : whoCanSummary(names)}
+            href={pageHref(page)}
+          />
+        );
+      })}
+    </SettingsGroup>
   );
-  const loading = rolesQuery.isPending || tiersQuery.isPending;
+}
+
+/**
+ * One permission's page, opened from its Who can row: the chapter's tiers as
+ * switches, then the roles that hold it apart from their tier, each with a
+ * way to take it away, and Add a role. Discord's channel permission page and
+ * the phone's tier screen (#4074) both answer "who can" as switches.
+ *
+ * The writes are the tier and role pages' own (`use-role-permission-toggle`),
+ * saved the moment a switch flips. Editing needs `roles:manage`; the rank
+ * rules (#4071) disable what the API would refuse, a tier or role at or
+ * above the caller's own and granting a permission the caller doesn't hold,
+ * and the row says why.
+ */
+export function WhoCanPermissionPage({
+  permission,
+  canEdit,
+  note,
+}: {
+  permission: string;
+  /** Whether the viewer holds `roles:manage`. */
+  canEdit: boolean;
+  /** A line about this permission in particular, above its tiers. */
+  note?: ReactNode;
+}) {
+  const data = useWhoCanData();
+  const { tiers, editableRoles, reach, words } = data;
+  if (data.failed) {
+    return (
+      <InlineNote>Couldn&apos;t load your chapter&apos;s roles.</InlineNote>
+    );
+  }
+  if (data.loading) {
+    return <p className="text-caption text-muted-foreground">Loading</p>;
+  }
+
+  const canGrant = mayGrant(reach, permission);
+  const holders = data.holdersOf(permission);
+  const tierReason = (tier: TierRow, held: boolean): string | null => {
+    if (!canEdit) return null;
+    if (!reachesTier(reach, tier)) {
+      return `At or above your rank, so your role can't change it.`;
+    }
+    if (!held && !canGrant) return CANT_GIVE;
+    return null;
+  };
+  const mayEditRole = (role: TieredRole) =>
+    canEdit && reachesRole(reach, role, tiers);
+  const tierPending = (tier: TierRow) =>
+    data.tierToggle.pending?.id === tier.id &&
+    data.tierToggle.pending.permission === permission;
+  const rolePending = (role: TieredRole) =>
+    data.roleToggle.pending?.id === role.id &&
+    data.roleToggle.pending.permission === permission;
+  const addable = canGrant
+    ? editableRoles.filter(
+        (role) =>
+          !holders.roles.some((held) => held.id === role.id) &&
+          !data.roleHas(role, permission) &&
+          mayEditRole(role),
+      )
+    : [];
 
   return (
-    <ProfileSection
-      id={`settings-module-${moduleKey}-who`}
-      title="Who can"
-      hint={
-        <>
-          {canEdit
-            ? `Which ${words.plural} and roles can do each thing in ${moduleLabel}. Changes save as you make them. The President can do everything.`
-            : `What each ${words.singular} and role can do in ${moduleLabel}. The President can do everything.`}{" "}
-          {rolesLink}
-        </>
-      }
-    >
-      {rolesQuery.isError || tiersQuery.isError ? (
-        <InlineNote>
-          Couldn&apos;t load your chapter&apos;s roles. {rolesLink} shows them.
-        </InlineNote>
-      ) : (
-        <ul className="divide-y divide-border rounded-[14px] border border-border">
-          {permissions.map((entry) => {
-            const holdingTiers = tiers.filter((tier) =>
-              tierHas(tier, entry.permission),
-            );
-            // A role is its own chip only where its tier doesn't already
-            // answer for it: outside the tiers, or set apart from its tier.
-            const roleTier = (role: TieredRole) =>
-              tiers.find((tier) => tier.id === role.tier_id) ?? null;
-            const holdingRoles = editableRoles.filter((role) => {
-              const tier = roleTier(role);
-              return (
-                roleHas(role, entry.permission) &&
-                (!tier || !tierHas(tier, entry.permission))
-              );
-            });
-            const holders = [
-              ...holdingTiers.map(tierHolder),
-              ...holdingRoles.map(roleHolder),
-            ];
-            const canGrant = mayGrant(reach, entry.permission);
-            const addable = canGrant
-              ? [
-                  ...tiers
-                    .filter((tier) => !tierHas(tier, entry.permission))
-                    .map(tierHolder),
-                  ...editableRoles
-                    .filter((role) => !roleHas(role, entry.permission))
-                    .map(roleHolder),
-                ].filter(mayEdit)
-              : [];
-            return (
-              <li
-                key={entry.permission}
-                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
-              >
-                <div className="min-w-0 sm:max-w-[50%]">
-                  <p className="text-sm font-medium text-foreground">
-                    {entry.label}
-                  </p>
-                  <p className="mt-0.5 text-caption text-muted-foreground">
-                    {entry.description}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                  {loading ? (
-                    <span className="text-caption text-muted">Loading</span>
-                  ) : (
-                    <>
-                      {holders.length === 0 ? (
-                        <span className="text-caption text-muted-foreground">
-                          Only the President
-                        </span>
-                      ) : (
-                        holders.map((holder) => (
-                          <HolderChip
-                            key={`${holder.kind}-${holder.id}`}
-                            holder={holder}
-                            saving={isSaving(holder, entry.permission)}
-                            onRemove={
-                              mayEdit(holder)
-                                ? () => flip(holder, entry.permission, true)
-                                : undefined
-                            }
-                            permissionLabel={entry.label}
-                          />
-                        ))
-                      )}
-                      {canEdit && addable.length > 0 ? (
-                        <AddHolder
-                          permissionLabel={entry.label}
-                          holders={addable}
-                          tierHeading={words.Plural}
-                          tierWord={words.singular}
-                          onAdd={(holder) =>
-                            flip(holder, entry.permission, false)
-                          }
-                        />
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </ProfileSection>
+    <div className="space-y-8">
+      {note}
+      <SettingsGroup
+        heading={words.Plural}
+        footnote={
+          canEdit
+            ? WHO_CAN_FOOTNOTE
+            : `${WHO_CAN_FOOTNOTE} Your role can't change these.`
+        }
+      >
+        {tiers.map((tier) => {
+          const held = data.tierHas(tier, permission);
+          const reason = tierReason(tier, held);
+          return (
+            <SettingsRow
+              key={tier.id}
+              label={tier.name}
+              description={reason ?? undefined}
+              checked={held}
+              disabled={!canEdit || reason !== null || tierPending(tier)}
+              onCheckedChange={() =>
+                void data.tierToggle.toggle(tier, permission, held)
+              }
+            />
+          );
+        })}
+      </SettingsGroup>
+
+      {holders.roles.length > 0 || (canEdit && addable.length > 0) ? (
+        <SettingsGroup
+          heading="Roles set apart"
+          footnote={WHO_CAN_ROLES_FOOTNOTE}
+        >
+          {holders.roles.map((role) => (
+            <SettingsRow
+              key={role.id}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <RoleDot color={role.color} />
+                  {role.name}
+                </span>
+              }
+              control={
+                mayEditRole(role) ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void data.roleToggle.toggle(role, permission, true)
+                    }
+                    disabled={rolePending(role)}
+                    aria-label={`Take it away from ${role.name}`}
+                    className={cn(
+                      "grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-card-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+                      FOCUS_RING,
+                    )}
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                ) : null
+              }
+            />
+          ))}
+          {canEdit && addable.length > 0 ? (
+            <li className="group">
+              <SearchablePicker
+                trigger={
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex min-h-11 w-full items-center gap-4 px-4 py-2.5 text-left text-sm text-muted-foreground transition hover:bg-card-hover hover:text-foreground group-first:rounded-t-[13px] group-last:rounded-b-[13px]",
+                      FOCUS_RING,
+                    )}
+                  >
+                    <Plus className="h-[18px] w-[18px] shrink-0" aria-hidden />
+                    Add a role
+                  </button>
+                }
+                align="start"
+                label="Role to add"
+                placeholder="Find a role"
+                items={addable}
+                nameOf={(role) => role.name}
+                keyOf={(role) => role.id}
+                itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
+                renderItem={(role) => (
+                  <>
+                    <RoleDot color={role.color} />
+                    <span className="min-w-0 flex-1 break-words">
+                      {role.name}
+                    </span>
+                  </>
+                )}
+                onPick={(role) =>
+                  void data.roleToggle.toggle(role, permission, false)
+                }
+              />
+            </li>
+          ) : null}
+        </SettingsGroup>
+      ) : null}
+    </div>
   );
 }
 
@@ -247,109 +289,6 @@ function RoleDot({ color }: { color: string | null }) {
       aria-hidden
       className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground"
       style={color ? { backgroundColor: color } : undefined}
-    />
-  );
-}
-
-/**
- * A tier or role holding the permission. A tier chip is drawn square-ish and
- * without a dot, so "Exec board" never reads as a role of that name. With
- * `onRemove`, a × takes it away. A chip whose write is in flight goes muted
- * rather than growing a spinner, so the row never shifts.
- */
-function HolderChip({
-  holder,
-  saving,
-  onRemove,
-  permissionLabel,
-}: {
-  holder: Holder;
-  saving: boolean;
-  onRemove?: () => void;
-  permissionLabel: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-6 items-center gap-1.5 border border-border pl-2 text-caption",
-        holder.kind === "tier"
-          ? "rounded-md bg-card font-semibold"
-          : "rounded-full",
-        onRemove ? "pr-0.5" : "pr-2",
-        saving ? "text-muted-foreground" : "text-foreground",
-      )}
-    >
-      {holder.kind === "role" ? <RoleDot color={holder.color} /> : null}
-      {holder.name}
-      {onRemove ? (
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={saving}
-          aria-label={`Remove ${holder.name} from ${permissionLabel}`}
-          className={cn(
-            "grid h-5 w-5 place-items-center rounded-full text-muted-foreground hover:bg-card-hover hover:text-foreground disabled:pointer-events-none",
-            FOCUS_RING,
-          )}
-        >
-          <X className="h-3 w-3" aria-hidden />
-        </button>
-      ) : null}
-    </span>
-  );
-}
-
-/**
- * "Add": a filterable list of the tiers, then the roles, that don't have the
- * permission. Filterable because a chapter imported from Discord can carry a
- * hundred roles, the same reason the toolbar filter chips are.
- */
-function AddHolder({
-  permissionLabel,
-  holders,
-  tierHeading,
-  tierWord,
-  onAdd,
-}: {
-  permissionLabel: string;
-  holders: readonly Holder[];
-  tierHeading: string;
-  tierWord: string;
-  onAdd: (holder: Holder) => void;
-}) {
-  return (
-    <SearchablePicker
-      trigger={
-        <button
-          type="button"
-          aria-label={`Add to ${permissionLabel}`}
-          className={cn(
-            "inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-border px-2 text-caption font-semibold text-muted-foreground hover:border-input hover:text-foreground",
-            FOCUS_RING,
-          )}
-        >
-          <Plus className="h-3 w-3" aria-hidden />
-          Add
-        </button>
-      }
-      align="end"
-      label={`Who to add to ${permissionLabel}`}
-      placeholder={`Find a ${tierWord} or role`}
-      items={holders}
-      nameOf={(holder) => holder.name}
-      keyOf={(holder) => `${holder.kind}-${holder.id}`}
-      groupsOf={(shown) => [
-        { heading: tierHeading, items: shown.filter((h) => h.kind === "tier") },
-        { heading: "Roles", items: shown.filter((h) => h.kind === "role") },
-      ]}
-      itemClassName="min-h-8 gap-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base"
-      renderItem={(holder) => (
-        <>
-          {holder.kind === "role" ? <RoleDot color={holder.color} /> : null}
-          <span className="min-w-0 flex-1 break-words">{holder.name}</span>
-        </>
-      )}
-      onPick={onAdd}
     />
   );
 }

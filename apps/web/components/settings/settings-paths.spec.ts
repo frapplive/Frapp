@@ -86,12 +86,12 @@ describe("settingsSubpageFor", () => {
 
 describe("the addresses", () => {
   it("builds a channel's, its pages', its description's and the Chat page's", () => {
-    expect(channelSettingsPath("c 1")).toBe("/settings?tab=chat&channel=c%201");
+    expect(channelSettingsPath("c 1")).toBe("/settings?tab=chat&page=chat-admin&channel=c%201");
     expect(channelSettingsPath("c1", "see")).toBe(
-      "/settings?tab=chat&channel=c1&page=see",
+      "/settings?tab=chat&page=see&channel=c1",
     );
     expect(channelDescriptionPath("c1")).toBe(
-      "/settings?tab=chat&channel=c1&focus=description",
+      "/settings?tab=chat&page=chat-admin&channel=c1&focus=description",
     );
     expect(chatSettingsPagePath("background")).toBe(
       "/settings?tab=chat&page=background",

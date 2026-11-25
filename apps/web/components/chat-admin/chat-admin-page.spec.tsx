@@ -35,7 +35,6 @@ const {
   mockUpdateCategory,
   mockDeleteCategory,
   mockChatReports,
-  mockDiscordImports,
   mockMarkSeen,
 } = vi.hoisted(() => ({
   mockOffline: { value: false },
@@ -45,14 +44,12 @@ const {
   mockUpdateCategory: vi.fn(),
   mockDeleteCategory: vi.fn(),
   mockChatReports: vi.fn(),
-  mockDiscordImports: vi.fn(),
   mockMarkSeen: vi.fn(),
   reads: {
     channels: {} as Record<string, unknown>,
     categories: {} as Record<string, unknown>,
     accessOptions: {} as Record<string, unknown>,
     reports: {} as Record<string, unknown>,
-    imports: {} as Record<string, unknown>,
     background: {} as Record<string, unknown>,
   },
 }));
@@ -74,10 +71,6 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useChatReports: (...args: unknown[]) => {
       mockChatReports(...args);
       return reads.reports;
-    },
-    useDiscordImports: (...args: unknown[]) => {
-      mockDiscordImports(...args);
-      return reads.imports;
     },
     useMarkNotificationScreensSeen: (...args: unknown[]) =>
       mockMarkSeen(...args),
@@ -190,7 +183,6 @@ beforeEach(() => {
   reads.categories = settled(CATEGORIES);
   reads.accessOptions = settled(ACCESS_OPTIONS);
   reads.reports = settled([]);
-  reads.imports = settled([]);
   reads.background = { data: undefined };
 });
 
@@ -265,7 +257,7 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     expect(links.map(channelName)).toEqual(["exec", "general", "officers"]);
     expect(channelLink("general")).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-1",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
     );
     // Each row says who can see the channel.
     expect(
@@ -384,7 +376,7 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     fireEvent.click(system);
     expect(channelLink("chapter-audit")).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-audit",
+      "/settings?tab=chat&page=chat-admin&channel=ch-audit",
     );
   });
 
@@ -395,7 +387,7 @@ describe("ChatAdminPage — the category tree (#5727)", () => {
     expect(none).toHaveAttribute("aria-expanded", "true");
     expect(channelLink("general")).toHaveAttribute(
       "href",
-      "/settings?tab=chat&channel=ch-1",
+      "/settings?tab=chat&page=chat-admin&channel=ch-1",
     );
     fireEvent.click(none);
     expect(none).toHaveAttribute("aria-expanded", "false");
@@ -978,7 +970,7 @@ describe("ChatAdminPage — Look", () => {
 });
 
 describe("ChatAdminPage — Moderation", () => {
-  it("is hidden from a viewer who reviews no reports and holds no Discord import", () => {
+  it("is hidden from a viewer who reviews no reports", () => {
     render(<ChatAdminPage />);
     expect(screen.queryByText("Moderation")).toBeNull();
     expect(screen.queryByRole("link", { name: /^Reports/ })).toBeNull();
@@ -992,12 +984,11 @@ describe("ChatAdminPage — Moderation", () => {
     const row = within(moderation).getByRole("link", { name: /^Reports/ });
     expect(row).toHaveAttribute("href", "/settings?tab=chat&page=reports");
     expect(row).toHaveTextContent("None open");
-    expect(mockChatReports).toHaveBeenCalledWith("open", undefined, true);
-    // No Discord import without the tool.
+    expect(mockChatReports).toHaveBeenCalledWith("open");
+    // Discord import is a row on the Chat page itself (#6030), not here.
     expect(
       within(moderation).queryByRole("link", { name: /^Discord import/ }),
     ).toBeNull();
-    expect(mockDiscordImports).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("counts the open reports", () => {
@@ -1018,45 +1009,12 @@ describe("ChatAdminPage — Moderation", () => {
     );
   });
 
-  it("shows Discord import's state to a viewer who holds it, without Reports for a non-reviewer", () => {
-    reads.imports = settled([
-      {
-        id: "imp-1",
-        status: "completed",
-        created_at: "2026-11-01T00:00:00Z",
-        imported_messages: 1234,
-      },
-    ]);
-    render(<ChatAdminPage holdsDiscordImport />);
-
-    const moderation = screen.getByRole("list", { name: "Moderation" });
-    const row = within(moderation).getByRole("link", {
-      name: /^Discord import/,
-    });
-    expect(row).toHaveAttribute(
-      "href",
-      "/settings?tab=chat&tool=discord-import",
-    );
-    expect(row).toHaveTextContent("1,234 messages");
-    expect(mockDiscordImports).toHaveBeenCalledWith({ enabled: true });
-    expect(
-      within(moderation).queryByRole("link", { name: /^Reports/ }),
-    ).toBeNull();
-  });
-
-  it("says an import hasn't started when there is none", () => {
-    render(<ChatAdminPage holdsDiscordImport />);
-    expect(
-      screen.getByRole("link", { name: /^Discord import/ }),
-    ).toHaveTextContent("Not started");
-  });
-
   it("puts Moderation after Look", () => {
     permissions.current = [
       ...CHAPTER_PROFILE_PERMISSIONS,
       ...CHAT_REPORT_QUEUE_PERMISSIONS,
     ];
-    render(<ChatAdminPage holdsDiscordImport />);
+    render(<ChatAdminPage />);
     expect(
       follows(
         screen.getByRole("list", { name: "Look" }),
@@ -1073,9 +1031,9 @@ describe("ChatSettingsSubpage", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Reports" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat",
+      "/settings?tab=chat&page=chat-admin",
     );
     expect(screen.getByTestId("report-queue")).toHaveAttribute(
       "data-channel",
@@ -1093,9 +1051,9 @@ describe("ChatSettingsSubpage", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Chat background" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Chat admin" })).toHaveAttribute(
       "href",
-      "/settings?tab=chat",
+      "/settings?tab=chat&page=chat-admin",
     );
     expect(screen.getByTestId("background-picker")).toBeInTheDocument();
     expect(screen.queryByTestId("report-queue")).toBeNull();

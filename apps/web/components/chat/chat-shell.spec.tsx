@@ -3506,7 +3506,7 @@ describe("ChatShell channel description and start", () => {
     const start = await screen.findByTestId("channel-start");
     expect(
       within(start).getByRole("link", { name: "Edit channel", hidden: true }),
-    ).toHaveAttribute("href", "/settings?tab=chat&channel=chan-general");
+    ).toHaveAttribute("href", "/settings?tab=chat&page=chat-admin&channel=chan-general");
     unmount();
 
     mockUseMyPermissions.mockReturnValue({ data: { permissions: [] } });
@@ -6421,7 +6421,7 @@ describe("ChatShell rail row menu (owner, 2026-11-06)", () => {
     render(<ChatShell initialChannelId="chan-general" />);
     railRowActions.value!.onEdit("chan-random");
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/settings?tab=chat&channel=chan-random",
+      "/settings?tab=chat&page=chat-admin&channel=chan-random",
     );
   });
 
