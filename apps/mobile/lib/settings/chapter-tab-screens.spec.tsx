@@ -87,6 +87,9 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useRequestChapterLogoUploadUrl: () => ({ mutateAsync: vi.fn() }),
   useConfirmChapterLogo: () => ({ mutateAsync: vi.fn() }),
   useRemoveChapterLogo: () => ({ mutate: h.removeLogo, isPending: false }),
+  // The Recruitment module is off here, so #6039's interest form stays hidden.
+  useInterestFormSettings: () => ok(undefined),
+  useUpdateInterestForm: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/components/settings/accent-sheet", async () => {

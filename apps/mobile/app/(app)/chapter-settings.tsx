@@ -142,6 +142,7 @@ export default function ChapterSettingsScreen() {
   // config read refuses a council (#5933), so its parts don't draw there.
   const tab = useChapterTab();
   const {
+    permissions,
     access,
     chapterQuery,
     orgConfig,

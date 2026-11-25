@@ -50,6 +50,8 @@ export function useChapterTab() {
   const config = orgConfig.data;
   const name = chapter?.name ?? "";
   return {
+    /** The viewer's permission list, for the screen's other sections. */
+    permissions,
     access,
     chapterFeatures,
     chapterQuery,
