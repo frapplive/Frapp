@@ -141,6 +141,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = Object.freeze([
     ],
     phone: [
       "On iPhone, chat notifications now show the sender's profile photo, the way your other messaging apps do.",
+      "Officers can now change the chapter's name, logo, short name, identity, organization type, words and birthday posts from Chapter settings, as on the web.",
     ],
   },
   {
