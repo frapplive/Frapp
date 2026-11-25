@@ -41,7 +41,9 @@ vi.mock("@/components/item-actions-menu", async (importOriginal) => ({
     state.menus.push(menu);
   },
 }));
-vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
+vi.mock("expo-clipboard", () => ({
+  setStringAsync: vi.fn().mockResolvedValue(true),
+}));
 
 const connected = (
   over: Partial<NonNullable<GoogleDriveStatus["connection"]>> = {},
@@ -129,6 +131,61 @@ describe("DriveFolderRow", () => {
     menu.actions[2]!.run();
     expect(state.disconnect).not.toHaveBeenCalled();
     expect(alert.mock.calls[0]![0]).toBe("Disconnect Chapter files?");
+    // Confirming disconnects.
+    state.disconnect.mockResolvedValue(undefined);
+    const buttons = alert.mock.calls[0]![2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    buttons.find((button) => button.text === "Disconnect")!.onPress!();
+    expect(state.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("says why files were left out under the menu's caption", () => {
+    const tree = renderRow({
+      name: "Chapter files",
+      drive_folder_id: "drive-top",
+    });
+    expect(press(tree).message).toMatch(
+      /753 left out\. Left out: Forms and shortcuts/,
+    );
+  });
+
+  it("opens a folder below the connected one straight in Drive, with no menu", () => {
+    const openURL = vi.mocked(Linking.openURL);
+    const tree = renderRow({
+      name: "Chapter files / Rush",
+      drive_folder_id: "drive-rush",
+    });
+    expect(screenText(tree)).toContain("In Google Drive");
+    const row = tree.root.findAll(
+      (node) =>
+        node.props.accessibilityHint === "Opens this folder in Google Drive.",
+    )[0]!;
+    act(() => row.props.onPress());
+    expect(openURL).toHaveBeenCalledWith(
+      "https://drive.google.com/drive/folders/drive-rush",
+    );
+    expect(state.menus).toEqual([]);
+  });
+
+  it("says who sorts out a refused sync, with no retry", async () => {
+    const alert = vi.spyOn(Alert, "alert").mockImplementation(() => {});
+    state.syncNow.mockRejectedValue({
+      statusCode: 403,
+      error: "Forbidden",
+      message:
+        "Chapter subscription is not active; complete checkout to use this feature.",
+    });
+    const tree = renderRow({
+      name: "Chapter files",
+      drive_folder_id: "drive-top",
+    });
+    press(tree)
+      .actions.find((action) => action.key === "sync")!
+      .run();
+    await vi.waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(alert.mock.calls[0]![1]).toMatch(/subscription isn't active/);
   });
 
   it("offers the address to share a lost folder with again", () => {

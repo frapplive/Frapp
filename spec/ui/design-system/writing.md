@@ -602,6 +602,7 @@ Two constraints bind every one of them, and both are the point rather than style
 | Log service hours (s20) | `Your chapter's subscription isn't active, so service hours can't be logged. An officer can sort this out for the chapter.` |
 | Review service hours (Activity sheet, #3897) | `Your chapter's subscription isn't active, so hours can't be reviewed. An officer can sort this out for the chapter.` |
 | Upload document (s21) | `Your chapter's subscription isn't active, so documents can't be uploaded. An officer can sort this out for the chapter.` |
+| Sync now on the Google Drive folder (Documents, #5583) | `Your chapter's subscription isn't active, so Google Drive can't sync. An officer can sort this out for the chapter.` In the alert a refused Sync now raises, with no retry. |
 | Rush candidate (chat card, web and mobile) | `Your chapter's subscription isn't active, so votes and bids can't be saved. An officer can sort this out for the chapter.` A refused Vote or Extend bid: the line under a mobile card, whose controls stay withdrawn until the member comes back to the thread or the app, and the description of web's failure toast. One copy for both, `RUSH_CARD_REFUSAL_COPY` and `rushCardGateRefusal` in `packages/hooks/src/rush-card.ts` ([#3383](https://github.com/pdcarlson/Frapp/issues/3383)). Web's card also shows its `SubscriptionNotice` before a press, as the task card does. |
 | Study | See the two rows in *Study session (mobile, s10)* below — start and in-session differ, and the difference is load-bearing. |
 

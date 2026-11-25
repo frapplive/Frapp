@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { driveFolderLine, driveFolderUrl } from "./google-drive-line";
+import {
+  driveFolderActions,
+  driveFolderLine,
+  driveFolderUrl,
+  driveShortfallNote,
+} from "./google-drive-line";
 
 const NOW = new Date(2026, 10, 25, 21, 0);
 const base = {
@@ -53,5 +58,50 @@ describe("driveFolderLine", () => {
     expect(driveFolderUrl("a/b")).toBe(
       "https://drive.google.com/drive/folders/a%2Fb",
     );
+  });
+});
+
+describe("driveShortfallNote", () => {
+  it("says nothing when the pass brought everything in", () => {
+    expect(driveShortfallNote(base)).toBeNull();
+  });
+
+  it("says why files were left out and folders not read, and the fix", () => {
+    const note = driveShortfallNote({
+      ...base,
+      skipped_count: 3,
+      folders_left_out: 2,
+    });
+    expect(note).toMatch(/^Left out: Forms and shortcuts/);
+    expect(note).toMatch(/Move them higher up in Drive/);
+  });
+
+  it("waits out a pass and a lost folder", () => {
+    expect(
+      driveShortfallNote({ ...base, skipped_count: 3, syncing: true }),
+    ).toBeNull();
+    expect(
+      driveShortfallNote({ ...base, skipped_count: 3, status: "no_access" }),
+    ).toBeNull();
+  });
+});
+
+describe("driveFolderActions", () => {
+  it("syncs only the connected folder, between passes, while Frapp sees it", () => {
+    expect(driveFolderActions(base, "f-1", false)).toEqual({
+      root: true,
+      lost: false,
+      syncing: false,
+      canSync: true,
+    });
+    expect(driveFolderActions(base, "sub", false).canSync).toBe(false);
+    expect(driveFolderActions(base, "f-1", true).canSync).toBe(false);
+    expect(
+      driveFolderActions({ ...base, syncing: true }, "f-1", false).canSync,
+    ).toBe(false);
+    expect(
+      driveFolderActions({ ...base, status: "no_access" }, "f-1", false)
+        .canSync,
+    ).toBe(false);
   });
 });

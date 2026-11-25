@@ -2,8 +2,10 @@
 
 import { ExternalLink, RefreshCw, Unplug } from "lucide-react";
 import {
+  driveFolderActions,
   driveFolderLine,
   driveFolderUrl,
+  driveShortfallNote,
   useDisconnectGoogleDrive,
   useGoogleDriveStatus,
   useSyncGoogleDrive,
@@ -13,6 +15,7 @@ import {
   type RowMenuEntry,
 } from "@/components/shared/row-menu";
 import { useConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import type { SubscriptionGate } from "@/components/shared/subscription-gate";
 import {
   CopyAddress,
@@ -30,10 +33,12 @@ import { getErrorMessage } from "@/lib/utils";
  * The Google Drive folder, managed where it shows (Paul's Drive-as-a-folder
  * pick, 2026-11-25: no Drive page). Over the list of a folder sync made, an
  * officer with Manage documents sees one state line ("Synced today at 8:40
- * PM · 494 files · 753 left out") and a ⋯ with Open in Google Drive, Sync now
- * and, on the connected folder itself, Disconnect. The connected folder also
- * says when Frapp lost it, with the address to share it with again, and
- * lists the copies sync is holding back. Comparable: Dropbox's and Box's
+ * PM · 494 files · 753 left out"), with why any were left out. The connected
+ * folder's ⋯ holds Open in Google Drive, Sync now and Disconnect; a folder
+ * below it has just Open in Google Drive. The connected folder also says when
+ * Frapp lost it, with the address to share it with again, and lists the
+ * copies sync is holding back. An officer who can't open the connected folder
+ * gets its line at the top of Documents instead (`documents-page.tsx`). Comparable: Dropbox's and Box's
  * synced folders, which say their sync state in the folder's own header.
  */
 export function DriveFolderLine({
@@ -42,8 +47,11 @@ export function DriveFolderLine({
   documents,
   folders,
 }: {
-  /** The folder on screen; nothing shows unless sync made it. */
-  folder: FolderRow | undefined;
+  /**
+   * The folder on screen; nothing shows unless sync made it. At the top of
+   * Documents, the connected folder itself when the officer can't open it.
+   */
+  folder: Pick<FolderRow, "name" | "drive_folder_id"> | undefined;
   gate: SubscriptionGate;
   /** The documents the officer sees, for the copies sync is holding back. */
   documents: readonly ChapterDocument[];
@@ -58,10 +66,13 @@ export function DriveFolderLine({
   const connection = data?.connection;
   const driveId = folder?.drive_folder_id;
   if (!connection || !driveId) return null;
-  const root = driveId === connection.folder_id;
-  const lost = connection.status === "no_access";
-  const syncing = connection.syncing || sync.isPending;
+  const { root, lost, canSync } = driveFolderActions(
+    connection,
+    driveId,
+    sync.isPending,
+  );
   const held = root ? heldCopies(documents, folders) : [];
+  const note = root ? driveShortfallNote(connection) : null;
 
   async function syncNow() {
     try {
@@ -111,25 +122,21 @@ export function DriveFolderLine({
       key: "sync",
       label: "Sync now",
       icon: RefreshCw,
-      disabled: syncing || lost || !gate.allowed,
+      disabled: !canSync || !gate.allowed,
       title,
       describedBy,
       onSelect: () => void syncNow(),
     },
-    ...(root
-      ? ([
-          { type: "separator", key: "break" },
-          {
-            type: "item",
-            key: "disconnect",
-            label: "Disconnect",
-            icon: Unplug,
-            destructive: true,
-            disabled: disconnect.isPending,
-            onSelect: () => void onDisconnect(),
-          },
-        ] satisfies RowMenuEntry[])
-      : []),
+    { type: "separator", key: "break" },
+    {
+      type: "item",
+      key: "disconnect",
+      label: "Disconnect",
+      icon: Unplug,
+      destructive: true,
+      disabled: disconnect.isPending,
+      onSelect: () => void onDisconnect(),
+    },
   ];
 
   return (
@@ -147,12 +154,28 @@ export function DriveFolderLine({
             ? `Google Drive · ${driveFolderLine(connection)}`
             : "In Google Drive"}
         </p>
-        <ActionMenuButton
-          entries={entries}
-          label={`More for ${folder.name}`}
-          busy={sync.isPending || disconnect.isPending}
-        />
+        {root ? (
+          <ActionMenuButton
+            entries={entries}
+            label={`More for ${folder.name}`}
+            busy={sync.isPending || disconnect.isPending}
+          />
+        ) : (
+          <Button asChild variant="ghost" size="sm" className="gap-1.5">
+            <a
+              href={driveFolderUrl(driveId)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Google Drive
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+          </Button>
+        )}
       </div>
+      {note ? (
+        <p className="text-caption text-muted-foreground">{note}</p>
+      ) : null}
       {root && lost && data.service_account_email ? (
         <CopyAddress email={data.service_account_email} />
       ) : null}

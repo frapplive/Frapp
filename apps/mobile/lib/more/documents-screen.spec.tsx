@@ -20,6 +20,7 @@ import { screenText } from "@/test/screen-text";
  */
 
 let permissions: string[] = [];
+let driveStatus: unknown = undefined;
 let folderRows: unknown[] = [];
 let documentRows: unknown[] = [];
 let chapterId: string | null = "chapter-a";
@@ -58,8 +59,8 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useDocumentAccessOptions: () => accessQuery,
   // The upload sheet's Type (Paul 2026-11-22).
   useDocumentTypes: () => ({ data: [] }),
-  // No Google Drive folder connected: no Drive row over a folder.
-  useGoogleDriveStatus: () => ({ data: undefined }),
+  // No Google Drive folder connected unless a test connects one.
+  useGoogleDriveStatus: () => ({ data: driveStatus }),
   useSyncGoogleDrive: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDisconnectGoogleDrive: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateDocumentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -135,6 +136,7 @@ import { MarkedCards } from "@/components/documents/marked-cards";
 import { DocumentTiles } from "@/components/documents/document-tiles";
 import { PinGlyph, StarGlyph } from "@/components/documents/document-glyphs";
 import { ListLayoutToggle } from "@/components/list-layout-toggle";
+import { DriveFolderRow } from "@/components/documents/drive-folder-row";
 import { resetListLayoutsForTests, setListLayout } from "@/lib/list-layout";
 
 const present = vi.fn();
@@ -173,6 +175,7 @@ const sheets = (tree: ReactTestRenderer) =>
 
 afterEach(() => {
   permissions = [];
+  driveStatus = undefined;
   folderRows = [];
   documentRows = [];
   semesterRows = [];
@@ -1983,5 +1986,78 @@ describe("Documents with minutes filed in it (#5949)", () => {
   it("is titled Resources, as the You row and web's page are", () => {
     const tree = render();
     expect(screenText(tree)).toContain("Resources");
+  });
+});
+
+describe("Documents with a Google Drive folder (#5583)", () => {
+  const connection = {
+    folder_id: "drive-rush",
+    folder_name: "Rush",
+    folder_url: "https://drive.google.com/drive/folders/drive-rush",
+    status: "active",
+    last_synced_at: null,
+    synced_count: 4,
+    skipped_count: 0,
+    folders_left_out: 0,
+    syncing: false,
+    who_can_see: null,
+  };
+  const driveRow = (tree: ReactTestRenderer) =>
+    tree.root.findAllByType(DriveFolderRow)[0];
+
+  it("shows the Drive row over the synced folder an officer opens", () => {
+    permissions = ["chapter_docs:manage"];
+    driveStatus = {
+      available: true,
+      service_account_email: null,
+      picker: null,
+      connection,
+    };
+    folderRows = [
+      { id: "f-1", name: "Bylaws", sort_order: 0 },
+      { id: "f-2", name: "Rush", sort_order: 1, drive_folder_id: "drive-rush" },
+    ];
+    const tree = render();
+    // At the top the officer can open the folder itself, so no row there.
+    expect(driveRow(tree)?.props.folder).toBeUndefined();
+    act(() =>
+      tree.root
+        .findAllByType(FilterChips)
+        .find((chips) => chips.props.accessibilityLabel === "Filter by folder")!
+        .props.onSelect("Rush"),
+    );
+    expect(driveRow(tree)!.props.folder).toMatchObject({
+      name: "Rush",
+      drive_folder_id: "drive-rush",
+    });
+    expect(screenText(tree)).toContain("Not synced yet · 4 files");
+  });
+
+  it("keeps the row at the top for an officer who can't open the folder", () => {
+    permissions = ["chapter_docs:manage"];
+    driveStatus = {
+      available: true,
+      service_account_email: null,
+      picker: null,
+      connection,
+    };
+    folderRows = [{ id: "f-1", name: "Bylaws", sort_order: 0 }];
+    const tree = render();
+    expect(driveRow(tree)!.props.folder).toEqual({
+      name: "Rush",
+      drive_folder_id: "drive-rush",
+    });
+  });
+
+  it("shows a member no Drive row", () => {
+    permissions = ["chapter_docs:upload"];
+    driveStatus = {
+      available: true,
+      service_account_email: null,
+      picker: null,
+      connection,
+    };
+    const tree = render();
+    expect(driveRow(tree)).toBeUndefined();
   });
 });

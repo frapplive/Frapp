@@ -357,6 +357,21 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
   const driveRoot = driveRootId
     ? folders.find((folder) => folder.drive_folder_id === driveRootId)
     : undefined;
+  // An officer the connected folder's list leaves out, or a folder the first
+  // pass never made, still gets its line and ⋯ (Disconnect above all), at
+  // the top of Documents: managing the connection is `chapter_docs:manage`'s,
+  // as on the API, and doesn't wait on seeing the folder.
+  const driveConnection = canManageTypes
+    ? driveStatus.data?.connection
+    : undefined;
+  const driveLineFolder = activeFolder
+    ? folders.find((folder) => folder.name === activeFolder)
+    : !driveRoot && driveConnection
+      ? {
+          name: driveConnection.folder_name,
+          drive_folder_id: driveConnection.folder_id,
+        }
+      : undefined;
   /*
     Who can see (#3642 piece 1). A file in a limited folder, or with its own
     list, draws a lock; its uploader and whoever manages documents get its
@@ -515,7 +530,11 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
           typeRows={typesQuery.isSuccess ? typeRows : null}
           importContext={importContext}
           onOpenDriveFolder={
-            driveRoot ? () => setActiveFolder(driveRoot.name) : undefined
+            driveRoot
+              ? () => setActiveFolder(driveRoot.name)
+              : driveConnection
+                ? () => setActiveFolder(null)
+                : undefined
           }
           canUpload={canUpload}
           canManage={canManageTypes}
@@ -660,11 +679,9 @@ function ChapterDocumentsPage({ initialType }: { initialType: string | null }) {
               <FolderMenu {...railProps} className="@2xl/docs:hidden" />
             }
             folderLine={
-              canManageTypes && activeFolder ? (
+              canManageTypes ? (
                 <DriveFolderLine
-                  folder={folders.find(
-                    (folder) => folder.name === activeFolder,
-                  )}
+                  folder={driveLineFolder}
                   gate={gate}
                   documents={documents}
                   folders={folders}

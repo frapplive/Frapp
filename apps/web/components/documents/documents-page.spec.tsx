@@ -2474,6 +2474,77 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     }
   });
 
+  describe("a connected Google Drive folder (#5583)", () => {
+    const connectedDrive = {
+      data: {
+        available: true,
+        service_account_email: "drive@example.com",
+        picker: null,
+        connection: {
+          folder_id: "drive-gov",
+          folder_name: "Governance",
+          folder_url: "https://drive.google.com/drive/folders/drive-gov",
+          status: "active",
+          last_synced_at: null,
+          synced_count: 12,
+          skipped_count: 0,
+          folders_left_out: 0,
+          syncing: false,
+          who_can_see: null,
+        },
+      },
+    };
+    afterEach(() => {
+      mockDriveStatus.mockReturnValue({ data: undefined });
+    });
+
+    it("opens the connected folder from the Upload menu, with its line", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [
+        {
+          id: "f-1",
+          name: "Governance",
+          sort_order: 0,
+          drive_folder_id: "drive-gov",
+        },
+        { id: "f-2", name: "Rush", sort_order: 1 },
+      ];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(screen.queryByText(/^Google Drive · /)).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "More ways to add documents" }),
+      );
+      await user.click(
+        await screen.findByRole("menuitem", { name: "Google Drive" }),
+      );
+      expect(
+        await screen.findByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "More for Governance" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the line, and Disconnect, for an officer who can't open the folder", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [{ id: "f-2", name: "Rush", sort_order: 1 }];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(
+        screen.getByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "More for Governance" }),
+      );
+      expect(
+        await screen.findByRole("menuitem", { name: /Disconnect/ }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("keeps a row's controls out of sight until hover or focus, and behind More on touch (#5576)", () => {
     render(<DocumentsPage />);
     const star = screen.getByRole("button", { name: "Star Chapter bylaws" });

@@ -18,6 +18,7 @@ import {
   useMarkFilterHold,
   useDocuments,
   useDocumentStars,
+  useGoogleDriveStatus,
   useMemberDisplayNames,
   useSetDocumentPin,
   useSetDocumentStar,
@@ -350,6 +351,12 @@ export default function DocumentsScreen() {
     () => selectDocumentFolders(foldersQuery.data),
     [foldersQuery.data],
   );
+  // The Google Drive folder's row (officers), as on web: over a folder sync
+  // made, or at the top of Documents for the connected folder itself when
+  // its list leaves this officer out or the first pass hasn't made it yet,
+  // so Disconnect never depends on seeing the folder.
+  const driveConnection = useGoogleDriveStatus({ enabled: canManage }).data
+    ?.connection;
   // Each row's tile wears its folder's hue, as web's rows do (#5576,
   // `documentFolderHues`): a hue names a folder, never a state.
   const folderHue = useMemo(
@@ -1149,14 +1156,26 @@ export default function DocumentsScreen() {
         />
       ) : null}
 
-      {/* The count and, across from it, the order (#5278), as Files, Drive
-          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
-      {/* A folder Google Drive sync made: its state and menu (officers). */}
-      {canManage && folder ? (
+      {canManage ? (
         <DriveFolderRow
-          folder={folders.find((entry) => entry.name === folder)}
+          folder={
+            folder
+              ? folders.find((entry) => entry.name === folder)
+              : driveConnection &&
+                  !folders.some(
+                    (entry) =>
+                      entry.drive_folder_id === driveConnection.folder_id,
+                  )
+                ? {
+                    name: driveConnection.folder_name,
+                    drive_folder_id: driveConnection.folder_id,
+                  }
+                : undefined
+          }
         />
       ) : null}
+      {/* The count and, across from it, the order (#5278), as Files, Drive
+          and Dropbox put "Name ↑" over their lists: one tap opens the sort. */}
       <View style={styles.listHeader}>
         <SectionHeader>
           {documentsQuery.isSuccess

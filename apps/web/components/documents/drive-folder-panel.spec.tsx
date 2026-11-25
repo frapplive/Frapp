@@ -125,7 +125,7 @@ describe("DriveFolderPanel", () => {
     };
     connect.mockResolvedValue(connected());
     const user = userEvent.setup();
-    render(<DriveFolderPanel gate={gate} />);
+    const { rerender } = render(<DriveFolderPanel gate={gate} />);
 
     await user.click(
       screen.getByRole("button", { name: "Connect Google Drive" }),
@@ -146,6 +146,16 @@ describe("DriveFolderPanel", () => {
       folderLink: "https://drive.google.com/drive/folders/abcdefghijk",
       whoCanSee: null,
     });
+
+    // Connected, then disconnected later: Connect doesn't come back open.
+    status = { ...status, connection: connected().connection };
+    rerender(<DriveFolderPanel gate={gate} />);
+    status = { ...status, connection: null };
+    rerender(<DriveFolderPanel gate={gate} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Connect Google Drive" }),
+    ).toBeInTheDocument();
   });
 
   // #5220: what the folder brings in starts behind the list picked here.
@@ -287,7 +297,7 @@ describe("DriveFolderPanel", () => {
       });
       connectPicked.mockResolvedValue(connected());
       const user = userEvent.setup();
-      render(<DriveFolderPanel gate={gate} />);
+      const { rerender } = render(<DriveFolderPanel gate={gate} />);
 
       await user.click(
         screen.getByRole("button", { name: "Connect Google Drive" }),
@@ -309,7 +319,51 @@ describe("DriveFolderPanel", () => {
         accessToken: "member-token",
         whoCanSee: null,
       });
+      // The connection lands in the status, which closes the dialog.
+      status = { ...pickerStatus(), connection: connected().connection };
+      rerender(<DriveFolderPanel gate={gate} />);
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    });
+
+    it("keeps the share step when the officer closes a second pick", async () => {
+      status = pickerStatus();
+      pickDriveFolder.mockResolvedValueOnce({
+        id: "folder-9",
+        name: "Chapter Drive",
+        accessToken: "member-token",
+      });
+      connectPicked.mockRejectedValueOnce({
+        statusCode: 409,
+        code: "google_drive.share_by_hand",
+        message: "Share it.",
+      });
+      const user = userEvent.setup();
+      render(<DriveFolderPanel gate={gate} />);
+      await user.click(
+        screen.getByRole("button", { name: "Connect Google Drive" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Connect" }));
+      expect(await screen.findByText(EMAIL)).toBeInTheDocument();
+
+      // Pressing the folder again, then closing Google's window.
+      pickDriveFolder.mockResolvedValueOnce(null);
+      await user.click(screen.getByRole("button", { name: "Chapter Drive" }));
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Waiting for the share",
+      );
+      expect(screen.getByText(EMAIL)).toBeInTheDocument();
+
+      // A picker that fails keeps the folder already picked, too.
+      pickDriveFolder.mockRejectedValueOnce(
+        new DrivePickerError("Google's folder picker didn't open."),
+      );
+      await user.click(screen.getByRole("button", { name: "Chapter Drive" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Google's folder picker didn't open.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Chapter Drive" }),
+      ).toBeInTheDocument();
     });
 
     it("stays put when the officer closes Google's window", async () => {

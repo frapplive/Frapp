@@ -16,6 +16,7 @@ import {
   FolderSync,
 } from "lucide-react";
 import {
+  driveFolderUrl,
   useConnectGoogleDrive,
   useConnectPickedGoogleDrive,
   useGoogleDriveStatus,
@@ -98,7 +99,7 @@ export function DriveFolderPanel({
 }: {
   gate: SubscriptionGate;
   /**
-   * Set, the panel draws no button of its own and puts its opener here, for
+   * Set, Connect draws no button of its own and puts its opener here, for
    * a menu to call: Documents opens it from the Upload menu (#5576).
    */
   openerRef?: RefObject<(() => void) | null>;
@@ -113,9 +114,31 @@ export function DriveFolderPanel({
   const [byLink, setByLink] = useState(false);
   const [picked, setPicked] = useState<PickedFolder | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
-  // A fresh form for every pick: its share wait and Who sees it start over.
+  // The form's choices live here, not in the dialog: the dialog closes while
+  // Google's picker is up, and a pick closed without a folder comes back to
+  // the same Who sees it and share wait. A new folder starts them over.
+  const [form, setForm] = useState<PickForm>(NEW_PICK_FORM);
+  // A new folder remounts the form, so a check still running for the last
+  // folder can't act on the new one.
   const [pickNumber, setPickNumber] = useState(0);
+  // Preloaded while Connect is on offer, so Google's sign-in window opens
+  // straight from the press (browsers block a popup opened long after it).
   const { pick, picking } = usePickFolder(picker, !!picker && !connected);
+
+  // However a folder gets connected (here, by its link, or by another
+  // officer), the dialog closes and forgets this one's choices, so a later
+  // Disconnect doesn't bring it back by itself.
+  const [wasConnected, setWasConnected] = useState(connected);
+  if (connected !== wasConnected) {
+    setWasConnected(connected);
+    if (connected) {
+      dialog.setOpen(false);
+      setByLink(false);
+      setPicked(null);
+      setPickError(null);
+      setForm(NEW_PICK_FORM);
+    }
+  }
 
   async function choose() {
     if (!gate.allowed) return;
@@ -135,13 +158,14 @@ export function DriveFolderPanel({
       return;
     }
     setByLink(false);
-    setPickNumber((n) => n + 1);
     if ("error" in result) {
-      setPicked(null);
+      // The folder already picked, and its choices, stay to connect.
       setPickError(result.error);
     } else {
       setPicked(result.folder);
       setPickError(null);
+      setForm(NEW_PICK_FORM);
+      setPickNumber((n) => n + 1);
     }
     dialog.setOpen(true);
   }
@@ -177,6 +201,8 @@ export function DriveFolderPanel({
             <PickerConnectView
               key={pickNumber}
               folder={picked}
+              form={form}
+              onForm={setForm}
               pickError={pickError}
               picking={picking}
               email={data.service_account_email}
@@ -189,10 +215,11 @@ export function DriveFolderPanel({
                 forgetDrivePickerSignIn();
                 setPicked(null);
                 setPickError(message);
-              }}
-              onConnected={() => {
-                dialog.setOpen(false);
-                setPicked(null);
+                setForm((last) => ({
+                  ...last,
+                  shareStep: false,
+                  waitingSince: null,
+                }));
               }}
               onCancel={() => dialog.setOpen(false)}
               onUseLink={() => setByLink(true)}
@@ -367,8 +394,6 @@ function ConnectView({
  */
 function usePickFolder(picker: DrivePickerConfig | null, active: boolean) {
   const [picking, setPicking] = useState(false);
-  // Loaded as the panel opens, so the sign-in window opens straight from the
-  // press: browsers block a popup opened long after it.
   useEffect(() => {
     if (active) void preloadDrivePicker().catch(() => undefined);
   }, [active]);
@@ -394,9 +419,24 @@ function usePickFolder(picker: DrivePickerConfig | null, active: boolean) {
   return { pick, picking };
 }
 
+/** The picked folder's form: who sees it, and the share step's wait. */
+interface PickForm {
+  whoCanSee: string[] | null;
+  /** Google left the share to the officer. */
+  shareStep: boolean;
+  /** Set while the dialog checks by itself for that share. */
+  waitingSince: number | null;
+}
+
+const NEW_PICK_FORM: PickForm = {
+  whoCanSee: null,
+  shareStep: false,
+  waitingSince: null,
+};
+
 /** The API's answer for a picked folder the officer must share themselves. */
 const SHARE_BY_HAND = "google_drive.share_by_hand";
-/** How often the panel asks again while it waits for that share. */
+/** How often the dialog asks again while it waits for that share. */
 const SHARE_CHECK_MS = 10_000;
 /**
  * How long it waits. A sign-in is only reused with more than this left
@@ -414,12 +454,14 @@ function passing(caught: unknown): boolean {
  * Connect by picking (#5583): the officer signs in with Google and picks the
  * folder in Google's own picker. Frapp tries to share it with itself using
  * that sign-in, but Google lets that sign-in share only the folder, not the
- * files in it (staging, 2026-11-25), so for a folder with files the panel shows
+ * files in it (staging, 2026-11-25), so for a folder with files the dialog shows
  * Frapp's address to share it with in Drive, and connects by itself once the
  * share lands (Paul's pick, 2026-11-25). No link to paste, no code to add.
  */
 function PickerConnectView({
   folder,
+  form,
+  onForm,
   pickError,
   picking,
   email,
@@ -427,12 +469,13 @@ function PickerConnectView({
   open,
   onChoose,
   onRefused,
-  onConnected,
   onCancel,
   onUseLink,
 }: {
   /** The folder picked, or null after a refusal (pick again). */
   folder: PickedFolder | null;
+  form: PickForm;
+  onForm: (update: (last: PickForm) => PickForm) => void;
   /** Why the last pick or connect failed, worded for the officer. */
   pickError: string | null;
   picking: boolean;
@@ -442,28 +485,26 @@ function PickerConnectView({
   /** Opens Google's picker again. */
   onChoose: () => void;
   onRefused: (message: string) => void;
-  onConnected: () => void;
   onCancel: () => void;
   onUseLink: () => void;
 }) {
   const connect = useConnectPickedGoogleDrive();
   const access = useDocumentAccessChoices(open);
   const { toast } = useToast();
-  const [whoCanSee, setWhoCanSee] = useState<string[] | null>(null);
-  // Shown once Google leaves the share to the officer; `waitingSince` is set
-  // while the dialog checks by itself, and cleared when it stops waiting.
-  const [shareStep, setShareStep] = useState(false);
-  const [waitingSince, setWaitingSince] = useState<number | null>(null);
+  const { whoCanSee, shareStep, waitingSince } = form;
+  const setWhoCanSee = (next: string[] | null) =>
+    onForm((last) => ({ ...last, whoCanSee: next }));
   const checking = useRef(false);
-  // A pick remounts this form, so a check still running for the last folder
-  // can't act on the new one.
+  // A new folder remounts this form, so a check still running for the last
+  // one can't act on it. Set again on mount: React's development double
+  // mount runs the cleanup once before the form is used.
   const alive = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
       alive.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   const accessId = useId();
   const errorId = useId();
   const hideAccess = access.optionsState === "ready" && !access.canLimit;
@@ -488,26 +529,27 @@ function PickerConnectView({
         whoCanSee,
       });
       if (!alive.current) return;
+      // The new connection closes the dialog (`DriveFolderPanel`).
       toast({
         title: `${picked.name || "Google Drive"} connected`,
         description: "Its files show up in Documents in a minute or two.",
       });
-      onConnected();
     } catch (caught) {
       if (!alive.current) return;
       if (codeOf(caught) === SHARE_BY_HAND) {
         // Keep the folder and the sign-in: once the officer has shared it,
         // the same request connects it.
-        setShareStep(true);
-        if (!quiet) setWaitingSince(Date.now());
+        onForm((last) => ({
+          ...last,
+          shareStep: true,
+          waitingSince: quiet ? last.waitingSince : Date.now(),
+        }));
         return;
       }
       if (quiet && passing(caught)) return;
       // The API words each refusal for the officer: a folder they can only
       // view, a school account that blocks sharing out, a folder another
       // chapter has, or a sign-in that expired (pick again).
-      setShareStep(false);
-      setWaitingSince(null);
       onRefused(
         getErrorMessage(caught, "Couldn't connect. Try again.", {
           serverWritesForMembers: true,
@@ -539,7 +581,7 @@ function PickerConnectView({
     if (!waiting || !folder || waitingSince === null) return;
     const check = () => {
       if (Date.now() - waitingSince > SHARE_WAIT_MS) {
-        setWaitingSince(null);
+        onForm((last) => ({ ...last, waitingSince: null }));
         return;
       }
       if (readyRef.current) void attemptRef.current(folder, true);
@@ -551,7 +593,7 @@ function PickerConnectView({
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [waiting, folder, waitingSince]);
+  }, [waiting, folder, waitingSince, onForm]);
 
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
@@ -650,7 +692,7 @@ function PickerConnectView({
 
 /**
  * The one step Google leaves to the officer: share the picked folder with
- * Frapp's address in Drive. While `waiting`, the panel connects by itself
+ * Frapp's address in Drive. While `waiting`, the dialog connects by itself
  * once they have; after that, Connect checks again.
  */
 function ShareByHand({
@@ -669,7 +711,7 @@ function ShareByHand({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="secondary" size="sm" className="gap-1.5">
           <a
-            href={`https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`}
+            href={driveFolderUrl(folderId)}
             target="_blank"
             rel="noopener noreferrer"
           >

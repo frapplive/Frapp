@@ -177,8 +177,9 @@ export function UploadMenu({
           ) : null}
           {showDrive ? (
             <DropdownMenuItem
-              // Connected, the item opens the folder, which the first pass
-              // makes within a minute or two; until then there is none.
+              // Connected, the item opens the folder in Documents, or the
+              // top of Documents, where its line shows for an officer who
+              // can't open it (or before the first pass makes it).
               disabled={
                 !gate.allowed || (!!driveData?.connection && !onOpenDriveFolder)
               }

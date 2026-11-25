@@ -145,20 +145,29 @@ describe("DriveFolderLine", () => {
     await waitFor(() => expect(disconnect).toHaveBeenCalled());
   });
 
-  it("opens a subfolder in Drive, and disconnects only from the connected folder", async () => {
-    const user = userEvent.setup();
+  it("offers a subfolder just its Drive link, with no menu (rulebook § 9)", () => {
     renderLine(exec);
     expect(screen.getByText("In Google Drive")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "More for Chapter files / Exec" }),
-    );
     expect(
-      screen.getByRole("menuitem", { name: /Open in Google Drive/ }),
+      screen.getByRole("link", { name: /Open in Google Drive/ }),
     ).toHaveAttribute(
       "href",
       "https://drive.google.com/drive/folders/drive-exec",
     );
-    expect(screen.queryByRole("menuitem", { name: /Disconnect/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "More for Chapter files / Exec" }),
+    ).toBeNull();
+  });
+
+  it("says why files were left out and folders not read", () => {
+    status = connected({ skipped_count: 3, folders_left_out: 2 });
+    renderLine(top);
+    expect(
+      screen.getByText(/^Left out: Forms and shortcuts/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Move them higher up in Drive/),
+    ).toBeInTheDocument();
   });
 
   // Google won't let a picker sign-in share a folder with files in it, so a
