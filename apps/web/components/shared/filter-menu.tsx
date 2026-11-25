@@ -71,10 +71,12 @@ export function FilterMenu({
       <Badge
         variant="default"
         aria-hidden="true"
+        // On the glyph it rides the corner; on the worded button it does
+        // where the header folds that button to its glyph.
         className={
           narrow
             ? "absolute -right-1.5 -top-1.5 h-4 min-w-4 justify-center px-1"
-            : undefined
+            : HEADER_BADGE_FOLD
         }
       >
         {on.length}
@@ -107,15 +109,7 @@ export function FilterMenu({
           >
             <ListFilter className="h-4 w-4" aria-hidden="true" />
             <span className={HEADER_LABEL_FOLD}>Filter</span>
-            {on.length > 0 ? (
-              <Badge
-                variant="default"
-                aria-hidden="true"
-                className={HEADER_BADGE_FOLD}
-              >
-                {on.length}
-              </Badge>
-            ) : null}
+            {count}
           </Button>
         )}
       </DropdownMenuTrigger>

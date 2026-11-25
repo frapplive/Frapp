@@ -104,7 +104,7 @@ These cause most of the iterations, so they come first.
   ran under its count and the title vanished. The title and the views keep their room and the actions
   fold first (glyphs, then one View menu); a board's columns share the width and empty ones fold; a table
   drops its least-read columns before its ⋯ scrolls off; a row's title never gives way to its facts.
-  Capture every page at 576px and at 375px beside chat before the PR opens. (11-24)
+  The widths to capture are in [`review-checklist.md`](review-checklist.md) § 1. (11-24)
 - **Keep pages beside chat (the split).** Only Settings, which needs the room, is full width and opens
   its tools inside itself, not in drawers. (11-11, 11-12)
 - **No overlay side cards, ever.** "I NEVER WANT TO SEE ANOTHER ONE OF THESE SIDE CARDS." A record or a

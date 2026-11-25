@@ -152,7 +152,7 @@ export function RushList({
           {showRating
             ? header("rating", "Rating", RUSH_LIST_FOLD.rating)
             : null}
-          {header("added", "Added", RUSH_LIST_FOLD.added)}
+          {header("added", "Added")}
           <TableHead className="w-10">
             <span className="sr-only">Actions</span>
           </TableHead>
@@ -241,12 +241,7 @@ export function RushList({
                       {rushRatingSummary(candidate)}
                     </TableCell>
                   ) : null}
-                  <TableCell
-                    className={cn(
-                      "whitespace-nowrap text-sm text-muted-foreground",
-                      RUSH_LIST_FOLD.added,
-                    )}
-                  >
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDay(candidate.created_at)}
                   </TableCell>
                   <TableCell className="w-10">{menuButton}</TableCell>
@@ -264,15 +259,15 @@ export function RushList({
  * The columns a narrow page leaves out, last-read first, on the page's own
  * width (`rush-page.tsx`'s `@container`): beside chat the list is often
  * under 600px, and a table that scrolls sideways hides the row's ⋯ off the
- * edge (Paul, 2026-11-24). Name, Stage and the ⋯ always show; the panel a row
- * opens holds every fact a folded column drops.
+ * edge (Paul, 2026-11-24). Name, Stage, Added (the order the list opens in,
+ * so its arrow never goes) and the ⋯ always show; the panel a row opens holds
+ * every fact a folded column drops.
  */
 const RUSH_LIST_FOLD = {
   tags: "@max-[48rem]:hidden",
-  added: "@max-[42rem]:hidden",
-  rating: "@max-[38rem]:hidden",
+  rating: "@max-[42rem]:hidden",
+  owner: "@max-[36rem]:hidden",
   followUp: "@max-[32rem]:hidden",
-  owner: "@max-[26rem]:hidden",
 } as const;
 
 function SortHeader({

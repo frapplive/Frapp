@@ -641,4 +641,34 @@ describe("the recruitment page beside chat (2026-11-24)", () => {
       screen.getByRole("button", { name: "View: List" }),
     ).toBeInTheDocument();
   });
+
+  it("folds All / Follow up into the same menu, and draws neither set as words", async () => {
+    narrowPane.current = true;
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.queryByRole("tab", { name: "All" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Follow up" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^View:/ }));
+    expect(
+      screen.getByRole("menuitemradio", { name: "All" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemradio", { name: "Follow up" }),
+    ).toBeInTheDocument();
+  });
+
+  it("folds an empty stage to its label and lets the stages with prospects share the width", () => {
+    const { container } = renderPage();
+    const columns = [
+      ...container.querySelectorAll<HTMLElement>("section[data-rush-column]"),
+    ];
+    const empty = columns.filter((c) => !c.querySelector("[data-rush-card]"));
+    const full = columns.filter((c) => c.querySelector("[data-rush-card]"));
+    expect(empty.length).toBeGreaterThan(0);
+    expect(full.length).toBeGreaterThan(0);
+    for (const column of empty) expect(column.className).toContain("w-max");
+    for (const column of full) expect(column.className).toContain("flex-1");
+  });
 });

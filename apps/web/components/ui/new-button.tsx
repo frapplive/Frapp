@@ -44,20 +44,35 @@ export const HEADER_BADGE_FOLD =
 export type NewButtonProps = Omit<ButtonProps, "children" | "variant"> & {
   /** What it makes, lowercase unless a name: "event", "minutes", "task". */
   thing: string;
+  /**
+   * The + alone at any width, the words read out only: for a page that has
+   * folded its views into a menu, so the header's views-present fold no
+   * longer applies though the header is just as narrow.
+   */
+  glyphOnly?: boolean;
 };
 
 export const NewButton = React.forwardRef<HTMLButtonElement, NewButtonProps>(
-  function NewButton({ thing, className, size = "toolbar", ...props }, ref) {
+  function NewButton(
+    { thing, glyphOnly = false, className, size = "toolbar", ...props },
+    ref,
+  ) {
     return (
       <Button
         ref={ref}
         size={size}
         variant="action"
-        className={cn("shrink-0 gap-2", HEADER_BUTTON_FOLD, className)}
+        className={cn(
+          "shrink-0 gap-2",
+          glyphOnly ? "w-9 px-0 pointer-coarse:w-11" : HEADER_BUTTON_FOLD,
+          className,
+        )}
         {...props}
       >
         <Plus className="h-4 w-4" aria-hidden="true" />
-        <span className={HEADER_LABEL_FOLD}>{newLabel(thing)}</span>
+        <span className={glyphOnly ? "sr-only" : HEADER_LABEL_FOLD}>
+          {newLabel(thing)}
+        </span>
       </Button>
     );
   },
