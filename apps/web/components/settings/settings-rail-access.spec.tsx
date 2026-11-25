@@ -243,6 +243,14 @@ describe("Settings shows each viewer what they can use", () => {
     ]);
   });
 
+  it("opens a tool's page from a search link made before the pages existed", () => {
+    // A shipped phone build's search opens web results with no `page`.
+    permissions.current = ["*"];
+    search.current = "tab=geofences&setting=study-zones";
+    render(<SettingsPage />);
+    expect(screen.getByText("study-zones body")).toBeInTheDocument();
+  });
+
   it("opens Chat admin in place of the Chat page, with a way back", () => {
     permissions.current = ["*"];
     search.current = "tab=chat&page=chat-admin";

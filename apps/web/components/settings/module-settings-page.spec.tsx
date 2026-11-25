@@ -263,6 +263,74 @@ describe("a module page", () => {
     mine.permissions = ["*"];
   });
 
+  it("says a module is off and that the viewer's role can't switch it", () => {
+    renderHours({ on: false, canManage: false });
+    const line = screen.getByText(/^Off\./);
+    expect(line).toHaveTextContent(/nothing was deleted/i);
+    expect(line).toHaveTextContent("Your role can't switch modules on or off.");
+    expect(
+      screen.getByRole("switch", { name: "Service hours" }),
+    ).toBeDisabled();
+  });
+
+  it("keeps what was typed on the page and on a page it opened, both ways (#4857)", async () => {
+    const user = userEvent.setup();
+    const pages = [
+      {
+        id: "goal-service",
+        title: "Service hours goal",
+        body: <input aria-label="Goal draft" />,
+      },
+    ];
+    const body = <input aria-label="Rule draft" />;
+    const { rerender } = renderHours({ body, pages });
+    await user.type(screen.getByLabelText("Rule draft"), "42");
+    const at = (page: string | null) =>
+      rerender(
+        <ModuleSettingsPage
+          module={hours}
+          on
+          canManage
+          onToggle={vi.fn()}
+          page={page}
+          pageHref={(next) =>
+            next ? `/settings?tab=hours&page=${next}` : "/settings?tab=hours"
+          }
+          canSeeWhoCan={false}
+          body={body}
+          pages={pages}
+        />,
+      );
+    at("goal-service");
+    await user.type(screen.getByLabelText("Goal draft"), "20");
+    at(null);
+    expect(screen.getByLabelText("Rule draft")).toHaveValue("42");
+    at("goal-service");
+    expect(screen.getByLabelText("Goal draft")).toHaveValue("20");
+  });
+
+  it("mounts a page only once it has been opened", () => {
+    renderHours({
+      pages: [
+        { id: "points-ledger", title: "Points ledger", body: <p>ledger</p> },
+      ],
+    });
+    expect(screen.queryByText("ledger")).toBeNull();
+  });
+
+  it("puts a permission's own note on its page", () => {
+    tiers.current = [];
+    roles.current = [
+      { id: "p", name: "President", permissions: ["*"], display_order: 0 },
+    ];
+    renderHours({
+      canSeeWhoCan: true,
+      page: "can-service:approve",
+      permissionNotes: { "service:approve": <p>A note for approvers</p> },
+    });
+    expect(screen.getByText("A note for approvers")).toBeInTheDocument();
+  });
+
   it("shows the module page for a permission that isn't this module's", () => {
     renderHours({ canSeeWhoCan: true, page: "can-events:create" });
     expect(

@@ -92,6 +92,7 @@ import {
 } from "@/components/settings/settings-paths";
 import { useSettingJump } from "@/lib/settings/use-setting-jump";
 import { settingEntryById } from "@repo/hooks/settings-search";
+import { rushPipelineAccess } from "@repo/hooks/rush-pipeline";
 import {
   MeetingSectionsRow,
   MeetingSectionsRules,
@@ -158,6 +159,20 @@ const DEFAULT_DUES: OrgDues = {
 function chapterPageOfSetting(settingId: string | null): string | undefined {
   const web = settingEntryById(settingId)?.web;
   return web?.page === "org" ? web.params?.page : undefined;
+}
+
+/**
+ * The page inside module page `moduleKey` a settings-search result lives on
+ * (#6030), for a `?setting=` link made before the pages existed: a shipped
+ * phone build opens `/settings?tab=points&setting=points-goal` with no
+ * `page`, and the goal it names is on the Points goal page.
+ */
+function modulePageOfSetting(
+  settingId: string | null,
+  moduleKey: string,
+): string | null {
+  const web = settingEntryById(settingId)?.web;
+  return web?.page === moduleKey ? (web.params?.page ?? null) : null;
 }
 
 function SettingsPageContent() {
@@ -246,7 +261,9 @@ function SettingsPageContent() {
   // A page opened from one of a module page's rows (#6030): a tool, a goal,
   // a rule's own page, one permission's Who can. The module page checks it
   // against its own pages, so an unknown one shows the module page.
-  const modulePageParam = searchParams.get("page");
+  const modulePageParam = (moduleKey: string) =>
+    searchParams.get("page") ??
+    modulePageOfSetting(searchParams.get("setting"), moduleKey);
   // Write a page the address only implied into it, so it stays open once the
   // setting jump drops `?setting=`, and a refresh lands on it.
   useEffect(() => {
@@ -619,7 +636,6 @@ function SettingsPageContent() {
           id: goalPageId(metric),
           title: goalPageTitle(metric),
           body: <ModuleGoals metrics={[metric]} canManage={canManage} />,
-          keepMounted: true,
         });
       }
     };
@@ -685,10 +701,15 @@ function SettingsPageContent() {
           pageHref={href}
         />
       );
-      pages.push(
-        { id: "stages", title: "Stages", body: <RushStagesPage /> },
-        { id: "tags", title: "Tags", body: <RushTagsPage /> },
-      );
+      // The stages and tags read through the pipeline's routes, which
+      // refuse a viewer without rush:view and a chapter with Recruitment
+      // off, so their pages exist only where their rows do.
+      if (moduleOn(key) && rushPipelineAccess(permissions).view) {
+        pages.push(
+          { id: "stages", title: "Stages", body: <RushStagesPage /> },
+          { id: "tags", title: "Tags", body: <RushTagsPage /> },
+        );
+      }
       if (canSeeWhoCan) {
         permissionNotes = {
           [RUSH_READ_NOTES]: (
@@ -1024,7 +1045,7 @@ function SettingsPageContent() {
                     }
                     body={content.body}
                     pages={content.pages}
-                    page={modulePageParam}
+                    page={modulePageParam(module.key)}
                     pageHref={(page) => moduleSettingsHref(module.key, page)}
                     permissionNotes={content.permissionNotes}
                     canSeeWhoCan={canSeeWhoCan}

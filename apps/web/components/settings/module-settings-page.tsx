@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { permissionOfWhoCanPage } from "@repo/hooks/module-settings";
 import { Badge } from "@/components/ui/badge";
@@ -22,12 +22,6 @@ export type ModulePage = {
   id: string;
   title: string;
   body: ReactNode;
-  /**
-   * Kept mounted, hidden, while another page shows, so a draft typed on it
-   * (a goal) is still there on the way back (#4857), as the Chapter tab's
-   * pages keep theirs. A tool that loads a long list (the ledger) is not.
-   */
-  keepMounted?: boolean;
 };
 
 type Props = {
@@ -115,7 +109,11 @@ export function ModuleSettingsPage({
     lastPage.current = page;
     if (page || !left) return;
     const active = document.activeElement;
-    if (active && active !== document.body) return;
+    // A page kept mounted (below) only hides, so its back link can still be
+    // the focused element; that counts as focus having nowhere to be.
+    if (active && active !== document.body && !active.closest("[hidden]")) {
+      return;
+    }
     document.getElementById(`module-row-${left}`)?.focus();
   }, [page]);
 
@@ -130,6 +128,18 @@ export function ModuleSettingsPage({
       : undefined;
   const openPage = pages.find((candidate) => candidate.id === page);
   const showingPage = Boolean(openPage || whoCanEntry);
+
+  // A page stays mounted, hidden, once it has been opened, so a draft typed
+  // on it (a goal, a stage's new name, the report form's picks, a
+  // half-drawn zone) is still there on the way back (#4857), as the Chapter
+  // tab's pages keep theirs. Pages never opened aren't mounted, so the
+  // module page doesn't load every tool it lists.
+  const [visited, setVisited] = useState<ReadonlySet<string>>(
+    () => new Set(openPage ? [openPage.id] : []),
+  );
+  if (openPage && !visited.has(openPage.id)) {
+    setVisited(new Set([...visited, openPage.id]));
+  }
 
   const subpage = (
     title: string,
@@ -149,13 +159,14 @@ export function ModuleSettingsPage({
   );
 
   const offLine = `Off. ${module.offNote} Turning it back on brings everything back; nothing was deleted.`;
-  const switchDescription = !on
-    ? module.alwaysOn
-      ? undefined
-      : offLine
-    : !module.alwaysOn && !canManage
+  const roleLine =
+    !module.alwaysOn && !canManage
       ? "Your role can't switch modules on or off."
-      : undefined;
+      : null;
+  const switchDescription =
+    [!on && !module.alwaysOn ? offLine : null, roleLine]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   return (
     <>
@@ -212,7 +223,7 @@ export function ModuleSettingsPage({
           <div key={candidate.id}>
             {subpage(candidate.title, candidate.body)}
           </div>
-        ) : candidate.keepMounted ? (
+        ) : visited.has(candidate.id) ? (
           <div key={candidate.id} hidden>
             {subpage(candidate.title, candidate.body, false)}
           </div>

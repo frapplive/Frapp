@@ -718,7 +718,7 @@ Channel seeding happens at chapter onboarding and has no billing prerequisite; [
 
 ### Chat Admin — channels and categories (dashboard)
 
-The channel structure in Settings → Chat (`/settings?tab=chat`), above the report queue.
+The channel structure in Settings → Chat → Chat admin (`/settings?tab=chat&page=chat-admin`), above the report queue.
 Its states stand where both of its sections would be, so they name channels, not the page: the report queue below them reads and fails on its own.
 
 | State | Title | Description |

@@ -85,10 +85,17 @@ export function RushModuleSettings({
           <InlineNote>Couldn&apos;t load the stages and tags.</InlineNote>
         ) : null
       ) : null}
-      <RushRecruitmentPicks
-        canEdit={access.manage}
-        canSeeRoles={canSeeWhoCan}
-      />
+      {/*
+        The picks read the recruitment settings route, which refuses a viewer
+        without rush:view and a chapter with Recruitment off, as the pipeline
+        does.
+      */}
+      {moduleOn && access.view ? (
+        <RushRecruitmentPicks
+          canEdit={access.manage}
+          canSeeRoles={canSeeWhoCan}
+        />
+      ) : null}
     </div>
   );
 }
@@ -123,7 +130,8 @@ export function RushTagsPage() {
  * isn't a grant anyone chose). New chapters start with it on for their top
  * two tiers; an existing chapter turns it on here, in one press, for the
  * same two (`spec/behavior/rush.md` § Notes). Once anyone holds
- * it the line goes, and the Who can block below says who.
+ * it the line goes, and the switches under it on the Read recruitment notes
+ * page (#6030) say who.
  *
  * The write is a tier's permission list (`useTierPermissionToggle`), so it
  * needs `roles:manage` and the rank rules: the button is dimmed with the

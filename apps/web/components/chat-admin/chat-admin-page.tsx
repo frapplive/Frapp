@@ -214,17 +214,18 @@ function categoryAccessSummary(
 }
 
 /**
- * Chat admin, inside Chapter settings' Chat page (#3837). Two views, the way
+ * Chat admin, opened from the Chat page of Chapter settings (#3837, #6030:
+ * `?tab=chat&page=chat-admin`). Two views, the way
  * Discord splits channel settings from server settings (Paul, 2026-11-11:
  * "scope the chat admin panel to whatever channel you're editing"):
  *
  * - **`?channel=<id>`: that channel's settings, and nothing else**, drawn in
- *   place of the Chat page. The channel start's Edit channel shortcut
+ *   place of Chat admin. The channel start's Edit channel shortcut
  *   (`components/chat/channel-start.tsx`) and the chat rail's right-click
  *   Edit channel (`chat-shell.tsx`) open it, as Discord's Edit Channel opens
  *   its full-screen settings. Its settings first, then its pins, then the
  *   reports filed in it, and a way back to all chat settings.
- * - **No channel: the chapter's chat settings**, the body of the Chat page.
+ * - **No channel: the chapter's chat settings**, the Chat admin page itself.
  *   New channel, the categories with every channel under its own (#5727;
  *   a channel row opens that channel's settings), the chapter's chat
  *   background, and the whole report queue last (the only
