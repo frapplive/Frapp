@@ -511,11 +511,12 @@ it beside `GOOGLE_DRIVE_SERVICE_ACCOUNT` fails boot.
 
 **Verify after setup.** `GET /v1/google-drive` (signed in as an officer with
 Manage documents) answers `"available": true` with the `frapp-docs` address.
-With step 4 done it also carries `"picker"`; in a test chapter, Connect
-Google Drive → Choose a folder in Google Drive, sign in, pick a folder you can
-edit, and Connect. Google lets the picker's sign-in share only an empty folder,
-so for one with files the panel shows the address to share it with: share it
-in Drive, and the panel connects by itself. Within a minute its files appear
+With step 4 done it also carries `"picker"`; in a test chapter, Documents'
+add menu → Connect Google Drive opens Google's sign-in and picker: pick a
+folder you can edit, then Connect in the dialog. Google lets the picker's
+sign-in share only an empty folder, so for one with files the dialog shows the
+address to share it with: share it in Drive, and the dialog connects by
+itself. Within a minute its files appear
 in Documents, and the folder's Share list in Drive shows `frapp-docs` as a
 Viewer. Without step 4, share a
 Drive folder with that address as a Viewer and connect it by its link.

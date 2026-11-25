@@ -65,6 +65,7 @@ export function DocumentList({
   canSetAccess,
   onSetAccess,
   folderPicker,
+  folderLine,
   folderHue,
 }: {
   listState: DocumentListState;
@@ -126,6 +127,11 @@ export function DocumentList({
    * is too narrow for its folder rail (#5576).
    */
   folderPicker?: ReactNode;
+  /**
+   * Under the toolbar: a synced Google Drive folder's state line and its ⋯
+   * (`drive-folder-line.tsx`), when the folder on screen is one.
+   */
+  folderLine?: ReactNode;
   /** The hue a file's tile wears, by its folder (#5576). */
   folderHue: (folder: string | null) => string;
 }) {
@@ -214,6 +220,7 @@ export function DocumentList({
           />
         </div>
       </div>
+      {folderLine}
       {/*
         Above the rows and whatever state replaces them, as backwork's is: a
         search that finds nothing past the cap is exactly when it matters.
