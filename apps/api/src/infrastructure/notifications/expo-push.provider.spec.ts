@@ -194,20 +194,17 @@ describe('ExpoPushProvider', () => {
 
       const [[withPhoto], [noPhoto], [plain]] = mockSendPushNotificationsAsync
         .mock.calls as [Record<string, unknown>[]][];
-      // The iOS extension reads `data.communication`; Android draws
-      // `richContent.image` as the large icon.
+      // The iOS extension reads `data.communication`. No image goes to
+      // Android, where Firebase would draw it as a big picture (#6035).
       expect(withPhoto[0]).toMatchObject({
         mutableContent: true,
-        richContent: { image: communication.senderImageUrl },
         data: {
           target: { screen: 'chat', channelId: 'ch-1' },
           communication,
         },
       });
-      // No photo: iOS still draws the sender (their initials); Android keeps
-      // the app icon.
+      expect(withPhoto[0]).not.toHaveProperty('richContent');
       expect(noPhoto[0]).toMatchObject({ mutableContent: true });
-      expect(noPhoto[0]).not.toHaveProperty('richContent');
       for (const key of ['mutableContent', 'richContent']) {
         expect(plain[0]).not.toHaveProperty(key);
       }

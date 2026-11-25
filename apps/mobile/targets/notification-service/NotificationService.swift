@@ -59,9 +59,13 @@ class NotificationService: UNNotificationServiceExtension {
     from communication: Communication,
     image: INImage?
   ) {
+    // Name components as well as the display name, so a sender with no
+    // photo gets their initials rather than a blank silhouette.
     let sender = INPerson(
       personHandle: INPersonHandle(value: communication.senderId, type: .unknown),
-      nameComponents: nil,
+      nameComponents: PersonNameComponentsFormatter().personNameComponents(
+        from: communication.senderName
+      ),
       displayName: communication.senderName,
       image: image,
       contactIdentifier: nil,
@@ -105,6 +109,9 @@ class NotificationService: UNNotificationServiceExtension {
     if communication.mentioned {
       let metadata = INSendMessageIntentDonationMetadata()
       metadata.mentionsCurrentUser = true
+      // The metadata's count replaces the recipients array's, so it repeats
+      // it: left at its default, a mention in a channel could read as a DM.
+      metadata.recipientCount = recipients?.count ?? 0
       intent.donationMetadata = metadata
     }
 

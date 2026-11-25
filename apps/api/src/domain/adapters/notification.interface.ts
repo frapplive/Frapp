@@ -31,12 +31,11 @@ export interface PushPayload {
   /**
    * The person a chat push comes from, so the phone draws it as a message
    * from them with their photo, the way iMessage and WhatsApp do (#6024).
-   * Set only on chat pushes with a named sender. Android shows the photo as
-   * the notification's large icon (Expo's `richContent.image`); iOS shows it
-   * through the app's Notification Service Extension
+   * Set only on chat pushes with a named sender. iOS draws it through the
+   * app's Notification Service Extension
    * (`apps/mobile/targets/notification-service`), which reads this from
-   * `data.communication`. A build without the extension shows the push as
-   * before.
+   * `data.communication`; a build without the extension shows the push as
+   * before. Android shows the push as before until #6035.
    */
   communication?: PushCommunication;
 }

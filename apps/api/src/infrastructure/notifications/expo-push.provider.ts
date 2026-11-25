@@ -125,21 +125,18 @@ function communicationData(
 }
 
 /**
- * What makes the phone fetch the sender's photo (#6024). `mutableContent`
- * wakes the iOS Notification Service Extension, which turns the push into a
+ * What makes an iPhone fetch the sender's photo (#6024): `mutableContent`
+ * wakes the app's Notification Service Extension, which turns the push into a
  * communication notification; a build without one shows the push unchanged.
- * `richContent.image` is the photo Android draws as the large icon, and is
- * left off when the sender has no photo, so Android keeps the app icon.
+ *
+ * No `richContent.image` for Android: Expo sends it as an FCM notification
+ * message, which a backgrounded app has Firebase draw as a full-width picture
+ * that cuts the message text. Android's version is #6035.
  */
 function communicationDelivery(
   payload: PushPayload,
-): Pick<ExpoPushMessage, 'mutableContent' | 'richContent'> {
-  if (!payload.communication) return {};
-  const image = payload.communication.senderImageUrl;
-  return {
-    mutableContent: true,
-    ...(image ? { richContent: { image } } : {}),
-  };
+): Pick<ExpoPushMessage, 'mutableContent'> {
+  return payload.communication ? { mutableContent: true } : {};
 }
 
 /** A category as a caught-failure site segment (lowercase, hyphenated). */

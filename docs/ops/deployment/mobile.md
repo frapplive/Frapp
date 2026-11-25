@@ -520,7 +520,9 @@ stops if a later ship has tagged another commit; dispatch Deploy production for 
   `live.frapp.mobile.staging.NotificationService` for Frapp Staging. The same **All: Set up all the
   required credentials** run as the capability item above, from a checkout that has the extension,
   sets up every target the config lists; run it for `production` and again for `staging`
-  (`--profile staging`). The same release adds the Communication Notifications capability
+  (`--profile staging`), **before the PR that adds the extension merges**: the Staging app
+  workflow builds iOS on its own after the staging deploy that follows the merge, since the new
+  native inputs move the staging runtime. The same release adds the Communication Notifications capability
   (`com.apple.developer.usernotifications.communication` under `ios.entitlements`), so that run
   covers both. *Derived from eas-cli's documented handling of `appExtensions`; not yet run, so
   correct this from the first time it is.*
