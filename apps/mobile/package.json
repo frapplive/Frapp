@@ -93,5 +93,12 @@
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^4.1.10"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "@bacons/apple-targets"
+      ]
+    }
+  }
 }
