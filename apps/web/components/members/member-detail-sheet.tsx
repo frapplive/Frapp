@@ -536,7 +536,7 @@ export function MemberDetailSheet({
               <p className="text-caption text-muted-foreground">{meta}</p>
             ) : null}
             {timedOutUntil ? (
-              <p className="text-caption text-warning-text">
+              <p className="text-caption text-warning">
                 {CHAT_TIMEOUT_COPY.until(timedOutUntil, now)}
                 {timeoutReason ? ` · ${timeoutReason}` : ""}
               </p>
