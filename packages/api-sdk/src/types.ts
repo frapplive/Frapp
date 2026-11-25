@@ -4163,7 +4163,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft */
+        /** Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051) */
         get: operations["MeetingActionItemTasksController_list_v1"];
         put?: never;
         post?: never;
@@ -4414,6 +4414,41 @@ export interface paths {
         post: operations["ChapterGroupController_addMember_v1"];
         /** Take one member out of a manual group */
         delete: operations["ChapterGroupController_removeMember_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls */
+        get: operations["ChatTimeoutController_mine_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/{id}/chat-timeout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President. */
+        put: operations["ChatTimeoutController_timeOut_v1"];
+        post?: never;
+        /** Lift a member's chat timeout early. Under the same rank rule as setting one. */
+        delete: operations["ChatTimeoutController_lift_v1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5513,6 +5548,23 @@ export interface paths {
         put?: never;
         /** What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone */
         post: operations["FrappLinkController_resolve_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/updates/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A desktop release file or update feed: redirects to a time-limited download link */
+        get: operations["DesktopUpdateController_file_v1"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8796,6 +8848,15 @@ export interface components {
             viewer_can_remove?: boolean;
             /** @description Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads. */
             viewer_can_edit_profile?: boolean;
+            /** @description Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads. */
+            viewer_can_timeout?: boolean;
+            /**
+             * Format: date-time
+             * @description Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout.
+             */
+            chat_timeout_until?: string | null;
+            /** @description The reason the officer gave, under the same rule. */
+            chat_timeout_reason?: string | null;
         };
         MemberRosterEntryDto: {
             /** @description users.id — the id chat carries as sender_id */
@@ -10497,7 +10558,7 @@ export interface components {
              */
             status: "pending" | "failed";
             /**
-             * @description Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message; `send_failed` it kept failing.
+             * @description Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message, or the author was timed out when it came due; `send_failed` it kept failing.
              * @enum {string|null}
              */
             failure_reason: "no_access" | "chapter_locked" | "not_sendable" | "send_failed" | null;
@@ -12048,6 +12109,22 @@ export interface components {
             done: number;
             total: number;
         };
+        ActionItemTaskWhoDto: {
+            /**
+             * @description A task for everyone’s audience; null for a task for one member.
+             * @enum {string|null}
+             */
+            audience: "everyone" | "people" | "role" | "group" | "tier" | null;
+            /** @description The role’s, group’s or tier’s name, when it went to one. */
+            audience_name: string | null;
+            /** @description The member, or the named people of a task for several. Empty for a role, group, tier or everyone. */
+            assignee_ids: string[];
+        };
+        ActionItemTaskRefDto: {
+            /** Format: uuid */
+            id: string;
+            who: components["schemas"]["ActionItemTaskWhoDto"];
+        };
         MeetingActionItemTaskDto: {
             /** @description The action item’s place in the minutes’ list, from 0. */
             index: number;
@@ -12055,6 +12132,8 @@ export interface components {
             done: boolean;
             /** @description A task for everyone: how many of its copies are done. */
             group: components["schemas"]["ActionItemTaskGroupDto"] | null;
+            /** @description The task and who it went to, for a caller with `tasks:manage`; null for everyone else. */
+            task: components["schemas"]["ActionItemTaskRefDto"] | null;
         };
         OpenActionItemDto: {
             /** @description The action item’s place in its minutes’ list, from 0. */
@@ -12282,6 +12361,33 @@ export interface components {
         SetChapterGroupMembersDto: {
             /** @description The group's whole member list, as `users.id`s of members of the chapter. Replaces the list, all or none. */
             member_ids: string[];
+        };
+        ChatTimeoutStateDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+        };
+        SetChatTimeoutDto: {
+            /**
+             * @description 5 minutes, 1 hour, 1 day or 1 week.
+             * @enum {string}
+             */
+            duration: "5m" | "1h" | "1d" | "1w";
+            /** @description Shown to the member and to officers who can time out. Optional. */
+            reason?: string | null;
+        };
+        MemberChatTimeoutDto: {
+            /**
+             * Format: date-time
+             * @description Until when the caller can't post or react in the chapter's channels; null when they can.
+             */
+            until: string | null;
+            reason: string | null;
+            /** Format: uuid */
+            member_id: string;
         };
         RushCandidateViewDto: {
             /** Format: uuid */
@@ -15362,7 +15468,7 @@ export interface components {
             synced_count: number;
             /** @description Files the last sync left out: a type Documents does not take, over 25 MB, or past 500 files */
             skipped_count: number;
-            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
+            /** @description The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted. */
             folders_left_out: number;
             /** @description Whether a sync is due or running now */
             syncing: boolean;
@@ -25785,6 +25891,98 @@ export interface operations {
             };
         };
     };
+    ChatTimeoutController_mine_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatTimeoutStateDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_timeOut_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetChatTimeoutDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ChatTimeoutController_lift_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberChatTimeoutDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
     RushController_lookup_v1: {
         parameters: {
             query: {
@@ -28398,6 +28596,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ResolveFrappLinksResponseDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DesktopUpdateController_file_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names */
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download link, in `Location` */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a file a release publishes */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This API cannot reach the releases bucket */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

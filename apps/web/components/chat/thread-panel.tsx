@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatTimeoutNotice } from "./chat-timeout-notice";
 import {
   useCallback,
   useEffect,
@@ -120,6 +121,7 @@ export interface ThreadPanelProps extends Pick<
   | "canManageChannel"
   | "onReport"
   | "onBlock"
+  | "onTimeOut"
   | "onForward"
   | "onOpenProfile"
   | "isMember"
@@ -146,6 +148,11 @@ export interface ThreadPanelProps extends Pick<
    * follows `canReply` (`ChatService.editMessage`).
    */
   canPost: boolean;
+  /**
+   * The member's chat timeout here (#6006, `chatTimeoutNotice`): while set,
+   * the banner stands where the reply box would.
+   */
+  timeoutNotice?: { title: string; detail: string | null } | null;
   onClose: () => void;
   /**
    * Closes the whole chat panel (#4223): the channel header's X, which the
@@ -250,10 +257,12 @@ export function ThreadPanel({
   canManageChannel,
   onReport,
   onBlock,
+  onTimeOut,
   onForward,
   onOpenProfile,
   isMember,
   canReply,
+  timeoutNotice = null,
   canPost,
   onClose,
   onClosePanel,
@@ -582,6 +591,7 @@ export function ThreadPanel({
                 canManageChannel={canManageChannel}
                 onReport={onReport}
                 onBlock={onBlock}
+                onTimeOut={onTimeOut}
                 onForward={onForward}
                 onOpenProfile={onOpenProfile}
                 isMember={isMember}
@@ -728,6 +738,7 @@ export function ThreadPanel({
           canManageChannel={canManageChannel}
           onReport={onReport}
           onBlock={onBlock}
+          onTimeOut={onTimeOut}
           onForward={onForward}
           onOpenProfile={onOpenProfile}
           isMember={isMember}
@@ -740,7 +751,9 @@ export function ThreadPanel({
           read: one that failed for lost posting is the one to delete. */}
       <ScheduledMessagesBar channelId={channelId} threadRootId={rootId} />
       <div className="shrink-0 border-t border-border p-3">
-        {canReply ? (
+        {timeoutNotice ? (
+          <ChatTimeoutNotice notice={timeoutNotice} className="" />
+        ) : canReply ? (
           <>
             <Textarea
               aria-label="Reply in thread"

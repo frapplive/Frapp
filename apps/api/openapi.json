@@ -13821,7 +13821,7 @@
             "bearer": []
           }
         ],
-        "summary": "Which action items of posted minutes became tasks, and whether each is done. Empty for a draft",
+        "summary": "Which action items of posted minutes became tasks, and whether each is done. Empty for a draft. A caller with `tasks:manage` also gets each task’s id and who it went to (#6051)",
         "tags": [
           "Meetings"
         ]
@@ -14795,6 +14795,143 @@
         "summary": "Take one member out of a manual group",
         "tags": [
           "Groups"
+        ]
+      }
+    },
+    "/v1/chat/timeout": {
+      "get": {
+        "operationId": "ChatTimeoutController_mine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTimeoutStateDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The caller's own chat timeout in this chapter: until when they can't post or react in channels, or nulls",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/v1/members/{id}/chat-timeout": {
+      "put": {
+        "operationId": "ChatTimeoutController_timeOut_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetChatTimeoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Time a member out of the chapter's channels for 5 minutes, 1 hour, 1 day or 1 week, replacing any timeout they have. Only a member ranked below you, never the President.",
+        "tags": [
+          "Chat"
+        ]
+      },
+      "delete": {
+        "operationId": "ChatTimeoutController_lift_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberChatTimeoutDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lift a member's chat timeout early. Under the same rank rule as setting one.",
+        "tags": [
+          "Chat"
         ]
       }
     },
@@ -18606,6 +18743,47 @@
         "summary": "What each record names for the caller: its live name when they may open it, `hidden` (no name) when they may not, `removed` when it's gone",
         "tags": [
           "Frapp links"
+        ]
+      }
+    },
+    "/v1/desktop/updates/{file}": {
+      "get": {
+        "operationId": "DesktopUpdateController_file_v1",
+        "parameters": [
+          {
+            "name": "file",
+            "required": true,
+            "in": "path",
+            "description": "A feed (`latest.yml`, `latest-mac.yml`, `beta.yml`, `beta-mac.yml`) or a file a feed names",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "The download link, in `Location`"
+          },
+          "404": {
+            "description": "Not a file a release publishes"
+          },
+          "503": {
+            "description": "This API cannot reach the releases bucket"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A desktop release file or update feed: redirects to a time-limited download link",
+        "tags": [
+          "Desktop updates"
         ]
       }
     },
@@ -28349,6 +28527,21 @@
           "viewer_can_edit_profile": {
             "type": "boolean",
             "description": "Whether the requesting viewer may fix this member's name and graduation year (PATCH /v1/members/{id}/profile): they hold roles:manage, it is not their own profile, the member ranks below them or at their own rank, and the member is in no other chapter. Present only on single-member reads."
+          },
+          "viewer_can_timeout": {
+            "type": "boolean",
+            "description": "Whether the requesting viewer may time this member out of chat or lift their timeout (PUT/DELETE /v1/members/{id}/chat-timeout): they hold members:timeout, it is not their own profile, the member is not the President, and the member ranks below them. Present only on single-member reads."
+          },
+          "chat_timeout_until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the member can't post or react in the chapter's channels. Set only for the member themselves and for a viewer who can time out; null otherwise and when there is no timeout."
+          },
+          "chat_timeout_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reason the officer gave, under the same rule."
           }
         },
         "required": [
@@ -33263,7 +33456,7 @@
               "send_failed"
             ],
             "nullable": true,
-            "description": "Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message; `send_failed` it kept failing."
+            "description": "Why a failed message did not post: `no_access` the author can no longer post there; `chapter_locked` the chapter is read-only for billing; `not_sendable` the channel refused the message, or the author was timed out when it came due; `send_failed` it kept failing."
           },
           "created_at": {
             "type": "string",
@@ -37568,6 +37761,56 @@
           "total"
         ]
       },
+      "ActionItemTaskWhoDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "everyone",
+              "people",
+              "role",
+              "group",
+              "tier"
+            ],
+            "nullable": true,
+            "description": "A task for everyone’s audience; null for a task for one member."
+          },
+          "audience_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The role’s, group’s or tier’s name, when it went to one."
+          },
+          "assignee_ids": {
+            "description": "The member, or the named people of a task for several. Empty for a role, group, tier or everyone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "audience",
+          "audience_name",
+          "assignee_ids"
+        ]
+      },
+      "ActionItemTaskRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "who": {
+            "$ref": "#/components/schemas/ActionItemTaskWhoDto"
+          }
+        },
+        "required": [
+          "id",
+          "who"
+        ]
+      },
       "MeetingActionItemTaskDto": {
         "type": "object",
         "properties": {
@@ -37589,12 +37832,23 @@
                 "$ref": "#/components/schemas/ActionItemTaskGroupDto"
               }
             ]
+          },
+          "task": {
+            "nullable": true,
+            "description": "The task and who it went to, for a caller with `tasks:manage`; null for everyone else.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActionItemTaskRefDto"
+              }
+            ]
           }
         },
         "required": [
           "index",
           "done",
-          "group"
+          "group",
+          "task"
         ]
       },
       "OpenActionItemDto": {
@@ -38218,6 +38472,73 @@
         },
         "required": [
           "member_ids"
+        ]
+      },
+      "ChatTimeoutStateDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "until",
+          "reason"
+        ]
+      },
+      "SetChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5m",
+              "1h",
+              "1d",
+              "1w"
+            ],
+            "description": "5 minutes, 1 hour, 1 day or 1 week."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "Shown to the member and to officers who can time out. Optional."
+          }
+        },
+        "required": [
+          "duration"
+        ]
+      },
+      "MemberChatTimeoutDto": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the caller can't post or react in the chapter's channels; null when they can."
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "member_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "until",
+          "reason",
+          "member_id"
         ]
       },
       "RushCandidateViewDto": {
@@ -46613,7 +46934,7 @@
           },
           "folders_left_out": {
             "type": "number",
-            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 300 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
+            "description": "The top-most folders the last sync did not read, because they sit more than nine levels below the connected folder or past its first 1,000 folders. They and any folders inside them, and their files, are not in Documents; folders inside them are not counted."
           },
           "syncing": {
             "type": "boolean",

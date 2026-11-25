@@ -65,6 +65,7 @@ export * from "./chat-message";
 export * from "./chat-message-flags";
 export * from "./chat-notification-defaults";
 export * from "./chat-sidebar";
+export * from "./chat-timeout";
 // The check-in QR as a link the phone camera opens. See ./check-in-link.
 export * from "./check-in-link";
 export * from "./check-in-window";
@@ -250,9 +251,11 @@ export {
   nextReleaseNoteSnapshot,
   parseReleaseNoteSnapshot,
   parseReleaseNoteVersion,
+  RELEASE_NOTE_TIME_ZONE,
   RELEASE_NOTE_VERSION_PATTERN,
   RELEASE_NOTES,
   type ReleaseNote,
+  releaseNoteDay,
   releaseNoteGroups,
   type ReleaseNoteSnapshot,
   releaseNoteStoreText,

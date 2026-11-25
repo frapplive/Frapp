@@ -77,6 +77,9 @@ export const SCREEN_TITLES = {
   // Tasks and, since #3930, events: `AI_SUGGESTION_COPY.listHeading`.
   "suggested-tasks": "Suggested",
   "arrange-channels": "Arrange channels",
+  // One channel's settings (#6031), titled by the channel's name, which a
+  // capsule has no room for.
+  "channel-settings": "Channel settings",
   "chapter-settings": "Chapter settings",
   "chapter-roles": "Roles and groups",
   // Pushed from Chapter settings (Paul, 2026-11-21).

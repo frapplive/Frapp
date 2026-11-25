@@ -13,6 +13,7 @@ import { chapterSubscription } from "@/tests/chapter-subscription";
 import { networkMock } from "@/tests/network";
 import { ConnectionPill } from "@/components/shared/connection-pill";
 import { folderOpenStorageKey } from "@/components/documents/use-folder-open";
+import { RENDER_WINDOW } from "@repo/hooks/use-render-window";
 
 const {
   mockCurrentChapter,
@@ -2474,6 +2475,77 @@ describe("DocumentsPage wiring across its split components (#3273)", () => {
     }
   });
 
+  describe("a connected Google Drive folder (#5583)", () => {
+    const connectedDrive = {
+      data: {
+        available: true,
+        service_account_email: "drive@example.com",
+        picker: null,
+        connection: {
+          folder_id: "drive-gov",
+          folder_name: "Governance",
+          folder_url: "https://drive.google.com/drive/folders/drive-gov",
+          status: "active",
+          last_synced_at: null,
+          synced_count: 12,
+          skipped_count: 0,
+          folders_left_out: 0,
+          syncing: false,
+          who_can_see: null,
+        },
+      },
+    };
+    afterEach(() => {
+      mockDriveStatus.mockReturnValue({ data: undefined });
+    });
+
+    it("opens the connected folder from the Upload menu, with its line", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [
+        {
+          id: "f-1",
+          name: "Governance",
+          sort_order: 0,
+          drive_folder_id: "drive-gov",
+        },
+        { id: "f-2", name: "Rush", sort_order: 1 },
+      ];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(screen.queryByText(/^Google Drive · /)).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "More ways to add documents" }),
+      );
+      await user.click(
+        await screen.findByRole("menuitem", { name: "Google Drive" }),
+      );
+      expect(
+        await screen.findByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "More for Governance" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the line, and Disconnect, for an officer who can't open the folder", async () => {
+      manageGate.granted = true;
+      mockDriveStatus.mockReturnValue(connectedDrive);
+      foldersQuery.data = [{ id: "f-2", name: "Rush", sort_order: 1 }];
+      const user = userEvent.setup();
+      render(<DocumentsPage />);
+      expect(
+        screen.getByText("Google Drive · Not synced yet · 12 files"),
+      ).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "More for Governance" }),
+      );
+      expect(
+        await screen.findByRole("menuitem", { name: /Disconnect/ }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("keeps a row's controls out of sight until hover or focus, and behind More on touch (#5576)", () => {
     render(<DocumentsPage />);
     const star = screen.getByRole("button", { name: "Star Chapter bylaws" });
@@ -3558,5 +3630,84 @@ describe("DocumentsPage minutes rows (#5949)", () => {
     expect(
       screen.getByRole("dialog", { name: "New minutes" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("DocumentsPage with a long library (#6088)", () => {
+  const observers: { callback: IntersectionObserverCallback }[] = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOffline.value = false;
+    resolvedDocumentsQuery();
+    chapter.active();
+    observers.length = 0;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observers.push({ callback });
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    documentsQuery.data = Array.from({ length: 400 }, (_, i) => ({
+      ...BYLAWS,
+      id: `doc-${i}`,
+      title: `Doc ${String(i).padStart(3, "0")}`,
+      storage_path: `chap-1/doc-${i}.pdf`,
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const drawnRows = () =>
+    screen.getAllByRole("button", { name: /^Download Doc \d{3}/ }).length;
+
+  it("draws one page of rows, not one per file, and the next as the end comes into view", () => {
+    render(<DocumentsPage />);
+    expect(drawnRows()).toBe(RENDER_WINDOW.first);
+
+    act(() => {
+      observers.at(-1)!.callback(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    expect(drawnRows()).toBe(RENDER_WINDOW.first + RENDER_WINDOW.step);
+  });
+
+  it("watches afresh after each page, so a sentinel still in view keeps the list growing", () => {
+    render(<DocumentsPage />);
+    const reach = () =>
+      act(() => {
+        observers.at(-1)!.callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+    reach();
+    const watched = observers.length;
+    reach();
+
+    expect(observers.length).toBeGreaterThan(watched);
+    expect(drawnRows()).toBe(RENDER_WINDOW.first + 2 * RENDER_WINDOW.step);
+  });
+
+  it("draws the viewer's document wherever it sits, so closing can hand focus back to its row", async () => {
+    linkedDocument.current = "doc-300";
+    try {
+      render(<DocumentsPage />);
+      await screen.findByRole("dialog", { name: "Doc 300" });
+
+      expect(
+        document.querySelector('[data-document-open="doc-300"]'),
+      ).not.toBeNull();
+    } finally {
+      linkedDocument.current = null;
+    }
   });
 });

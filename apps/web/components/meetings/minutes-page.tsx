@@ -126,6 +126,7 @@ import { LinkEventPanel } from "@/components/meetings/link-event";
 import { NotesDraftPanel } from "@/components/meetings/notes-draft-panel";
 import { AttendanceBackfill } from "@/components/meetings/attendance-backfill";
 import { SuggestedTasks } from "@/components/ai/suggested-tasks";
+import { useActionItemTaskRow } from "@/components/meetings/action-item-task";
 import { ComingUpDates } from "@/components/meetings/coming-up-dates";
 import { ComingUpPostReview } from "@/components/meetings/coming-up-post-review";
 import { MinutesPageSkeleton } from "@/components/meetings/meetings-skeleton";
@@ -615,6 +616,14 @@ function Minutes({
     view.content,
   );
   const jumps = editing ? [] : minutesJumps(readKeys, view.content);
+  // Each action item's own Create task, or Open task once it is one
+  // (#6051): on posted minutes being read, for whoever could create it.
+  const taskRow = useActionItemTaskRow({
+    meetingId: meeting.id,
+    items: view.content.action_items,
+    meetingStart: meeting.event_start_time,
+    enabled: !isDraft && !editing && !posting,
+  });
   const showsAttendance =
     !editing &&
     (hasAttendees(meeting) ||
@@ -1065,6 +1074,7 @@ function Minutes({
                     nameFor={names.nameFor}
                     viewerId={viewer?.id ?? null}
                     tasks={actionItemTasks}
+                    taskRow={taskRow}
                   />
                 ) : key === "tabled" ? (
                   <TabledView items={view.content.tabled} />

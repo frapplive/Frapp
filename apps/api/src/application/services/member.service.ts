@@ -32,8 +32,6 @@ import { Role } from '#domain/entities/role.entity';
 import { flattenPermissionSets } from '#domain/utils/permissions';
 import {
   canAssignRoleOnMemberAt,
-  canCorrectProfileAt,
-  canReach,
   holderRank,
   roleRank,
 } from '#domain/utils/role-rank';
@@ -44,7 +42,16 @@ import {
 } from '#domain/constants/permissions';
 import { CustomFieldService } from './custom-field.service';
 import { RbacService, type RankContext } from './rbac.service';
-import { memberRankIn } from '#domain/utils/rank-context';
+import {
+  chatTimeoutBlock,
+  memberHoldsWildcard,
+  rankBlock,
+  rankContextOrSkip,
+} from './member-rank';
+import {
+  stateOf as chatTimeoutStateOf,
+  withoutChatTimeout,
+} from './chat-timeout.service';
 import { ChapterAuditLogService } from './chapter-audit-log.service';
 import { ProfilePhotoUrlService } from './profile-photo-url.service';
 import { allowedVisibilities } from './custom-field-visibility';
@@ -126,6 +133,20 @@ export interface MemberProfile {
    * reads, so a client offers the editor only where the API would allow it.
    */
   viewer_can_edit_profile?: boolean;
+  /**
+   * Whether the requesting viewer may time this member out of chat or lift
+   * their timeout (#6006): `members:timeout` (or `*`), not their own
+   * profile, not the President, and ranked below them
+   * (`chatTimeoutBlock`). Present only on single-member reads.
+   */
+  viewer_can_timeout?: boolean;
+  /**
+   * The member's running chat timeout (#6006), on a single-member read for
+   * the member themselves and for a viewer who can time out; null for
+   * anyone else, and when there is none.
+   */
+  chat_timeout_until?: string | null;
+  chat_timeout_reason?: string | null;
 }
 
 /**
@@ -459,7 +480,7 @@ export class MemberService {
         "This member's roles changed while you were saving. Reload and try again.",
       );
     }
-    return written;
+    return withoutChatTimeout(written);
   }
 
   /** The rank rules of {@link updateRoles}; see there. */
@@ -962,6 +983,59 @@ export class MemberService {
     }
   }
 
+  /**
+   * `viewer_can_timeout` for a profile read (#6006): `chatTimeoutBlock`'s
+   * answer, without its reads where the permissions already settle it. The
+   * member's own permissions are read only for a viewer who could otherwise
+   * time them out. A failed read answers `false`: the write re-checks.
+   */
+  private async viewerCanTimeout(
+    member: Member,
+    viewerUserId: string,
+    permissions: readonly string[],
+    rankContext: () => Promise<RankContext>,
+  ): Promise<boolean> {
+    if (member.user_id === viewerUserId) return false;
+    const wildcard = permissions.includes(SystemPermissions.WILDCARD);
+    if (!wildcard && !permissions.includes(SystemPermissions.MEMBERS_TIMEOUT)) {
+      return false;
+    }
+    try {
+      // A `*` viewer reads no rank context (it outranks everyone), so one
+      // permissions read says whether the member is the President. Anyone
+      // else reads the context, which holds every role and answers that too.
+      if (wildcard) {
+        const memberPermissions =
+          await this.rbacService.getEffectivePermissions(
+            member.chapter_id,
+            member.user_id,
+          );
+        return !memberPermissions.includes(SystemPermissions.WILDCARD);
+      }
+      const context = await rankContextOrSkip(
+        member,
+        viewerUserId,
+        rankContext,
+      );
+      return (
+        chatTimeoutBlock(
+          member,
+          viewerUserId,
+          context ? memberHoldsWildcard(context, member) : false,
+          context,
+        ) === null
+      );
+    } catch (error) {
+      logThrowable(
+        this.logger,
+        'warn',
+        `Read for viewer_can_timeout failed (chapter ${member.chapter_id}, member ${member.id})`,
+        error,
+      );
+      return false;
+    }
+  }
+
   /** The profile of a membership row already known to be in `chapterId`. */
   private async buildProfile(
     member: Member,
@@ -986,21 +1060,27 @@ export class MemberService {
       member.user_id === viewerUserId,
     );
     const rankContext = this.rankContextFor(member, viewerUserId);
-    const [customFields, viewerCanRemove, viewerCanEditProfile] =
-      await Promise.all([
-        this.customFieldService.findVisibleValuesForMember(
-          chapterId,
-          member.id,
-          allowed,
-        ),
-        this.viewerCanRemove(member, viewerUserId, permissions, rankContext),
-        this.viewerCanEditProfile(
-          member,
-          viewerUserId,
-          permissions,
-          rankContext,
-        ),
-      ]);
+    const [
+      customFields,
+      viewerCanRemove,
+      viewerCanEditProfile,
+      viewerCanTimeout,
+    ] = await Promise.all([
+      this.customFieldService.findVisibleValuesForMember(
+        chapterId,
+        member.id,
+        allowed,
+      ),
+      this.viewerCanRemove(member, viewerUserId, permissions, rankContext),
+      this.viewerCanEditProfile(member, viewerUserId, permissions, rankContext),
+      this.viewerCanTimeout(member, viewerUserId, permissions, rankContext),
+    ]);
+    // The timeout is the member's and the moderators' business (#6006).
+    const seesTimeout =
+      member.user_id === viewerUserId ||
+      permissions.includes(SystemPermissions.WILDCARD) ||
+      permissions.includes(SystemPermissions.MEMBERS_TIMEOUT);
+    const timeout = seesTimeout ? chatTimeoutStateOf(member) : null;
 
     return this.photoUrls.signRow(
       {
@@ -1008,6 +1088,9 @@ export class MemberService {
         custom_fields: customFields,
         viewer_can_remove: viewerCanRemove,
         viewer_can_edit_profile: viewerCanEditProfile,
+        viewer_can_timeout: viewerCanTimeout,
+        chat_timeout_until: timeout?.until ?? null,
+        chat_timeout_reason: timeout?.reason ?? null,
       },
       member.user_id,
     );
@@ -1193,7 +1276,7 @@ export class MemberService {
     alumniRoleId: string | null,
   ): MemberProfile {
     return {
-      ...member,
+      ...withoutChatTimeout(member),
       is_alumni:
         alumniRoleId !== null && member.role_ids.includes(alumniRoleId),
       display_name: user.display_name,
@@ -1222,42 +1305,4 @@ function sharedBirthday(
     birthday_month: shared ? (user.birthday_month ?? null) : null,
     birthday_day: shared ? (user.birthday_day ?? null) : null,
   };
-}
-
-/**
- * Whether the rank rules (#4071, `spec/behavior/rbac.md` § Rank) let
- * `actorUserId` act on `member`: `'self'` for their own membership,
- * `'out-of-reach'` when `member` is out of reach, `null` when they may.
- * Removal and correction share it, so they never disagree on who ranks where.
- * A `null` context means the self check already answered.
- *
- * `reach` says who is in reach: `'below'`, only members ranked below the
- * caller (removal); `'peer'`, those or a member at the caller's own rank
- * (correction, Paul's go relayed by Shawn, 2026-11-23, #5900;
- * `canCorrectProfileAt`). Neither reaches a member ranked above the caller,
- * though roles and pledge class do since #5903.
- */
-function rankBlock(
-  member: Member,
-  actorUserId: string,
-  context: RankContext | null,
-  reach: 'below' | 'peer',
-): 'self' | 'out-of-reach' | null {
-  if (!context || member.user_id === actorUserId) return 'self';
-  if (context.reach.memberId === member.id) return 'self';
-  const rank = memberRankIn(context, member);
-  const reachable =
-    reach === 'peer'
-      ? canCorrectProfileAt(context.reach, rank)
-      : canReach(context.reach, rank);
-  return reachable ? null : 'out-of-reach';
-}
-
-/** The rank context, or `null` without a read when `member` is the actor. */
-function rankContextOrSkip(
-  member: Member,
-  actorUserId: string,
-  rankContext: () => Promise<RankContext>,
-): Promise<RankContext | null> {
-  return member.user_id === actorUserId ? Promise.resolve(null) : rankContext();
 }

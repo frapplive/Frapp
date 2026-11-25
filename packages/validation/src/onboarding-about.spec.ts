@@ -26,3 +26,18 @@ describe("needsAboutYou", () => {
     expect(needsAboutYou(full)).toBe(false);
   });
 });
+
+describe("needsAboutYou with the chapter's fields (#5926)", () => {
+  it("shows the step when a required field has no value", () => {
+    expect(needsAboutYou(full, [{ required: true, value: null }])).toBe(true);
+    expect(needsAboutYou(full, [{ required: true, value: "  " }])).toBe(true);
+  });
+
+  it("skips it when every required field has one", () => {
+    expect(needsAboutYou(full, [{ required: true, value: "Ann" }])).toBe(false);
+  });
+
+  it("never asks for an empty optional field alone", () => {
+    expect(needsAboutYou(full, [{ required: false, value: null }])).toBe(false);
+  });
+});

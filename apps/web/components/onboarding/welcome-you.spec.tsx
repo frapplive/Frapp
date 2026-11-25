@@ -13,11 +13,23 @@ const mocks = vi.hoisted(() => ({
   completeOnboarding: vi.fn(),
   replace: vi.fn(),
   refetch: vi.fn(),
+  customFields: [] as Record<string, unknown>[],
+  /** What the fields read holds when the screen draws; `load` answers with `customFields`. */
+  customFieldsLoaded: true,
+  updateCustom: vi.fn(),
   /** The member's verified schools (#5929): one, so chat is next. */
   schools: [{ school: { id: "s-1" } }] as unknown[],
 }));
 
-vi.mock("@repo/hooks", () => ({
+vi.mock("@repo/hooks", async (importOriginal) => ({
+  // The pure helpers (shown value, form changes) are the real ones.
+  ...(await importOriginal<typeof import("@repo/hooks")>()),
+  useOnboardingCustomFields: () => ({
+    data: mocks.customFieldsLoaded ? mocks.customFields : undefined,
+    settled: mocks.customFieldsLoaded,
+    load: async () => mocks.customFields,
+  }),
+  useUpdateOwnCustomFields: () => ({ mutateAsync: mocks.updateCustom }),
   useCurrentUser: () => ({
     data: mocks.user,
     isPending: mocks.user === undefined && !mocks.isError,
@@ -31,7 +43,7 @@ vi.mock("@repo/hooks", () => ({
   useCurrentChapter: () => ({
     data: { university: "Rensselaer Polytechnic Institute" },
   }),
-  usePermissionList: () => [],
+  usePermissionList: () => ["members:view"],
   useChapterMajors: () => [],
 }));
 /** The school step has its own spec; here it only has to be reached. */
@@ -385,5 +397,225 @@ describe("About you (#5284)", () => {
     );
     expect(mocks.updateUser).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("About you with the chapter's fields (#5926)", () => {
+  const CONTACT = {
+    field_id: "cf-contact",
+    label: "Emergency contact (name)",
+    type: "text",
+    required: true,
+    visibility: "exec",
+    choices: null,
+    max_length: null,
+    value: null,
+  };
+  const SHIRT = {
+    field_id: "cf-shirt",
+    label: "T-shirt size",
+    type: "select",
+    required: false,
+    visibility: "chapter",
+    choices: ["S", "M", "L"],
+    max_length: null,
+    value: null,
+  };
+  const ALLERGIES = {
+    field_id: "cf-allergies",
+    label: "Allergies",
+    type: "text",
+    required: false,
+    visibility: "exec",
+    choices: null,
+    max_length: null,
+    value: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.user = ADA;
+    mocks.isError = false;
+    mocks.offline = false;
+    mocks.customFields = [CONTACT, SHIRT, ALLERGIES];
+    mocks.customFieldsLoaded = true;
+    mocks.updateUser.mockResolvedValue({});
+    mocks.updateCustom.mockImplementation(async (values) =>
+      mocks.customFields.map((f) => ({
+        ...f,
+        value:
+          (values as { field_id: string; value: string | null }[]).find(
+            (v) => v.field_id === f.field_id,
+          )?.value ?? f.value,
+      })),
+    );
+    mocks.completeOnboarding.mockResolvedValue({});
+    window.localStorage.clear();
+  });
+
+  const seeMore = () => screen.getByRole("button", { name: "See more" });
+  const toAbout = async ({ open = true } = {}) => {
+    render(<WelcomeYou />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "About you" });
+    if (open) fireEvent.click(seeMore());
+  };
+
+  it("shows the step for an empty required field, even with the profile full", async () => {
+    await toAbout({ open: false });
+
+    expect(screen.getByLabelText("Phone")).toBeTruthy();
+  });
+
+  it("keeps every one of them behind a collapsed See more (Shawn, 2026-11-24)", async () => {
+    await toAbout({ open: false });
+
+    expect(screen.queryByLabelText("Emergency contact (name)")).toBeNull();
+    expect(seeMore().getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(seeMore());
+
+    expect(seeMore().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Emergency contact (name)")).toBeTruthy();
+    expect(screen.getByLabelText("Allergies")).toBeTruthy();
+    expect(screen.getByLabelText("T-shirt size")).toBeTruthy();
+    // Who else sees each, under it.
+    expect(screen.getAllByText("Officers see this")).toHaveLength(2);
+
+    fireEvent.change(screen.getByLabelText("Allergies"), {
+      target: { value: "Peanuts" },
+    });
+    fireEvent.click(seeMore());
+    expect(screen.queryByLabelText("Allergies")).toBeNull();
+    fireEvent.click(seeMore());
+    // What was typed stays while it is closed.
+    expect((screen.getByLabelText("Allergies") as HTMLInputElement).value).toBe(
+      "Peanuts",
+    );
+  });
+
+  it("opens See more on a refusal inside it, and sends nothing", async () => {
+    mocks.user = { ...ADA, major: null };
+    mocks.customFields = [{ ...CONTACT, value: "Grace Hopper" }, SHIRT];
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "" },
+    });
+    fireEvent.click(seeMore());
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText("Emergency contact (name) is required."),
+    ).toBeTruthy();
+    expect(seeMore().getAttribute("aria-expanded")).toBe("true");
+    expect(mocks.updateCustom).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("waits for a fields read still loading, so a required field isn't missed", async () => {
+    mocks.customFieldsLoaded = false;
+    render(<WelcomeYou />);
+
+    // Nothing loaded yet: the button can only go by the profile.
+    fireEvent.click(screen.getByRole("button", { name: "Go to chat" }));
+
+    await screen.findByRole("heading", { name: "About you" });
+    fireEvent.click(seeMore());
+    expect(screen.getByLabelText("Emergency contact (name)")).toBeTruthy();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's refusal, not the connection line", async () => {
+    mocks.updateCustom.mockRejectedValueOnce({
+      statusCode: 400,
+      message: "Pick one of the choices for T-shirt size.",
+    });
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "Grace Hopper" },
+    });
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText("Pick one of the choices for T-shirt size."),
+    ).toBeTruthy();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("skips the step when the required fields are filled and only optional ones are empty", () => {
+    mocks.customFields = [{ ...CONTACT, value: "Grace Hopper" }, SHIRT];
+    render(<WelcomeYou />);
+
+    expect(screen.getByRole("button", { name: "Go to chat" })).toBeTruthy();
+  });
+
+  it("saves only the chapter's fields that changed", async () => {
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: " Grace Hopper " },
+    });
+    fireEvent.change(screen.getByLabelText("Allergies"), {
+      target: { value: "Peanuts" },
+    });
+
+    fireEvent.click(goToChat());
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/chat"));
+    expect(mocks.updateUser).not.toHaveBeenCalled();
+    expect(mocks.updateCustom).toHaveBeenCalledTimes(1);
+    expect(mocks.updateCustom).toHaveBeenCalledWith([
+      { field_id: "cf-contact", value: "Grace Hopper" },
+      { field_id: "cf-allergies", value: "Peanuts" },
+    ]);
+  });
+
+  it("lets a required field wait: Go to chat with it empty saves nothing", async () => {
+    await toAbout({ open: false });
+
+    fireEvent.click(goToChat());
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/chat"));
+    expect(mocks.updateCustom).not.toHaveBeenCalled();
+  });
+
+  it("Skip for now saves none of them", async () => {
+    await toAbout();
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "Grace Hopper" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/chat"));
+    expect(mocks.updateCustom).not.toHaveBeenCalled();
+  });
+
+  it("stays when the fields can't be saved, and doesn't resend the profile on retry", async () => {
+    mocks.user = { ...ADA, major: null };
+    await toAbout();
+    mocks.updateCustom.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.change(screen.getByLabelText("Major"), {
+      target: { value: "Physics" },
+    });
+    fireEvent.change(screen.getByLabelText("Emergency contact (name)"), {
+      target: { value: "Grace Hopper" },
+    });
+
+    fireEvent.click(goToChat());
+
+    expect(
+      await screen.findByText(
+        "Couldn't save that. Check your connection and try again.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    fireEvent.click(goToChat());
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/chat"));
+    expect(mocks.updateUser).toHaveBeenCalledTimes(1);
+    expect(mocks.updateCustom).toHaveBeenCalledTimes(2);
   });
 });

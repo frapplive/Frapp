@@ -623,7 +623,7 @@ describe("ChannelList hide and reopen (#2303)", () => {
 //
 // The arrangement itself (pins, sort, filters, folds) is pinned in
 // `@repo/hooks`' `channel-sidebar.spec.ts`. These cases pin what the rail adds:
-// that it renders that output, draws the fold control and the folded badge,
+// that it renders that output, draws the fold control and the heading's menu,
 // offers pin, and shows the filtered-out empty state.
 
 const announcements: ChatChannel = {
@@ -731,7 +731,9 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     }
   });
 
-  it("shows a folded section's total on its header, red when it holds a mention", () => {
+  // #6053, Discord's collapsed categories: folding hides what the member has
+  // read, never what is new, so the heading needs no count of its own.
+  it("keeps the channels with something new under a folded heading, which stays quiet", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -746,15 +748,18 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
       ]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
+    const header = screen.getByRole("button", { name: "Channels" });
     expect(header).toHaveAttribute("aria-expanded", "false");
-    expect(header).toHaveTextContent("@ 1");
-    expect(screen.getByLabelText("1 mention, 5 unread")).toBeInTheDocument();
-    // Folded: no rows drawn under it.
-    expect(screen.queryByRole("list", { name: /Channels/ })).toBeNull();
+    expect(header).toHaveTextContent(/^Channels$/);
+    expect(header.className).not.toMatch(/\bfont-bold\b/);
+    const rows = screen.getByRole("list", { name: "Channels" });
+    expect(rows).toHaveTextContent("general");
+    expect(rows).toHaveTextContent("announcements");
+    // exec has nothing new, so it folds away.
+    expect(rows).not.toHaveTextContent("exec");
   });
 
-  it("draws a folded section over plain unread bold, as an unread row reads", () => {
+  it("folds a section with nothing new to its heading alone", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -763,11 +768,133 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           filters: { unreadOnly: false, hideMuted: false },
         },
       }),
-      new Map([["c-gen", { unreadCount: 3, mentionCount: 0 }]]),
     );
 
-    const header = screen.getByRole("button", { name: /Channels/ });
-    expect(header).toHaveClass("font-bold", "text-foreground");
+    expect(screen.queryByRole("list", { name: "Channels" })).toBeNull();
+  });
+
+  describe("a heading's menu (#6053)", () => {
+    const execRow: ChatChannel = {
+      id: "c-exec",
+      name: "exec-board",
+      type: "PUBLIC",
+      category_id: "cat-exec",
+    };
+    function renderWithCategory(onSetCollapsed = vi.fn()) {
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(),
+              collapsed: new Set(["category:cat-exec"]),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      return onSetCollapsed;
+    }
+    async function openMenu(heading: string): Promise<string[]> {
+      fireEvent.contextMenu(screen.getByRole("button", { name: heading }));
+      const items = await screen.findAllByRole("menuitem");
+      return items.map((item) => item.textContent ?? "");
+    }
+
+    it("folds this heading, or every section at once", async () => {
+      renderWithCategory();
+      expect(await openMenu("Channels")).toEqual([
+        "Fold Channels",
+        "Fold all categories",
+        "Unfold all categories",
+      ]);
+    });
+
+    it("names a folded heading's own entry Unfold", async () => {
+      renderWithCategory();
+      expect((await openMenu("Executive"))[0]).toBe("Unfold Executive");
+    });
+
+    it("writes only the sections Fold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("writes only the sections Unfold all changes", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("runs the heading's own entry: Fold, or Unfold once folded", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Channels");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Fold Channels" }));
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
+
+    it("unfolds a folded heading from its own entry", async () => {
+      const onSetCollapsed = renderWithCategory();
+      await openMenu("Executive");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Unfold Executive" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["category:cat-exec", false]]);
+    });
+
+    it("has a visible ⋯ too, shown while the heading is hovered", () => {
+      renderWithCategory();
+      const more = screen.getByRole("button", { name: "More for Channels" });
+      // RowMenu's ⋯ appears on `group-hover`: the heading's row is that group.
+      expect(more).toHaveClass("group-hover:opacity-100");
+      expect(more.closest(".group")).toBe(
+        screen.getByRole("button", { name: "Channels" }).parentElement,
+      );
+    });
+
+    it("leaves a heading that isn't drawn out of Fold all", async () => {
+      // Every channel of Executive is pinned, so Executive draws no heading:
+      // folding it would hide what comes back once the member unpins.
+      const onSetCollapsed = vi.fn();
+      render(
+        <ChannelList
+          channels={[general, execRow]}
+          categories={[{ id: "cat-exec", name: "Executive" }]}
+          activeChannelId={null}
+          viewerId={VIEWER}
+          memberNames={NAMES}
+          unreadByChannelId={new Map()}
+          onPick={vi.fn()}
+          sidebar={sidebarControls({
+            onSetCollapsed,
+            preferences: {
+              pinnedIds: new Set(["c-exec"]),
+              collapsed: new Set(),
+              filters: { unreadOnly: false, hideMuted: false },
+            },
+          })}
+        />,
+      );
+      await openMenu("Channels");
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Fold all categories" }),
+      );
+      expect(onSetCollapsed.mock.calls).toEqual([["channels", true]]);
+    });
   });
 
   it("keeps the open channel under its folded header", () => {
@@ -956,7 +1083,7 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     );
   });
 
-  it("announces a folded Direct messages header as direct messages", () => {
+  it("keeps an unread DM under a folded Direct messages heading", () => {
     renderArranged(
       sidebarControls({
         preferences: {
@@ -969,8 +1096,8 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
     );
 
     expect(
-      screen.getByLabelText("3 unread messages, including direct messages"),
-    ).toBeInTheDocument();
+      screen.getByRole("list", { name: "Direct messages" }),
+    ).toHaveTextContent("Alice Chen");
   });
 
   it("offers no fold or pin control without `sidebar`", () => {
@@ -1327,10 +1454,7 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
                 readStatus: "read" as const,
               },
             ],
-            [
-              "c-group",
-              { time: "4:46 PM", timeLabel: null, readStatus: null },
-            ],
+            ["c-group", { time: "4:46 PM", timeLabel: null, readStatus: null }],
           ])
         }
         sidebar={sidebarControls()}
@@ -1660,7 +1784,7 @@ describe("ChannelList threads under their channel (#5300)", () => {
     expect(generalRow).not.toHaveClass("font-bold");
   });
 
-  it("reads a folded section as unread over a thread with new replies", () => {
+  it("keeps a channel whose thread has new replies under a folded heading", () => {
     renderThreads(new Map([["c-gen", [thread({ unread_count: 1 })]]]), {
       sidebar: sidebarControls({
         preferences: {
@@ -1671,10 +1795,9 @@ describe("ChannelList threads under their channel (#5300)", () => {
       }),
     });
 
-    expect(screen.getByRole("button", { name: /Channels/ })).toHaveClass(
-      "font-bold",
-      "text-foreground",
-    );
+    const channels = screen.getByRole("list", { name: "Channels" });
+    expect(channels).toHaveTextContent("general");
+    expect(channels).not.toHaveTextContent("exec");
   });
 });
 
