@@ -21,7 +21,11 @@ import {
   type Archetype,
   type ArchetypeKey,
 } from "@repo/org-archetypes";
-import { resolveChapterMark, type PatchChapterConfig } from "@repo/validation";
+import {
+  greekLettersShown,
+  resolveChapterMark,
+  type PatchChapterConfig,
+} from "@repo/validation";
 import { parseFoundedYear } from "./chapter-identity";
 
 /** The `branding` keys the Chapter tab reads and writes. */
@@ -120,6 +124,30 @@ export function chapterProfileChanged(
 }
 
 // ── Chapter mark ────────────────────────────────────────────────────────
+
+/** The mark page's two fields, as stored. */
+export type ChapterMarkDraft = { shortName: string; showLetters: boolean };
+
+export function chapterMarkDraftOf(
+  branding: ChapterTabBranding,
+): ChapterMarkDraft {
+  return {
+    shortName: branding.short_name ?? "",
+    showLetters: greekLettersShown(branding),
+  };
+}
+
+/** Whether the mark page holds an edit: the phone's Save waits on it. */
+export function chapterMarkChanged(
+  draft: ChapterMarkDraft,
+  branding: ChapterTabBranding,
+): boolean {
+  const stored = chapterMarkDraftOf(branding);
+  return (
+    draft.shortName.trim() !== stored.shortName.trim() ||
+    draft.showLetters !== stored.showLetters
+  );
+}
 
 /**
  * What the mark's Save sends: the letters switch, always, and the short name
@@ -232,6 +260,17 @@ export function chapterIdentityBrandingDiff(
   return diff;
 }
 
+/** Whether Identity & founding holds an edit: the phone's Save waits on it. */
+export function chapterIdentityChanged(
+  draft: ChapterIdentityDraft,
+  branding: ChapterTabBranding,
+): boolean {
+  const stored = chapterIdentityDraftOf(branding);
+  return (Object.keys(stored) as (keyof ChapterIdentityDraft)[]).some(
+    (key) => draft[key].trim() !== stored[key].trim(),
+  );
+}
+
 /** The Identity & founding row's value: the first fact the chapter filled in. */
 export function chapterIdentityValue(
   branding: ChapterTabBranding,
@@ -334,6 +373,17 @@ export function chapterVocabularyPatch(
   };
 }
 
+/** Whether Vocabulary holds an edit: the phone's Save waits on it. */
+export function chapterVocabularyChanged(
+  draft: ChapterVocabularyDraft,
+  vocabulary: Readonly<Record<string, string | undefined>>,
+): boolean {
+  const stored = chapterVocabularyDraftOf(vocabulary);
+  return CHAPTER_VOCABULARY_FIELDS.some(
+    ({ key }) => draft[key].trim() !== stored[key].trim(),
+  );
+}
+
 /** The Vocabulary row's value: "Custom" once any word differs from the type's. */
 export function chapterVocabularyValue(
   vocabulary: Readonly<Record<string, string | undefined>>,
@@ -348,12 +398,91 @@ export function chapterVocabularyValue(
   return custom ? "Custom" : "Defaults";
 }
 
+// ── Birthday posts ──────────────────────────────────────────────────────
+
+/** The channel fields the birthday picker reads from the channel list. */
+export type BirthdayChannelRow = {
+  id?: string;
+  name?: string;
+  type?: string;
+  archived_at?: string | null;
+  is_audit_log?: boolean;
+};
+
+/**
+ * Whether a channel can take the birthday posts: the chapter's public,
+ * unarchived channels, never the audit feed. The API's check
+ * (`isBirthdayPostChannel`) refuses anything else.
+ */
+export function offersBirthdayPosts(
+  channel: BirthdayChannelRow,
+): channel is BirthdayChannelRow & { id: string; name: string } {
+  return (
+    !!channel.id &&
+    !!channel.name &&
+    !channel.archived_at &&
+    !channel.is_audit_log &&
+    channel.type === "PUBLIC"
+  );
+}
+
+/**
+ * What the birthday picker offers and says, from the channel list as loaded
+ * (`undefined` until it has). A saved channel the list no longer offers
+ * (archived, made private, gone) still shows as picked and the posts read as
+ * paused, since the sweep skips it; only once the list has loaded, since
+ * before then it isn't known.
+ */
+export function birthdayPostChoices(
+  rows: readonly BirthdayChannelRow[] | undefined,
+  channelId: string | null,
+): {
+  loaded: boolean;
+  channels: (BirthdayChannelRow & { id: string; name: string })[];
+  paused: boolean;
+  /** The picked channel's name, `#general`, "A removed channel", or "Off". */
+  value: string;
+} {
+  const loaded = rows !== undefined;
+  const list = rows ?? [];
+  const channels = list.filter(offersBirthdayPosts);
+  const paused =
+    loaded && channelId !== null && !channels.some((c) => c.id === channelId);
+  const name = list.find((c) => c.id === channelId)?.name;
+  const value =
+    channelId === null
+      ? BIRTHDAY_POSTS_COPY.off
+      : name
+        ? `#${name}`
+        : BIRTHDAY_POSTS_COPY.removedChannel;
+  return { loaded, channels, paused, value };
+}
+
+/** Birthday posts' words, on web's card and the phone's row and sheet. */
+export const BIRTHDAY_POSTS_COPY = {
+  title: "Birthday posts",
+  hint: "Frapp wishes members a happy birthday on the day, if they share their birthday with the chapter.",
+  label: "Post in",
+  off: "Off",
+  removedChannel: "A removed channel",
+  pausedSuffix: "(paused)",
+  paused:
+    "Paused: that channel can't take them now. Pick another, or turn them off.",
+  when: "Posts go out from 9 AM in each member's own time zone, once.",
+  saveFailed: "Couldn't change birthday posts. Try again.",
+} as const;
+
 // ── Copy ────────────────────────────────────────────────────────────────
 
 /** The words both apps' Chapter tab pages share. */
 export const CHAPTER_TAB_COPY = {
   /** Under a form the member's role can't save. Says what, never which key. */
   readOnly: "Your role can't change chapter settings.",
+  /**
+   * The second line of a phone row its viewer can't open: it says who sets
+   * it, so the row doesn't read as broken (design-system README §5).
+   */
+  rowReadOnly: "Set by an officer with chapter settings access.",
   markHint: (lettersHidden: boolean) =>
     lettersHidden
       ? "Shown in the nav and on mobile's Chat home: your logo, or else your short name."
