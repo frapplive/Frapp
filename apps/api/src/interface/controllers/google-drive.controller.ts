@@ -92,7 +92,7 @@ export class GoogleDriveController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      "Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, once, then copies its files into Documents and keeps them in sync. Picking the connected folder again after it was unshared shares it again.",
+      "Connect the folder the officer picked in Google's picker: Frapp shares it with itself using their Google sign-in, then copies its files into Documents and keeps them in sync. Google allows that share only for an empty folder: for any other the answer is 409 `google_drive.share_by_hand`, and once the officer has shared it in Drive the same request connects it.",
   })
   @ApiOkResponse({ type: GoogleDriveStatusDto })
   connectPicked(

@@ -557,6 +557,31 @@ describe('NotificationService', () => {
       );
     });
 
+    it('forwards who a chat push is from and keeps it off the in-app row (#6024)', async () => {
+      mockPreferenceRepo.findByUserChapterCategory.mockResolvedValue(null);
+      mockSettingsRepo.findByUser.mockResolvedValue(null);
+      mockNotificationRepo.create.mockResolvedValue(baseNotification);
+      mockPushTokenRepo.findByUser.mockResolvedValue([basePushToken]);
+      const communication = { senderId: 'u-sam', senderName: 'Sam Rivera' };
+
+      await service.notifyUser('u-1', 'ch-1', {
+        title: 'Sam Rivera',
+        body: 'hi',
+        category: 'chat',
+        communication,
+      });
+
+      const [row] = mockNotificationRepo.create.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(row).not.toHaveProperty('communication');
+      expect(row.data).not.toHaveProperty('communication');
+      expect(mockPushProvider.sendToUser).toHaveBeenCalledWith(
+        [basePushToken.token],
+        expect.objectContaining({ communication }),
+      );
+    });
+
     it('forwards categoryId to the push and keeps it off the in-app row (#4686)', async () => {
       mockPreferenceRepo.findByUserChapterCategory.mockResolvedValue(null);
       mockSettingsRepo.findByUser.mockResolvedValue(null);

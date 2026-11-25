@@ -188,3 +188,14 @@ PUT /v1/documents/{id}/pin the response property 'storage_path' became nullable 
 PUT /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'
 DELETE /v1/documents/{id}/pin the response property 'storage_path' became nullable for the status '200'
 DELETE /v1/documents/{id}/pin the response property 'uploaded_by' became nullable for the status '200'
+
+# #5977 makes `created_by` nullable on the rush candidate responses: a prospect the PNM's own
+# interest form created has no member who added them. The shipped builds have no Recruitment
+# screen (at the newest shipped SHA, 0426149e, there is no apps/mobile/components/rush/ and no
+# rush route under apps/mobile/app/(app)); their only caller is chat-core's `/rush` dispatcher,
+# which reads `id` and `card_posted` from these responses and never `created_by`.
+GET /v1/rush/candidates the response property 'created_by' became nullable for the status '200'
+POST /v1/rush/candidates the response property 'created_by' became nullable for the status '201'
+GET /v1/rush/candidates/{id} the response property 'created_by' became nullable for the status '200'
+POST /v1/rush/candidates/{id}/bid the response property 'created_by' became nullable for the status '201'
+POST /v1/rush/candidates/{id}/vote the response property 'created_by' became nullable for the status '201'

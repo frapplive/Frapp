@@ -79,9 +79,21 @@ export function hashSchoolCode(salt: string, code: string): string {
  * (a test request), which skips the IP ceiling only.
  */
 export function hashSchoolCodeIp(ip: string | undefined): string | null {
+  return hashCodeIp(ip, 'school-code-ip');
+}
+
+/**
+ * {@link hashSchoolCodeIp} for another code's ceilings, under its own
+ * prefix so the two sets of counts never share a key (the interest form,
+ * #5977). The same caveat: unkeyed, so not anonymous.
+ */
+export function hashCodeIp(
+  ip: string | undefined,
+  scope: string,
+): string | null {
   const value = ip?.trim();
   if (!value) return null;
-  return createHash('sha256').update(`school-code-ip:${value}`).digest('hex');
+  return createHash('sha256').update(`${scope}:${value}`).digest('hex');
 }
 
 function unavailable(): ConflictException {

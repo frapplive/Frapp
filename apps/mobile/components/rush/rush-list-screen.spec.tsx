@@ -105,6 +105,7 @@ function candidate(
     bid_status: "none",
     created_by: "user-a",
     created_by_name: "Alice Park",
+    origin: "manual" as const,
     created_at: `2026-11-${10 + Number(id.slice(-1))}T18:00:00.000Z`,
     tag_ids: [],
     viewer_rating: null,

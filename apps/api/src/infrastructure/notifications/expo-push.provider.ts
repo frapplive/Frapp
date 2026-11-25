@@ -111,6 +111,34 @@ function completePushCopy(payload: PushPayload): {
   };
 }
 
+/**
+ * The push's data, with who it is from under `communication` when it is a
+ * chat message from a person (#6024). The iOS Notification Service Extension
+ * reads it from there (Expo hands `data` to iOS as the payload's `body`).
+ * Push-only: the in-app row never stores it.
+ */
+function communicationData(
+  payload: PushPayload,
+): Record<string, unknown> | undefined {
+  if (!payload.communication) return payload.data;
+  return { ...payload.data, communication: payload.communication };
+}
+
+/**
+ * What makes an iPhone fetch the sender's photo (#6024): `mutableContent`
+ * wakes the app's Notification Service Extension, which turns the push into a
+ * communication notification; a build without one shows the push unchanged.
+ *
+ * No `richContent.image` for Android: Expo sends it as an FCM notification
+ * message, which a backgrounded app has Firebase draw as a full-width picture
+ * that cuts the message text. Android's version is #6035.
+ */
+function communicationDelivery(
+  payload: PushPayload,
+): Pick<ExpoPushMessage, 'mutableContent'> {
+  return payload.communication ? { mutableContent: true } : {};
+}
+
 /** A category as a caught-failure site segment (lowercase, hyphenated). */
 function siteSafe(category: string): string {
   return (
@@ -173,7 +201,8 @@ export class ExpoPushProvider implements INotificationProvider {
       to: token,
       title: copy.title,
       body: copy.body,
-      data: payload.data,
+      data: communicationData(payload),
+      ...communicationDelivery(payload),
       ...(payload.threadId ? { threadId: payload.threadId } : {}),
       ...(payload.categoryId ? { categoryId: payload.categoryId } : {}),
       sound: payload.priority === 'SILENT' ? undefined : 'default',

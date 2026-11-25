@@ -213,7 +213,11 @@ export class MasterListDto {
   })
   counts_only: boolean;
 
-  @ApiProperty({ type: [ChapterTotalDto] })
+  @ApiProperty({
+    type: [ChapterTotalDto],
+    description:
+      "Interest per accepted chapter. Empty until the season is closed: beside each PNM's count, totals could tell where a PNM signed up.",
+  })
   chapter_totals: ChapterTotalDto[];
 
   @ApiProperty({ type: [MasterListRowDto] })

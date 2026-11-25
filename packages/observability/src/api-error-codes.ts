@@ -263,6 +263,10 @@ export const MEMBER_CAUSED_ERROR_CODES = [
   // of one already counted.
   "attendance.check_in.window_closed",
   "attendance.already_checked_in",
+  // A picked Drive folder with files in it (#5583): Google lets a picker
+  // sign-in share only the folder, not what's inside, so the officer shares
+  // it with Frapp's address in Drive and the panel connects once they have.
+  "google_drive.share_by_hand",
 ] as const;
 
 export type ClientContractErrorCode =

@@ -44,6 +44,25 @@ export type GoogleModelsClient = {
 const EMBED_CONCURRENCY = 4;
 
 /**
+ * Where embedding calls go when the configured location is `global`. Google
+ * serves `gemini-embedding-001` through its `embedContent` endpoint only at
+ * a regional location: at `global` that endpoint answers 404, while the
+ * older `predict` endpoint answered there. `@google/genai` moved the model
+ * from `predict` to `embedContent` in 3.4.0, and every embedding on staging
+ * failed from the deploy that carried that bump (2026-11-24, #6016). Probed
+ * that day against the staging project, same call and credentials: 3.6.1 at
+ * `global` 404, 3.6.1 at `us-central1` OK, 3.3.0 at `global` OK, and the
+ * old and new answers for one text are the same vector (cosine 1.000000),
+ * so passages stored before the change still compare with new ones. A
+ * regional location set in `GOOGLE_VERTEX_LOCATION` is used as it is.
+ */
+const EMBEDDING_FALLBACK_LOCATION = 'us-central1';
+
+export function embeddingLocation(location: string): string {
+  return location === 'global' ? EMBEDDING_FALLBACK_LOCATION : location;
+}
+
+/**
  * Gemini embeds a passage and a question differently when told which it is,
  * which is what makes a short question land near the passage that answers it.
  * A caller that states no purpose gets the provider's default.
@@ -84,10 +103,25 @@ const EMBEDDING_TASK_TYPE: Record<EmbeddingPurpose, string> = {
 export class GoogleLanguageModel implements ILanguageModel {
   readonly provider = 'google' as const;
 
-  constructor(private readonly client: GoogleModelsClient) {}
+  /**
+   * @param client answers generation.
+   * @param embedClient answers embeddings, which need a regional location
+   *   (see `embeddingLocation`). A test passes one client for both.
+   */
+  constructor(
+    private readonly client: GoogleModelsClient,
+    private readonly embedClient: GoogleModelsClient = client,
+  ) {}
 
   static fromSettings(settings: GoogleVertexEnvSettings): GoogleLanguageModel {
-    return new GoogleLanguageModel(googleGenAiClient(settings));
+    const client = googleGenAiClient(settings);
+    const location = embeddingLocation(settings.location);
+    return new GoogleLanguageModel(
+      client,
+      location === settings.location
+        ? client
+        : googleGenAiClient({ ...settings, location }),
+    );
   }
 
   async generate(asked: LanguageModelRequest): Promise<LanguageModelResult> {
@@ -156,7 +190,7 @@ export class GoogleLanguageModel implements ILanguageModel {
       while (!failed && next < request.texts.length) {
         const index = next++;
         try {
-          const response = await this.client.models.embedContent({
+          const response = await this.embedClient.models.embedContent({
             model: request.model,
             contents: request.texts[index],
             config: {

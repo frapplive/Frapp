@@ -35,7 +35,8 @@ export function aiProviderMode(env: Env = process.env): AiProviderMode {
  *   signs in as the service's own identity, which has no key to leak.
  *   Anywhere else it is needed together with the project, and boot refuses
  *   one without the other.
- * - `GOOGLE_VERTEX_LOCATION`: optional, `global` when unset.
+ * - `GOOGLE_VERTEX_LOCATION`: optional, `global` when unset. Embeddings go
+ *   to a region instead of `global` (`embeddingLocation` in the adapter).
  */
 export interface GoogleVertexEnvSettings {
   project: string;
