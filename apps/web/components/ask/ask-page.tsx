@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { ArrowUp } from "lucide-react";
 import {
   useActStatus,
@@ -16,6 +17,8 @@ import {
 import {
   ASK_COPY,
   ASK_QUESTION_MAX_LENGTH,
+  askDayLine,
+  askGreeting,
   askSavedLine,
   can,
   formatAiAnswerDate,
@@ -24,6 +27,7 @@ import {
 import { useAiConsentGate } from "@/components/ai/meet-frapp-ai";
 import { AskTurn } from "@/components/ask/ask-answer";
 import { ASK_STARTER_STORE, AskOpening } from "@/components/ask/ask-opening";
+import { NewActions } from "@/components/ask/new-actions";
 import { useSharedAskCardEdits } from "@/components/ask/ask-in-channel";
 import {
   AskCardEditsContext,
@@ -43,6 +47,7 @@ import { NewButton } from "@/components/ui/new-button";
 import { INLINE_PANEL_ATTRIBUTE } from "@/components/shared/panel";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useIsCouncil } from "@/lib/hooks/use-tenant-kind";
 import { JumpToLatestButton } from "@/components/chat/jump-to-latest-button";
 import { prefersReducedMotion } from "@/components/chat/use-rail-flip";
 import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
@@ -55,8 +60,8 @@ import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
  * done.
  *
  * **A page, chat beside it** (Paul's pick of 2026-11-22, after "too small
- * and not smooth"). The Ask bar opens it in the main area as the sidebar
- * opens Events, beside chat at the width the member set, with no scrim, so
+ * and not smooth"). The sidebar's New row opens it in the main area as the
+ * other rows open their pages, beside chat at the width the member set, with no scrim, so
  * a member can ask while reading a channel. The thread and the field keep
  * to one centred column of at most 720px, the field pinned under it, as
  * ChatGPT, Claude and Gemini draw theirs; on a narrow window it is the whole
@@ -66,7 +71,7 @@ import { useGrowWithText } from "@/lib/hooks/use-grow-with-text";
  * place and measures over a dimmed app (#4904).
  *
  * A source, a channel an answer names and the page a confirmed card leaves
- * for are ordinary links: following one leaves the page, and the Ask bar
+ * for are ordinary links: following one leaves the page, and New
  * comes back to the same thread. Edit on an event card grows the card into
  * the event form in place (`Panel`'s `docked="inline"`).
  *
@@ -130,19 +135,59 @@ function offsetIn(view: HTMLElement, child: HTMLElement): number {
 }
 
 /**
- * The Ask page's body: the conversation for a member with Ask, and nothing
- * while that is being read or for anyone else (`AskHost` takes a member who
- * lost Ask to chat).
+ * Fetched only in a council: it carries the Directory's invite panel, which
+ * would otherwise ride in this page's chunk for every chapter.
+ */
+const CouncilHome = dynamic(
+  () => import("@/components/councils/council-home").then((m) => m.CouncilHome),
+  { ssr: false },
+);
+
+/**
+ * New's page (#5946): the conversation for a member with Frapp
+ * Intelligence, its loading shape while that is read, and for anyone else
+ * the greeting and what they can start, with no field.
+ *
+ * A council has neither the assistant nor a chapter's forms (their routes
+ * refuse it, #5933), so its New is its home: its identity and its first two
+ * steps, Invite delegates and Edit titles (`council-home.tsx`). That home sat
+ * in the shell's empty view until #5946 deleted the view.
  */
 export function AskPage() {
+  const isCouncil = useIsCouncil();
   const entry = useAskEntry();
   const pending = useAskPending();
+  if (isCouncil) return <CouncilHome />;
   if (entry) return <AskConversation />;
   // Not yet known (a reload of `/ask`, or a read being retried): the field's
   // place, so the page never stands empty under its title.
   if (pending) return <AskPageSkeleton />;
-  // No Ask: `AskHost` is taking the member to chat.
-  return null;
+  // No assistant (the chapter has it off, or this role may not use it): New
+  // is still where a member starts something, so the page is the greeting
+  // and the forms, with no field (#5946).
+  return <NewWithoutAssistant />;
+}
+
+/**
+ * New for a member without Frapp Intelligence: the day, the greeting and
+ * what they can start, in the same place the assistant's start view puts
+ * them. No crest and no field: nothing here answers.
+ */
+function NewWithoutAssistant() {
+  const displayName = useViewerDisplayName();
+  // Read once, so the greeting doesn't change under the member's eyes.
+  const [now] = useState(() => new Date());
+  return (
+    <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6 pt-[max(3.5rem,14vh)]">
+      <div className="space-y-1 text-center">
+        <p className="text-caption text-muted-foreground">{askDayLine(now)}</p>
+        <p className="text-2xl font-bold leading-8 text-foreground">
+          {askGreeting(now, displayName)}
+        </p>
+      </div>
+      <NewActions />
+    </div>
+  );
 }
 
 /**
@@ -416,6 +461,87 @@ export function AskConversation() {
     });
   }
 
+  /*
+    The field. Before the first turn it is part of the start view, under the
+    greeting with what New starts under it (`AskOpening`); once there is a
+    conversation it is pinned under the thread, as every chat's is.
+  */
+  const starting = exchanges.length === 0;
+  /*
+    The field moves between the start view and the foot of the thread, which
+    mounts a new one: the first question and New conversation would leave
+    focus on <body>. Focus follows the field when it was in the old one.
+  */
+  const wasStarting = useRef(starting);
+  useEffect(() => {
+    if (wasStarting.current === starting) return;
+    wasStarting.current = starting;
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      field.current?.focus({ preventScroll: true });
+    }
+  }, [starting]);
+  const composer = (
+    <form
+      className={
+        starting
+          ? // The start view: in the page's flow, right under the greeting.
+            "w-full"
+          : // A conversation: pinned under the thread, in its column.
+            "shrink-0 px-4 pb-2 pt-2 sm:px-6"
+      }
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit(draft);
+      }}
+    >
+      <div className="mx-auto w-full max-w-[720px]">
+        {saving && savedUntil ? (
+          <p className="mb-2 text-caption text-muted-foreground">
+            {askSavedLine(formatAiAnswerDate(savedUntil))}
+          </p>
+        ) : null}
+        <div className="flex items-end gap-2">
+          <Textarea
+            ref={field}
+            {...{ [ASK_FIELD_ATTRIBUTE]: "" }}
+            // Escape in the empty field leaves the page, as Escape
+            // anywhere else on it does; with words typed it is the
+            // field's (`dashboard-shell.tsx`).
+            {...(draft === "" ? { [ESCAPE_LEAVES_ATTRIBUTE]: "" } : {})}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                submit(draft);
+              }
+            }}
+            rows={1}
+            maxLength={ASK_QUESTION_MAX_LENGTH}
+            placeholder={ASK_COPY.placeholder}
+            aria-label={ASK_COPY.placeholder}
+            className="max-h-40 min-h-10 resize-none [field-sizing:content]"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            className="shrink-0"
+            aria-label={ASK_COPY.send}
+            title={ASK_COPY.send}
+            disabled={working || draft.trim().length === 0}
+          >
+            <ArrowUp className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+
   return (
     <>
       {exchanges.length > 0 && !formOpen ? (
@@ -519,7 +645,11 @@ export function AskConversation() {
                   canAct={canAct}
                   suggestions={suggestions}
                   onPick={pick}
-                />
+                >
+                  {composer}
+                  {/* What New starts, under the field (#5946). */}
+                  <NewActions />
+                </AskOpening>
               )}
             </div>
           </AskCardEditsContext.Provider>
@@ -529,59 +659,18 @@ export function AskConversation() {
             <JumpToLatestButton hasNew={false} onJump={jumpToLatest} />
           </div>
         ) : null}
-        <form
-          // Pinned under the thread, in its column.
-          className="shrink-0 px-4 pb-4 pt-2 sm:px-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit(draft);
-          }}
-        >
-          <div className="mx-auto w-full max-w-[720px]">
-            {saving && savedUntil ? (
-              <p className="mb-2 text-caption text-muted-foreground">
-                {askSavedLine(formatAiAnswerDate(savedUntil))}
-              </p>
-            ) : null}
-            <div className="flex items-end gap-2">
-              <Textarea
-                ref={field}
-                {...{ [ASK_FIELD_ATTRIBUTE]: "" }}
-                // Escape in the empty field leaves the page, as Escape
-                // anywhere else on it does; with words typed it is the
-                // field's (`dashboard-shell.tsx`).
-                {...(draft === "" ? { [ESCAPE_LEAVES_ATTRIBUTE]: "" } : {})}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing
-                  ) {
-                    event.preventDefault();
-                    submit(draft);
-                  }
-                }}
-                rows={1}
-                maxLength={ASK_QUESTION_MAX_LENGTH}
-                placeholder={ASK_COPY.placeholder}
-                aria-label={ASK_COPY.placeholder}
-                className="max-h-40 min-h-10 resize-none [field-sizing:content]"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                className="shrink-0"
-                aria-label={ASK_COPY.send}
-                title={ASK_COPY.send}
-                disabled={working || draft.trim().length === 0}
-              >
-                <ArrowUp className="h-4 w-4" aria-hidden="true" />
-              </Button>
+        {starting ? null : (
+          <>
+            {composer}
+            {/*
+              New's forms stay under the field once there is a conversation,
+              so New is still one press from any of them (#5946).
+            */}
+            <div className="shrink-0 px-4 pb-4 sm:px-6">
+              <NewActions className="mx-auto max-w-[720px] justify-start" />
             </div>
-          </div>
-        </form>
+          </>
+        )}
       </div>
       {consentDialog}
     </>

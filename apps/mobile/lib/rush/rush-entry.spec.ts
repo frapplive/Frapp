@@ -55,6 +55,18 @@ function candidate(id: string, stageKey: string, day: number) {
     follow_up_note: null,
     follow_up_user_id: null,
     follow_up_user_name: null,
+    bid_state: "none" as const,
+    bid_extended_at: null,
+    bid_extended_by_name: null,
+    bid_expires_at: null,
+    bid_acceptance_recorded_at: null,
+    bid_acceptance_recorded_by_name: null,
+    bid_confirm_emailed: false,
+    bid_answered_at: null,
+    bid_answered_by_name: null,
+    bid_answered_via: null,
+    bid_rescind_reason: null,
+    bid_invite_sent: null,
   } as RushPipelineCandidate;
 }
 

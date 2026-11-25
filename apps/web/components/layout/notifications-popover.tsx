@@ -67,6 +67,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { standingHref } from "@/components/standing/standing-doors";
 import { asArray, cn } from "@/lib/utils";
 import { useRealtimeTable } from "@/lib/realtime/use-realtime-table";
 import { useFrappUser } from "@/lib/auth/use-frapp-user";
@@ -81,8 +82,15 @@ import { usePageVisible } from "@/lib/notifications/use-page-visible";
 type NotificationsPopoverProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The bell in the top bar, which opens and closes the list. */
+  /** The bell, which opens and closes the list (`notifications-bell.tsx`). */
   children: ReactElement;
+  /**
+   * Where the list opens from its bell: under it by its leading edge in the
+   * sidebar's head, beside it in the rail, under it by its trailing edge in
+   * the top bar below `lg`.
+   */
+  side?: "bottom" | "right";
+  align?: "start" | "end";
 };
 
 type Notification = {
@@ -170,8 +178,10 @@ export function deepLinkFor(notification: Notification): string {
       });
     case "events":
       return target.meetingId ? `/meetings/${target.meetingId}` : "/events";
+    // "Points awarded" and "Points deducted" are about the member's own
+    // points, which open from their Profile (#5950).
     case "points":
-      return "/points";
+      return standingHref("points");
     case "billing":
       return "/billing";
     // "Shawn Klein submitted: Clean his room" opens that review in
@@ -189,8 +199,10 @@ export function deepLinkFor(notification: Notification): string {
       return target.sourceType === "meeting" && target.sourceId
         ? `/meetings/${target.sourceId}`
         : "/tasks";
+    // "Service hours approved" and "rejected" go to whoever logged the
+    // entry: their own log, on their Profile (#5950).
     case "service":
-      return "/service";
+      return standingHref("service");
     // The weekly recap push (#4985): Activity, where the "Last week" card is.
     case "activity":
       return "/activity";
@@ -224,36 +236,19 @@ function isReportNotification(notification: Notification): boolean {
 }
 
 /**
- * The notification list, a dropdown under the top bar's bell (2026-11-12,
- * #4593): a quick list opens under its button, as Discord's inbox, Facebook's
- * and LinkedIn's bell and GitHub's notification menu do, instead of a sheet
- * sliding over the page and dimming chat. It closes on a row, Escape, the
- * bell, or a click outside, and never covers more than the corner it opens in.
- *
- * Mounted with the top bar, so on every dashboard page, open or not: the
- * read-on-visit, realtime and report-queue effects below run from here.
+ * What notifications need on every dashboard page, open bell or not. Mounted
+ * once, by the shell (`dashboard-shell.tsx`).
  */
-export function NotificationsPopover({
-  open,
-  onOpenChange,
-  children,
-}: NotificationsPopoverProps) {
-  const titleId = useId();
+export function useNotificationsLive(): void {
   const frappUser = useFrappUser();
   const notificationsQuery = useNotifications();
-  const markRead = useMarkNotificationRead();
-  const markManyRead = useMarkNotificationsRead();
-  // Its own instance, so opening an entry doesn't disable Mark all read.
-  const markEntryRead = useMarkNotificationsRead();
-  const clear = useClearNotifications();
   const invalidateReports = useInvalidateChatReports();
-
   // A notification is read once the member has seen what it is about
   // (notifications.md § How an in-app row is marked read): opening Events
   // reads the event notices, as opening a channel reads its chat notices.
   // Only while the tab is showing, so a page left open in the background does
-  // not read what nobody saw. The list is mounted with the top bar, so this
-  // runs on every dashboard page.
+  // not read what nobody saw. The shell mounts this hook, so it runs on
+  // every dashboard page.
   const pathname = usePathname();
   const pageVisible = usePageVisible();
   useMarkNotificationScreensSeen(notificationScreensForPath(pathname), {
@@ -268,6 +263,60 @@ export function NotificationsPopover({
     invalidate: [["notifications"]],
     enabled: Boolean(frappUser.userId),
   });
+
+  /*
+    Keep the officer report queue in step with its notifications (#2257).
+
+    The realtime ping above carries no row, so it cannot say *which*
+    notification arrived; once the list has refetched, the newest report
+    notification can. When that changes, a report was filed and the queue's
+    cached slices are stale — `staleTime` alone would leave an officer who
+    opens Chat Admin within 30s of an earlier visit looking at a queue without
+    the report they were paged about. Invalidation refetches a mounted queue
+    at once and an unmounted one on its next mount, so this costs nothing for
+    a member with no queue. Following the link invalidates again, below, for
+    the report whose ping this tab never heard.
+  */
+  const newestReportNotification = useMemo(
+    () =>
+      asArray<Notification>(notificationsQuery.data)
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .find(isReportNotification)?.id ?? null,
+    [notificationsQuery.data],
+  );
+  useEffect(() => {
+    if (newestReportNotification) void invalidateReports();
+  }, [newestReportNotification, invalidateReports]);
+}
+
+/**
+ * The notification list, a dropdown under the bell (2026-11-12,
+ * #4593): a quick list opens under its button, as Discord's inbox, Facebook's
+ * and LinkedIn's bell and GitHub's notification menu do, instead of a sheet
+ * sliding over the page and dimming chat. It closes on a row, Escape, the
+ * bell, or a click outside, and never covers more than the corner it opens in.
+ *
+ * It only draws the list. What has to run on every dashboard page whether
+ * or not a bell is open (read-on-visit, the realtime refresh, the report
+ * queue) is `useNotificationsLive`, which the shell mounts once: the bell
+ * has more than one home (the sidebar from `lg`, the top bar below it), and
+ * two copies of a realtime subscription fight over its topic.
+ */
+export function NotificationsPopover({
+  open,
+  onOpenChange,
+  children,
+  side = "bottom",
+  align = "end",
+}: NotificationsPopoverProps) {
+  const titleId = useId();
+  const notificationsQuery = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const markManyRead = useMarkNotificationsRead();
+  // Its own instance, so opening an entry doesn't disable Mark all read.
+  const markEntryRead = useMarkNotificationsRead();
+  const clear = useClearNotifications();
+  const invalidateReports = useInvalidateChatReports();
 
   const notifications = useMemo(
     () =>
@@ -302,25 +351,6 @@ export function NotificationsPopover({
       ),
     [notifications, filter, now],
   );
-
-  /*
-    Keep the officer report queue in step with its notifications (#2257).
-
-    The realtime ping above carries no row, so it cannot say *which*
-    notification arrived; once the list has refetched, the newest report
-    notification can. When that changes, a report was filed and the queue's
-    cached slices are stale — `staleTime` alone would leave an officer who
-    opens Chat Admin within 30s of an earlier visit looking at a queue without
-    the report they were paged about. Invalidation refetches a mounted queue
-    at once and an unmounted one on its next mount, so this costs nothing for
-    a member with no queue. Following the link invalidates again, below, for
-    the report whose ping this tab never heard.
-  */
-  const newestReportNotification =
-    notifications.find(isReportNotification)?.id ?? null;
-  useEffect(() => {
-    if (newestReportNotification) void invalidateReports();
-  }, [newestReportNotification, invalidateReports]);
 
   /*
     Opening an entry reads every unread row it stands for (#3948): one row
@@ -370,7 +400,8 @@ export function NotificationsPopover({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         ref={contentRef}
-        align="end"
+        side={side}
+        align={align}
         sideOffset={8}
         collisionPadding={8}
         aria-labelledby={titleId}

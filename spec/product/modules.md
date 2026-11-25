@@ -43,13 +43,13 @@
 
 ### Internal Ledger (House Points)
 
-- Every point change is recorded as a transaction in `point_transactions`. The web dashboard **Audit** tab loads a chapter-wide, cursor-paginated slice of those rows for officers with `points:view_all` (API: `GET /v1/points/transactions`; full rules in [`spec/behavior/points.md`](../behavior/points.md)).
+- Every point change is recorded as a transaction in `point_transactions`. The chapter points ledger in web's Chapter settings loads a chapter-wide, cursor-paginated slice of those rows for officers with `points:view_all` (API: `GET /v1/points/transactions`; full rules in [`spec/behavior/points.md`](../behavior/points.md)).
 - Positive amount = reward; negative amount = fine/correction.
 - Every transaction carries a category; the allowed set is the `category` column in [`spec/architecture/README.md` § Points & Events](../architecture/README.md#points--events).
 - A member's balance is the sum of their transactions.
 - Admins can manually adjust points with a required reason. Audit trail tracks which admin made the adjustment.
 - Anti-fraud: rate limiting on adjustments, anomaly flagging for large transactions, no self-award (enforced on `points:adjust`, task confirmation and service-hour approval — see [`points.md`](../behavior/points.md) § Anti-Fraud).
-- Leaderboard with configurable time windows (all-time, semester, month).
+- Leaderboard with configurable time windows (all-time, semester, month), read as a sort of the Directory, and each member's own points on their profile ([`points.md` § Where points are read](../behavior/points.md#where-points-are-read)).
 
 ### Member Invoices (Dues)
 
@@ -141,7 +141,7 @@
 - Members log entries: date, duration, description, optional proof file upload.
 - Admin approval workflow: PENDING → APPROVED / REJECTED with optional comment.
 - Approved hours auto-generate point transactions (category: SERVICE) at a chapter-configurable rate.
-- Service leaderboard and per-member history.
+- Service leaderboard (a sort of the Directory) and per-member history (on the member's profile) ([`service-hours.md` § Visibility](../behavior/service-hours.md#visibility)).
 
 ## Tasks
 
@@ -259,9 +259,9 @@ A line shows only to an officer who can do it, and only while the module the ser
 
 ## Not-set-up features
 
-Nobody is sent to a feature that is on but that nobody has set up yet, when its screen could only say so. Two features qualify, and the web nav, the mobile You tab and the web Ask popover leave them out until the first item exists:
+Nobody is sent to a feature that is on but that nobody has set up yet, when its screen could only say so. Two features qualify, and the web nav and the mobile You tab leave them out until the first item exists:
 
-- **Study hours** with no active study zone hides from everyone. Zones are made on the web app's Chapter settings Study zones page (`/settings?tab=geofences`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
+- **Study hours** with no active study zone hides from everyone. _(Since #5950, 2026-11-24, neither list has a Study hours row to hide: web reads a member's sessions on their Profile, whose Study hours door is drawn only once they have a session, and the phone opens Study from the This semester gauge and New. The rule below stands for any entry point that comes back.)_ Zones are made on the web app's Chapter settings Study zones page (`/settings?tab=geofences`; `/geofences` redirects there), which neither Study screen links to, so an officer who manages zones would land on the same dead end; the [setup checklist](#setup-checklist) above sends them to that page instead. Only active zones count, because both Study screens list only those, and a zone that has sessions can't be deleted, so a chapter done with zones deactivates them. While the zones module (`geofences`) is off no zone can exist, so Study hours counts as not set up.
 - **Documents** with nothing in it hides from a viewer without `chapter_docs:upload`. Whoever can upload keeps it, because the upload is on that screen.
 
 The rule is shared by both clients (`useHiddenUnsetFeatures` in `@repo/hooks`), and it reads a feature's list only for a viewer it could hide the feature from, and only while the list's module is on. Nothing hides while the viewer's permissions, the chapter's modules or the list are still loading, or after the list's read fails: a row hides on a read that answers "none", or on its list's module being off. Only the entry points hide: the routes stay open, so a link into one still lands.

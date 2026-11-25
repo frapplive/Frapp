@@ -174,7 +174,7 @@ gap. Web binds the manager before `GET /v1/users/me` answers, so the first
 viewer to resolve is the session the inbox already joined with, and keeps that join; a viewer who
 changes after one was bound (a sign-out, then a sign-in) rejoins it. Mobile binds the manager app-wide from `components/app-runtime.tsx`
 so the inbox runs from launch. Web binds it for the whole dashboard from `DashboardShell`
-(`useChatRealtimeBinding`, #3745), so the nav's Chat row lights, or its Direct messages row counts (#3774), within seconds of a
+(`useChatRealtimeBinding`, #3745), so the sidebar's channel list lights, or its Messages row counts (#3774, #5946), within seconds of a
 message on any page, not only on `/chat`; `ChatProvider` never configures or tears the manager down.
 
 **Back in the foreground** (#3698). A socket can die while the app is in the background (mobile)

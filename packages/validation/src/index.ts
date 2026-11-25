@@ -79,6 +79,8 @@ export * from "./coming-up-tracking";
 export * from "./connection-state";
 // Councils (#5933): profiles, role packs and recruitment models.
 export * from "./council";
+// Affiliations and PNM records (#5974): link states, offers, codes, copy.
+export * from "./council-chapters";
 // A member's own custom-field values (#581): the rule the API and both forms check.
 export * from "./custom-field-values";
 // Discord export (DCE) preamble parsing, shared between the import wizard
@@ -222,6 +224,10 @@ export * from "./permission-registry";
 export * from "./permissions";
 export * from "./phone";
 export * from "./phone-reach";
+// What each points category is called, and the officer action's one name,
+// on web and phone (#5950).
+export * from "./point-category";
+export * from "./point-history";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";

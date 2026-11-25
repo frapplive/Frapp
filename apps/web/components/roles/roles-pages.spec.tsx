@@ -70,6 +70,8 @@ vi.mock("@repo/hooks", async (importOriginal) => {
     useMembers: () => ok(h.members),
     useMyPermissions: () => ok({ permissions: h.mine }),
     useViewerUserId: () => "me",
+    useViewerDisplayName: () => "Me",
+    useChapterRoleColors: () => [],
     useUpdateRole: () => mutation(h.updateRole),
     useCreateRole: () => mutation(h.createRole),
     useDeleteRole: () => mutation(h.deleteRole),
@@ -803,13 +805,14 @@ describe("a role's page", () => {
   it("saves a picked swatch, and leaves an untouched color out", async () => {
     const user = userEvent.setup();
     render(<RolePage roleId="brother" onBack={vi.fn()} onOpenTier={vi.fn()} />);
-    const swatches = within(
-      screen.getByRole("group", { name: "Color" }),
-    ).getAllByRole("button");
-    await user.click(swatches[1]!);
+    await user.click(
+      within(screen.getByRole("group", { name: "Color" })).getByRole("button", {
+        name: "Teal",
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "Save role" }));
     const body = h.updateRole.mock.calls[0]![0].body;
-    expect(typeof body.color).toBe("string");
+    expect(body.color).toBe("#3DD6C4");
     expect(body).not.toHaveProperty("permissions", expect.anything());
   });
 

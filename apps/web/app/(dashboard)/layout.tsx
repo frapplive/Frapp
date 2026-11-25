@@ -8,10 +8,8 @@ import {
 } from "@/components/layout/nav-collapse";
 import {
   CHAT_OPEN_COOKIE,
-  CHAT_VIEW_COOKIE,
   CHAT_WIDTH_COOKIE,
   parseChatOpen,
-  parseChatView,
   parseChatWidth,
 } from "@/components/layout/shell-prefs";
 import {
@@ -28,17 +26,16 @@ export default async function DashboardLayout({
 }) {
   // Read the nav collapse preference here, on the server, so the very first
   // paint is already the right width. Doing it in a client effect would render
-  // the 240px nav and then snap to the 56px rail after hydration on every
+  // the 264px sidebar and then snap to the 56px rail after hydration on every
   // route, which is exactly the layout shift the first-paint contract budgets
   // to zero.
   const cookieStore = await cookies();
   const navCollapsed = parseNavCollapsed(
     cookieStore.get(NAV_COLLAPSED_COOKIE)?.value,
   );
-  // The same for the chat panel the shell hosts (#3779): open or closed, the
-  // side panel's width beside a tool (#5575), which list it shows (#3774), and its member column.
+  // The same for the chat panel the shell hosts (#3779): open or closed
+  // beside a page, its width there (#5575), and its member column.
   const chatOpen = parseChatOpen(cookieStore.get(CHAT_OPEN_COOKIE)?.value);
-  const chatView = parseChatView(cookieStore.get(CHAT_VIEW_COOKIE)?.value);
   const chatWidth = parseChatWidth(cookieStore.get(CHAT_WIDTH_COOKIE)?.value);
   const membersHidden = parseMembersHidden(
     cookieStore.get(CHAT_MEMBERS_HIDDEN_COOKIE)?.value,
@@ -75,7 +72,6 @@ export default async function DashboardLayout({
         <DashboardShell
           defaultNavCollapsed={navCollapsed}
           defaultChatOpen={chatOpen}
-          defaultChatView={chatView}
           defaultChatWidth={chatWidth}
           defaultMembersHidden={membersHidden}
         >

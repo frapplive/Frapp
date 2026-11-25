@@ -168,7 +168,11 @@ export function mixHex(a: string, b: string, ratio: number): string {
 }
 
 /** Flattens `hex` at `alpha` over an opaque `background` — what CSS would composite. */
-export function applyAlpha(hex: string, alpha: number, background: string): string {
+export function applyAlpha(
+  hex: string,
+  alpha: number,
+  background: string,
+): string {
   const foreground = parseHex(hex) ?? { r: 0, g: 0, b: 0 };
   const base = parseHex(background) ?? { r: 0, g: 0, b: 0 };
 
@@ -303,3 +307,62 @@ function toHex({ r, g, b }: Rgb): string {
  * API-side copy to keep in agreement with this file. The build-order constraint
  * above still applies to any future direct import from `apps/api`.
  */
+
+// ── HSV ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A color as a picker's square and hue bar hold it: hue `h` in degrees
+ * (0–360), saturation `s` and value (brightness) `v` from 0 to 1. The square
+ * is saturation across and brightness up, the bar is hue, the way Discord's,
+ * Figma's and the macOS color pickers lay them out (#5966).
+ */
+export type Hsv = { h: number; s: number; v: number };
+
+const clampUnit = (value: number) =>
+  Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+/** The `#RRGGBB` for an HSV color; out-of-range parts are clamped. */
+export function hsvToHex({ h, s, v }: Hsv): string {
+  const hue = Number.isFinite(h) ? ((h % 360) + 360) % 360 : 0;
+  const saturation = clampUnit(s);
+  const value = clampUnit(v);
+  const chroma = value * saturation;
+  const sector = hue / 60;
+  const second = chroma * (1 - Math.abs((sector % 2) - 1));
+  const [r, g, b] =
+    sector < 1
+      ? [chroma, second, 0]
+      : sector < 2
+        ? [second, chroma, 0]
+        : sector < 3
+          ? [0, chroma, second]
+          : sector < 4
+            ? [0, second, chroma]
+            : sector < 5
+              ? [second, 0, chroma]
+              : [chroma, 0, second];
+  const base = value - chroma;
+  return toHex({
+    r: Math.round((r + base) * 255),
+    g: Math.round((g + base) * 255),
+    b: Math.round((b + base) * 255),
+  });
+}
+
+/** `null` when the input is not a hex color. A grey reports hue 0. */
+export function hexToHsv(input: string): Hsv | null {
+  const rgb = parseHex(input);
+  if (!rgb) return null;
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  let h = 0;
+  if (delta > 0) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  return { h: (h + 360) % 360, s: max === 0 ? 0 : delta / max, v: max };
+}

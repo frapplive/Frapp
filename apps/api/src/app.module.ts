@@ -35,6 +35,7 @@ import { FinancialInvoiceModule } from './modules/financial-invoice/financial-in
 import { BackworkModule } from './modules/backwork/backwork.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { SchoolModule } from './modules/school/school.module';
+import { AffiliationModule } from './modules/affiliation/affiliation.module';
 import { ServiceEntryModule } from './modules/service-entry/service-entry.module';
 import { TaskModule } from './modules/task/task.module';
 import { TenantModule } from './modules/tenant/tenant.module';
@@ -170,6 +171,8 @@ import { validateEnv } from './config/env.validation';
     MeetingNoMinutesModule,
     MeetingDateReminderModule,
     BootstrapModule,
+    // Last, so its routes append to the exported contract (#5974).
+    AffiliationModule,
   ],
   providers: [
     {

@@ -13,10 +13,10 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
 /**
  * The chapter menu: what Chat home's chapter name opens (Paul, 2026-11-19:
  * "can we move chapter settings into one place? the chapter thing on the top
- * left?"). Web's chapter row atop the nav opens the same menu
- * (`apps/web/components/layout/chapter-nav-header.tsx`), so on both the
- * chapter's name is the one door to its settings and to switching chapters,
- * the way Slack's workspace name and Discord's server name open theirs.
+ * left?"), the way Slack's workspace name and Discord's server name open
+ * theirs. Web moved both into the member's menu at the sidebar's foot in
+ * #5946 (`apps/web/components/layout/account-menu.tsx`), where Claude keeps
+ * them; the phone keeps them here until its own shell follows (#5983).
  *
  * Chapter settings leads, for a viewer it holds something for
  * (`chapterSettingsAccess`); Switch chapter opens the chapter picker, which

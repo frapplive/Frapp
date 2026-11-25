@@ -109,8 +109,11 @@ describe("isSettingsTabVisible", () => {
 describe("visibleSettingsTools", () => {
   const ids = (tools: { id: string }[]) => tools.map((tool) => tool.id);
 
-  it("gives a treasurer Reports and nothing else", () => {
-    expect(ids(visibleSettingsTools(TREASURER))).toEqual(["reports"]);
+  it("gives a treasurer the points ledger and Reports, and nothing else", () => {
+    expect(ids(visibleSettingsTools(TREASURER))).toEqual([
+      "points-ledger",
+      "reports",
+    ]);
   });
 
   it("gives an ordinary member nothing", () => {
@@ -121,6 +124,8 @@ describe("visibleSettingsTools", () => {
     expect(ids(visibleSettingsTools(["*"]))).toEqual([
       "chat-admin",
       "discord-import",
+      "points-ledger",
+      "service-history",
       "study-zones",
       "reports",
     ]);

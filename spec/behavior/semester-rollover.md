@@ -23,12 +23,15 @@ Admins with `semester:rollover` permission can trigger a "New Semester" action f
 - All historical semesters are queryable by `semester_archive_id` — `GET
   /v1/points/{me,leaderboard,members/:userId}` and `POST /v1/reports/points`
   all accept it, resolved against the archive's own `[start_date, end_date]`
-  range (see `points.md`). The web Points page exposes this as an "Archived
-  period" selector for the leaderboard and balance summary. The Reports page,
-  attendance, and mobile do not yet surface a selector for it (#1526).
+  range (see `points.md`). Archived semesters are periods in the points
+  standing in the Directory and in a member's own points (web's Points panel
+  on Profile, the phone's Points screen) on both apps, since #5950
+  ([`points.md` § Where points are read](points.md#where-points-are-read)).
+  The Reports page and attendance do not yet surface a selector for it
+  (#1526).
 - Point transactions, attendance records, and service entries are timestamped and can always be filtered by date range regardless of semester archives.
 
 ## Edge Cases
 
 - A chapter may trigger a rollover at most once per **named calendar month** — e.g. a rollover on January 15 blocks another until February 1, regardless of how many days have elapsed. Attempting a second rollover within the same calendar month returns `409 Conflict`.
-- If no semester archive exists yet (brand new chapter), the leaderboard shows "All Time" as the default period, and the `semester` time window returns all transactions (there is no archived boundary to filter after).
+- If no semester archive exists yet (brand new chapter), the `semester` time window returns all transactions (there is no archived boundary to filter after), so the standings' default period, This semester, counts all time. _(Changed in #5950, 2026-11-24: the Points page's leaderboard opened on All time.)_ A member's own points still open on All time.

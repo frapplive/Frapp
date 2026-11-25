@@ -191,6 +191,7 @@ describe("isRushManualClosedReason", () => {
 describe("contacts, follow-ups and the stale alert (#5934)", () => {
   const open = {
     closed_reason: null,
+    bid_state: "none",
     created_at: "2026-11-10T22:00:00Z",
     last_contact_on: null as string | null,
     follow_up_on: null as string | null,
@@ -222,6 +223,19 @@ describe("contacts, follow-ups and the stale alert (#5934)", () => {
     expect(
       isRushFollowUpDue({ ...due, closed_reason: "withdrew" }, "2026-11-30"),
     ).toBe(false);
+  });
+
+  it("treats an accepted prospect as closed: never stale, no follow-up due (#5973)", () => {
+    const accepted = {
+      ...open,
+      bid_state: "accepted",
+      follow_up_on: "2026-11-24",
+    };
+    expect(rushStaleOn(accepted, 7)).toBeNull();
+    expect(isRushFollowUpDue(accepted, "2026-11-30")).toBe(false);
+    expect(
+      isRushFollowUpDue({ ...accepted, bid_state: "extended" }, "2026-11-30"),
+    ).toBe(true);
   });
 
   it("puts the viewer's due follow-ups and stale prospects they own under Follow up", () => {

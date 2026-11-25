@@ -1,5 +1,6 @@
 import {
   rushAppliedTags,
+  rushBidBadge,
   rushTagOverflow,
   type RushPipelineCandidate,
   type RushTag,
@@ -48,17 +49,34 @@ export function RushTagChips({
   );
 }
 
+/** A bid badge's colour by tone: out and accepted read as good news. */
+const BID_BADGE_VARIANT = {
+  out: "info",
+  waiting: "warning",
+  done: "success",
+  ended: "outline",
+} as const;
+
 /**
  * Bid state, which is not a stage (`spec/behavior/ifc-recruitment.md`
- * § Stages): the board shows it as a badge, and only once a bid is out.
+ * § Stages): a badge once a bid is out, in `rushBidBadge`'s words, so a
+ * recorded acceptance reads "Waiting to confirm" (#5973).
  */
 export function RushBidBadge({
   candidate,
 }: {
-  candidate: Pick<RushPipelineCandidate, "bid_status">;
+  candidate: Pick<
+    RushPipelineCandidate,
+    "bid_state" | "bid_acceptance_recorded_at"
+  >;
 }) {
-  if (candidate.bid_status !== "extended") return null;
-  return <Badge variant="success">Bid extended</Badge>;
+  const badge = rushBidBadge(candidate);
+  if (!badge) return null;
+  return (
+    <Badge variant={BID_BADGE_VARIANT[badge.tone]} className="shrink-0">
+      {badge.label}
+    </Badge>
+  );
 }
 
 /**

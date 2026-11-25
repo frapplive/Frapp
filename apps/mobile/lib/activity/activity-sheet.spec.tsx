@@ -3,6 +3,7 @@ import React from "react";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { Alert } from "react-native";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -67,9 +68,26 @@ const review = vi.hoisted(() => ({
   mutateAsync: vi.fn<(input: unknown) => Promise<unknown>>(),
   isPending: false,
 }));
+// What an approver decides by (#5950): the chapter's rate and the entry's proof.
+const approverReads = vi.hoisted(() => ({
+  minutesPerPoint: undefined as number | undefined,
+  proofPath: null as string | null,
+  proofUrl: vi.fn<(id: string) => Promise<{ url: string }>>(),
+}));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useReviewServiceEntry: () => review,
+  useServicePointsRate: () => ({
+    data:
+      approverReads.minutesPerPoint === undefined
+        ? undefined
+        : { minutes_per_point: approverReads.minutesPerPoint },
+  }),
+  useServiceEntry: () => ({ data: { proof_path: approverReads.proofPath } }),
+  useGetServiceProofUrl: () => ({
+    mutateAsync: approverReads.proofUrl,
+    isPending: false,
+  }),
   // Read by the sheet's chrome and buttons for the chapter's accent.
   useCurrentChapter: () => ({ data: undefined }),
 }));
@@ -403,6 +421,35 @@ describe("Activity sheet (#3897)", () => {
   });
 
   describe("a pending service entry", () => {
+    beforeEach(() => {
+      approverReads.minutesPerPoint = undefined;
+      approverReads.proofPath = null;
+      approverReads.proofUrl.mockReset();
+    });
+
+    it("says what Approve will award at the chapter's rate, and nothing while the rate is unknown (#5950)", () => {
+      expect(screenText(render(rowOf("hours")))).not.toContain(
+        "Approving awards",
+      );
+      approverReads.minutesPerPoint = 60;
+      expect(screenText(render(rowOf("hours")))).toMatch(
+        /Approving awards \d+ service points?|Approving awards no points/,
+      );
+    });
+
+    it("opens the member's proof when there is some (#5950)", async () => {
+      expect(() => button(render(rowOf("hours")), "View proof")).toThrow();
+      approverReads.proofPath = "chapter/entry-1.jpg";
+      approverReads.proofUrl.mockResolvedValue({ url: "https://proof.example/1" });
+      const open = vi.mocked(Linking.openURL);
+      const tree = render(rowOf("hours"));
+      await act(async () => {
+        button(tree, "View proof").props.onPress();
+      });
+      expect(approverReads.proofUrl).toHaveBeenCalledWith("entry-1");
+      expect(open).toHaveBeenCalledWith("https://proof.example/1");
+    });
+
     it("approves it, stays open on the result and tells the screen", async () => {
       const tree = render(rowOf("hours"));
       expect(cards.hours.at(-1)!.payload).toMatchObject({

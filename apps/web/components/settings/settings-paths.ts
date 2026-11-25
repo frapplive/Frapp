@@ -33,6 +33,20 @@ export const DISCORD_IMPORT_SETTINGS_PATH = `${CHAT_SETTINGS_PATH}&tool=${DISCOR
 /** The Reports page, whose body is the export form. */
 export const REPORTS_SETTINGS_PATH = "/settings?tab=reports";
 
+/** The Points page, whose body is the chapter's points ledger (#5950). */
+export const POINTS_SETTINGS_PATH = "/settings?tab=points";
+
+/** `?member=` narrows the ledger to one member's transactions. */
+export const LEDGER_MEMBER_PARAM = "member";
+
+/** The ledger on one member, from the Points row on their card. */
+export function pointsLedgerPath(userId: string): string {
+  return `${POINTS_SETTINGS_PATH}&${LEDGER_MEMBER_PARAM}=${encodeURIComponent(userId)}`;
+}
+
+/** The Service hours page, whose body is the chapter's reviewed entries (#5950). */
+export const HOURS_SETTINGS_PATH = "/settings?tab=hours";
+
 /** The Study zones page, whose body is the zone list. */
 export const STUDY_ZONES_SETTINGS_PATH = "/settings?tab=geofences";
 
@@ -52,6 +66,8 @@ export const SETTINGS_SUBPAGE_PARAMS = [
   "module",
   // A page opened from one of the Chapter tab's rows.
   "page",
+  // The points ledger's member, from a member's card.
+  LEDGER_MEMBER_PARAM,
 ] as const;
 
 /**

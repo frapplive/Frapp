@@ -64,9 +64,9 @@ const MODULE_COPY: readonly ModuleCopy[] = [
     key: "points",
     label: "Points",
     description:
-      "The points ledger and leaderboard: points from events, service and officers.",
+      "The points ledger and standings: points from events, service and officers.",
     offNote:
-      "Members don't see Points, and nothing earns points until it's back on.",
+      "Members don't see points on their profile or in the Directory, and nothing earns points until it's back on.",
   },
   {
     key: "hours",
@@ -74,7 +74,7 @@ const MODULE_COPY: readonly ModuleCopy[] = [
     description:
       "Members log service and study hours; officers approve service for points.",
     offNote:
-      "Members don't see Service hours or Study hours, and no hours can be logged.",
+      "Members don't see service or study hours on their profile, and no hours can be logged.",
   },
   {
     key: "geofences",

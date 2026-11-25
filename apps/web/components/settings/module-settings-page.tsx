@@ -55,7 +55,8 @@ type Props = {
  * on/off state, then what the thing does, then who may use it; here the
  * officer tool comes before the rules because it is the thing an officer
  * opens most (Chat admin, Study zones, Reports), and the rules are set once
- * a term.
+ * a term. A tool that is a list which keeps growing (the points ledger, the
+ * service history, #5950) goes last instead, so the rules stay in reach.
  *
  * Everything shown is stored and read somewhere. A module with no rules has
  * no Rules block, rather than a disabled placeholder (#1760, #3439).
@@ -88,6 +89,10 @@ export function ModuleSettingsPage({
 
   const switchId = `settings-module-${module.key}-switch`;
   const linkedTools = tools.filter((tool) => !tool.embedded);
+  // A body that is a list which keeps growing (the points ledger, the
+  // service history, `SettingsTool.growsLong`) goes last, under the rules
+  // and who-can, which it would otherwise push out of reach.
+  const toolBodyLast = tools.some((tool) => tool.embedded && tool.growsLong);
 
   return (
     <div className="space-y-10">
@@ -138,7 +143,7 @@ export function ModuleSettingsPage({
         </p>
       ) : null}
 
-      {toolBody}
+      {toolBodyLast ? null : toolBody}
 
       {linkedTools.length > 0 ? (
         <ProfileSection
@@ -158,6 +163,8 @@ export function ModuleSettingsPage({
           canEdit={canEditRoles}
         />
       ) : null}
+
+      {toolBodyLast ? toolBody : null}
     </div>
   );
 }

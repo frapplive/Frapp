@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ChevronDown, FilePlus2, FolderSync, FolderUp } from "lucide-react";
 import { useGoogleDriveStatus, type DocumentTypeRow } from "@repo/hooks";
 import { useKeptPanel } from "@repo/hooks/kept-drafts";
+import { useNewIntent } from "@/components/layout/new-intent";
 import { NEW_ACTION_LABELS } from "@repo/validation";
 import {
   MINUTES_DRAFT,
@@ -82,6 +83,13 @@ export function UploadMenu({
   minutesOpenerRef?: MutableRefObject<(() => void) | null>;
 }) {
   const [startingMinutes, setStartingMinutes] = useState(false);
+  // New's New minutes (#5946) lands here, on the Minutes filter (#5949).
+  useNewIntent(
+    () => setStartingMinutes(true),
+    canStartMinutes,
+    undefined,
+    "minutes",
+  );
   useEffect(() => {
     if (!minutesOpenerRef) return;
     minutesOpenerRef.current = canStartMinutes

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import {
+  rushDashboard,
   rushRatingSummary,
   useRushPipeline,
   useViewerUserId,
@@ -33,6 +34,7 @@ import {
   type ItemMenuHandle,
 } from "@/components/item-actions-menu";
 import { RushAddProspectSheet } from "@/components/rush/rush-add-prospect-sheet";
+import { RushSummary } from "@/components/rush/rush-summary";
 import {
   RUSH_LOG_CONTACT,
   RushLogContactSheet,
@@ -46,6 +48,7 @@ import {
 } from "@/lib/rush/rush-entry";
 import {
   RUSH_ADD_PROSPECT,
+  rushBidBadge,
   rushListSubtitle,
   rushOwnerWords,
   rushRowMark,
@@ -89,6 +92,13 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * **New prospect** is the floating "+" for `rush:add` (#5931), a one-name
  * sheet; once one is added the list shows the stage it landed in.
  */
+type RushListView = "list" | "summary";
+
+const RUSH_LIST_VIEWS = [
+  { value: "list", label: "List" },
+  { value: "summary", label: "Summary" },
+] as const satisfies readonly { value: RushListView; label: string }[];
+
 export function RushListScreen() {
   const router = useRouter();
   const entry = useRushEntry();
@@ -100,6 +110,8 @@ export function RushListScreen() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [logging, setLogging] = useState<string | null>(null);
+  // List or Summary (#5973), web's Board / List / Summary on a phone's width.
+  const [view, setView] = useState<RushListView>("list");
   const canWork = entry.access.add;
   const today = localIsoDate(new Date());
 
@@ -169,6 +181,22 @@ export function RushListScreen() {
       );
     }
     if (!data || !tab) return null;
+    if (view === "summary") {
+      return (
+        <RushSummary
+          dashboard={rushDashboard(data.stages, data.candidates, {
+            viewerId,
+            staleDays: data.stale_days,
+            today,
+            viewResults: entry.access.viewResults,
+          })}
+          canOwn={canWork}
+          onOpen={(candidateId) =>
+            router.push({ pathname: "/rush-prospect", params: { candidateId } })
+          }
+        />
+      );
+    }
     return (
       <>
         <FilterChips
@@ -209,6 +237,16 @@ export function RushListScreen() {
         openCount === null ? undefined : rushListSubtitle(openCount, dueCount)
       }
       refresh={refresh}
+      views={
+        data && data.candidates.length > 0
+          ? {
+              accessibilityLabel: "Show",
+              options: RUSH_LIST_VIEWS,
+              value: view,
+              onChange: setView,
+            }
+          : undefined
+      }
       keyboardShouldPersistTaps="handled"
       createAction={
         canWork
@@ -219,7 +257,7 @@ export function RushListScreen() {
           : undefined
       }
     >
-      {data && data.candidates.length > 0 ? (
+      {data && data.candidates.length > 0 && view === "list" ? (
         <SearchField
           value={search}
           onChangeText={setSearch}
@@ -322,7 +360,7 @@ export function emptyStageLine(
 
 /**
  * A prospect's row: their name, their owner and rating summary on one muted
- * line, then the follow-up mark (a due one and a stale prospect in the
+ * line, then the bid's badge in web's words ("Waiting to confirm"), the follow-up mark (a due one and a stale prospect in the
  * warning hue, a later one quiet), up to two tags and a count of the rest.
  */
 export function ProspectRow({
@@ -345,6 +383,7 @@ export function ProspectRow({
   const rating = rushRatingSummary(candidate);
   const meta = [rushOwnerWords(candidate), rating].filter(Boolean).join(" · ");
   const mark = rushRowMark(candidate, staleDays, today);
+  const bid = rushBidBadge(candidate);
   const labels = rushAppliedTags(candidate.tag_ids, tags).map((t) => t.label);
   const cut = rushTagOverflow(labels);
   return (
@@ -354,6 +393,7 @@ export function ProspectRow({
       accessibilityLabel={candidate.display_name}
       accessibilityHint={[
         meta,
+        bid?.label ?? null,
         mark?.label ?? null,
         labels.length ? labels.join(", ") : null,
       ]
@@ -371,8 +411,24 @@ export function ProspectRow({
         <Text numberOfLines={1} style={styles.meta}>
           {meta}
         </Text>
-        {mark || cut.shown.length > 0 ? (
+        {bid || mark || cut.shown.length > 0 ? (
           <View style={styles.tags}>
+            {bid ? (
+              bid.tone === "ended" ? (
+                <HairlineChip label={bid.label} />
+              ) : (
+                <StatusChip
+                  label={bid.label}
+                  hue={
+                    bid.tone === "waiting"
+                      ? tokens.color.semantic.warning
+                      : bid.tone === "done"
+                        ? tokens.color.semantic.success
+                        : tokens.color.semantic.info
+                  }
+                />
+              )
+            ) : null}
             {mark ? (
               mark.tone === "planned" ? (
                 <HairlineChip label={mark.label} />

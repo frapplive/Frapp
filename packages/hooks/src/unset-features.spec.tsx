@@ -3,19 +3,10 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { reads, enabledCalls } = vi.hoisted(() => ({
-  reads: {
-    zones: [] as unknown[] | undefined,
-    documents: [] as unknown[] | undefined,
-  },
+  reads: { documents: [] as unknown[] | undefined },
   enabledCalls: {} as Record<string, boolean | undefined>,
 }));
 
-vi.mock("./use-study", () => ({
-  useGeofences: (options?: { enabled?: boolean }) => {
-    enabledCalls.zones = options?.enabled;
-    return { data: options?.enabled ? reads.zones : undefined };
-  },
-}));
 vi.mock("./use-documents", () => ({
   useDocuments: (options?: { enabled?: boolean }) => {
     enabledCalls.documents = options?.enabled;
@@ -24,6 +15,7 @@ vi.mock("./use-documents", () => ({
 }));
 
 import {
+  activeZoneCount,
   selectHiddenUnsetFeatures,
   useHiddenUnsetFeatures,
 } from "./unset-features";
@@ -32,30 +24,29 @@ const MEMBER = ["members:view", "backwork:upload", "service:log"];
 const ALL_ON = () => true;
 
 beforeEach(() => {
-  reads.zones = [];
   reads.documents = [];
   for (const key of Object.keys(enabledCalls)) delete enabledCalls[key];
 });
 
 describe("selectHiddenUnsetFeatures", () => {
-  it("hides study and documents from a member while the chapter has neither", () => {
+  it("hides Documents from a member while the chapter has none", () => {
     expect(
       selectHiddenUnsetFeatures({
         permissions: MEMBER,
         isModuleEnabled: ALL_ON,
-        counts: { study: 0, documents: 0 },
-      }),
-    ).toEqual(new Set(["study", "documents"]));
-  });
-
-  it("shows each one once its first item exists", () => {
-    expect(
-      selectHiddenUnsetFeatures({
-        permissions: MEMBER,
-        isModuleEnabled: ALL_ON,
-        counts: { study: 1, documents: 0 },
+        counts: { documents: 0 },
       }),
     ).toEqual(new Set(["documents"]));
+  });
+
+  it("shows it once the first document exists", () => {
+    expect(
+      selectHiddenUnsetFeatures({
+        permissions: MEMBER,
+        isModuleEnabled: ALL_ON,
+        counts: { documents: 1 },
+      }).size,
+    ).toBe(0);
   });
 
   it("keeps Documents for whoever can upload, since the upload is on its page", () => {
@@ -63,24 +54,13 @@ describe("selectHiddenUnsetFeatures", () => {
       selectHiddenUnsetFeatures({
         permissions: [...MEMBER, "chapter_docs:upload"],
         isModuleEnabled: ALL_ON,
-        counts: { study: 1, documents: 0 },
+        counts: { documents: 0 },
       }).size,
     ).toBe(0);
   });
 
-  // Zones are made in the web zones tool, which neither Study page links to.
-  it("hides Study hours from an officer too, who could only make zones elsewhere", () => {
-    expect(
-      selectHiddenUnsetFeatures({
-        permissions: ["*"],
-        isModuleEnabled: ALL_ON,
-        counts: { study: 0, documents: 0 },
-      }),
-    ).toEqual(new Set(["study"]));
-  });
-
   it("hides nothing until permissions, modules and the list have answered", () => {
-    const counts = { study: 0, documents: 0 };
+    const counts = { documents: 0 };
     for (const input of [
       { permissions: undefined, isModuleEnabled: ALL_ON, counts },
       { permissions: null, isModuleEnabled: ALL_ON, counts },
@@ -91,59 +71,43 @@ describe("selectHiddenUnsetFeatures", () => {
     }
   });
 
-  // No zone can exist or be read while the zones module is off, so Study
-  // hours has nowhere to study for a member.
   it("counts a feature whose module is off as empty", () => {
     expect(
       selectHiddenUnsetFeatures({
         permissions: MEMBER,
-        isModuleEnabled: (key) => key !== "geofences",
-        counts: { documents: 3 },
+        isModuleEnabled: (key) => key !== "documents",
+        counts: {},
       }),
-    ).toEqual(new Set(["study"]));
+    ).toEqual(new Set(["documents"]));
   });
 });
 
 describe("useHiddenUnsetFeatures", () => {
-  it("reads only the lists the viewer can't set up", () => {
+  // Study hours left both navs in #5950, so nothing reads the zone list here.
+  it("reads no zone list, and the document list only for who can't upload", () => {
+    renderHook(() => useHiddenUnsetFeatures(MEMBER, ALL_ON));
+    expect(enabledCalls).toEqual({ documents: true });
     renderHook(() =>
       useHiddenUnsetFeatures([...MEMBER, "chapter_docs:upload"], ALL_ON),
     );
-    expect(enabledCalls).toEqual({ zones: true, documents: false });
-    renderHook(() => useHiddenUnsetFeatures(["*"], ALL_ON));
-    expect(enabledCalls).toEqual({ zones: true, documents: false });
+    expect(enabledCalls).toEqual({ documents: false });
   });
 
-  // The zones route refuses while its module is off, and that's the default
-  // in every org archetype, so the read must not fire for nothing.
   it("reads no list whose module is off", () => {
     renderHook(() =>
-      useHiddenUnsetFeatures(MEMBER, (key) => key !== "geofences"),
+      useHiddenUnsetFeatures(MEMBER, (key) => key !== "documents"),
     );
-    expect(enabledCalls).toEqual({ zones: false, documents: true });
-  });
-
-  it("counts only active zones, the ones the Study pages list", () => {
-    reads.zones = [{ id: "z1", is_active: false }];
-    reads.documents = [{ id: "d1" }];
-    const { result, rerender } = renderHook(() =>
-      useHiddenUnsetFeatures(MEMBER, ALL_ON),
-    );
-    expect(result.current).toEqual(new Set(["study"]));
-    reads.zones = [{ id: "z1", is_active: false }, { id: "z2", is_active: true }];
-    rerender();
-    expect(result.current.size).toBe(0);
+    expect(enabledCalls).toEqual({ documents: false });
   });
 
   it("reads nothing while permissions or modules load", () => {
     renderHook(() => useHiddenUnsetFeatures(undefined, ALL_ON));
-    expect(enabledCalls).toEqual({ zones: false, documents: false });
+    expect(enabledCalls).toEqual({ documents: false });
     renderHook(() => useHiddenUnsetFeatures(MEMBER, undefined));
-    expect(enabledCalls).toEqual({ zones: false, documents: false });
+    expect(enabledCalls).toEqual({ documents: false });
   });
 
   it("hides from the list's answer, and not from a read that hasn't one", () => {
-    reads.zones = [{ id: "z1" }];
     const { result, rerender } = renderHook(() =>
       useHiddenUnsetFeatures(MEMBER, ALL_ON),
     );
@@ -151,5 +115,19 @@ describe("useHiddenUnsetFeatures", () => {
     reads.documents = undefined;
     rerender();
     expect(result.current.size).toBe(0);
+  });
+});
+
+describe("activeZoneCount", () => {
+  it("counts only active zones, the ones a member can study in", () => {
+    expect(activeZoneCount([{ id: "z1", is_active: false }])).toBe(0);
+    expect(
+      activeZoneCount([
+        { id: "z1", is_active: false },
+        { id: "z2", is_active: true },
+        { id: "z3" },
+      ]),
+    ).toBe(2);
+    expect(activeZoneCount(undefined)).toBeUndefined();
   });
 });

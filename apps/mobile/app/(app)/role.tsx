@@ -20,6 +20,7 @@ import {
   groupPermissionsByModule,
   SELF_ASSIGNABLE_REFUSAL_COPY,
   SELF_ASSIGNABLE_SWITCH_DESCRIPTION,
+  roleColorOrNull,
   SELF_ASSIGNABLE_TIERED_CODE,
   selfAssignableRefusal,
   type SelfAssignableRefusal,
@@ -41,6 +42,10 @@ import {
   OverrideSheet,
   type OverrideTarget,
 } from "@/components/roles/override-sheet";
+import {
+  RoleColorRow,
+  usePendingColors,
+} from "@/components/roles/role-color-row";
 import { Toggle } from "@/components/toggle";
 import { describeError } from "@/lib/roles/save-error";
 import {
@@ -72,7 +77,10 @@ type Failure = { permission: string; message: string } | null;
  *   page has. It saves at once, like every switch on this screen, and is
  *   disabled with the rule's words on a role that can't be marked.
  *
- * Name, color, @mention and moving a role between tiers stay on web with
+ * - **Color** (#5966): the same picker as web's role page, saved on each
+ *   pick (`components/roles/role-color-row.tsx`).
+ *
+ * Name, @mention and moving a role between tiers stay on web with
  * the rest of a role's setup; giving a member a role is the Directory's
  * member profile, as it has been (#3676).
  */
@@ -140,13 +148,10 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
   const tier = tiers.find((candidate) => candidate.id === role.tier_id) ?? null;
   const wildcard = isWildcardRole(role);
   const count = memberCounts?.get(role.id) ?? (memberCounts ? 0 : null);
+  const editable = canManage && reachesRole(reach, role, tiers);
   const lockedReason = wildcard
     ? "This role can do everything. That only moves through Transfer presidency."
-    : lockedReasonFor(
-        data,
-        canManage && reachesRole(reach, role, tiers),
-        "role",
-      );
+    : lockedReasonFor(data, editable, "role");
 
   return (
     <ScreenShell back={BACK_TO_ROLES} title={role.name}>
@@ -174,6 +179,11 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
           label="Members"
           value={count === null ? "—" : String(count)}
           variant="detail"
+        />
+        <RoleColor
+          role={role}
+          editable={editable}
+          rolesUpdatedAt={data.rolesQuery.dataUpdatedAt}
         />
       </ListSection>
 
@@ -210,6 +220,53 @@ function RoleBody({ role, data }: { role: TieredRole; data: RolesData }) {
         />
       )}
     </ScreenShell>
+  );
+}
+
+/**
+ * The role's color (#5966, #5791), set here as on web's role page with the
+ * same picker; a swatch saves on the tap and Custom when its sheet closes,
+ * like every switch on this screen saving on its own. Read-only for an
+ * officer who can't edit this role.
+ */
+function RoleColor({
+  role,
+  editable,
+  rolesUpdatedAt,
+}: {
+  role: TieredRole;
+  editable: boolean;
+  rolesUpdatedAt: number;
+}) {
+  const updateRole = useUpdateRole();
+  const colors = usePendingColors(rolesUpdatedAt);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  async function save(next: string | null) {
+    setFailure(null);
+    const error = await colors.save(role.id, next, () =>
+      updateRole.mutateAsync({ id: role.id, body: { color: next } }),
+    );
+    if (error) {
+      setFailure(
+        describeError(
+          role.name,
+          error,
+          "The color was not changed. Try again in a moment.",
+        ),
+      );
+    }
+  }
+
+  return (
+    <RoleColorRow
+      value={colors.shown(role.id, roleColorOrNull(role.color))}
+      subject={role.id}
+      name={role.name}
+      onChange={(next) => void save(next)}
+      disabled={!editable}
+      failure={failure}
+    />
   );
 }
 

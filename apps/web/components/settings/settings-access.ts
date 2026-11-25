@@ -9,6 +9,8 @@ import { isModuleSettingsTab } from "@/components/settings/settings-modules";
 import {
   CHAT_SETTINGS_PATH,
   DISCORD_IMPORT_SETTINGS_PATH,
+  HOURS_SETTINGS_PATH,
+  POINTS_SETTINGS_PATH,
   REPORTS_SETTINGS_PATH,
   STUDY_ZONES_SETTINGS_PATH,
 } from "@/components/settings/settings-paths";
@@ -25,8 +27,8 @@ import {
  * (`page`), so the rail stays on screen and chat does not come back beside it
  * (Paul, 2026-11-12: "I want to phase those out").
  *
- * The chapter menu's "Chapter settings" link (`chapter-nav-header.tsx`, the
- * one door since 2026-11-19), the Settings rail and the page's "nothing here for you" state
+ * The member menu's "Chapter settings" item (`account-menu.tsx`, the one
+ * door since 2026-11-19, on the chapter menu until #5946), the Settings rail and the page's "nothing here for you" state
  * all read this module, so the question "can this viewer open something in
  * Settings?" has one answer. The rules are owned by
  * `spec/behavior/settings/README.md` § Who sees what.
@@ -47,12 +49,19 @@ export type SettingsTool = {
   page: string;
   /**
    * The tool is drawn on its module page itself (Study zones' zone list, the
-   * Reports form, Chat's channels and report queue), so `href` is that page
+   * Reports form, Chat's channels and report queue, the points ledger, the
+   * chapter's service history), so `href` is that page
    * and the page lists no row for it. A tool without it (Discord import) is a
    * row on its module page that opens it in place of the page, with a way
    * back, still inside Chapter settings.
    */
   embedded?: boolean;
+  /**
+   * The embedded body is a list that keeps growing (the points ledger, the
+   * service history), so it is drawn last on its page, under the rules and
+   * who-can, which stay a screen from the top however long it gets.
+   */
+  growsLong?: boolean;
 };
 
 export const SETTINGS_TOOLS: readonly SettingsTool[] = [
@@ -75,6 +84,34 @@ export const SETTINGS_TOOLS: readonly SettingsTool[] = [
     href: DISCORD_IMPORT_SETTINGS_PATH,
     permission: "channels:manage",
     page: "chat",
+  },
+  {
+    // The chapter's points ledger, with Adjust points for a role that may
+    // (#5950). The Points page's Audit section and Adjust button until then.
+    id: "points-ledger",
+    label: "Points ledger",
+    description:
+      "Every points transaction in the chapter, flagged adjustments, and Adjust points.",
+    href: POINTS_SETTINGS_PATH,
+    permission: "points:view_all",
+    page: "points",
+    module: "points",
+    embedded: true,
+    growsLong: true,
+  },
+  {
+    // The chapter's reviewed service entries (#5950). The Service hours
+    // page's Chapter history until then; pending ones are reviewed in
+    // Activity.
+    id: "service-history",
+    label: "Service history",
+    description: "Every member's approved and rejected service entries.",
+    href: HOURS_SETTINGS_PATH,
+    permission: "service:approve",
+    page: "hours",
+    module: "hours",
+    embedded: true,
+    growsLong: true,
   },
   {
     id: "study-zones",
@@ -132,7 +169,7 @@ const TAB_ONLY_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
    * Plan and billing (#3827) reads `GET /v1/billing/status` and the invoice
    * list, both `billing:view`, and no chapter config. It is the gate the
    * sidebar's Billing row used, so whoever reached billing before still does,
-   * and the chapter menu's Chapter settings link admits a treasurer who holds
+   * and the member menu's Chapter settings item admits a treasurer who holds
    * only this. Plan actions stay behind `billing:manage` inside the section.
    */
   billing: ["billing:view"],
@@ -206,7 +243,7 @@ export function visibleSettingsTools(
 
 /**
  * Whether Settings holds anything for this viewer: a tab, or a tool whose
- * module is on. The chapter menu's "Chapter settings" link asks this, so it
+ * module is on. The member menu's "Chapter settings" item asks this, so it
  * never opens onto an empty page. A treasurer whose only tool is Reports loses
  * the link when the chapter switches Reports off, the same way the Reports row
  * used to hide (#2946).

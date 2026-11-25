@@ -41,9 +41,6 @@ const LOADED_USER = {
 };
 let currentUser: Record<string, unknown> = LOADED_USER;
 let hiddenFeatures = new Set<string>();
-/** The member's weekly study goal in minutes (#1062), from `useMyGoals`. */
-let studyGoal: number | null = null;
-const goalReadOptions: ({ enabled?: boolean } | undefined)[] = [];
 /** True while `/v1/users/me/permissions` hasn't answered. */
 let permissionsLoading = false;
 const hiddenFeatureCalls: unknown[][] = [];
@@ -55,6 +52,7 @@ let tenantKind: "chapter" | "council" = "chapter";
 /** False while `useCurrentChapter` hasn't answered (#5281's slow-read case). */
 let chapterLoaded = true;
 /** What `useMyProfileStats` answers (#5281); its reads are its own spec's. */
+const statsWanted: { points?: boolean; service?: boolean }[] = [];
 let profileStats = {
   points: null as number | null,
   serviceHours: null as string | null,
@@ -131,10 +129,6 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   // The Edit sheet's Major suggestions (#5778) are its own spec's business.
   useChapterMajors: () => [],
   useOwnAvatarTint: () => null,
-  useMyGoals: (options?: { enabled?: boolean }) => {
-    goalReadOptions.push(options);
-    return { data: { points: null, service: null, study: studyGoal } };
-  },
   useListChapters: () => ({ isSuccess: true, data: chapterList.value }),
   usePermissionList: () => permissions,
   useMyPermissions: () => ({
@@ -154,7 +148,10 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     return { data: invoices };
   },
   useCurrentUser: () => currentUser,
-  useMyProfileStats: () => profileStats,
+  useMyProfileStats: (wanted?: { points?: boolean; service?: boolean }) => {
+    statsWanted.push(wanted ?? {});
+    return profileStats;
+  },
   // Their cards have their own spec (`standing-cards.spec.tsx`).
   useActivityStanding: () => ({
     ...standingRead,
@@ -290,90 +287,6 @@ describe("You tab clock (#2101)", () => {
     expect(screenText(tree)).toContain("Rush dinner");
     expect(screenText(tree)).not.toContain("Chapter meeting");
   });
-
-  it("starts a new Study hours week at the week boundary while the screen is up", () => {
-    // Saturday 23:59:30. The week starts on Sunday (`startOfWeek`).
-    vi.setSystemTime(new Date(2026, 9, 3, 23, 59, 30));
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 12, 0).toISOString(),
-        total_foreground_minutes: 120,
-      },
-    ];
-    const tree = render();
-    expect(screenText(tree)).toContain("2.0 hrs");
-
-    tick();
-
-    // A new week with nothing studied and no goal says nothing (#5281).
-    expect(screenText(tree)).not.toContain("2.0 hrs");
-    const study = tree.root
-      .findAllByType(ListRow)
-      .find((row) => row.props.label === "Study hours");
-    expect(study?.props.value).toBeNull();
-  });
-
-  it("reads the week against the member's study goal when the chapter sets one (#1062)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    studyGoal = 360;
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 14, 0).toISOString(),
-        total_foreground_minutes: 240,
-      },
-    ];
-    try {
-      expect(screenText(render())).toContain("4.0 / 6.0 hrs");
-    } finally {
-      studyGoal = null;
-    }
-  });
-
-  it("says nothing for a week that would draw as 0.0 hrs (#5281)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    sessions = [
-      {
-        id: "session-1",
-        status: "COMPLETED",
-        start_time: new Date(2026, 9, 3, 10, 0).toISOString(),
-        end_time: new Date(2026, 9, 3, 10, 2).toISOString(),
-        total_foreground_minutes: 2,
-      },
-    ];
-    const study = render()
-      .root.findAllByType(ListRow)
-      .find((row) => row.props.label === "Study hours");
-    expect(study?.props.value).toBeNull();
-  });
-
-  it("keeps 0.0 against a goal, which says how far there is to go (#5281)", () => {
-    vi.setSystemTime(new Date(2026, 9, 3, 18, 0, 0));
-    studyGoal = 360;
-    sessions = [];
-    try {
-      expect(screenText(render())).toContain("0.0 / 6.0 hrs");
-    } finally {
-      studyGoal = null;
-    }
-  });
-
-  it("doesn't read the study goal when Study is hidden", () => {
-    hiddenFeatures = new Set(["study"]);
-    goalReadOptions.length = 0;
-    try {
-      render();
-      expect(goalReadOptions.length).toBeGreaterThan(0);
-      expect(goalReadOptions.every((o) => o?.enabled === false)).toBe(true);
-    } finally {
-      hiddenFeatures = new Set();
-    }
-  });
 });
 
 describe("You tab anatomy (#1048, #3839)", () => {
@@ -410,7 +323,8 @@ describe("You tab anatomy (#1048, #3839)", () => {
       );
     expect(order[0]).toBe("ProfileHead");
     expect(order[1]).toBe("Status");
-    expect(order[2]).toBe("Study hours");
+    // Study hours and Service hours left the rows for the gauges (#5950).
+    expect(order[2]).toBe("Dues");
     expect(order.at(-1)).toBe("ProfileDetails");
     expect(screenText(tree)).toMatch(/^You/);
   });
@@ -503,8 +417,6 @@ describe("You tab anatomy (#1048, #3839)", () => {
   it("draws labels without a description line", () => {
     const text = screenText(render());
     for (const label of [
-      "Study hours",
-      "Service hours",
       "Dues",
       "Resources",
       "Directory",
@@ -529,7 +441,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
       );
     expect(sections).toEqual([
       ["Status"],
-      ["Study hours", "Service hours", "Dues", "Resources", "Directory"],
+      ["Dues", "Resources", "Directory"],
       ["Settings"],
       ["Host check-in"],
     ]);
@@ -603,17 +515,23 @@ describe("You tab anatomy (#1048, #3839)", () => {
     expect(invoiceReadOptions.at(-1)).toEqual({ enabled: false });
   });
 
-  it("drops Study hours and Resources while nobody has set them up for this member", () => {
-    hiddenFeatures = new Set(["study", "documents"]);
+  it("draws no Study hours or Service hours row: the gauges open them (#5950)", () => {
+    const labels = render()
+      .root.findAllByType(ListRow)
+      .map((row) => row.props.label);
+    expect(labels).not.toContain("Study hours");
+    expect(labels).not.toContain("Service hours");
+  });
+
+  it("drops Resources while nobody has set it up for this member", () => {
+    hiddenFeatures = new Set(["documents"]);
     // Resources stays while the chapter keeps minutes, which nobody sets up.
     chapterModules = { meetings: false };
     try {
       const labels = render()
         .root.findAllByType(ListRow)
         .map((row) => row.props.label);
-      expect(labels).not.toContain("Study hours");
       expect(labels).not.toContain("Resources");
-      expect(labels).toContain("Service hours");
       expect(labels).toContain("Directory");
     } finally {
       hiddenFeatures = new Set();
@@ -706,8 +624,6 @@ describe("You tab anatomy (#1048, #3839)", () => {
     const labels = buttons.map((node) => node.props.accessibilityLabel);
     expect(labels).toEqual([
       "Status",
-      "Study hours",
-      "Service hours",
       "Dues",
       "Resources",
       "Directory",
@@ -823,7 +739,7 @@ describe("You tab anatomy (#1048, #3839)", () => {
  * Points is a quiet figure at the top right; service hours is the Service
  * hours row's value. Both say nothing at zero or with their module off.
  */
-describe("You tab points and service hours (#5281)", () => {
+describe("You tab points (#5281, #5950)", () => {
   const baseStats = { ...profileStats };
 
   beforeEach(() => {
@@ -855,10 +771,6 @@ describe("You tab points and service hours (#5281)", () => {
         (node.type as unknown) === "PointsLabel" ||
         (typeof node.type === "function" && node.type.name === "PointsLabel"),
     );
-  const serviceRow = (tree: ReactTestRenderer) =>
-    tree.root
-      .findAllByType(ListRow)
-      .find((row) => row.props.label === "Service hours");
 
   it("hands the points to the title's corner, and nothing with Points off", () => {
     profileStats.points = 60;
@@ -874,19 +786,6 @@ describe("You tab points and service hours (#5281)", () => {
     profileStats.points = 60;
     profileStats.visible = false;
     expect(pointsLabel(render())).toHaveLength(0);
-  });
-
-  it("puts approved service hours on their row, and nothing at zero", () => {
-    profileStats.serviceMinutes = 150;
-    profileStats.serviceHours = "2.5";
-    expect(serviceRow(render())?.props.value).toBe("2.5 hrs");
-
-    profileStats.serviceMinutes = 0;
-    profileStats.serviceHours = "0";
-    const zero = serviceRow(render());
-    // The row stays at zero: it is where a member logs hours.
-    expect(zero).toBeDefined();
-    expect(zero?.props.value).toBeNull();
   });
 
   it("draws no corner figure at zero, and a dash when the read failed", () => {
@@ -905,34 +804,23 @@ describe("You tab points and service hours (#5281)", () => {
     expect(pointsLabel(render())[0]?.props.points).toBe(-5);
   });
 
-  it("formats service hours as Study's row does, singular at one hour", () => {
-    profileStats.serviceMinutes = 60;
-    profileStats.serviceHours = "1";
-    expect(serviceRow(render())?.props.value).toBe("1.0 hr");
-  });
-
-  it("says nothing for a total that would draw as zero", () => {
-    profileStats.serviceMinutes = 2;
-    profileStats.serviceHours = "0.0";
-    expect(serviceRow(render())?.props.value).toBeNull();
-  });
-
-  it("gives the Service hours row a dash when its read failed", () => {
-    profileStats.serviceFailed = true;
-    expect(serviceRow(render())?.props.value).toBe("—");
-  });
-
   it("hides nothing while the chapter hasn't loaded: its modules count as on", () => {
     chapterLoaded = false;
     profileStats.points = 60;
-    const tree = render();
-    expect(pointsLabel(tree)).toHaveLength(1);
-    expect(serviceRow(tree)).toBeDefined();
+    expect(pointsLabel(render())).toHaveLength(1);
   });
 
-  it("drops the Service hours row for a chapter with the module off", () => {
-    chapterModules = { hours: false };
-    expect(serviceRow(render())).toBeUndefined();
+  it("opens the member's own points from the figure (#5950)", () => {
+    profileStats.points = 60;
+    const push = vi.mocked(useRouter().push);
+    const label = pointsLabel(render())[0]!;
+    act(() => label.props.onPress());
+    expect(push).toHaveBeenLastCalledWith("/points");
+  });
+
+  it("asks for no service total: its number is on the gauge and its screen", () => {
+    render();
+    expect(statsWanted.at(-1)).toMatchObject({ service: false });
   });
 });
 

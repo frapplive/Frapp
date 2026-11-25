@@ -52,6 +52,8 @@ export const SCREEN_TITLES = {
   preferences: "Settings",
   "service-hours": "Service hours",
   study: "Study hours",
+  // A member's own points and their history, pushed from You (#5950).
+  points: "Points",
   dues: "Dues",
   // Titled Resources, as web's page and the You row are: a meeting's
   // minutes are filed here (#5949).

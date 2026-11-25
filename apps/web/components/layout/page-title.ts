@@ -1,4 +1,4 @@
-import type { TenantKind } from "@repo/validation";
+import { CHAPTER_AFFILIATIONS_COPY, type TenantKind } from "@repo/validation";
 import { ASK_ROUTE } from "@/components/layout/shell-layout";
 import type { VocabConfig } from "@repo/org-archetypes";
 import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
@@ -10,7 +10,8 @@ import {
 } from "@/components/layout/nav-config";
 
 /**
- * The open route's title, as the top bar shows it.
+ * The open route's title, as its page's header shows it (the top bar's
+ * copy below `lg`).
  *
  * The title is derived from the route here, in one place, rather than passed
  * up by each page. That is what puts it on every path a route can take:
@@ -20,7 +21,8 @@ import {
  * kept dropping.
  *
  * **Where the words come from.** A nav route's title is its row's label, so the
- * row a member clicked and the heading they land on say the same words.
+ * row a member clicked and the heading they land on say the same words (a row
+ * that opens a page with its own name says so with `title`, `nav-config.ts`).
  * Profile, which has no nav row, is named below. Each route
  * also names its browser tab in its own `metadata.title`; the two are kept to
  * the same words, and `page-title.spec.ts` checks them against each other.
@@ -45,9 +47,10 @@ export type PageTitle = {
 };
 
 /**
- * Routes that are not nav rows. Profile and the personal Settings page hang
- * off the account menu; Chapter settings opens from the chapter menu atop the
- * nav, under the words that menu item uses; Frapp Intelligence from the Ask bar.
+ * Routes that are not nav rows. Profile, the personal Settings page, Chapter
+ * settings and What's new open from the member's menu at the sidebar's foot,
+ * under the words that menu uses; Frapp Intelligence from the New row; and
+ * `/chat` is the open conversation, which the channel list opens.
  */
 /**
  * Settings' name in each tenant kind, as the chapter menu's item and the top
@@ -59,11 +62,14 @@ export const SETTINGS_TITLE: Readonly<Record<TenantKind, string>> = {
 };
 
 const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
+  "/chat": "Chat",
   "/profile": "Profile",
   "/preferences": "Settings",
   "/settings": SETTINGS_TITLE.chapter,
   "/whats-new": "What's new",
-  // Opened from the Ask bar at the sidebar's foot (Paul, 2026-11-22).
+  // Opened from the member's menu (#5974).
+  "/affiliations": CHAPTER_AFFILIATIONS_COPY.title,
+  // The sidebar's New row opens it (#5946).
   [ASK_ROUTE]: "Frapp Intelligence",
 };
 
@@ -73,10 +79,11 @@ const OFF_NAV_TITLES: Readonly<Record<string, string>> = {
  * only for a viewer who can open that page: Bulk upload goes back to
  * Backwork, the view it was opened from (#5949, Resources).
  */
-const SUB_PAGE_TITLES: Readonly<Record<string, { title: string; back: string }>> =
-  {
-    "/backwork/upload": { title: "Bulk upload", back: "/backwork" },
-  };
+const SUB_PAGE_TITLES: Readonly<
+  Record<string, { title: string; back: string }>
+> = {
+  "/backwork/upload": { title: "Bulk upload", back: "/backwork" },
+};
 
 /**
  * Pages one record deep under a nav row, matched by prefix: any

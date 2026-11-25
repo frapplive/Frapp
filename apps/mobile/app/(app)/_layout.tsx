@@ -117,6 +117,8 @@ export default function AppLayout() {
         options={{ title: SCREEN_TITLES["service-hours"] }}
       />
       <Stack.Screen name="study" options={{ title: SCREEN_TITLES.study }} />
+      {/* A member's own points, pushed from You (#5950). */}
+      <Stack.Screen name="points" options={{ title: SCREEN_TITLES.points }} />
       <Stack.Screen name="dues" options={{ title: SCREEN_TITLES.dues }} />
       <Stack.Screen
         name="documents"

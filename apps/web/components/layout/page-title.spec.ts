@@ -11,6 +11,11 @@ describe("resolvePageTitle", () => {
     }
   });
 
+  it("titles the two chat pages (#5946)", () => {
+    expect(resolvePageTitle("/chat")).toEqual({ title: "Chat" });
+    expect(resolvePageTitle("/messages")).toEqual({ title: "Messages" });
+  });
+
   it("titles no officer tool apart from Chapter settings (#3837)", () => {
     // The tools open inside Chapter settings, whose rail names them; their
     // old routes only redirect there and name nothing.
@@ -25,7 +30,7 @@ describe("resolvePageTitle", () => {
   });
 
   it("titles a route's sub-paths as the route, but not a lookalike prefix", () => {
-    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Events" });
+    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Calendar" });
     expect(resolvePageTitle("/eventsx")).toBeNull();
   });
 

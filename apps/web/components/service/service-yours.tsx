@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { components } from "@repo/api-sdk";
 import { Button } from "@/components/ui/button";
 import { InlineNote, InlineNoteAction } from "@/components/shared/inline-note";
@@ -9,6 +8,7 @@ import { SkeletonRows } from "@/components/shared/page-skeletons";
 import { SectionLabel } from "@/components/shared/section-label";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { ServiceEntryRow } from "@/components/service/service-entry-row";
+import { StandingStat } from "@/components/standing/standing-panel-frame";
 import {
   hoursLabel,
   type OwnServiceTotals,
@@ -16,40 +16,12 @@ import {
 
 type ServiceEntry = components["schemas"]["ServiceEntryResponseDto"];
 
-/** A stat on the page surface, the `/points` balance recipe: label over number, no frame. */
-function Stat({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: ReactNode;
-  detail?: ReactNode;
-}) {
-  return (
-    <div className="min-w-0 space-y-0.5">
-      <dt className="text-caption text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <span className="text-headline font-bold tabular-nums text-foreground">
-          {value}
-        </span>
-        {detail ? (
-          <span className="text-caption tabular-nums text-muted-foreground">
-            {detail}
-          </span>
-        ) : null}
-      </dd>
-    </div>
-  );
-}
-
 /**
- * The top of `/service` (#4669, Shawn): the viewer's own approved hours this
- * semester and all time with what is pending beside them, then their own log
- * of every entry in every state, newest first. It is the viewer's alone
- * whatever their role: an approver's chapter-wide read is filtered to them
- * before it reaches here, and their review queue and the chapter's history
- * sit below this section.
+ * The body of the Service hours panel on the member's own Profile (#5950; the
+ * top of the Service hours page until then, #4669, Shawn): the viewer's own
+ * approved hours this semester and all time with what is pending beside them,
+ * then their own log of every entry in every state, newest first. It is the
+ * viewer's alone whatever their role (`useMyServiceLog`).
  *
  * Withdraw stays on a pending row, and only here: `DELETE
  * /v1/service-entries/:id` lets a `service:approve` holder delete anyone's
@@ -96,14 +68,13 @@ export function ServiceYours({
 }) {
   const ready = state === "ready";
   return (
-    <section aria-labelledby="svc-mine-label" className="min-w-0 space-y-6">
+    <section aria-label="Your service hours" className="min-w-0 space-y-6">
       <div className="space-y-3">
-        <SectionLabel id="svc-mine-label">Your service hours</SectionLabel>
         {notice ? (
           <p className="text-sm text-muted-foreground">{notice}</p>
         ) : null}
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-4">
-          <Stat
+          <StandingStat
             label="This semester"
             value={
               !ready || totals.semesterMinutes === null
@@ -120,12 +91,12 @@ export function ServiceYours({
                   : "approved"
             }
           />
-          <Stat
+          <StandingStat
             label="All time"
             value={ready ? hoursLabel(totals.allTimeMinutes) : "–"}
             detail={ready ? "approved" : null}
           />
-          <Stat
+          <StandingStat
             label="Pending"
             value={ready ? hoursLabel(totals.pendingMinutes) : "–"}
             detail={
@@ -165,7 +136,7 @@ export function ServiceYours({
           />
         ) : entries.length === 0 ? (
           // One line where the rows go (empty-states plan rule 7); the first
-          // entry starts from the line, through the toolbar's gated dialog.
+          // entry starts from the line, through the header's gated dialog.
           <InlineNote>
             You haven&apos;t logged any service yet.
             {canLog ? (

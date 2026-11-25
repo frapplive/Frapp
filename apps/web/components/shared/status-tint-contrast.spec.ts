@@ -34,7 +34,7 @@ const LABELS: Array<[string, string, keyof typeof STATUS_TINT]> = [
   // The destructive button's hover.
   ["--destructive-text", DESTRUCTIVE_TEXT, "destructiveHover"],
   // Notices that carry neutral text on the danger tint
-  // (`chapter-nav-header`, `discord-import/connect-step`).
+  // (`chapter-switcher`, `discord-import/connect-step`).
   ["--foreground", TEXT.foreground, "destructive"],
   ["--muted-foreground", TEXT.mutedForeground, "destructive"],
   // And on the warning tint (`chat/block-list-notice`).

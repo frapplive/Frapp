@@ -78,8 +78,8 @@ except the on-screen readout of the keyboard path, which a unit test covers:
       the sign-in screen (s01): its title is 700, its button labels 600 and its body
       copy 400. Android is the honest test, because it can't fake weights from
       one file. A `ScreenShell` title (You, Settings) is 700 too.
-- [ ] **Sheets and the keyboard.** You → Service hours, then the header's
-      **+** tile (labelled "Log service hours" for a screen reader), presents
+- [ ] **Sheets and the keyboard.** The tab bar's **+**, then **Log hours**
+      (You's Service hours row until #5950), presents
       the s20 "Log service hours" sheet with its grabber,
       header and Cancel. It drags and
       dismisses, and typing in its description field keeps the field visible
@@ -106,7 +106,8 @@ device run, check:
 - [ ] **Profile** is the top of the You tab, with no screen of its own, and
       Chat home's header shows Search and the bell; Messages is tab 3, and
       the Calendar opens from the "Calendar" link in Activity's To do header.
-- [ ] A deleted path (`exp://.../--/points`, `--/task-center`) lands on home via
+- [ ] A deleted path (`exp://.../--/task-center`; `--/points` is the Points
+      screen again since #5950) lands on home via
       `+not-found` instead of an error screen.
 - [ ] **`frapp://event-details` still resolves** — open
       `frapp://event-details?id=<an event id>`, the URL `.ics` files exported

@@ -14823,6 +14823,9 @@
               }
             }
           },
+          "409": {
+            "description": "`code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id."
+          },
           "default": {
             "description": "Error",
             "content": {
@@ -14885,6 +14888,56 @@
           }
         ],
         "summary": "Add a recruitment candidate",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/matches": {
+      "get": {
+        "operationId": "RushController_matches_v1",
+        "parameters": [
+          {
+            "name": "name",
+            "required": true,
+            "in": "query",
+            "description": "Candidate display name (case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RushNameMatchDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every candidate a display name matches, with stage and day added, for a picker",
         "tags": [
           "Rush"
         ]
@@ -15710,7 +15763,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RushSettingsDto"
+                "$ref": "#/components/schemas/SaveRushSettingsDto"
               }
             }
           }
@@ -16002,6 +16055,312 @@
           }
         ],
         "summary": "Clear the candidate's follow-up",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/decline": {
+      "post": {
+        "operationId": "RushBidController_decline_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid to decline"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a decline the PNM gave on paper or aloud",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/accept": {
+      "post": {
+        "operationId": "RushBidController_accept_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRushAcceptanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid, or an acceptance is already recorded"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record an acceptance the PNM gave on paper or aloud; it waits for the PNM or `rush:manage` to confirm",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/confirm": {
+      "post": {
+        "operationId": "RushBidController_confirm_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No recorded acceptance to confirm"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm a recorded acceptance; the PNM is invited with the chapter's new-member role",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/candidates/{id}/bid/rescind": {
+      "post": {
+        "operationId": "RushBidController_rescind_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RescindRushBidDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No open bid to rescind"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Take back an open bid, with a reason",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/bid-confirmations/preview": {
+      "post": {
+        "operationId": "RushBidConfirmationController_preview_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushBidConfirmTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidConfirmationPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No waiting confirmation for that link"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A recorded bid acceptance's chapter, who recorded it and whether it waits, with no account needed",
+        "tags": [
+          "Rush"
+        ]
+      }
+    },
+    "/v1/rush/bid-confirmations/confirm": {
+      "post": {
+        "operationId": "RushBidConfirmationController_confirm_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RushBidConfirmTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RushBidConfirmationPreviewDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No waiting confirmation for that link"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The PNM confirms the acceptance a member recorded, with one tap from the emailed link",
         "tags": [
           "Rush"
         ]
@@ -24386,6 +24745,858 @@
         "summary": "What a client's first screen reads, in one request",
         "tags": [
           "Bootstrap"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations": {
+      "get": {
+        "description": "Its live school links, and the councils at its confirmed schools with the chapter's link to each, if any.",
+        "operationId": "ChapterAffiliationController_get_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterAffiliationsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The chapter's school and councils",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/school": {
+      "post": {
+        "description": "Proposes the link and, since the caller is the chapter's officer, confirms it. A second school becomes a secondary link. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_linkSchool_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkSchoolDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AffiliationSchoolDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Name and confirm the chapter's school",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/school/{linkId}": {
+      "patch": {
+        "description": "Ending a confirmed link ends the chapter's council links at that school. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_decideSchool_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideSchoolLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolLinkDecisionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm, decline or end a school link",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/councils": {
+      "post": {
+        "description": "The council at the chapter's confirmed school accepts or declines. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_requestCouncil_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCouncilDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ask to join a council",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/chapter/affiliations/councils/{linkId}": {
+      "patch": {
+        "description": "`accepted` or `declined` answers an invitation; `ended` withdraws the chapter's request or leaves. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "ChapterAffiliationController_decideCouncil_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCouncilLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer a council's invitation, or leave",
+        "tags": [
+          "Affiliations"
+        ]
+      }
+    },
+    "/v1/council/chapters": {
+      "get": {
+        "description": "Member chapters, suspended ones, invitations out and requests waiting on the council, newest first.",
+        "operationId": "CouncilChaptersController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CouncilChapterDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's chapters",
+        "tags": [
+          "Councils"
+        ]
+      },
+      "post": {
+        "description": "The chapter's officers accept or decline. 404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "CouncilChaptersController_invite_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteChapterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Invite a chapter",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/chapters/candidates": {
+      "get": {
+        "description": "Chapters that confirmed the council's school and have no live link to it, offered archetypes first.",
+        "operationId": "CouncilChaptersController_candidates_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InviteCandidateDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Chapters the council can invite",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/chapters/{linkId}": {
+      "patch": {
+        "description": "404 `affiliation.not_found` for a link or tenant that isn't there for this side; 409 `affiliation.exists`, `affiliation.invalid_transition` (the link moved, or the step is the other side's) or `affiliation.no_shared_school` (the chapter hasn't confirmed the council's school).",
+        "operationId": "CouncilChaptersController_decide_v1",
+        "parameters": [
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCouncilLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouncilLinkDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Answer a chapter's request, suspend, reinstate or remove",
+        "tags": [
+          "Councils"
+        ]
+      }
+    },
+    "/v1/council/recruitment/seasons": {
+      "get": {
+        "description": "Newest first. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_listSeasons_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's recruitment seasons",
+        "tags": [
+          "Council recruitment"
+        ]
+      },
+      "post": {
+        "description": "409 `council.season_exists` for a term the council already has; 400 when it closes before it opens. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_createSeason_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecruitmentSeasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a recruitment season",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/seasons/{term}": {
+      "patch": {
+        "description": "404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_updateSeason_v1",
+        "parameters": [
+          {
+            "name": "term",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 40,
+              "example": "Spring 2027",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRecruitmentSeasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecruitmentSeasonDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change a season: its dates, status or retention",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/pnms": {
+      "get": {
+        "description": "Shared fields, never a phone number. Counts only until the season is closed. 404 `council.season_not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_masterList_v1",
+        "parameters": [
+          {
+            "name": "term",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 40,
+              "example": "Spring 2027",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterListDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The council's master list for a season",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/pnms/{pnmId}/phone": {
+      "get": {
+        "description": "Logged before it is read. 404 `pnm.not_found` for anyone not on this council's list. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_phone_v1",
+        "parameters": [
+          {
+            "name": "pnmId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PnmPhoneDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A PNM's phone number",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/duplicates": {
+      "get": {
+        "description": "Suspected duplicates on the council's list: the same name and phone, or the same name and class year. Never merged automatically. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_duplicates_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DuplicatePairDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The merge queue",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/duplicates/dismiss": {
+      "post": {
+        "description": "The pair stops being suggested. 404 `pnm.not_found`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_dismiss_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissDuplicateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Not the same person",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/council/recruitment/merges": {
+      "post": {
+        "description": "Moves registrations and interests to the survivor and repoints each chapter's candidate where it can. Logged; no unmerge. 404 `pnm.not_found`; 409 `pnm.already_merged` or `pnm.two_accounts`. 403 `council.recruitment_off` for a council whose recruitment model is `none`.",
+        "operationId": "CouncilRecruitmentController_merge_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergePnmsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergedPnmsDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Merge two records of one person",
+        "tags": [
+          "Council recruitment"
+        ]
+      }
+    },
+    "/v1/pnms/{pnmId}": {
+      "get": {
+        "description": "Their shared fields, and their phone only when they chose to share it. 404 `pnm.not_found` for any PNM not linked to this chapter.",
+        "operationId": "ChapterPnmController_get_v1",
+        "parameters": [
+          {
+            "name": "pnmId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterPnmDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A PNM linked to this chapter",
+        "tags": [
+          "Rush"
         ]
       }
     }
@@ -36509,7 +37720,20 @@
             "enum": [
               "none",
               "extended"
-            ]
+            ],
+            "description": "The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole."
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state (#5973)."
           },
           "created_by": {
             "type": "string",
@@ -36537,9 +37761,41 @@
           "stage",
           "closed_reason",
           "bid_status",
+          "bid_state",
           "created_by",
           "created_at",
           "viewer_has_voted"
+        ]
+      },
+      "RushNameMatchDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string",
+            "description": "The stage key."
+          },
+          "stage_label": {
+            "type": "string",
+            "description": "The stage's name in this chapter, to tell two matches apart."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "stage",
+          "stage_label",
+          "created_at"
         ]
       },
       "CreateRushCandidateDto": {
@@ -36610,7 +37866,20 @@
             "enum": [
               "none",
               "extended"
-            ]
+            ],
+            "description": "The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole."
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state (#5973)."
           },
           "created_by": {
             "type": "string",
@@ -36634,6 +37903,7 @@
           "stage",
           "closed_reason",
           "bid_status",
+          "bid_state",
           "created_by",
           "created_at"
         ]
@@ -36845,6 +38115,72 @@
           "follow_up_user_name": {
             "type": "string",
             "nullable": true
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state; `bid_status` is its two-value form for shipped clients. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed."
+          },
+          "bid_extended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_extended_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_confirm_emailed": {
+            "type": "boolean",
+            "description": "Whether the PNM was emailed the one-tap confirmation. The address is never returned."
+          },
+          "bid_answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_answered_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_answered_via": {
+            "type": "string",
+            "enum": [
+              "member",
+              "pnm",
+              "system"
+            ],
+            "nullable": true
+          },
+          "bid_rescind_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_invite_sent": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "On an accepted bid: whether the PNM’s invite to join went out. Null on any other."
           }
         },
         "required": [
@@ -36868,7 +38204,19 @@
           "follow_up_on",
           "follow_up_note",
           "follow_up_user_id",
-          "follow_up_user_name"
+          "follow_up_user_name",
+          "bid_state",
+          "bid_extended_at",
+          "bid_extended_by_name",
+          "bid_expires_at",
+          "bid_acceptance_recorded_at",
+          "bid_acceptance_recorded_by_name",
+          "bid_confirm_emailed",
+          "bid_answered_at",
+          "bid_answered_by_name",
+          "bid_answered_via",
+          "bid_rescind_reason",
+          "bid_invite_sent"
         ]
       },
       "RushPipelineDto": {
@@ -37116,6 +38464,22 @@
           "body"
         ]
       },
+      "RushSettingsSkippedMemberDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ]
+      },
       "RushSettingsDto": {
         "type": "object",
         "properties": {
@@ -37124,11 +38488,86 @@
             "minimum": 1,
             "maximum": 60,
             "description": "Days without a logged contact before an open prospect needs a follow-up."
+          },
+          "bid_expiry_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30,
+            "description": "Days a bid stays open before it expires."
+          },
+          "new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The role an accepted PNM’s invite carries, as picked. Null means the default."
+          },
+          "default_new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role."
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The recruitment contacts Group, told about each interest-form submission."
+          },
+          "contacts_group_skipped": {
+            "description": "Members of the contacts Group who lack `rush:view` and so are skipped.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RushSettingsSkippedMemberDto"
+            }
+          },
+          "card_channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Where an interest-form submission’s candidate card is posted. Null posts none."
           }
         },
         "required": [
-          "stale_days"
+          "stale_days",
+          "bid_expiry_days",
+          "new_member_role_id",
+          "default_new_member_role_id",
+          "contacts_group_id",
+          "contacts_group_skipped",
+          "card_channel_id"
         ]
+      },
+      "SaveRushSettingsDto": {
+        "type": "object",
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "bid_expiry_days": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "new_member_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "A role of this chapter that the caller could invite someone into; null goes back to the default."
+          },
+          "contacts_group_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "card_channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "A channel everyone who can read holds `rush:view`; null posts no card."
+          }
+        }
       },
       "RushContactDto": {
         "type": "object",
@@ -37307,6 +38746,174 @@
           "follow_up_note",
           "follow_up_user_id",
           "follow_up_user_name"
+        ]
+      },
+      "RushBidDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bid_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "extended",
+              "accepted",
+              "declined",
+              "expired",
+              "rescinded"
+            ],
+            "description": "The bid’s full state. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed."
+          },
+          "bid_extended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_extended_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_acceptance_recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Set while a recorded acceptance waits for confirmation."
+          },
+          "bid_acceptance_recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_confirm_emailed": {
+            "type": "boolean",
+            "description": "Whether the PNM was emailed the one-tap confirmation. The address is never returned."
+          },
+          "bid_answered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_answered_by_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who recorded the decline, confirmed or rescinded; null for the PNM and for an expiry."
+          },
+          "bid_answered_via": {
+            "type": "string",
+            "enum": [
+              "member",
+              "pnm",
+              "system"
+            ],
+            "nullable": true,
+            "description": "`member` by a member, `pnm` by the PNM’s own tap, `system` by expiry."
+          },
+          "bid_rescind_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "bid_invite_sent": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "On an accepted bid: whether the PNM’s invite to join went out. Null on any other."
+          },
+          "invite_sent": {
+            "type": "boolean",
+            "description": "On a confirmation: whether the accepted PNM’s invite went out to the email kept for it."
+          }
+        },
+        "required": [
+          "id",
+          "bid_state",
+          "bid_extended_at",
+          "bid_extended_by_name",
+          "bid_expires_at",
+          "bid_acceptance_recorded_at",
+          "bid_acceptance_recorded_by_name",
+          "bid_confirm_emailed",
+          "bid_answered_at",
+          "bid_answered_by_name",
+          "bid_answered_via",
+          "bid_rescind_reason",
+          "bid_invite_sent"
+        ]
+      },
+      "RecordRushAcceptanceDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 320,
+            "description": "The PNM’s email for the one-tap confirmation and the invite. Omit to use a linked member’s account email; with neither, only `rush:manage` can confirm. Never shown to members."
+          }
+        }
+      },
+      "RescindRushBidDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "RushBidConfirmTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the emailed link’s fragment."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "RushBidConfirmationPreviewDto": {
+        "type": "object",
+        "properties": {
+          "chapter_name": {
+            "type": "string"
+          },
+          "recorded_by_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "confirmed",
+              "closed"
+            ],
+            "description": "`waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm."
+          },
+          "invite_sent": {
+            "type": "boolean",
+            "description": "On the tap that confirmed it: whether the invite to join went out."
+          }
+        },
+        "required": [
+          "chapter_name",
+          "recorded_by_name",
+          "expires_at",
+          "status"
         ]
       },
       "GeofenceCircleDto": {
@@ -44477,6 +46084,804 @@
             "description": "As `GET /v1/notifications?limit=50`."
           }
         }
+      },
+      "AffiliationSchoolSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          },
+          "short_name": {
+            "type": "string",
+            "example": "RPI"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short_name"
+        ]
+      },
+      "AffiliationSchoolDto": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "active",
+              "declined",
+              "ended"
+            ]
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "school": {
+            "$ref": "#/components/schemas/AffiliationSchoolSummaryDto"
+          }
+        },
+        "required": [
+          "link_id",
+          "status",
+          "is_primary",
+          "school"
+        ]
+      },
+      "AffiliationCouncilSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "RPI IFC"
+          },
+          "council_type": {
+            "type": "string",
+            "enum": [
+              "ifc",
+              "panhellenic",
+              "nphc",
+              "mgc",
+              "other"
+            ],
+            "nullable": true
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether Frapp staff verified the council."
+          },
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "council_type",
+          "verified",
+          "school_id"
+        ]
+      },
+      "CouncilLinkDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted",
+              "declined",
+              "suspended",
+              "ended"
+            ]
+          },
+          "proposed_by_side": {
+            "type": "string",
+            "enum": [
+              "council",
+              "chapter"
+            ],
+            "description": "Who proposed it: the council invited, or the chapter asked."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "proposed_by_side",
+          "created_at",
+          "decided_at"
+        ]
+      },
+      "ChapterCouncilDto": {
+        "type": "object",
+        "properties": {
+          "council": {
+            "$ref": "#/components/schemas/AffiliationCouncilSummaryDto"
+          },
+          "link": {
+            "nullable": true,
+            "description": "The live link, or null when the chapter isn't linked.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CouncilLinkDto"
+              }
+            ]
+          },
+          "offered": {
+            "type": "boolean",
+            "description": "Whether this council's type is offered the chapter's archetype (council-types.md § Link offers). A chapter may still ask any council at its school."
+          }
+        },
+        "required": [
+          "council",
+          "link",
+          "offered"
+        ]
+      },
+      "ChapterAffiliationsDto": {
+        "type": "object",
+        "properties": {
+          "schools": {
+            "description": "The chapter's live school links, primary first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AffiliationSchoolDto"
+            }
+          },
+          "councils": {
+            "description": "The councils at the chapter's confirmed schools, and any it is linked to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChapterCouncilDto"
+            }
+          }
+        },
+        "required": [
+          "schools",
+          "councils"
+        ]
+      },
+      "LinkSchoolDto": {
+        "type": "object",
+        "properties": {
+          "school_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chapter's school. The officer naming it confirms it in the same step."
+          }
+        },
+        "required": [
+          "school_id"
+        ]
+      },
+      "DecideSchoolLinkDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "declined",
+              "ended"
+            ],
+            "description": "`active` confirms a proposed link, `declined` refuses it, `ended` unlinks a confirmed one (and ends the chapter's council links at that school)."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "SchoolLinkDecisionDto": {
+        "type": "object",
+        "properties": {
+          "link_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "active",
+              "declined",
+              "ended"
+            ]
+          }
+        },
+        "required": [
+          "link_id",
+          "status"
+        ]
+      },
+      "RequestCouncilDto": {
+        "type": "object",
+        "properties": {
+          "council_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The council to ask to join."
+          }
+        },
+        "required": [
+          "council_id"
+        ]
+      },
+      "DecideCouncilLinkDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "declined",
+              "suspended",
+              "ended"
+            ],
+            "description": "`accepted` or `declined` answers the other side's proposal; `accepted` also lifts the council's own suspension. `suspended` is the council's, on a member chapter. `ended` withdraws a proposal or ends a membership, from either side."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ChapterListingDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Phi Gamma Delta"
+          },
+          "org_archetype": {
+            "type": "string",
+            "nullable": true,
+            "example": "ifc"
+          },
+          "university": {
+            "type": "string",
+            "example": "Rensselaer Polytechnic Institute"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "org_archetype",
+          "university"
+        ]
+      },
+      "CouncilChapterDto": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/CouncilLinkDto"
+          },
+          "chapter": {
+            "description": "The chapter's public listing only: never its members or data (#4068 decision 11).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChapterListingDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "link",
+          "chapter"
+        ]
+      },
+      "InviteCandidateDto": {
+        "type": "object",
+        "properties": {
+          "chapter": {
+            "$ref": "#/components/schemas/ChapterListingDto"
+          },
+          "offered": {
+            "type": "boolean",
+            "description": "Whether the council's type is offered this chapter's archetype; offered chapters come first."
+          }
+        },
+        "required": [
+          "chapter",
+          "offered"
+        ]
+      },
+      "InviteChapterDto": {
+        "type": "object",
+        "properties": {
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chapter to invite."
+          }
+        },
+        "required": [
+          "chapter_id"
+        ]
+      },
+      "RecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "example": "Spring 2027"
+          },
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ],
+            "description": "Until it is `closed`, the council sees interests as counts only."
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "description": "Days after `closes_at` a PNM record is kept (default and most 180).",
+            "example": 180
+          }
+        },
+        "required": [
+          "term",
+          "opens_at",
+          "closes_at",
+          "bid_window_opens_at",
+          "bid_window_closes_at",
+          "status",
+          "pnm_retention_days"
+        ]
+      },
+      "CreateRecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "example": "Spring 2027",
+            "maxLength": 40
+          },
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ]
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180
+          }
+        },
+        "required": [
+          "term",
+          "opens_at",
+          "closes_at"
+        ]
+      },
+      "UpdateRecruitmentSeasonDto": {
+        "type": "object",
+        "properties": {
+          "opens_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closes_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bid_window_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "bid_window_closes_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open",
+              "closed"
+            ]
+          },
+          "pnm_retention_days": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180
+          }
+        }
+      },
+      "ChapterTotalDto": {
+        "type": "object",
+        "properties": {
+          "chapter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "interested": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "name",
+          "interested"
+        ]
+      },
+      "MasterListRowDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "has_phone": {
+            "type": "boolean",
+            "description": "Whether a phone number is on file. Reading it is `GET …/phone`, logged."
+          },
+          "interest_count": {
+            "type": "number",
+            "description": "How many of the council's member chapters they showed interest in."
+          },
+          "interested_chapter_ids": {
+            "nullable": true,
+            "description": "Which member chapters, by id: null until the season is closed (counts only in season).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source",
+          "registered_at",
+          "has_phone",
+          "interest_count",
+          "interested_chapter_ids"
+        ]
+      },
+      "MasterListDto": {
+        "type": "object",
+        "properties": {
+          "season": {
+            "$ref": "#/components/schemas/RecruitmentSeasonDto"
+          },
+          "counts_only": {
+            "type": "boolean",
+            "description": "True while the season isn't closed: interests are counts only."
+          },
+          "chapter_totals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChapterTotalDto"
+            }
+          },
+          "pnms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MasterListRowDto"
+            }
+          }
+        },
+        "required": [
+          "season",
+          "counts_only",
+          "chapter_totals",
+          "pnms"
+        ]
+      },
+      "PnmPhoneDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "PnmSharedDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source"
+        ]
+      },
+      "DuplicatePairDto": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PnmSharedDto"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PnmSharedDto"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "same_name_and_phone",
+                "same_name_and_class_year"
+              ]
+            }
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "reasons"
+        ]
+      },
+      "DismissDuplicateDto": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "b": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      },
+      "MergePnmsDto": {
+        "type": "object",
+        "properties": {
+          "survivor_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The record that stays."
+          },
+          "loser_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The record merged into it."
+          }
+        },
+        "required": [
+          "survivor_id",
+          "loser_id"
+        ]
+      },
+      "MergedPnmsDto": {
+        "type": "object",
+        "properties": {
+          "survivor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_conflicts": {
+            "type": "number",
+            "description": "Chapters that already had a candidate for each record keep both until they merge them themselves."
+          }
+        },
+        "required": [
+          "survivor_id",
+          "candidate_conflicts"
+        ]
+      },
+      "ChapterPnmDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "preferred_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "school_email": {
+            "type": "string",
+            "example": "student@rpi.edu"
+          },
+          "class_year": {
+            "type": "number",
+            "nullable": true,
+            "example": 2030
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "Whether the person proved the school address. An imported record that hasn't reaches no chapter."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "interest_form",
+              "council_registration",
+              "council_import"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only when the PNM chose to share it."
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "preferred_name",
+          "school_email",
+          "class_year",
+          "email_verified",
+          "source",
+          "phone"
+        ]
       }
     }
   }

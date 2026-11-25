@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   rushBoardColumns,
   rushCandidatesByColumn,
@@ -12,6 +12,7 @@ import {
   type RushStage,
   type RushTag,
   rushOwnerWords,
+  rushPlacedByBid,
   rushRowMark,
 } from "@repo/hooks";
 import { RowMenu, type RowMenuEntry } from "@/components/shared/row-menu";
@@ -96,7 +97,28 @@ export function RushBoard({
   return (
     <div className={RUSH_BOARD_CLASS}>
       {columns.map((column) => {
-        const cards = byColumn.get(column.id) ?? [];
+        const inColumn = byColumn.get(column.id) ?? [];
+        // Closed folds in the accepted prospects (#5973), listed first under
+        // their own label, as the design's Closed column counts them apart.
+        const accepted =
+          column.category === "closed"
+            ? inColumn.filter((c) => c.bid_state === "accepted")
+            : [];
+        const cards =
+          accepted.length > 0
+            ? [
+                ...accepted,
+                ...inColumn.filter((c) => c.bid_state !== "accepted"),
+              ]
+            : inColumn;
+        const groupAt = (index: number): string | null => {
+          if (accepted.length === 0) return null;
+          if (index === 0) return `Accepted · ${accepted.length}`;
+          if (index === accepted.length && index < cards.length) {
+            return `Closed · ${cards.length - accepted.length}`;
+          }
+          return null;
+        };
         const labelId = `rush-column-${column.id}`;
         const accepts = (candidate: RushPipelineCandidate | null) =>
           !!candidate &&
@@ -141,37 +163,61 @@ export function RushBoard({
               </SectionLabel>
             </div>
             <ul className="flex min-h-16 flex-col gap-2">
-              {cards.map((candidate) => (
-                <RushCard
-                  key={candidate.id}
-                  candidate={candidate}
-                  stages={stages}
-                  tags={tags}
-                  closed={column.category === "closed"}
-                  staleDays={staleDays}
-                  today={today}
-                  movable={movable}
-                  canMove={canMove}
-                  selected={candidate.id === selectedId}
-                  held={candidate.id === heldId}
-                  onOpen={() => onOpen(candidate)}
-                  onMove={(to) => onMove(candidate, to)}
-                  onDragStart={(event) => {
-                    held.current = candidate;
-                    setHeldId(candidate.id);
-                    event.dataTransfer?.setData("text/plain", candidate.id);
-                    if (event.dataTransfer) {
-                      event.dataTransfer.effectAllowed = "move";
-                    }
-                  }}
-                  onDragEnd={endDrag}
-                />
+              {cards.map((candidate, index) => (
+                <RushCardInGroup key={candidate.id} group={groupAt(index)}>
+                  <RushCard
+                    candidate={candidate}
+                    stages={stages}
+                    tags={tags}
+                    closed={column.category === "closed"}
+                    staleDays={staleDays}
+                    today={today}
+                    movable={movable}
+                    canMove={canMove}
+                    // Only a bid action moves a card into Bid extended or out
+                    // of it, and into Closed as Accepted (#5973); its stage
+                    // still changes from Move to and the panel.
+                    canDrag={canMove && !rushPlacedByBid(candidate)}
+                    selected={candidate.id === selectedId}
+                    held={candidate.id === heldId}
+                    onOpen={() => onOpen(candidate)}
+                    onMove={(to) => onMove(candidate, to)}
+                    onDragStart={(event) => {
+                      held.current = candidate;
+                      setHeldId(candidate.id);
+                      event.dataTransfer?.setData("text/plain", candidate.id);
+                      if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = "move";
+                      }
+                    }}
+                    onDragEnd={endDrag}
+                  />
+                </RushCardInGroup>
               ))}
             </ul>
           </section>
         );
       })}
     </div>
+  );
+}
+
+/** A card, after its group's label when it starts one (Accepted, Closed). */
+function RushCardInGroup({
+  group,
+  children,
+}: {
+  group: string | null;
+  children: ReactNode;
+}) {
+  if (!group) return <>{children}</>;
+  return (
+    <>
+      <li className="px-2 pt-1 text-caption font-semibold text-muted-foreground">
+        {group}
+      </li>
+      {children}
+    </>
   );
 }
 
@@ -207,6 +253,7 @@ function RushCard({
   today,
   movable,
   canMove,
+  canDrag,
   selected,
   held,
   onOpen,
@@ -222,6 +269,7 @@ function RushCard({
   today: string;
   movable: readonly RushStage[];
   canMove: boolean;
+  canDrag: boolean;
   selected: boolean;
   held: boolean;
   onOpen: () => void;
@@ -242,13 +290,13 @@ function RushCard({
     <RowMenu entries={entries} label={`More for ${candidate.display_name}`}>
       {(menuButton) => (
         <li
-          draggable={canMove}
+          draggable={canDrag}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           data-rush-card={candidate.id}
           className={cn(
             "group relative rounded-[14px] border border-border bg-background transition-[opacity,box-shadow]",
-            canMove && "cursor-grab active:cursor-grabbing",
+            canDrag && "cursor-grab active:cursor-grabbing",
             selected && "border-input bg-card",
             held && "opacity-60 shadow-lg ring-1 ring-border",
           )}
@@ -286,7 +334,7 @@ function RushCard({
               max={2}
               className="pt-1"
             />
-            {candidate.bid_status === "extended" || (work && !quietFollowUp) ? (
+            {candidate.bid_state !== "none" || (work && !quietFollowUp) ? (
               <span className="flex flex-wrap gap-1 pt-0.5">
                 <RushBidBadge candidate={candidate} />
                 {quietFollowUp ? null : <RushFollowUpFact state={work} />}

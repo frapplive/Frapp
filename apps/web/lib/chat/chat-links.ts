@@ -16,13 +16,14 @@ import {
 export const CHAT_CHANNEL_PARAM = CHAT_LINK_CHANNEL_PARAM;
 export const CHAT_MESSAGE_PARAM = CHAT_LINK_MESSAGE_PARAM;
 /**
- * Which list the chat panel opens on (#3774): `channels` or `direct`. The
- * nav's Direct messages row links to `/chat?view=direct` below the
- * side-by-side width. A link that names a channel needs no view: the panel
- * follows the channel's kind, so a notification for a DM opens on Direct
- * messages without knowing it is one.
+ * The two kinds of conversation, and the two lists that hold them: the
+ * chapter's channels, which live in the sidebar, and the member's direct and
+ * group messages, which the Messages page (`/messages`) lists. A link that
+ * names a conversation needs to say neither: the shell follows its kind, so a
+ * notification for a DM opens on Messages without knowing it is one
+ * (`dashboard-shell.tsx`).
  */
-export const CHAT_VIEW_PARAM = "view";
+export type ChatView = "channels" | "direct";
 
 export interface ChatLinkTarget {
   channelId?: string | null;

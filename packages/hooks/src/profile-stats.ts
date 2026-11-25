@@ -149,7 +149,16 @@ export interface ProfileStats {
  * `data` through a failed background refetch, and a number drawn above
  * "couldn't load" contradicts itself.
  */
-export function useMyProfileStats(): ProfileStats {
+export function useMyProfileStats(
+  /**
+   * Which numbers the screen draws. One it leaves out (its module is off)
+   * sends no read: the screen hides that number (P5.8), so reading it would
+   * only spend a request on a figure nobody sees.
+   */
+  wanted: { points?: boolean; service?: boolean } = {},
+): ProfileStats {
+  const wantPoints = wanted.points ?? true;
+  const wantService = wanted.service ?? true;
   const chapterId = useActiveChapterId();
   const viewerUserId = useViewerUserId();
   const permissionsQuery = useMyPermissions();
@@ -165,9 +174,11 @@ export function useMyProfileStats(): ProfileStats {
   const canView =
     permissionsKnown && can("members:view", permissions) && !isCouncil;
   const canRead = canView && kindSettled;
-  const pointsQuery = useMyPoints(undefined, undefined, { enabled: canRead });
+  const pointsQuery = useMyPoints(undefined, undefined, {
+    enabled: canRead && wantPoints,
+  });
   const serviceQuery = useServiceEntries(viewerUserId ?? undefined, undefined, {
-    enabled: canRead && !!viewerUserId,
+    enabled: canRead && wantService && !!viewerUserId,
   });
   const minutes = sumApprovedServiceMinutes(serviceQuery.data);
   return {

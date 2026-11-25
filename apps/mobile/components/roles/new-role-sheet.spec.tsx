@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({ createRole: vi.fn() }));
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useCreateRole: () => ({ mutateAsync: state.createRole, isPending: false }),
+  useChapterRoleColors: () => [],
+  useViewerDisplayName: () => "Marcus Ellison",
 }));
 
 vi.mock("@/lib/chapter-branding", () => ({
