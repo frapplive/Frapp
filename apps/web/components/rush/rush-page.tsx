@@ -9,6 +9,7 @@ import {
   useRushPipeline,
   useViewerUserId,
   type RushPipelineCandidate,
+  rushDashboard,
   rushOpenProspectCount,
   rushListSubtitle,
 } from "@repo/hooks";
@@ -44,12 +45,17 @@ import { RushBoard } from "./rush-board";
 import { RushList } from "./rush-list";
 import { useRushMove } from "./rush-move";
 import { RushProspectPanel } from "./rush-prospect-panel";
+import { RushSummary } from "./rush-summary";
 import { RushPageSkeleton } from "./rush-skeleton";
+
+/** Board and List lay the prospects out; Summary counts them (#5973). */
+type RushLayout = ListLayout | "summary";
 
 const LAYOUT_OPTIONS = [
   { value: "grid", label: "Board" },
   { value: "list", label: "List" },
-] as const satisfies readonly { value: ListLayout; label: string }[];
+  { value: "summary", label: "Summary" },
+] as const satisfies readonly { value: RushLayout; label: string }[];
 
 type RushView = "all" | "follow_up";
 
@@ -97,7 +103,15 @@ export function RushPage() {
   const term = vocab("recruitment", useChapterVocabulary());
   // Every write on the page is a paid op, as the chat card's are (#841).
   const gate = useSubscriptionGate();
-  const [layout, setLayout] = useListLayout("rush");
+  const [listLayout, setListLayout] = useListLayout("rush");
+  // Summary is a look at the whole pipeline, not a way to lay out cards, so
+  // it isn't kept between visits: the page opens on the board or list.
+  const [summary, setSummary] = useState(false);
+  const layout: RushLayout = summary ? "summary" : listLayout;
+  const setLayout = (next: RushLayout) => {
+    setSummary(next === "summary");
+    if (next !== "summary") setListLayout(next);
+  };
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [viewPick, setViewPick] = useState<RushView | null>(null);
@@ -210,6 +224,20 @@ export function RushPage() {
           : "No prospects yet."}
       </InlineNote>
     );
+  } else if (layout === "summary") {
+    // Counts the whole pipeline, whatever the view or search narrows.
+    body = (
+      <RushSummary
+        dashboard={rushDashboard(stages, candidates, {
+          viewerId,
+          staleDays,
+          today,
+          viewResults: access.viewResults,
+        })}
+        canOwn={access.add}
+        onOpen={setOpenId}
+      />
+    );
   } else if (searching && shown.length === 0) {
     body = (
       <InlineNote>
@@ -230,14 +258,15 @@ export function RushPage() {
 
   return (
     <div className="@container space-y-6">
-      {/* Board and List as plain words beside the title (#5947), none
-          until there is a prospect to lay out. */}
+      {/* Board, List and Summary as plain words beside the title (#5947),
+          none until there is a prospect to lay out. Summary counts the whole
+          pipeline, so it hides the view and search that narrow the others. */}
       <PageViews>
         {/* All / Follow up (#5934): which prospects, a view of the page
             like Tasks' My tasks / Everyone's, for roles that work them. */}
         <ViewLabels
           label="Which prospects"
-          options={canSwitchView ? VIEW_OPTIONS : []}
+          options={canSwitchView && !summary ? VIEW_OPTIONS : []}
           value={pageView}
           onChange={setViewPick}
         />
@@ -252,7 +281,7 @@ export function RushPage() {
         <span className="min-w-0 truncate text-sm text-muted-foreground tabular-nums">
           {rushListSubtitle(open, due)}
         </span>
-        {candidates.length > 0 ? (
+        {candidates.length > 0 && !summary ? (
           <div className="relative w-44 min-w-0 shrink @max-[34rem]:w-28">
             <SearchGlyph className={dashboardToolbarSearchGlyphClassName} />
             <Input

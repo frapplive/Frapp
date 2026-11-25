@@ -44,6 +44,7 @@ import { InlineNote } from "@/components/inline-note";
 import { OptionSheet, type SheetOption } from "@/components/option-sheet";
 import { ErrorState, SkeletonRegion } from "@/components/state-block";
 import { useRefetchAll } from "@/components/pull-to-refresh";
+import { RushBidSection } from "@/components/rush/rush-bid-section";
 import { RushContacts } from "@/components/rush/rush-contacts";
 import {
   RUSH_FOLLOW_UP,
@@ -361,6 +362,13 @@ export function RushProspectScreen() {
           />
         ) : null}
       </ListSection>
+
+      <RushBidSection
+        candidate={candidate}
+        access={access}
+        viewerId={viewerId}
+        today={today}
+      />
 
       <RushProspectForm
         candidateId={candidate.id}

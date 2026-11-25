@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { EYEBROW } from "@/components/ui/typography";
 import { denseListClassName } from "@/components/shared/table-controls";
 import { StaleReadNotice } from "@/components/shared/stale-read-notice";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ViewLabels } from "@/components/shared/view-labels";
 import {
   readIsOffline,
   PermissionsOfflineSurface,
@@ -343,40 +343,38 @@ function ChatReportsQueue({ channelId }: { channelId?: string }) {
         </h2>
         <p className="text-caption text-muted">{copy.description}</p>
       </div>
-      <Tabs
-        value={status}
-        onValueChange={(next) => setStatus(next as ChatReportStatus)}
-      >
-        {/*
-            Four labels plus the primitive's 24px gaps run past a 375px page,
-            so the rail scrolls in its own box rather than pushing the page
-            (the `test:floor` rule). The wrapper scrolls, not the list: the
-            active underline sits on the list's own hairline, and a scrolling
-            list would clip it.
-          */}
-        <div className="overflow-x-auto">
-          <TabsList className="min-w-max" aria-label="Report status">
-            {CHAT_REPORT_TABS.map((tab) => (
-              <TabsTrigger key={tab.status} value={tab.status}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-        {CHAT_REPORT_TABS.map((tab) => (
-          <TabsContent key={tab.status} value={tab.status}>
-            {/* Radix unmounts inactive panels, so one slice is read at a time. */}
-            <ReportList
-              tab={tab}
-              channelId={channelId}
-              auditLogChannelId={auditLogChannelId}
-              busy={busy}
-              onResolve={(report, next) => void handleResolve(report, next)}
-              onRemove={(report, author) => void handleRemove(report, author)}
-            />
-          </TabsContent>
-        ))}
-      </Tabs>
+      {/*
+          The statuses as plain words (`ViewLabels`, #5947). Four of them
+          can run past a 375px page, so they scroll in their own box rather
+          than pushing the page (the `test:floor` rule). A scroll box clips
+          whatever leaves its padding box, so the box reaches 3px past the
+          labels on every side for the focus ring, and 7px further left so
+          the first word still lines up with the heading (what `flush` does
+          outside a scroll box).
+        */}
+      <div className="-my-[3px] -ml-[10px] -mr-[3px] overflow-x-auto p-[3px]">
+        <ViewLabels
+          label="Report status"
+          options={CHAT_REPORT_TABS.map((tab) => ({
+            value: tab.status,
+            label: tab.label,
+          }))}
+          value={status}
+          onChange={setStatus}
+        />
+      </div>
+      {/* One slice is read at a time. */}
+      {CHAT_REPORT_TABS.filter((tab) => tab.status === status).map((tab) => (
+        <ReportList
+          key={tab.status}
+          tab={tab}
+          channelId={channelId}
+          auditLogChannelId={auditLogChannelId}
+          busy={busy}
+          onResolve={(report, next) => void handleResolve(report, next)}
+          onRemove={(report, author) => void handleRemove(report, author)}
+        />
+      ))}
     </section>
   );
 }

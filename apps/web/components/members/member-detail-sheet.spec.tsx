@@ -102,6 +102,39 @@ vi.mock("@repo/hooks", async () => ({
   useAssignPledgeClasses: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// Points is off unless a test turns it on, so the ⋯ tests below are about
+// what they name: with `*`, Adjust points would otherwise always be in it.
+const pointsModule = vi.hoisted(() => ({ on: false, writesAllowed: true }));
+vi.mock("@/lib/hooks/use-chapter-module-gate", () => ({
+  useChapterModuleGateState: () => ({
+    status: "ready",
+    isModuleEnabled: (key: string) => key !== "points" || pointsModule.on,
+  }),
+}));
+vi.mock("@/components/shared/subscription-gate", () => ({
+  useSubscriptionGate: () => ({
+    allowed: pointsModule.writesAllowed,
+    controlProps: () => ({
+      title: pointsModule.writesAllowed ? undefined : "Your plan has lapsed.",
+    }),
+  }),
+}));
+// The form has its own spec; here it only has to open for the right member.
+vi.mock("@/components/points/points-adjustment-dialog", () => ({
+  PointsAdjustmentDialog: ({
+    open,
+    member,
+  }: {
+    open: boolean;
+    member: { userId: string; name: string };
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={`Adjust ${member.name}'s points`}>
+        {member.userId}
+      </div>
+    ) : null,
+}));
+
 vi.mock("@/lib/hooks/use-chapter-vocabulary", () => ({
   useChapterVocabulary: () => undefined,
 }));
@@ -183,6 +216,8 @@ beforeEach(() => {
   rolesState.refetch.mockReset();
   mockCurrentUserId.current = "viewer-1";
   mockCurrentUserLoading.current = false;
+  pointsModule.on = false;
+  pointsModule.writesAllowed = true;
 });
 
 describe("MemberDetailSheet loads by user id (#3726)", () => {
@@ -679,6 +714,79 @@ describe("MemberDetailSheet Remove from chapter", () => {
 });
 
 // #3711: the member's own phone, a tap away.
+describe("MemberDetailSheet Adjust points (#5950)", () => {
+  const moreButton = () =>
+    screen.queryByRole("button", { name: "More for Jane Smith" });
+
+  beforeEach(() => {
+    pointsModule.on = true;
+  });
+
+  it("opens the adjustment for this member from the ⋯ menu", async () => {
+    const user = userEvent.setup();
+    renderProfile();
+    await user.click(moreButton()!);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Adjust points" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Adjust Jane Smith's points" }),
+    ).toHaveTextContent("u1");
+  });
+
+  it("lists it before Remove from chapter, which stays last", async () => {
+    const user = userEvent.setup();
+    renderProfile({ ...baseMember, viewer_can_remove: true });
+    await user.click(moreButton()!);
+    const items = (await screen.findAllByRole("menuitem")).map(
+      (item) => item.textContent,
+    );
+    expect(items[0]).toBe("Adjust points");
+    expect(items.at(-1)).toBe("Remove from chapter");
+  });
+
+  it("is offered only to a role that may adjust points", () => {
+    mockPermissions.current = ["members:view"];
+    renderProfile();
+    expect(moreButton()).not.toBeInTheDocument();
+  });
+
+  it("is never offered against yourself, which the API refuses", () => {
+    mockCurrentUserId.current = "u1";
+    renderProfile();
+    expect(moreButton()).not.toBeInTheDocument();
+  });
+
+  it("is not offered while the chapter has Points off", () => {
+    pointsModule.on = false;
+    renderProfile();
+    expect(moreButton()).not.toBeInTheDocument();
+  });
+
+  it("is held, and says why, while the plan blocks writes", async () => {
+    const user = userEvent.setup();
+    pointsModule.writesAllowed = false;
+    renderProfile();
+    await user.click(moreButton()!);
+    const item = await screen.findByRole("menuitem", { name: "Adjust points" });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("links the Points row to this member's ledger for a role that reads it", () => {
+    renderProfile(baseMember, { points: 142 });
+    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute(
+      "href",
+      "/settings?tab=points&member=u1",
+    );
+  });
+
+  it("draws no ledger link for a role that can't read every member's points", () => {
+    mockPermissions.current = ["members:view", "points:adjust"];
+    renderProfile(baseMember, { points: 142 });
+    expect(screen.queryByRole("link", { name: "Ledger" })).toBeNull();
+  });
+});
+
 describe("MemberDetailSheet phone", () => {
   it("links the phone to a call", () => {
     renderProfile({ ...baseMember, phone: "+1 (518) 555-0142" });

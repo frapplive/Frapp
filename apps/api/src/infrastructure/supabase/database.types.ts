@@ -164,6 +164,7 @@ import type {
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
 import type { RushCandidateTableRow } from '#domain/entities/rush-candidate.entity';
+import type { RushBidConfirmation } from '#domain/repositories/rush-bid.repository.interface';
 import type { StripeWebhookClaimOutcome } from '#domain/repositories/stripe-webhook-event.repository.interface';
 
 /**
@@ -331,6 +332,7 @@ export interface Database {
       push_tokens: TableDefinition<PushToken>;
       role_tiers: TableDefinition<RoleTier>;
       roles: TableDefinition<Role>;
+      rush_bid_confirmations: TableDefinition<RushBidConfirmation>;
       rush_candidate_contacts: TableDefinition<RushCandidateContact>;
       rush_candidate_notes: TableDefinition<RushCandidateNote>;
       rush_candidate_ratings: TableDefinition<RushCandidateRating>;
@@ -760,7 +762,7 @@ export interface Database {
         Args: { p_import_id: string; p_chapter_id: string };
         Returns: string[];
       };
-      /** `20261124205834` (#5974) — deletes a PNM and its cascade; returns the count. */
+      /** `20261124223705` (#5974) — deletes a PNM and its cascade; returns the count. */
       delete_pnm: {
         Args: { p_pnm_id: string };
         Returns: number;
@@ -865,6 +867,28 @@ export interface Database {
       /** `20261112165020` (#714) — expires unsettled holds; returns the count. */
       expire_ai_spend_holds: {
         Args: { p_older_than: string };
+        Returns: number;
+      };
+      /** `20261124214736` (#5973) — expires open bids past their day; returns the count. */
+      expire_rush_bids: {
+        Args: { p_now: string };
+        Returns: number;
+      };
+      /**
+       * `20261125000245` (#5949). Files a meeting's posted minutes as a
+       * `chapter_documents` row, or follows its name when filed already;
+       * `null` when the minutes aren't the chapter's or aren't posted.
+       */
+      file_minutes_document: {
+        Args: { p_chapter_id: string; p_meeting_id: string };
+        Returns: string | null;
+      };
+      /**
+       * `20261125000245` (#5949). Files up to `p_limit` posted minutes that
+       * have no row yet, in every chapter; returns how many it filed.
+       */
+      file_unfiled_minutes: {
+        Args: { p_limit: number };
         Returns: number;
       };
       /** `20261112165050` (#720) — marks a source indexed or skipped. */
@@ -1147,7 +1171,7 @@ export interface Database {
         };
         Returns: Task[];
       };
-      /** `20261124205834` (#5974) — `returns jsonb`: `PnmMergeResult`. */
+      /** `20261124223705` (#5974) — `returns jsonb`: `PnmMergeResult`. */
       merge_pnms: {
         Args: {
           p_council_id: string;
@@ -1186,7 +1210,7 @@ export interface Database {
         Args: { p_token_hash: string };
         Returns: Json;
       };
-      /** `20261124205834` (#5974) — the PNM retention sweep; returns the count. */
+      /** `20261124223705` (#5974) — the PNM retention sweep; returns the count. */
       purge_expired_pnms: {
         Args: { p_now: string };
         Returns: number;
@@ -1246,7 +1270,7 @@ export interface Database {
           chunk_count: number;
         }[];
       };
-      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
+      /** `20261124223705` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, interest_id, registration_id }`. */
       record_pnm_interest: {
         Args: {
           p_pnm_id: string;
@@ -1574,7 +1598,7 @@ export interface Database {
         };
         Returns: ChatSidebarPreferences[];
       };
-      /** `20261124205834` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
+      /** `20261124223705` (#5974) — `returns jsonb`: `CouncilChapterStatusResult`. */
       set_council_chapter_status: {
         Args: {
           p_council_id: string;
@@ -1600,7 +1624,7 @@ export interface Database {
         };
         Returns: Member[];
       };
-      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
+      /** `20261124223705` (#5974) — `returns jsonb` `{ ok, reason, link }`. */
       set_school_chapter_status: {
         Args: {
           p_link_id: string;
@@ -1721,7 +1745,7 @@ export interface Database {
         Args: { p_chapter_id: string; p_user_id: string };
         Returns: number | null;
       };
-      /** `20261124205834` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
+      /** `20261124223705` (#5974) — `returns jsonb` `{ ok, reason, pnm_id, created }`. */
       upsert_verified_pnm: {
         Args: {
           p_school_id: string;

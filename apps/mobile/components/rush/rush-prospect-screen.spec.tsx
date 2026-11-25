@@ -37,9 +37,34 @@ const setTags = vi.hoisted(() => vi.fn());
 const addNote = vi.hoisted(() => vi.fn());
 const deleteNote = vi.hoisted(() => vi.fn());
 
+const bidMutate = vi.hoisted(() => ({
+  extend: vi.fn(),
+  decline: vi.fn(),
+  accept: vi.fn().mockResolvedValue({}),
+  confirm: vi.fn(),
+  rescind: vi.fn().mockResolvedValue({}),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useCandidateForm: () => ({ data: undefined }),
+  useBidRushCandidate: () => ({ mutate: bidMutate.extend, isPending: false }),
+  useRecordRushDecline: () => ({
+    mutate: bidMutate.decline,
+    isPending: false,
+  }),
+  useRecordRushAcceptance: () => ({
+    mutateAsync: bidMutate.accept,
+    isPending: false,
+  }),
+  useConfirmRushAcceptance: () => ({
+    mutate: bidMutate.confirm,
+    isPending: false,
+  }),
+  useRescindRushBid: () => ({
+    mutateAsync: bidMutate.rescind,
+    isPending: false,
+  }),
   useMyPermissions: () => ({ data: { permissions: state.permissions } }),
   useCurrentChapter: () => ({ data: { enabled_modules: {} } }),
   useViewerUserId: () => state.viewerId,
@@ -169,6 +194,18 @@ const CANDIDATE = {
   follow_up_note: null,
   follow_up_user_id: null,
   follow_up_user_name: null,
+  bid_state: "none" as const,
+  bid_extended_at: null,
+  bid_extended_by_name: null,
+  bid_expires_at: null,
+  bid_acceptance_recorded_at: null,
+  bid_acceptance_recorded_by_name: null,
+  bid_confirm_emailed: false,
+  bid_answered_at: null,
+  bid_answered_by_name: null,
+  bid_answered_via: null,
+  bid_rescind_reason: null,
+  bid_invite_sent: null,
 };
 
 const TAGS = [
@@ -906,6 +943,74 @@ describe("opened cold from a follow-up or stale push (#5934)", () => {
     vi.mocked(useLocalSearchParams).mockReturnValue({ candidateId: "gone" });
     expect(screenText(render())).toContain(
       "This prospect is no longer on the list.",
+    );
+  });
+});
+
+describe("a prospect's bid on the phone (#5973)", () => {
+  const BIDDER = [...VIEW, "rush:bid"];
+
+  beforeEach(() => {
+    for (const fn of Object.values(bidMutate)) fn.mockClear();
+  });
+
+  it("has no Bid section for a role without rush:bid while no bid is out", () => {
+    expect(screenText(render())).not.toContain("No bid yet");
+  });
+
+  it("offers Extend bid with rush:bid", () => {
+    state.permissions = BIDDER;
+    const tree = render();
+    expect(screenText(tree)).toContain("No bid yet");
+    act(() => button(tree, "Extend bid")[0]!.props.onPress());
+    expect(bidMutate.extend).toHaveBeenCalledWith(
+      state.candidate.id,
+      expect.anything(),
+    );
+  });
+
+  it("reads Waiting to confirm in web's words, with Confirm for rush:manage", () => {
+    state.permissions = [...BIDDER, "rush:manage"];
+    state.candidate = {
+      ...CANDIDATE,
+      bid_state: "extended",
+      bid_status: "extended",
+      bid_extended_at: "2026-11-24T12:00:00Z",
+      bid_extended_by_name: "Chris Diaz",
+      bid_expires_at: "2026-12-01T12:00:00Z",
+      bid_acceptance_recorded_at: "2026-11-24T13:00:00Z",
+      bid_acceptance_recorded_by_name: "Chris Diaz",
+      bid_confirm_emailed: true,
+    };
+    const tree = render();
+    const text = screenText(tree);
+    expect(text).toContain("Recorded by Chris Diaz, waiting to be confirmed");
+    expect(text).toContain(
+      "Emailed them to confirm. It expires December 1 if nobody does.",
+    );
+    expect(button(tree, "Record acceptance")).toEqual([]);
+    act(() => button(tree, "Confirm acceptance")[0]!.props.onPress());
+    expect(bidMutate.confirm).toHaveBeenCalledWith(
+      { candidateId: CANDIDATE.id },
+      expect.anything(),
+    );
+  });
+
+  it("asks before recording a decline", () => {
+    state.permissions = BIDDER;
+    state.candidate = {
+      ...CANDIDATE,
+      bid_state: "extended",
+      bid_status: "extended",
+      bid_extended_at: "2026-11-24T12:00:00Z",
+      bid_expires_at: "2026-12-01T12:00:00Z",
+    };
+    vi.mocked(Alert.alert).mockClear();
+    const tree = render();
+    act(() => button(tree, "Record decline")[0]!.props.onPress());
+    expect(bidMutate.decline).not.toHaveBeenCalled();
+    expect(vi.mocked(Alert.alert).mock.calls[0]![0]).toBe(
+      `Record that ${CANDIDATE.display_name} declined?`,
     );
   });
 });

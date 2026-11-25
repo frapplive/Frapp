@@ -2,24 +2,21 @@
 
 import { useMemo } from "react";
 import { can } from "@repo/validation";
-import { useGeofences } from "./use-study";
 import { useDocuments } from "./use-documents";
 
 /**
  * Features a member isn't sent to until an officer sets them up
  * (`spec/product/modules.md` § Not-set-up features).
  *
- * A chapter with no active study zones has a Study hours page that can only
- * say so, and a chapter with no documents has a Documents page that can only
- * say so. Neither is something a member can fix, so the web nav, the mobile
- * You tab and the web Ask popover leave it out until the first zone or
- * document exists.
+ * A chapter with no documents has a Documents page that can only say so,
+ * which no member can fix, so the web nav and the phone's You tab leave it
+ * out until the first document exists. It stays for whoever can upload,
+ * because its page is where the upload happens.
  *
- * Documents stays for whoever can upload, because its page is where the
- * upload happens. Study hours hides from everyone: zones are made in the web
- * app's Study zones tool, which neither Study page links to, so an officer
- * would land on the same dead end (the officer setup checklist on Chat home
- * opens the zones tool instead).
+ * Study hours was the other such row until it left both navs (#5950): the
+ * web's study sessions open from Profile, and the phone's from the Study
+ * gauge and New, so nothing here hides it any more. The rule in
+ * `spec/product/modules.md` stands for any entry point that comes back.
  *
  * Backwork is not here: members upload it themselves (`backwork:upload` is in
  * the Member and New Member roles), so an empty library is theirs to start,
@@ -30,7 +27,7 @@ import { useDocuments } from "./use-documents";
  * answers "none", or on the list's module being off, since then nothing can
  * be in it (and the read would be refused).
  */
-export type UnsetFeatureKey = "study" | "documents";
+export type UnsetFeatureKey = "documents";
 
 interface UnsetFeatureDefinition {
   /**
@@ -49,8 +46,6 @@ interface UnsetFeatureDefinition {
 const UNSET_FEATURES: Readonly<
   Record<UnsetFeatureKey, UnsetFeatureDefinition>
 > = {
-  // Study hours needs an active zone to study in, made in the web zones tool.
-  study: { setUpBy: null, module: "geofences" },
   documents: { setUpBy: "chapter_docs:upload", module: "documents" },
 };
 
@@ -105,8 +100,9 @@ function lengthOf(data: unknown): number | undefined {
 }
 
 /**
- * Only active zones count: both Study pages list just those, and a zone with
+ * Only active zones count: a member can study only in those, and a zone with
  * sessions can't be deleted, so a chapter done with zones deactivates them.
+ * The setup checklist reads this (`setup-checklist.ts`).
  */
 export function activeZoneCount(data: unknown): number | undefined {
   return Array.isArray(data)
@@ -134,27 +130,23 @@ export function selectHiddenUnsetFeatures({
 /**
  * The features to leave out for this viewer, reading a feature's list only
  * when the viewer can't set it up and its module is on.
- * The reads share their cache with the Study and Documents screens.
+ * The read shares its cache with the Documents screen.
  */
 export function useHiddenUnsetFeatures(
   permissions: UnsetFeatureInput["permissions"],
   isModuleEnabled: UnsetFeatureInput["isModuleEnabled"],
 ): ReadonlySet<UnsetFeatureKey> {
-  const zones = useGeofences({
-    enabled: needsUnsetFeatureRead("study", permissions, isModuleEnabled),
-  });
   const documents = useDocuments({
     enabled: needsUnsetFeatureRead("documents", permissions, isModuleEnabled),
   });
-  const zoneCount = activeZoneCount(zones.data);
   const documentCount = lengthOf(documents.data);
   return useMemo(
     () =>
       selectHiddenUnsetFeatures({
         permissions,
         isModuleEnabled,
-        counts: { study: zoneCount, documents: documentCount },
+        counts: { documents: documentCount },
       }),
-    [permissions, isModuleEnabled, zoneCount, documentCount],
+    [permissions, isModuleEnabled, documentCount],
   );
 }

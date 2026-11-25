@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { MINUTES_DOCUMENTS_HREF } from "@/components/documents/document-links";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
@@ -198,8 +199,11 @@ export function MinutesPage({ id }: { id: string }) {
           onRetry={missing ? undefined : () => void query.refetch()}
         />
         <p className="text-center text-sm">
-          <Link href="/meetings" className={inlineNoteActionClassName}>
-            Back to Meetings
+          <Link
+            href={MINUTES_DOCUMENTS_HREF}
+            className={inlineNoteActionClassName}
+          >
+            Back to minutes
           </Link>
         </p>
       </div>
@@ -510,7 +514,7 @@ function Minutes({
     try {
       await remove.mutateAsync(meeting.id);
       toast({ title: "Minutes deleted" });
-      router.push("/meetings");
+      router.push(MINUTES_DOCUMENTS_HREF);
     } catch (error) {
       toast({
         title: "Couldn't delete the minutes",

@@ -5,15 +5,12 @@ import type {
 
 export const RUSH_CANDIDATE_REPOSITORY = 'RUSH_CANDIDATE_REPOSITORY';
 
-/** A name lookup reads at most this many matches; two already answer 409. */
-export const RUSH_NAME_MATCHES_MAX = 10;
-
 export interface IRushCandidateRepository {
   findById(id: string, chapterId: string): Promise<RushCandidate | null>;
   /**
-   * Every candidate with the name, oldest first, up to
-   * {@link RUSH_NAME_MATCHES_MAX}. Two PNMs from the interest form may share
-   * a name (`ifc-recruitment.md` § Name lookup).
+   * Every candidate in the chapter with this name key, oldest first. Names
+   * are unique only among unlinked candidates (`ifc-recruitment.md` § Name
+   * lookup), so a lookup can match several.
    */
   findByNameKey(chapterId: string, nameKey: string): Promise<RushCandidate[]>;
   create(
@@ -22,7 +19,6 @@ export interface IRushCandidateRepository {
       created_at?: string;
     },
   ): Promise<RushCandidate>;
-  setBidExtended(id: string, chapterId: string): Promise<RushCandidate>;
   insertVote(
     candidateId: string,
     chapterId: string,

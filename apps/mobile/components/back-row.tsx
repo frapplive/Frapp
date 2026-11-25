@@ -5,6 +5,7 @@ import { SignetTokens } from "@repo/theme/signet";
 import { BackGlyph } from "@/components/control-glyphs";
 import { GlassSurface } from "@/components/glass-surface";
 import { useScreenBelow } from "@/lib/back-target";
+import { MINUTES_DOCUMENTS_HREF } from "@/lib/more/document-links";
 import { goBackTo } from "@/lib/href";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { pageSurfaces } from "@/lib/surfaces";
@@ -81,6 +82,16 @@ export const BACK_TO_TASKS: BackTarget = { label: "Tasks", href: "/tasks" };
  * home since #3362, so its way back is Chat.
  */
 export const BACK_TO_CHAT: BackTarget = { label: "Chat", href: "/" };
+/**
+ * A meeting's minutes, and a series' minutes, with nothing under them:
+ * Documents on the Minutes file type, where a meeting's posted minutes are
+ * filed since #5949 (the Minutes list's place until then). Labelled as the
+ * screen is titled, Resources.
+ */
+export const BACK_TO_MINUTES: BackTarget = {
+  label: SECTION_NAMES.resources,
+  href: MINUTES_DOCUMENTS_HREF,
+};
 /** Invite members, opened from the Directory's + rather than a You row. */
 export const BACK_TO_DIRECTORY: BackTarget = {
   label: SECTION_NAMES.directory,

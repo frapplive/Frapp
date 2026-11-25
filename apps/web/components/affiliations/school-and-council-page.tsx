@@ -42,7 +42,7 @@ import { SchoolAndCouncilSectionsSkeleton } from "@/components/affiliations/scho
 
 /**
  * A chapter's School and council (#5974; `school-layer.md` § 2.4), opened
- * from the chapter menu: the chapter's school, then the councils at it.
+ * from the member's menu: the chapter's school, then the councils at it.
  * Like GitHub's organization membership (ask to join, accept an invitation,
  * leave) and Slack Connect's accept or decline of another workspace's
  * invitation, and Discord's server settings for a partnered server.
@@ -113,7 +113,7 @@ function SchoolAndCouncil() {
     run(linkId, () => decideCouncil.mutateAsync({ linkId, status }));
 
   // Without the read key there is nothing to load: say so rather than
-  // sit on the skeleton (a typed visit; the chapter menu hides the item).
+  // sit on the skeleton (a typed visit; the member's menu hides the item).
   if (permissions && !can("chapter-config:view", permissions)) {
     return <InlineNote>{COPY.noAccess}</InlineNote>;
   }

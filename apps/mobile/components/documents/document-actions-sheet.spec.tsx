@@ -106,6 +106,11 @@ describe("DocumentActionsSheet (#3934)", () => {
       "Star",
       "Pin for the chapter",
     ]);
+    // A meeting's minutes are deleted as minutes, on their own screen (#5949).
+    expect(rowLabels(render({ ...FILE, minutes: true }, true).tree)).toEqual([
+      "Star",
+      "Pin for the chapter",
+    ]);
     // A folder is deleted on web, from its Edit controls.
     expect(rowLabels(render(FOLDER, true).tree)).toEqual([
       "Unstar",

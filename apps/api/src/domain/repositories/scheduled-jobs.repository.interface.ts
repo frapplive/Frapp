@@ -78,6 +78,7 @@ export interface SweepRushOwnedRow {
   display_name: string;
   owner_id: string;
   closed_reason: string | null;
+  bid_state: string;
   last_contact_on: string | null;
   created_at: string;
 }
@@ -215,6 +216,11 @@ export interface IScheduledJobsRepository {
   ): Promise<SweepRushFollowUpRow[]>;
   /** Every open candidate with an owner, across chapters. */
   findOwnedOpenRushCandidates(): Promise<SweepRushOwnedRow[]>;
+  /**
+   * Expires every open recruitment bid past its day, across chapters
+   * (`expire_rush_bids`, #5973); the count. Throws on a database error.
+   */
+  expireRushBids(now: string): Promise<number>;
   /**
    * Per chapter: whether the `rush` module is on, and its stale days (no
    * entry for a chapter with no settings row). Throws on a database error.

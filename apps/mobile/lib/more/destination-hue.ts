@@ -7,7 +7,7 @@ import { roleColor, type RoleColorHex } from "@repo/validation";
  * place's hue").
  *
  * The You tab is a list of up to ten places a member opens by habit. A hue
- * per place lets them find Study hours or Documents without reading the
+ * per place lets them find Study hours or Resources without reading the
  * labels, as iOS Settings and Telegram's settings list do. The rule that
  * keeps it from becoming decoration: **a hue names a place, never a state.**
  * It is the same every day for every member, so it carries no news. Rows
@@ -43,8 +43,7 @@ export type YouDestination =
   | "study"
   | "service"
   | "dues"
-  | "documents"
-  | "minutes"
+  | "resources"
   | "directory"
   | "settings"
   | "chapter"
@@ -56,8 +55,9 @@ export const YOU_DESTINATION_HUE: Record<YouDestination, RoleColorHex> = {
   study: roleColor("periwinkle"),
   service: NOTIFICATION_TILE_HUE.service,
   dues: NOTIFICATION_TILE_HUE.billing,
-  documents: roleColor("violet"),
-  minutes: roleColor("rose"),
+  // Documents' violet: the row opens Documents, where minutes are filed
+  // since #5949 (Minutes had rose while it was its own row).
+  resources: roleColor("violet"),
   directory: roleColor("orange"),
   settings: roleColor("slate"),
   chapter: roleColor("green"),

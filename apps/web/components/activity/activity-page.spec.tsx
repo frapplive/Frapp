@@ -231,6 +231,26 @@ vi.mock("./activity-reminder-row", () => ({
   ),
 }));
 
+// The minutes rows' writes are their own spec's
+// (`activity-minutes-actions.spec.tsx`); this page owes drawing the rows in
+// To do and handing Write minutes and the menu to them.
+const mockWriteMinutes = vi.fn();
+const mockMarkNoMinutes = vi.fn();
+vi.mock("./activity-minutes-actions", () => ({
+  useActivityMinutesActions: () => ({
+    startingId: null,
+    write: mockWriteMinutes,
+    entriesFor: (row: ActivityRow) => [
+      {
+        type: "item",
+        key: "no-minutes",
+        label: "No minutes for this meeting",
+        onSelect: () => mockMarkNoMinutes(row.key),
+      },
+    ],
+  }),
+}));
+
 const { ActivityPage } = await import("./activity-page");
 
 const task = {
@@ -1334,6 +1354,88 @@ describe("ActivityPage", () => {
         within(weekLines()).getByRole("button", { name: "Tasks: 0 of 1 done" }),
       );
       expect(within(toDo()).queryByText(/^reminder:/)).toBeNull();
+    });
+
+    it("lists minutes in a Minutes run: Write minutes, the member's drafts and their notes (#5949)", async () => {
+      const user = userEvent.setup();
+      mockActivity.mockReturnValue(
+        loaded({
+          needs_you: nothingWaiting,
+          minutes: {
+            to_write: [
+              {
+                event_id: "e9",
+                name: "Exec meeting",
+                start_time: "2026-11-18T19:00:00.000Z",
+                end_time: "2026-11-18T20:00:00.000Z",
+              },
+            ],
+            drafts: [
+              {
+                meeting_id: "m1",
+                event_id: "e8",
+                name: "Chapter meeting",
+                event_start_time: "2026-11-17T19:00:00.000Z",
+                started: false,
+                recording_by: null,
+                recording_by_name: null,
+              },
+            ],
+            taking_notes: [
+              {
+                meeting_id: "m2",
+                event_id: "e7",
+                name: "Recruitment Committee",
+                event_start_time: "2026-11-16T19:00:00.000Z",
+                author_name: "Olive Officer",
+                joined: false,
+                added: true,
+              },
+            ],
+          },
+          week: week(),
+        }),
+      );
+      render(<ActivityPage />);
+
+      const run = within(toDo()).getByTestId("activity-day-minutes");
+      expect(
+        within(run).getByRole("heading", { name: "Minutes" }),
+      ).toBeVisible();
+      // The row opens the event; Write minutes on it starts the minutes.
+      expect(
+        within(run).getByRole("link", { name: /Exec meeting/ }),
+      ).toHaveAttribute("href", "/events?event=e9");
+      await user.click(
+        within(run).getByRole("button", {
+          name: "Write minutes: Exec meeting",
+        }),
+      );
+      expect(mockWriteMinutes).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "minutes:write:e9" }),
+      );
+      // Its menu settles a meeting that had none.
+      await user.click(
+        within(run).getByRole("button", { name: "More for Exec meeting" }),
+      );
+      await user.click(
+        await screen.findByRole("menuitem", {
+          name: "No minutes for this meeting",
+        }),
+      );
+      expect(mockMarkNoMinutes).toHaveBeenCalledWith("minutes:write:e9");
+      // A draft opens the minutes, with where it stands; notes open the
+      // member's own notes.
+      expect(
+        within(run).getByRole("link", { name: /Chapter meeting.*Not started/ }),
+      ).toHaveAttribute("href", "/meetings/m1");
+      expect(
+        within(run).getByRole("link", {
+          name: /Recruitment Committee.*Minutes by Olive Officer.*Take notes/,
+        }),
+      ).toHaveAttribute("href", "/meetings/m2/notes");
+      // Nothing here opens the panel.
+      expect(screen.queryByTestId("panel")).toBeNull();
     });
   });
 

@@ -126,7 +126,7 @@ vi.mock("@/lib/auth/use-frapp-user", () => ({
   useFrappUser: () => ({ userId: "u-officer" }),
 }));
 
-const { NotificationsPopover, deepLinkFor } =
+const { NotificationsPopover, deepLinkFor, useNotificationsLive } =
   await import("./notifications-popover");
 
 function notification(
@@ -158,11 +158,23 @@ const REPORT = notification(
 /** The bell the list opens under. */
 const BELL = <button type="button">Notifications bell</button>;
 
+/**
+ * The list as the shell mounts it: the bell's popover, and beside it the
+ * always-on effects the shell runs once (`useNotificationsLive`).
+ */
+function Live() {
+  useNotificationsLive();
+  return null;
+}
+
 function renderDrawer() {
   return render(
-    <NotificationsPopover open onOpenChange={vi.fn()}>
-      {BELL}
-    </NotificationsPopover>,
+    <>
+      <Live />
+      <NotificationsPopover open onOpenChange={vi.fn()}>
+        {BELL}
+      </NotificationsPopover>
+    </>,
   );
 }
 
@@ -251,9 +263,12 @@ describe("NotificationsPopover — report queue freshness", () => {
       notification("n-points", "points", "2026-09-22T11:00:00Z"),
     ];
     rerender(
-      <NotificationsPopover open onOpenChange={vi.fn()}>
-        {BELL}
-      </NotificationsPopover>,
+      <>
+        <Live />
+        <NotificationsPopover open onOpenChange={vi.fn()}>
+          {BELL}
+        </NotificationsPopover>
+      </>,
     );
     expect(mockInvalidateReports).toHaveBeenCalledTimes(1);
 
@@ -267,9 +282,12 @@ describe("NotificationsPopover — report queue freshness", () => {
       ),
     ];
     rerender(
-      <NotificationsPopover open onOpenChange={vi.fn()}>
-        {BELL}
-      </NotificationsPopover>,
+      <>
+        <Live />
+        <NotificationsPopover open onOpenChange={vi.fn()}>
+          {BELL}
+        </NotificationsPopover>
+      </>,
     );
     expect(mockInvalidateReports).toHaveBeenCalledTimes(2);
   });
@@ -924,7 +942,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
     renderDrawer();
     expect(screen.getAllByRole("link")).toHaveLength(2);
 
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveTextContent("message g2");
@@ -935,7 +953,7 @@ describe("NotificationsPopover: grouped by conversation, Unread / All (#3948)", 
   it("says all caught up when Unread leaves nothing", async () => {
     notifications.value = [{ ...EVENT, read_at: "2026-09-22T09:30:00Z" }];
     renderDrawer();
-    await userEvent.click(screen.getByRole("radio", { name: "Unread" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Unread" }));
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.getByText(/all caught up/)).toBeInTheDocument();
   });

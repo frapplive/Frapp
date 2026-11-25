@@ -4437,6 +4437,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rush/candidates/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every candidate a display name matches, with stage and day added, for a picker */
+        get: operations["RushController_matches_v1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rush/candidates/{id}": {
         parameters: {
             query?: never;
@@ -4711,6 +4728,108 @@ export interface paths {
         post?: never;
         /** Clear the candidate's follow-up */
         delete: operations["RushPipelineController_clearFollowUp_v1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a decline the PNM gave on paper or aloud */
+        post: operations["RushBidController_decline_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record an acceptance the PNM gave on paper or aloud; it waits for the PNM or `rush:manage` to confirm */
+        post: operations["RushBidController_accept_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a recorded acceptance; the PNM is invited with the chapter's new-member role */
+        post: operations["RushBidController_confirm_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/candidates/{id}/bid/rescind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take back an open bid, with a reason */
+        post: operations["RushBidController_rescind_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/bid-confirmations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A recorded bid acceptance's chapter, who recorded it and whether it waits, with no account needed */
+        post: operations["RushBidConfirmationController_preview_v1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rush/bid-confirmations/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The PNM confirms the acceptance a member recorded, with one tap from the emailed link */
+        post: operations["RushBidConfirmationController_confirm_v1"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7421,7 +7540,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The events this officer can see that are marked "No minutes", so the Meetings list stops asking for them */
+        /**
+         * The events this officer can see that are marked "No minutes"
+         * @description Read by the phone Minutes list of builds from before #5949, which stops asking for these. A current client reads Activity's Minutes run instead, where the server leaves marked meetings out.
+         */
         get: operations["MeetingNoMinutesController_list_v1"];
         put?: never;
         post?: never;
@@ -12176,8 +12298,16 @@ export interface components {
              * @enum {string|null}
              */
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
-            /** @enum {string} */
+            /**
+             * @description The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.
+             * @enum {string}
+             */
             bid_status: "none" | "extended";
+            /**
+             * @description The bid’s full state (#5973).
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
             /**
              * Format: uuid
              * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
@@ -12189,6 +12319,17 @@ export interface components {
             vote_count?: number;
             /** @description Whether the authenticated caller has already voted. */
             viewer_has_voted: boolean;
+        };
+        RushNameMatchDto: {
+            /** Format: uuid */
+            id: string;
+            display_name: string;
+            /** @description The stage key. */
+            stage: string;
+            /** @description The stage's name in this chapter, to tell two matches apart. */
+            stage_label: string;
+            /** Format: date-time */
+            created_at: string;
         };
         CreateRushCandidateDto: {
             display_name: string;
@@ -12214,8 +12355,16 @@ export interface components {
              * @enum {string|null}
              */
             closed_reason: "not_interested" | "not_eligible" | "chapter_passed" | "no_response" | "accepted_elsewhere" | "withdrew" | "deleted_info" | null;
-            /** @enum {string} */
+            /**
+             * @description The two values shipped clients read: `extended` for a bid out or accepted, `none` otherwise. `bid_state` is the whole.
+             * @enum {string}
+             */
             bid_status: "none" | "extended";
+            /**
+             * @description The bid’s full state (#5973).
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
             /**
              * Format: uuid
              * @description Who added the candidate; null for one the PNM's own interest form created (#5977).
@@ -12316,6 +12465,29 @@ export interface components {
              */
             follow_up_user_id: string | null;
             follow_up_user_name: string | null;
+            /**
+             * @description The bid’s full state; `bid_status` is its two-value form for shipped clients. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
+            /** Format: date-time */
+            bid_extended_at: string | null;
+            bid_extended_by_name: string | null;
+            /** Format: date-time */
+            bid_expires_at: string | null;
+            /** Format: date-time */
+            bid_acceptance_recorded_at: string | null;
+            bid_acceptance_recorded_by_name: string | null;
+            /** @description Whether the PNM was emailed the one-tap confirmation. The address is never returned. */
+            bid_confirm_emailed: boolean;
+            /** Format: date-time */
+            bid_answered_at: string | null;
+            bid_answered_by_name: string | null;
+            /** @enum {string|null} */
+            bid_answered_via: "member" | "pnm" | "system" | null;
+            bid_rescind_reason: string | null;
+            /** @description On an accepted bid: whether the PNM’s invite to join went out. Null on any other. */
+            bid_invite_sent: boolean | null;
         };
         RushPipelineDto: {
             /** @description In board order: by category, then position. */
@@ -12390,9 +12562,54 @@ export interface components {
         RushNoteInputDto: {
             body: string;
         };
+        RushSettingsSkippedMemberDto: {
+            /** Format: uuid */
+            user_id: string;
+            display_name: string;
+        };
         RushSettingsDto: {
             /** @description Days without a logged contact before an open prospect needs a follow-up. */
             stale_days: number;
+            /** @description Days a bid stays open before it expires. */
+            bid_expiry_days: number;
+            /**
+             * Format: uuid
+             * @description The role an accepted PNM’s invite carries, as picked. Null means the default.
+             */
+            new_member_role_id: string | null;
+            /**
+             * Format: uuid
+             * @description The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role.
+             */
+            default_new_member_role_id: string | null;
+            /**
+             * Format: uuid
+             * @description The recruitment contacts Group, told about each interest-form submission.
+             */
+            contacts_group_id: string | null;
+            /** @description Members of the contacts Group who lack `rush:view` and so are skipped. */
+            contacts_group_skipped: components["schemas"]["RushSettingsSkippedMemberDto"][];
+            /**
+             * Format: uuid
+             * @description Where an interest-form submission’s candidate card is posted. Null posts none.
+             */
+            card_channel_id: string | null;
+        };
+        SaveRushSettingsDto: {
+            stale_days?: number;
+            bid_expiry_days?: number;
+            /**
+             * Format: uuid
+             * @description A role of this chapter that the caller could invite someone into; null goes back to the default.
+             */
+            new_member_role_id?: string | null;
+            /** Format: uuid */
+            contacts_group_id?: string | null;
+            /**
+             * Format: uuid
+             * @description A channel everyone who can read holds `rush:view`; null posts no card.
+             */
+            card_channel_id?: string | null;
         };
         RushContactDto: {
             /** Format: uuid */
@@ -12459,6 +12676,66 @@ export interface components {
             /** Format: uuid */
             follow_up_user_id: string | null;
             follow_up_user_name: string | null;
+        };
+        RushBidDto: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description The bid’s full state. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.
+             * @enum {string}
+             */
+            bid_state: "none" | "extended" | "accepted" | "declined" | "expired" | "rescinded";
+            /** Format: date-time */
+            bid_extended_at: string | null;
+            bid_extended_by_name: string | null;
+            /** Format: date-time */
+            bid_expires_at: string | null;
+            /**
+             * Format: date-time
+             * @description Set while a recorded acceptance waits for confirmation.
+             */
+            bid_acceptance_recorded_at: string | null;
+            bid_acceptance_recorded_by_name: string | null;
+            /** @description Whether the PNM was emailed the one-tap confirmation. The address is never returned. */
+            bid_confirm_emailed: boolean;
+            /** Format: date-time */
+            bid_answered_at: string | null;
+            /** @description Who recorded the decline, confirmed or rescinded; null for the PNM and for an expiry. */
+            bid_answered_by_name: string | null;
+            /**
+             * @description `member` by a member, `pnm` by the PNM’s own tap, `system` by expiry.
+             * @enum {string|null}
+             */
+            bid_answered_via: "member" | "pnm" | "system" | null;
+            bid_rescind_reason: string | null;
+            /** @description On an accepted bid: whether the PNM’s invite to join went out. Null on any other. */
+            bid_invite_sent: boolean | null;
+            /** @description On a confirmation: whether the accepted PNM’s invite went out to the email kept for it. */
+            invite_sent?: boolean;
+        };
+        RecordRushAcceptanceDto: {
+            /** @description The PNM’s email for the one-tap confirmation and the invite. Omit to use a linked member’s account email; with neither, only `rush:manage` can confirm. Never shown to members. */
+            email?: string | null;
+        };
+        RescindRushBidDto: {
+            reason: string;
+        };
+        RushBidConfirmTokenDto: {
+            /** @description The token from the emailed link’s fragment. */
+            token: string;
+        };
+        RushBidConfirmationPreviewDto: {
+            chapter_name: string;
+            recorded_by_name: string | null;
+            /** Format: date-time */
+            expires_at: string | null;
+            /**
+             * @description `waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm.
+             * @enum {string}
+             */
+            status: "waiting" | "confirmed" | "closed";
+            /** @description On the tap that confirmed it: whether the invite to join went out. */
+            invite_sent?: boolean;
         };
         InterestFormOptionDto: {
             id: string;
@@ -12773,14 +13050,32 @@ export interface components {
             /** @description One to 25 uploads to file, each as the single confirm route takes it */
             documents: components["schemas"]["ConfirmDocumentUploadDto"][];
         };
+        DocumentMinutesDto: {
+            meeting_id: string;
+            /** @description The meeting's name as the minutes hold it */
+            event_name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @enum {string} */
+            meeting_type: "chapter" | "exec" | "committee" | "other";
+            other_label: string | null;
+            decision_count: number;
+            action_item_count: number;
+            /** @description Whether a recording's transcript is kept with the minutes */
+            recorded: boolean;
+            /** @description The TL;DR's first line */
+            gist: string | null;
+        };
         ChapterDocumentDto: {
             id: string;
             chapter_id: string;
             title: string;
             description: string | null;
             folder: string | null;
-            storage_path: string;
-            uploaded_by: string;
+            /** @description The stored file's path. Null only on a row that files a meeting's minutes (`meeting_id`), which the list returns only when asked with `minutes=true`. */
+            storage_path: string | null;
+            /** @description Who uploaded the file. Null only on a row that files a meeting's minutes. */
+            uploaded_by: string | null;
             created_at: string;
             content_type: string | null;
             byte_size: number | null;
@@ -12808,6 +13103,10 @@ export interface components {
             drive_synced_at: string | null;
             /** @description Who can see it (#3642): null for the same as its folder, else its own list, which narrows the folder's */
             who_can_see: string[] | null;
+            /** @description Set on the row that files a meeting's posted minutes (#5949): the minutes' id, which the row opens instead of a file. Seen only by members who may read those minutes. */
+            meeting_id: string | null;
+            /** @description On the list and a single read: what a minutes row shows of its minutes. Null on a file. */
+            minutes?: components["schemas"]["DocumentMinutesDto"] | null;
         };
         DocumentConfirmResultDto: {
             /** @description The storage path this result is for */
@@ -12862,6 +13161,8 @@ export interface components {
             who_can_see: string[] | null;
             /** @description The Google Drive folder it mirrors, or null (#5220). Its name follows Drive, so it is renamed and deleted there, not here. */
             drive_folder_id: string | null;
+            /** @description Set on a folder the minutes flow files into (#5949): `root` for the chapter's Minutes folder, or a repeating meeting's series for that series' folder. */
+            minutes_series_key: string | null;
         };
         DocumentAccessOptionsDto: {
             options: components["schemas"]["ChannelAccessOptionDto"][];
@@ -13573,6 +13874,68 @@ export interface components {
             /** @description Whether `remind_at` has passed. A due reminder waits on the caller and is counted in `needs_you_count` until they clear it. */
             due: boolean;
         };
+        ActivityMinutesToWriteDto: {
+            /**
+             * Format: uuid
+             * @description The meeting’s event: `POST /v1/meetings` with it starts the minutes, and `PUT /v1/events/{id}/no-minutes` marks it as having none.
+             */
+            event_id: string;
+            /** @description The event’s name. */
+            name: string;
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+        };
+        ActivityMinutesDraftDto: {
+            /** Format: uuid */
+            meeting_id: string;
+            /**
+             * Format: uuid
+             * @description Null for minutes started with no meeting, until one is linked.
+             */
+            event_id: string | null;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Whether anything is in them yet: a written section, someone’s notes, or a recording. Without, they read "Not started". */
+            started: boolean;
+            /**
+             * Format: uuid
+             * @description Who is recording them on their phone right now, else null.
+             */
+            recording_by: string | null;
+            /** @description The name of whoever is recording, when it isn’t the caller; else null. */
+            recording_by_name: string | null;
+        };
+        ActivityNoteTakingDto: {
+            /**
+             * Format: uuid
+             * @description Their notes are `GET /v1/meetings/{id}/notes`.
+             */
+            meeting_id: string;
+            /** Format: uuid */
+            event_id: string;
+            /** @description The meeting’s name, as the minutes hold it. */
+            name: string;
+            /** Format: date-time */
+            event_start_time: string;
+            /** @description Who is writing the minutes. */
+            author_name: string;
+            /** @description The caller has notes on it already. */
+            joined: boolean;
+            /** @description The author or an editor added the caller. */
+            added: boolean;
+        };
+        ActivityMinutesDto: {
+            /** @description For a holder of `meetings:record`: events the caller can see that ended in the last 30 days, whose name reads as a meeting, with no minutes by anyone (a draft the caller can’t read included) and not marked "No minutes". Newest first, at most 25. Counted in `needs_you_count`. */
+            to_write: components["schemas"]["ActivityMinutesToWriteDto"][];
+            /** @description The caller’s own unposted minutes they may still read, newest meeting first, at most 25. Counted in `needs_you_count`. */
+            drafts: components["schemas"]["ActivityMinutesDraftDto"][];
+            /** @description Other officers’ unposted minutes the caller takes notes on, added or joined, newest meeting first, at most 25. Empty on a server with AI off. Those with `joined` false are counted in `needs_you_count`. */
+            taking_notes: components["schemas"]["ActivityNoteTakingDto"][];
+        };
         ActivityMadeByYouDto: {
             /** @description Poll cards the caller posted, newest first: up to 25 open and the 25 most recently posted closed ones, so closed polls never push an open one out of the read. A current client lists the open ones and finds the closed in `GET /v1/activity/archive` (#5127); the closed ones are served for phone builds from before it, which draw them as Archived polls (#4258). */
             polls: components["schemas"]["ActivityPollDto"][];
@@ -13619,11 +13982,13 @@ export interface components {
             links: components["schemas"]["ActivityLinkDto"][];
             /** @description Reminders the caller set on chat messages (#4957): those due that they haven’t cleared, newest first, then those still waiting, soonest first; at most 50 of each. Private to the caller. Due ones are counted in `needs_you_count` (so at most 50). */
             reminders: components["schemas"]["ActivityReminderDto"][];
+            /** @description Minutes waiting on the caller (#5949): meetings to write minutes for, their own drafts, and drafts they take notes on. Empty lists while the chapter has Meetings off. No `unread` or `snoozed_until`: these rows have neither. */
+            minutes: components["schemas"]["ActivityMinutesDto"];
             made_by_you: components["schemas"]["ActivityMadeByYouDto"];
-            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, less what the caller snoozed (`snoozed_until`). */
+            /** @description How many things wait on the caller: every `needs_you` row, counted before the 25-row cap on each list, plus events the caller can check in to now and hasn’t, plus due `reminders`, plus every `minutes.to_write` and `minutes.drafts` row and each `minutes.taking_notes` row not yet `joined`, less what the caller snoozed (`snoozed_until`). */
             needs_you_count: number;
             /** @description Sections that could not be read this time. Each is served empty; the others are unaffected. */
-            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders")[];
+            unavailable: ("tasks" | "hours_approvals" | "polls" | "cards" | "coming_up" | "made_events" | "links" | "reminders" | "minutes")[];
             /** @description How the caller’s week is going, for the ring at the top of the page (`spec/behavior/activity.md` § Week): what they finished since the week began and what is still theirs to do in it, by kind. Their own things only; what waits on their review is not counted. */
             week: components["schemas"]["ActivityWeekDto"];
             /**
@@ -25454,6 +25819,13 @@ export interface operations {
                     "application/json": components["schemas"]["RushCandidateViewDto"];
                 };
             };
+            /** @description `code: rush.several_match`: the name matches several prospects. Never a silent pick: read `GET /v1/rush/candidates/matches` and pick one by id. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -25484,6 +25856,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateRushCandidateResponseDto"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushController_matches_v1: {
+        parameters: {
+            query: {
+                /** @description Candidate display name (case-insensitive) */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushNameMatchDto"][];
                 };
             };
             /** @description Error */
@@ -26034,7 +26437,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RushSettingsDto"];
+                "application/json": components["schemas"]["SaveRushSettingsDto"];
             };
         };
         responses: {
@@ -26207,6 +26610,240 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RushFollowUpDto"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_decline_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid to decline */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_accept_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRushAcceptanceDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid, or an acceptance is already recorded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_confirm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No recorded acceptance to confirm */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidController_rescind_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RescindRushBidDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidDto"];
+                };
+            };
+            /** @description No open bid to rescind */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidConfirmationController_preview_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushBidConfirmTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidConfirmationPreviewDto"];
+                };
+            };
+            /** @description No waiting confirmation for that link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponseDto"];
+                };
+            };
+        };
+    };
+    RushBidConfirmationController_confirm_v1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RushBidConfirmTokenDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RushBidConfirmationPreviewDto"];
+                };
+            };
+            /** @description No waiting confirmation for that link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -26982,6 +27619,8 @@ export interface operations {
                 folder?: string;
                 /** @description Case-insensitive substring match on the document title */
                 search?: string;
+                /** @description Send `true` to also get the rows that file meetings' posted minutes (#5949): rows with `meeting_id` set and no file, which open the minutes. Left out unless asked for, so a client from before them never gets a row with no file. */
+                minutes?: "true";
             };
             header?: never;
             path?: never;
@@ -28500,6 +29139,8 @@ export interface operations {
             query?: {
                 /** @description Where the caller’s week begins, in their own time zone (the Study screen’s week: Sunday at midnight). Between eight days ago and a day from now: outside that, the standing answers 400 and `GET /v1/activity` counts the default week. Omitted: last Sunday at midnight UTC. */
                 week_start?: string;
+                /** @description `true` asks for the Minutes run (`minutes`) and counts it in `needs_you_count`. Omitted, `minutes` is served empty and not counted, for builds from before it (#5949). */
+                minutes?: "true";
             };
             header?: never;
             path?: never;

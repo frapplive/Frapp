@@ -22,6 +22,7 @@ import {
   SHEET_STACK_BEHAVIOR,
 } from "@/components/sheet-scaffold";
 import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { DisclosureGlyph, PlusGlyph } from "@/components/control-glyphs";
 import { TaskBarPill } from "@/components/tasks/task-action-bar";
 import { CheckGlyph } from "@/components/tasks/task-glyphs";
@@ -337,7 +338,9 @@ export function WhoPickerBody({
         style={styles.field}
       />
       {peopleOnly ? null : (
-        <Segmented
+        <ViewLabels
+          compact
+          flush
           options={TAB_OPTIONS}
           value={tab}
           onChange={setTab}

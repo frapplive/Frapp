@@ -18,8 +18,6 @@ import {
   RUSH_RATING_MIN,
   RUSH_TAG_LABEL_MAX,
   RUSH_STALE_DAYS_DEFAULT,
-  RUSH_STALE_DAYS_MAX,
-  RUSH_STALE_DAYS_MIN,
   RUSH_TAGS_MAX,
   firstVisibleRushStage,
   isRushContactKind,
@@ -49,11 +47,13 @@ import type {
   RushNoteView,
   RushPipeline,
   RushPipelineCandidate,
-  RushSettings,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
 import { RbacService } from './rbac.service';
+import { rushBidPeople, rushBidView } from './rush-bid.service';
+import { RUSH_BID_REPOSITORY } from '#domain/repositories/rush-bid.repository.interface';
+import type { IRushBidRepository } from '#domain/repositories/rush-bid.repository.interface';
 
 /**
  * Who is reading the pipeline. The two permission reads are promises so the
@@ -86,6 +86,7 @@ export class RushPipelineService {
     private readonly candidateRepo: IRushCandidateRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
     private readonly rbac: RbacService,
+    @Inject(RUSH_BID_REPOSITORY) private readonly bidRepo: IRushBidRepository,
   ) {}
 
   /**
@@ -185,7 +186,8 @@ export class RushPipelineService {
       ratings,
       votes,
       results,
-      settings,
+      staleDays,
+      emailed,
     ] = await Promise.all([
       this.listStages(chapterId),
       this.pipelineRepo.listTags(chapterId),
@@ -194,7 +196,8 @@ export class RushPipelineService {
       this.pipelineRepo.listRatings(chapterId),
       this.pipelineRepo.listVotes(chapterId),
       viewer.canViewResults,
-      this.getSettings(chapterId),
+      this.staleDays(chapterId),
+      this.bidRepo.candidatesWithConfirmationEmail(chapterId),
     ]);
 
     const names = await this.userNames(
@@ -203,6 +206,7 @@ export class RushPipelineService {
         candidate.owner_id,
         candidate.last_contact_by,
         candidate.follow_up_user_id,
+        ...rushBidPeople(candidate),
       ]),
     );
     const nameOf = (id: string | null) =>
@@ -215,7 +219,7 @@ export class RushPipelineService {
     return {
       stages,
       tags,
-      stale_days: settings.stale_days,
+      stale_days: staleDays,
       candidates: candidates.map((candidate): RushPipelineCandidate => {
         const own = ratingsBy.get(candidate.id) ?? [];
         const ballots = votesBy.get(candidate.id) ?? [];
@@ -224,6 +228,7 @@ export class RushPipelineService {
             ? null
             : own.reduce((sum, row) => sum + row.rating, 0) / own.length;
         return {
+          ...rushBidView(candidate, names, emailed.has(candidate.id)),
           id: candidate.id,
           display_name: candidate.display_name,
           user_id: candidate.user_id,
@@ -487,27 +492,13 @@ export class RushPipelineService {
 
   // Contacts, owner, follow-ups and the stale setting (#5934) ---------------
 
-  /** The chapter's recruitment settings; no row reads as the defaults. */
-  async getSettings(chapterId: string): Promise<RushSettings> {
+  /**
+   * The chapter's stale days, the one setting the pipeline reads; no row reads
+   * as the default. The rest of the settings page is `RushSettingsService`'s.
+   */
+  async staleDays(chapterId: string): Promise<number> {
     const row = await this.pipelineRepo.findSettings(chapterId);
-    return { stale_days: row?.stale_days ?? RUSH_STALE_DAYS_DEFAULT };
-  }
-
-  async saveSettings(
-    chapterId: string,
-    staleDays: number,
-  ): Promise<RushSettings> {
-    if (
-      !Number.isInteger(staleDays) ||
-      staleDays < RUSH_STALE_DAYS_MIN ||
-      staleDays > RUSH_STALE_DAYS_MAX
-    ) {
-      throw new BadRequestException(
-        `Pick from ${RUSH_STALE_DAYS_MIN} to ${RUSH_STALE_DAYS_MAX} days`,
-      );
-    }
-    const row = await this.pipelineRepo.saveSettings(chapterId, staleDays);
-    return { stale_days: row.stale_days };
+    return row?.stale_days ?? RUSH_STALE_DAYS_DEFAULT;
   }
 
   /**

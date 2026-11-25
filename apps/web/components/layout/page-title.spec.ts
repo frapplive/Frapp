@@ -11,6 +11,11 @@ describe("resolvePageTitle", () => {
     }
   });
 
+  it("titles the two chat pages (#5946)", () => {
+    expect(resolvePageTitle("/chat")).toEqual({ title: "Chat" });
+    expect(resolvePageTitle("/messages")).toEqual({ title: "Messages" });
+  });
+
   it("titles no officer tool apart from Chapter settings (#3837)", () => {
     // The tools open inside Chapter settings, whose rail names them; their
     // old routes only redirect there and name nothing.
@@ -25,20 +30,34 @@ describe("resolvePageTitle", () => {
   });
 
   it("titles a route's sub-paths as the route, but not a lookalike prefix", () => {
-    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Events" });
+    expect(resolvePageTitle("/events/abc")).toEqual({ title: "Calendar" });
     expect(resolvePageTitle("/eventsx")).toBeNull();
   });
 
-  it("puts Bulk upload under its Backwork row", () => {
+  // #5949: Documents and Backwork are views of one Resources page.
+  it("titles Documents and Backwork as Resources, the one row they share", () => {
+    expect(resolvePageTitle("/documents")).toEqual({ title: "Resources" });
+    expect(resolvePageTitle("/backwork")).toEqual({ title: "Resources" });
+  });
+
+  it("puts Bulk upload under Resources, going back to Backwork", () => {
     expect(resolvePageTitle("/backwork/upload")).toEqual({
       title: "Bulk upload",
-      parent: { label: "Backwork", href: "/backwork" },
+      parent: { label: "Resources", href: "/backwork" },
     });
     expect(
-      resolvePageTitle("/backwork/upload", (item) => item.href !== "/backwork"),
+      resolvePageTitle("/backwork/upload", (item) => item.id !== "resources"),
     ).toEqual({
       title: "Bulk upload",
     });
+    // The crumb asks whether the viewer can open Backwork, the view it goes
+    // back to, not only the row: the row with Documents alone is no door.
+    const asked: string[][] = [];
+    resolvePageTitle("/backwork/upload", (item) => {
+      asked.push((item.views ?? []).map((view) => view.href));
+      return true;
+    });
+    expect(asked).toEqual([["/backwork"]]);
   });
 
   it("titles Profile, which is not a nav row", () => {
@@ -53,11 +72,10 @@ describe("resolvePageTitle", () => {
     });
   });
 
-  it("titles one meeting's minutes under Meetings, and Meetings alone at its root", () => {
-    expect(resolvePageTitle("/meetings")).toEqual({ title: "Meetings" });
+  it("titles one meeting's minutes under Resources, going back to the chapter's minutes (#5949)", () => {
     expect(resolvePageTitle("/meetings/0b9d1c1e")).toEqual({
       title: "Minutes",
-      parent: { label: "Meetings", href: "/meetings" },
+      parent: { label: "Resources", href: "/documents?type=minutes" },
     });
   });
 

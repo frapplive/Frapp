@@ -78,6 +78,10 @@ const PUBLIC_ROUTES: Record<string, string> = {
     'The card an invite link opens on, before anyone signs in (#5625); the unguessable invite token in the body is the credential, and it shows only the chapter, sender, role and whether the link works.',
   'InviteDetailsController.funnelStep':
     "A step of the invite card's funnel (#5663), before anyone signs in; the invite token in the body proves the chapter whose analytics opt-out applies, and the route returns nothing.",
+  'RushBidConfirmationController.preview':
+    "The page a recorded bid acceptance's email opens on (#5973), for a PNM who may have no account; the 256-bit token in the body is the credential (only its hash is stored), and it shows only the chapter, who recorded it and whether it waits.",
+  'RushBidConfirmationController.confirm':
+    "The PNM's one tap confirming an acceptance a member recorded (#5973); the same token is the credential, it accepts only a waiting acceptance on an open bid, and a used token matches nothing.",
   'PublicInterestFormController.get':
     "A chapter's interest form at /f/<form-slug> (ADR-27, #5977); the slug names one form, and it answers only the form's public fields.",
   'PublicInterestFormController.startCode':

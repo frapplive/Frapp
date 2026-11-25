@@ -78,6 +78,7 @@ describe('ScheduledJobsService', () => {
   let followerRecipients: jest.Mock;
   let findRushFollowUpsDueBetween: jest.Mock;
   let findOwnedOpenRushCandidates: jest.Mock;
+  let expireRushBids: jest.Mock;
   let findRushChapters: jest.Mock;
   let memberHasAnyPermission: jest.Mock;
 
@@ -154,6 +155,7 @@ describe('ScheduledJobsService', () => {
     followerRecipients = jest.fn().mockResolvedValue([]);
     findRushFollowUpsDueBetween = jest.fn().mockResolvedValue([]);
     findOwnedOpenRushCandidates = jest.fn().mockResolvedValue([]);
+    expireRushBids = jest.fn().mockResolvedValue(0);
     // Default: every chapter read has recruitment on and no settings row.
     findRushChapters = jest.fn((ids: string[]) =>
       Promise.resolve({
@@ -186,6 +188,7 @@ describe('ScheduledJobsService', () => {
             endTaskSeries,
             findRushFollowUpsDueBetween,
             findOwnedOpenRushCandidates,
+            expireRushBids,
             findRushChapters,
           },
         },
@@ -2136,6 +2139,23 @@ describe('ScheduledJobsService', () => {
       expect(await service.sweepRushStale(MORNING)).toEqual({ sent: 0 });
       expect(claimDispatch).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+  });
+
+  describe('recruitment bid expiry (#5973)', () => {
+    it('expires open bids past their day, in one database statement', async () => {
+      expireRushBids.mockResolvedValue(2);
+      const now = new Date('2026-12-02T15:00:00Z');
+      await expect(service.sweepRushBidExpiry(now)).resolves.toEqual({
+        expired: 2,
+      });
+      expect(expireRushBids).toHaveBeenCalledWith('2026-12-02T15:00:00.000Z');
+    });
+
+    it('runs with the hourly recruitment sweeps, whatever they do', async () => {
+      findOwnedOpenRushCandidates.mockRejectedValue(new Error('read failed'));
+      await service.handleRushFollowUpSweep();
+      expect(expireRushBids).toHaveBeenCalledTimes(1);
     });
   });
 });

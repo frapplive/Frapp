@@ -9,12 +9,11 @@ import {
   useHiddenUnsetFeatures,
   useInvoices,
   useListChapters,
-  useMyGoals,
+
   useMyPermissions,
   useMyProfileStats,
   useNowDate,
   usePermissionList,
-  useStudySessions,
   useViewerUserId,
 } from "@repo/hooks";
 import { MEMBER_STATUS_LABEL, untilLabel } from "@repo/hooks/member-status";
@@ -35,11 +34,8 @@ import {
   DuesGlyph,
   HostCheckInGlyph,
   InviteGlyph,
-  MinutesGlyph,
   RecruitmentGlyph,
-  ServiceGlyph,
   SettingsGlyph,
-  StudyGlyph,
 } from "@/components/more/more-glyphs";
 import { StatusChip } from "@/components/status-chip";
 import { StatusDot } from "@/components/account/status-dot";
@@ -73,11 +69,8 @@ import {
   selectNextDueInvoice,
 } from "@/lib/dues/invoices";
 import {
-  formatHoursLabel,
-  formatHoursValue,
-  startOfWeek,
+
 } from "@/lib/study/format";
-import { selectSessionHistory } from "@/lib/study/session";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
@@ -92,7 +85,8 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * ## Order
  *
- * The member's points at the top right, beside the title (#5281), then the
+ * The member's points at the top right, beside the title (#5281), pressed to
+ * open them (#5950), then the
  * profile's head (photo and name, `components/you/profile-sections.tsx`), then
  * Status, then Last week and This semester (`StandingCards`, #5779: how the
  * member is standing, which Activity no longer shows; web draws them on the
@@ -117,10 +111,10 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  * ## Grouping
  *
  * The board draws one group (Study hours through Settings) and an Admin group.
- * The app splits the first in two, chapter tools and then your own Settings,
- * so Service hours, a row the board never drew (`spec/ui/mobile/navigation.md`
- * § You), sits with its kind instead of trailing the list. The owner approved
- * this layout on 2026-11-04.
+ * The app splits the first in two, chapter tools and then your own Settings.
+ * Study hours and Service hours left the rows with #5950: standing is a fact
+ * about a person, so they open from the This semester gauges above, which
+ * show their numbers, and from New, where a member with nothing yet starts.
  *
  * Notifications are not here: the inbox is the bell on Chat home, beside the
  * unread counts it belongs with (#3362, #3839).
@@ -151,24 +145,20 @@ import { typeRole, useFrappTheme } from "@/lib/theme";
  *
  * ## Rows nobody has set up
  *
- * Study hours with no active study zone leaves the list for everyone, since
- * zones are made in the web app and the screen could only say so. Documents
- * with nothing in it leaves it for a viewer who can't upload; an officer who
- * can keeps the row, because the upload is on that screen
- * (`useHiddenUnsetFeatures` in `@repo/hooks`; `spec/product/modules.md`
- * § Not-set-up features). Nothing hides until the viewer's permissions, the
+ * Resources (Documents, with posted minutes filed in it since #5949) with
+ * nothing in it leaves the list for a viewer who can't upload, unless the
+ * chapter keeps minutes in Frapp; an officer who can upload keeps the row,
+ * because the upload is on that screen (`useHiddenUnsetFeatures` in
+ * `@repo/hooks`; `spec/product/modules.md` § Not-set-up features). Nothing
+ * hides until the viewer's permissions, the
  * chapter's modules and the list have all answered, so a row never vanishes
  * on a slow or failed read.
  *
  * ## Trailing statuses
  *
- * Canvas draws "4.0 / 6.0" on Study: the week's real total over the member's
- * weekly study goal, which officers set in Chapter settings (#1062,
- * `useMyGoals`). With no goal the row shows the total with no denominator
- * (see `components/study/week-summary.tsx`), and nothing at zero (#5281). Neither Study nor Dues renders a
- * placeholder while its query is in flight: a row that says "0.0 hrs" for a
- * beat at a member who studied all week is worse than one that says nothing
- * yet.
+ * Dues draws its next due date; it renders no placeholder while its query is
+ * in flight. Study and service hours have no rows here since #5950: their
+ * numbers are the This semester gauges, which open their screens.
  */
 export default function YouTab() {
   return useIsCouncil() ? <CouncilYouScreen /> : <YouScreen />;
@@ -228,6 +218,9 @@ function YouScreen() {
     permissionsQuery.data?.permissions,
     moduleGate,
   );
+  // Resources (#5949): the Documents row's condition or the Minutes row's.
+  const showResources =
+    !hiddenFeatures.has("documents") || !!moduleGate?.("meetings");
 
   // s22 takes an `eventId`, so the row resolves one rather than leading
   // nowhere. `selectEventRows` already returns upcoming-plus-still-checkable-in,
@@ -244,11 +237,8 @@ function YouScreen() {
     return selectEventRows(eventsQuery.data, now)[0] ?? null;
   }, [canHost, eventsQuery.data, now]);
 
-  // The two drawn trailing statuses. Both reads are already cached by the
-  // screens they belong to (30s stale windows), so opening You warms them
-  // rather than duplicating work.
+  // The Dues row's trailing status reads the viewer's own invoices.
   const viewerUserId = useViewerUserId();
-  const sessionsQuery = useStudySessions();
   // The Dues row hides only while dues is off for every chapter in the beta
   // (`BETA_OFF_MODULES`). A chapter's own dues switch leaves it, so a member
   // can still pay an invoice the chapter already sent
@@ -260,51 +250,18 @@ function YouScreen() {
     enabled: duesOn && !!viewerUserId,
   });
 
-  // Keyed on the week boundary rather than the ticking `now`: this
-  // narrows and sorts the whole session list, and the answer only changes once a
-  // week.
-  const weekStart = startOfWeek(now).getTime();
-  // With a weekly goal (#1062) the row reads "4.0 / 6.0 hrs", as the board
-  // draws it. The goal is its own small read (`GET /v1/goals/mine`, fresh for
-  // five minutes), not the whole Activity standing.
-  const studyGoal =
-    useMyGoals({ enabled: !hiddenFeatures.has("study") }).data?.study ?? null;
-  const studyThisWeek = useMemo(() => {
-    if (!sessionsQuery.data) return null;
-    const minutes = selectSessionHistory(sessionsQuery.data)
-      .filter((row) => Date.parse(row.startTime) >= weekStart)
-      .reduce((sum, row) => sum + row.totalForegroundMinutes, 0);
-    // Quiet at zero (#5281, Paul 2026-11-17): "0.0 hrs" says nothing a member
-    // needs. Against a goal it stays, since "0.0 / 6.0" says how far to go.
-    // Zero as drawn, so a two-minute week doesn't read "0.0 hrs" either.
-    if (!studyGoal && formatHoursValue(minutes) === "0.0") return null;
-    return studyGoal
-      ? `${formatHoursValue(minutes)} / ${formatHoursLabel(studyGoal)}`
-      : formatHoursLabel(minutes);
-  }, [sessionsQuery.data, weekStart, studyGoal]);
-
-  // Points and approved service hours, read and summed as web's Profile does
-  // them (`@repo/hooks` `profile-stats.ts`, #4137). Both say nothing at zero
-  // or with their module off (#5281): points as the title's trailing figure,
-  // service hours as the Service hours row's value.
-  // A failed read says so with a dash rather than reading as zero; a module
-  // counts as on until the chapter has loaded, so nothing vanishes on a slow
-  // read (`isModuleEnabled`: absence is not disablement).
-  const stats = useMyProfileStats();
+  // The member's points, at the top right (#5281), pressed to open them
+  // (#5950). Nothing at zero or with Points off; a failed read says so with a
+  // dash rather than reading as zero. A module counts as on until the chapter
+  // has loaded, so nothing vanishes on a slow read (`isModuleEnabled`: absence
+  // is not disablement). Service hours is not asked for: its number is on the
+  // This semester gauge and on its own screen.
   const pointsOn = moduleGate?.("points") ?? true;
-  const serviceOn = moduleGate?.("hours") ?? true;
+  const stats = useMyProfileStats({ points: pointsOn, service: false });
   const showPoints =
     pointsOn &&
     stats.visible &&
     (stats.pointsFailed || (stats.points !== null && stats.points !== 0));
-  const serviceMinutes = stats.serviceMinutes;
-  // Formatted as Study's row is ("1.0 hr", "2.5 hrs"), and nothing while it
-  // would draw as zero.
-  const serviceValue = stats.serviceFailed
-    ? "—"
-    : serviceMinutes !== null && formatHoursValue(serviceMinutes) !== "0.0"
-      ? formatHoursLabel(serviceMinutes)
-      : null;
 
   const duesDue = useMemo(() => {
     if (!invoicesQuery.data || !viewerUserId) return null;
@@ -319,42 +276,24 @@ function YouScreen() {
       title="You"
       headerAction={
         showPoints ? (
-          <PointsLabel points={stats.points} failed={stats.pointsFailed} />
+          <PointsLabel
+            points={stats.points}
+            failed={stats.pointsFailed}
+            onPress={() => router.push("/points")}
+          />
         ) : undefined
       }
     >
       <YouHead you={you} />
 
       {/* Last week and This semester (#5779): only with a chapter, whose
-          reads they are. The strip leaves out Study, whose row below says
-          the same week's hours; its Points and Service hours are this
-          semester's, beside a goal, where the title row and the Service row
-          are all time, so they stay. */}
-      {stats.hasChapter ? (
-        <StandingCards omit={hiddenFeatures.has("study") ? [] : ["study"]} />
-      ) : null}
+          reads they are. Each gauge is the door to what is behind its number
+          (#5950): your points, your service hours, study. Study hours and
+          Service hours were rows of their own under this until then; they
+          are also in New, which is where a member with no hours yet starts. */}
+      {stats.hasChapter ? <StandingCards /> : null}
 
       <ListSection>
-        {hiddenFeatures.has("study") ? null : (
-          <ListRow
-            label="Study hours"
-            leading={tile(StudyGlyph, "study")}
-            value={studyThisWeek}
-            accessibilityHint="Opens study hours and session tracking."
-            onPress={() => router.push("/study")}
-          />
-        )}
-        {/* Only on a chapter that keeps service hours in Frapp (#5281).
-            It stays at zero hours: it is where a member logs them. */}
-        {serviceOn ? (
-          <ListRow
-            label="Service hours"
-            leading={tile(ServiceGlyph, "service")}
-            value={serviceValue}
-            accessibilityHint="Opens your logged service hours."
-            onPress={() => router.push("/service-hours")}
-          />
-        ) : null}
         {duesOn ? (
           <ListRow
             label="Dues"
@@ -379,21 +318,17 @@ function YouScreen() {
             onPress={() => router.push("/dues")}
           />
         ) : null}
-        {hiddenFeatures.has("documents") ? null : (
+        {/* One row for what the chapter keeps (#5949), as web's sidebar has
+            one: Documents, where a meeting's posted minutes are filed. Drawn
+            while Documents is shown or the chapter keeps minutes in Frapp,
+            the two rows' conditions until then. Backwork, web's other view
+            there, isn't on the phone (#2258). */}
+        {showResources ? (
           <ListRow
-            label="Documents"
-            leading={tile(DocumentsGlyph, "documents")}
-            accessibilityHint="Opens the chapter's documents."
+            label={SECTION_NAMES.resources}
+            leading={tile(DocumentsGlyph, "resources")}
+            accessibilityHint="Opens the chapter's documents and meeting minutes."
             onPress={() => router.push("/documents")}
-          />
-        )}
-        {/* Only on a chapter that keeps minutes in Frapp. */}
-        {moduleGate?.("meetings") ? (
-          <ListRow
-            label="Minutes"
-            leading={tile(MinutesGlyph, "minutes")}
-            accessibilityHint="Opens your chapter's meeting minutes."
-            onPress={() => router.push("/minutes")}
           />
         ) : null}
         <ListRow

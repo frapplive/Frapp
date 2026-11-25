@@ -1,7 +1,7 @@
 import { DocumentsPage } from "@/components/documents/documents-page";
 
 export const metadata = {
-  title: "Documents",
+  title: "Resources",
 };
 
 export default function Documents() {

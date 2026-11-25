@@ -255,22 +255,35 @@ export function rushDaysBetween(from: string, to: string): number {
 
 interface RushWorkLike {
   closed_reason: string | null;
+  /** An accepted bid closes the work as a closing reason does (#5973). */
+  bid_state: string;
   created_at: string;
   last_contact_on: string | null;
   follow_up_on: string | null;
 }
 
 /**
+ * Whether the work on a prospect is still open: not closed, and no bid
+ * accepted. An accepted PNM sits in the board's folded Closed column
+ * (Winston, 2026-11-24), so nothing asks anyone to follow them up.
+ */
+export function isRushWorkOpen(
+  candidate: Pick<RushWorkLike, "closed_reason" | "bid_state">,
+): boolean {
+  return candidate.closed_reason == null && candidate.bid_state !== "accepted";
+}
+
+/**
  * The day an open prospect goes stale: `staleDays` after their last logged
  * contact, or after they were added when nobody has logged one. `null` for a
- * closed prospect, which never goes stale. The API's morning sweep and both
+ * closed or accepted prospect, which never goes stale. The API's morning sweep and both
  * clients read this one rule.
  */
 export function rushStaleOn(
   candidate: Omit<RushWorkLike, "follow_up_on">,
   staleDays: number,
 ): string | null {
-  if (candidate.closed_reason != null) return null;
+  if (!isRushWorkOpen(candidate)) return null;
   const base = candidate.last_contact_on ?? candidate.created_at.slice(0, 10);
   return shiftRushDayKey(base, staleDays);
 }
@@ -287,11 +300,11 @@ export function isRushCandidateStale(
 
 /** A follow-up due today or already past, on an open prospect. */
 export function isRushFollowUpDue(
-  candidate: Pick<RushWorkLike, "closed_reason" | "follow_up_on">,
+  candidate: Pick<RushWorkLike, "closed_reason" | "bid_state" | "follow_up_on">,
   today: string,
 ): boolean {
   return (
-    candidate.closed_reason == null &&
+    isRushWorkOpen(candidate) &&
     candidate.follow_up_on != null &&
     candidate.follow_up_on <= today
   );
@@ -374,7 +387,7 @@ export function formatRushDay(day: string, today: string): string {
 export function rushFollowUpsDueCount(
   candidates: readonly Pick<
     RushWorkLike & { follow_up_user_id: string | null },
-    "closed_reason" | "follow_up_on" | "follow_up_user_id"
+    "closed_reason" | "bid_state" | "follow_up_on" | "follow_up_user_id"
   >[],
   viewerId: string,
   today: string,
@@ -383,3 +396,62 @@ export function rushFollowUpsDueCount(
     (c) => c.follow_up_user_id === viewerId && isRushFollowUpDue(c, today),
   ).length;
 }
+
+/**
+ * The starting tier an accepted PNM joins under (#4068 decision 10): the one
+ * named "New members", whatever its case or spacing. A chapter that renamed it
+ * away has none, and its Recruitment settings ask it to pick a role instead
+ * (`spec/behavior/ifc-recruitment.md` § Bids).
+ */
+export const RUSH_NEW_MEMBERS_TIER_NAME = "New members";
+
+export function rushNewMembersTier<T extends { name: string }>(
+  tiers: readonly T[],
+): T | null {
+  const key = RUSH_NEW_MEMBERS_TIER_NAME.toLowerCase();
+  return (
+    tiers.find(
+      (tier) => tier.name.trim().replace(/\s+/g, " ").toLowerCase() === key,
+    ) ?? null
+  );
+}
+
+// ── Bids (#5973) ─────────────────────────────────────────────────────────────
+
+/**
+ * A bid's full state (`spec/behavior/ifc-recruitment.md` § Bids). Only bid
+ * actions move it, never a stage move. A recorded acceptance stays
+ * `extended` until it is confirmed.
+ */
+export const RUSH_BID_STATES = [
+  "none",
+  "extended",
+  "accepted",
+  "declined",
+  "expired",
+  "rescinded",
+] as const;
+export type RushBidState = (typeof RUSH_BID_STATES)[number];
+
+/**
+ * The two values shipped clients read in `bid_status` (§ Compatibility with
+ * shipped clients): an acceptance still reads as a bid out, and every other
+ * state as none.
+ */
+export function rushLegacyBidStatus(state: RushBidState): "none" | "extended" {
+  return state === "extended" || state === "accepted" ? "extended" : "none";
+}
+
+/** Extend is allowed only from these; anything else is answered 409. */
+export function canExtendRushBid(state: RushBidState): boolean {
+  return state === "none" || state === "expired";
+}
+
+/** How long a bid stays open, a chapter setting until councils land. */
+export const RUSH_BID_EXPIRY_DAYS_DEFAULT = 7;
+export const RUSH_BID_EXPIRY_DAYS_MIN = 1;
+export const RUSH_BID_EXPIRY_DAYS_MAX = 30;
+export const RUSH_BID_RESCIND_REASON_MAX = 200;
+
+/** A recorded acceptance's state's words: "Waiting to confirm". */
+export const RUSH_BID_WAITING_TO_CONFIRM = "Waiting to confirm";

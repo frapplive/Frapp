@@ -66,7 +66,7 @@ Event (`apps/web/components/chat/event-quick-form.tsx`) holds the four fields ev
 A tap posts that task's card, the same card a created task posts, through `linkTask` in `@repo/chat-core/dispatch` (`POST /v1/tasks/:id/share`, which refuses a task the member can't read); a refusal shows under the field and keeps the picker open, and a lost answer reads as unconfirmed.
 **New task** sits beside the field for a member with `TASK_CREATE_PERMISSIONS` and turns the view into the Task form; it opens straight on the form when a Task draft is waiting. Comparable: Slack's and Linear's issue pickers.
 The Task form (`apps/web/components/tasks/task-form.tsx`) is Title, Assignee and Due date, with Points, Repeat and Description behind More options (Repeat: [tasks.md § Repeating tasks](../tasks.md#repeating-tasks), #5119; a repeating task posts a card for its first copy only). Role assignees are #4295 step 3.
-Service hours and Points are the bodies the Service page's Log service hours dialog and the Points page's Adjust points dialog also host (`apps/web/components/service/log-hours-form.tsx`, `apps/web/components/points/points-adjustment-form.tsx`), so the two never drift;
+Service hours and Points are the bodies the Log service hours dialog (Log hours on Profile's Service hours panel) and the Adjust points dialog (the chapter points ledger's, and a member card's, [`../points.md` § Where points are read](../points.md#where-points-are-read)) also host (`apps/web/components/service/log-hours-form.tsx`, `apps/web/components/points/points-adjustment-form.tsx`), so the two never drift;
 Service hours, unlike `/hours log`, can attach proof, and Points lists members by name (a shared name gets its email, never a user id), picks nobody until asked, and leaves out the officer's own row, which the API refuses.
 Every form names a missing or invalid field under it, outlined, and focuses it on submit; only a write the server refuses toasts.
 
@@ -326,7 +326,7 @@ Comparable apps: Google Forms, Microsoft Forms, Typeform and Slack Workflow form
   Which room?", so two questions with one title stay two columns (`formResponsesExportRows` in `@repo/chat-core/form-responses`, shared with the phone).
 - **Responses (phone, step 4).**
   The creator's card adds a secondary **Responses** button beside Fill out, which opens a full-screen page over the thread (`form-responses-page.tsx`), hosted by the form page's own overlay (`FormFillPage` with mode `responses`), so the virtualized row that opened it can't close it and the back button and edge swipe close the page rather than the thread.
-  It draws what web's panel does, with a Summary | Individual segmented control for the tabs, and **Export** at its foot shares the CSV through the share sheet, as the sign-up card's does.
+  It draws what web's panel does, with Summary and Individual as view labels at its head (`ViewLabels`, [`components.md` § View labels](../../ui/design-system/components.md#view-labels-change-a-pages-or-a-lists-view); a segmented control until #5947), and **Export** at its foot shares the CSV through the share sheet, as the sign-up card's does.
 - **Checked on save.**
   `PUT` takes `{ answers }`: text for a short-answer or paragraph question (up to 300 and 4,000 characters), an option id for multiple choice or a dropdown, a list of option ids for checkboxes, and `yes` or `no`.
   A blank answer is dropped; a blank required question, an option the question doesn't list, or an answer to a question the form doesn't ask is a 400 (`normalizeFormAnswers`).

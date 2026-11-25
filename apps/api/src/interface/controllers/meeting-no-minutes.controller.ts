@@ -44,8 +44,9 @@ export class MeetingNoMinutesController {
 
   @Get('meetings-no-minutes')
   @ApiOperation({
-    summary:
-      'The events this officer can see that are marked "No minutes", so the Meetings list stops asking for them',
+    summary: 'The events this officer can see that are marked "No minutes"',
+    description:
+      "Read by the phone Minutes list of builds from before #5949, which stops asking for these. A current client reads Activity's Minutes run instead, where the server leaves marked meetings out.",
   })
   @ApiOkResponse({ type: MeetingNoMinutesListDto })
   async list(

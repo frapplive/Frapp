@@ -126,5 +126,8 @@ test("the dashboard floor suite still exists and still measures every dashboard 
     // Thirteen since #3837: `/reports` and `/discord-import` redirect into
     // Chapter settings as well.
     // Fourteen since #5924: `/rush`, the recruitment pipeline.
-  ).toHaveLength(14);
+    // Fifteen since #5946: `/messages`, the Messages page.
+    // Twelve since #5950: `/points`, `/service` and `/study` redirect to the
+    // member's own panels on `/profile`, which this list already measures.
+  ).toHaveLength(12);
 });

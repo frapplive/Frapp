@@ -12,13 +12,15 @@ import { isDirectChannel } from "@repo/validation";
 import { asArray } from "@/lib/utils";
 
 /**
- * What is new in chat while it is out of sight, split the way the nav splits
- * it (#3774): the Chat row lights for the chapter's channels, and the Direct
- * messages row counts conversations. Both stay until the counts say the member
- * has read them, and the shell-wide inbox binding keeps the counts live off
- * `/chat` (`use-chat-realtime-binding.ts`, #3745).
+ * What is new in chat, split the way the sidebar splits it (#3774, #5946):
+ * the chapter's channels, and the member's conversations, which the Messages
+ * row counts. Both stay until the counts say the member has read them, and
+ * the shell-wide inbox binding keeps the counts live on every route
+ * (`use-chat-realtime-binding.ts`, #3745).
  *
- * - **Channels** light the Chat row (#3824) two ways, the same two the channel
+ * - **Channels** show their own unread in the sidebar's list. Where the list
+ *   is out of sight (the rail and the drawer, which hold a Channels button in
+ *   its place) that button lights (#3824) two ways, the same two the channel
  *   list draws: an @-mention, which gets past a mute as it does for push and
  *   for the list's Hide muted filter (`countsAddressMember`, foundations §5);
  *   or anything unread in a channel known not to be muted. Levels are read
@@ -33,7 +35,7 @@ import { asArray } from "@/lib/utils";
  * Counts are the server's (`GET /v1/channels/unread`, the read the list uses),
  * never a local re-derivation, and unknown counts light nothing. Until the
  * channel list has loaded a row's kind is unknown, and it is read as a
- * channel, so a DM lights Chat for that moment rather than nothing at all.
+ * channel, so a DM lights Channels for that moment rather than nothing at all.
  */
 type ChatUnread = {
   channels: boolean;
@@ -92,34 +94,24 @@ export function useChatHasUnread(): boolean {
 }
 
 export type NavHighlights = {
-  /** Rows lit with a dot: today only Chat. */
-  highlighted: ReadonlySet<string>;
-  /** Rows carrying a mention-red count: today only Direct messages. */
-  counts: ReadonlyMap<string, number>;
+  /** The rail's and the drawer's Channels button has something unread. */
+  channels: boolean;
+  /** Conversations with anything unread: the Messages row's red count. */
+  messages: number;
 };
 
-const NO_HIGHLIGHTS: ReadonlySet<string> = new Set();
-const CHAT_HIGHLIGHTED: ReadonlySet<string> = new Set(["chat"]);
-const NO_COUNTS: ReadonlyMap<string, number> = new Map();
-
 /**
- * The nav rows with something new (`AppNav`'s `highlighted` and `counts`), on
- * every route and in the drawer until seen (#3824, #3774).
+ * What the sidebar lights for chat, on every route and in the drawer until
+ * seen (#3824, #3774).
  *
- * Read by the nav itself (`NavColumn`, the shell's drawer), never by
- * `DashboardShell`'s body: the counts change with every message the inbox
- * reports, on every route, and only the nav has to redraw for it.
+ * Read by the sidebar itself, never by `DashboardShell`'s body: the counts
+ * change with every message the inbox reports, on every route, and only the
+ * sidebar has to redraw for it.
  */
 export function useNavHighlights(): NavHighlights {
   const { channels, directConversations } = useChatUnread();
   return useMemo(
-    () => ({
-      highlighted: channels ? CHAT_HIGHLIGHTED : NO_HIGHLIGHTS,
-      counts:
-        directConversations > 0
-          ? new Map([["direct", directConversations]])
-          : NO_COUNTS,
-    }),
+    () => ({ channels, messages: directConversations }),
     [channels, directConversations],
   );
 }

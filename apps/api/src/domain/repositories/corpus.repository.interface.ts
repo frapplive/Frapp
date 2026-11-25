@@ -30,8 +30,11 @@ export interface MatchCorpusInput {
   /** The member the retrieval acts for. Not a member: no rows. */
   userId: string;
   query: string;
-  embedding: number[];
-  embeddingModel: string;
+  /**
+   * The question's embedding and the model that made it, or null to search
+   * by words alone: no passage is "nearest" then.
+   */
+  embedding: { vector: number[]; model: string } | null;
   /** How many candidates each half returns. */
   limit: number;
   /** Narrows the candidates; never an access rule. */

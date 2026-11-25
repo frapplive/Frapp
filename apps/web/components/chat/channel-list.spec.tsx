@@ -642,7 +642,6 @@ function sidebarControls(
       pinnedIds: new Set(),
       collapsed: new Set(),
       filters: { unreadOnly: false, hideMuted: false },
-      sort: "chapter",
     },
     mutedChannelIds: new Set(),
     onSetPinned: vi.fn(),
@@ -695,7 +694,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(["c-exec"]),
           collapsed: new Set(),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -740,7 +738,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map([
@@ -764,7 +761,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map([["c-gen", { unreadCount: 3, mentionCount: 0 }]]),
@@ -781,7 +777,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map(),
@@ -802,7 +797,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(["c-exec"]),
           collapsed: new Set(),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -829,7 +823,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
         pinnedIds: new Set([dm.id]),
         collapsed: new Set(),
         filters: { unreadOnly: false, hideMuted: false },
-        sort: "chapter",
       },
     });
     const renderHidden = (activeChannelId: string | null) =>
@@ -875,7 +868,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(),
           filters: { unreadOnly: true, hideMuted: false },
-          sort: "chapter",
         },
       }),
     );
@@ -923,7 +915,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
             pinnedIds: new Set(),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: true },
-            sort: "chapter",
           },
         })}
       />,
@@ -972,7 +963,6 @@ describe("ChannelList sidebar arrangement (#2877)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["direct"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
       new Map([["c-dm", { unreadCount: 3, mentionCount: 0 }]]),
@@ -1026,7 +1016,7 @@ describe("ChannelFilters (#2877)", () => {
   });
 });
 
-describe("ChannelList member sort (#2877)", () => {
+describe("ChannelList order: always the chapter's (Paul, 2026-11-24, #5947)", () => {
   const zulu: ChatChannel = {
     id: "c-z",
     name: "zulu",
@@ -1046,81 +1036,29 @@ describe("ChannelList member sort (#2877)", () => {
       (li) => li.querySelector("span.truncate")?.textContent ?? "",
     );
 
-  function renderSorted(
-    sort: "chapter" | "recent" | "alpha",
-    latestAt?: ReadonlyMap<string, string>,
-  ) {
-    return render(
+  it("draws the chapter's order, even with every channel's latest message known", () => {
+    render(
       <ChannelList
         channels={[alpha, mike, zulu]}
         activeChannelId={null}
         viewerId={VIEWER}
         memberNames={NAMES}
-        latestAt={latestAt}
+        latestAt={
+          new Map([
+            ["c-m", "2026-11-14T12:00:00.000Z"],
+            ["c-a", "2026-11-14T09:00:00.000Z"],
+          ])
+        }
         onPick={vi.fn()}
-        sidebar={sidebarControls({
-          preferences: {
-            pinnedIds: new Set(),
-            collapsed: new Set(),
-            filters: { unreadOnly: false, hideMuted: false },
-            sort,
-          },
-        })}
+        sidebar={sidebarControls()}
       />,
     );
-  }
-
-  it("draws the chapter's order by default", () => {
-    renderSorted("chapter");
     expect(rowsIn("Channels")).toEqual(["zulu", "alpha", "mike"]);
-  });
-
-  it("draws A–Z when the member picks it", () => {
-    renderSorted("alpha");
-    expect(rowsIn("Channels")).toEqual(["alpha", "mike", "zulu"]);
-  });
-
-  it("draws the newest activity first under Recent", () => {
-    renderSorted(
-      "recent",
-      new Map([
-        ["c-m", "2026-11-14T12:00:00.000Z"],
-        ["c-a", "2026-11-14T09:00:00.000Z"],
-      ]),
-    );
-    expect(rowsIn("Channels")).toEqual(["mike", "alpha", "zulu"]);
   });
 });
 
-describe("ChannelFilters sort (#2877)", () => {
-  it("offers the three sorts and sends the one picked", () => {
-    const onChange = vi.fn();
-    render(
-      <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="chapter"
-        onChange={onChange}
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
-    );
-
-    const group = screen.getByRole("radiogroup", { name: "Sort" });
-    expect(
-      within(group)
-        .getAllByRole("radio")
-        .map((radio) => radio.textContent),
-    ).toEqual(["Chapter order", "Recent", "A–Z"]);
-    expect(
-      within(group).getByRole("radio", { name: "Chapter order" }),
-    ).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.click(within(group).getByRole("radio", { name: "Recent" }));
-    expect(onChange).toHaveBeenCalledWith({ sort: "recent" });
-  });
-
-  it("offers no sort without one, and says so in its name, as on the Direct messages panel", () => {
+describe("ChannelFilters: filters only, no sort (#5947)", () => {
+  it("offers the two filters and no sort", () => {
     render(
       <ChannelFilters
         filters={{ unreadOnly: false, hideMuted: false }}
@@ -1130,37 +1068,20 @@ describe("ChannelFilters sort (#2877)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filter channels" }));
 
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sort")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Unread only")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hide muted")).toBeInTheDocument();
   });
 
-  it("tells someone who can drag that dragging needs Chapter order", () => {
+  it("says when a filter is on", () => {
     render(
       <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="alpha"
-        reorderable
+        filters={{ unreadOnly: true, hideMuted: false }}
         onChange={vi.fn()}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
-    );
-
     expect(
-      screen.getByText("Switch to Chapter order to drag channels."),
-    ).toBeInTheDocument();
-  });
-
-  it("lights no dot for a sort alone, since it hides nothing", () => {
-    render(
-      <ChannelFilters
-        filters={{ unreadOnly: false, hideMuted: false }}
-        sort="recent"
-        onChange={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Sort and filter channels" }),
+      screen.getByRole("button", { name: "Filter channels, filters on" }),
     ).toBeInTheDocument();
   });
 });
@@ -1254,7 +1175,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(),
             collapsed: new Set(["direct"]),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1299,7 +1219,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(["c-third"]),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1361,7 +1280,6 @@ describe("ChannelList as the Direct messages list (#3774)", () => {
             pinnedIds: new Set(["c-third", "c-group"]),
             collapsed: new Set(),
             filters: { unreadOnly: false, hideMuted: false },
-            sort: "chapter",
           },
         })}
       />,
@@ -1727,7 +1645,6 @@ describe("ChannelList threads under their channel (#5300)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(),
           filters: { unreadOnly: true, hideMuted: false },
-          sort: "chapter",
         },
       }),
     });
@@ -1750,7 +1667,6 @@ describe("ChannelList threads under their channel (#5300)", () => {
           pinnedIds: new Set(),
           collapsed: new Set(["channels"]),
           filters: { unreadOnly: false, hideMuted: false },
-          sort: "chapter",
         },
       }),
     });
@@ -1759,5 +1675,36 @@ describe("ChannelList threads under their channel (#5300)", () => {
       "font-bold",
       "text-foreground",
     );
+  });
+});
+
+describe("ChannelList in the sidebar: the list's own control on its first heading (#5946)", () => {
+  const execRow: ChatChannel = {
+    id: "c-exec",
+    name: "exec-board",
+    type: "PUBLIC",
+    category_id: "cat-exec",
+  };
+
+  it("draws the control once, on the first heading, and nothing over the list", () => {
+    render(
+      <ChannelList
+        channels={[general, execRow]}
+        categories={[{ id: "cat-exec", name: "Executive" }]}
+        activeChannelId={null}
+        viewerId={VIEWER}
+        memberNames={NAMES}
+        unreadByChannelId={new Map()}
+        onPick={vi.fn()}
+        sidebar={sidebarControls()}
+        headingControl={<button type="button">Sort and filter</button>}
+      />,
+    );
+    const controls = screen.getAllByRole("button", { name: "Sort and filter" });
+    expect(controls).toHaveLength(1);
+    // It rides a heading row, beside that heading's fold button.
+    const heading = controls[0]!.closest(".group\\/head");
+    expect(heading).not.toBeNull();
+    expect(heading!.querySelector("[aria-expanded]")).not.toBeNull();
   });
 });

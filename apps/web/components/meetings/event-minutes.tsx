@@ -2,8 +2,6 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { codeOf } from "@repo/api-sdk";
 import {
   useMeetingNoteTaking,
   useLiveMeetingRecordings,
@@ -11,7 +9,6 @@ import {
   useMemberDisplayNames,
   useMinutesRequest,
   useMyPermissions,
-  useStartMeeting,
   useViewerUserId,
 } from "@repo/hooks";
 import {
@@ -27,12 +24,9 @@ import { Button } from "@/components/ui/button";
 import { RequestMinutesButton } from "@/components/meetings/request-minutes-button";
 import { inlineNoteActionClassName } from "@/components/shared/inline-note";
 import { useChapterModuleGateState } from "@/lib/hooks/use-chapter-module-gate";
-import { useToast } from "@/lib/hooks/use-toast";
-import { cn, getErrorMessage } from "@/lib/utils";
-import {
-  guessMeetingType,
-  meetingHref,
-} from "@/components/meetings/meeting-copy";
+import { cn } from "@/lib/utils";
+import { meetingHref } from "@/components/meetings/meeting-copy";
+import { useStartMinutesFor } from "@/components/meetings/use-start-minutes-for";
 
 /** Whether the chapter keeps minutes in Frapp, once the module read answers. */
 export function useMeetingsModuleOn(): boolean {
@@ -65,8 +59,6 @@ export function EventMinutes({
   eventName: string;
 }) {
   const on = useMeetingsModuleOn();
-  const router = useRouter();
-  const { toast } = useToast();
   const meetingsQuery = useMeetings({ enabled: on && !!eventId, eventId });
   const viewerId = useViewerUserId();
   const names = useMemberDisplayNames();
@@ -84,7 +76,9 @@ export function EventMinutes({
     enabled: on && meetingsQuery.isSuccess && !meetingsQuery.data?.[0],
   });
   const permissions = useMyPermissions().data?.permissions ?? [];
-  const start = useStartMeeting();
+  const { startFor, isPending: starting } = useStartMinutesFor(() =>
+    meetingsQuery.refetch(),
+  );
 
   const canRecord = can("meetings:record", permissions);
   if (!on || !eventId) return null;
@@ -143,28 +137,8 @@ export function EventMinutes({
     return <MinutesRowFrame status={null} />;
   }
 
-  async function write() {
-    try {
-      const meeting = await start.mutateAsync({
-        event_id: eventId,
-        meeting_type: guessMeetingType(eventName),
-      });
-      router.push(meetingHref(meeting.id));
-    } catch (error) {
-      if (codeOf(error) === "meeting.already_started") {
-        void meetingsQuery.refetch();
-        toast({
-          title: MEETING_ENTRY_COPY.alreadyStartedTitle,
-          description: MEETING_ENTRY_COPY.alreadyStartedBody,
-        });
-        return;
-      }
-      toast({
-        title: MEETING_ENTRY_COPY.startFailed,
-        description: getErrorMessage(error, "Try again in a moment."),
-        variant: "destructive",
-      });
-    }
+  function write() {
+    void startFor({ id: eventId, name: eventName });
   }
 
   const lines = minutes
@@ -191,7 +165,7 @@ export function EventMinutes({
         <Button
           size="sm"
           variant="secondary"
-          disabled={start.isPending}
+          disabled={starting}
           onClick={() => void write()}
         >
           {MEETING_ENTRY_COPY.write}

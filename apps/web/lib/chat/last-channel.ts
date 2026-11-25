@@ -1,5 +1,5 @@
 import { lastChannelStorageKey } from "@repo/hooks";
-import type { ChatView } from "@/components/layout/shell-prefs";
+import type { ChatView } from "@/lib/chat/chat-links";
 
 /**
  * Channels and direct messages each remember their own last conversation

@@ -5,6 +5,7 @@ import type {
   SendInterestFormPushedUpEmailParams,
   SendInterestFormReceiptEmailParams,
   SendInviteEmailParams,
+  SendBidConfirmEmailParams,
   SendSchoolCodeEmailParams,
 } from '#domain/adapters/email.interface';
 import { logThrowable } from '../observability/log-throwable';
@@ -237,6 +238,47 @@ function interestFormPushedUpEmailText(
 }
 
 /**
+ * "Confirm you accepted FIJI's bid" (Winston's UI design v8 § 3b). PNM-facing,
+ * so it says "bid" and the chapter's name, never the chapter's own word for
+ * recruitment (`ifc-recruitment.md` § Words used here).
+ */
+function bidConfirmSubject(params: SendBidConfirmEmailParams): string {
+  return `Confirm you accepted ${clipName(params.chapterName) ?? 'a chapter'}'s bid`;
+}
+
+/** "Chris from FIJI recorded that you accepted their bid. …" */
+function bidConfirmLine(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'A chapter';
+  const recorder = clipName(params.recorderName);
+  const who = recorder ? `${recorder} from ${chapter}` : chapter;
+  return `${who} recorded that you accepted their bid. If that's right, confirm it with one tap. If it isn't, ignore this email and nothing changes.`;
+}
+
+function bidConfirmFootnote(params: SendBidConfirmEmailParams): string {
+  const days = params.expiresInDays;
+  if (days === null) return "If you didn't accept, you can ignore this email.";
+  return `The bid expires in ${days === 1 ? '1 day' : `${days} days`} if it isn't confirmed.`;
+}
+
+function bidConfirmEmailHtml(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'Your bid';
+  return (
+    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;color:#1b1a22;line-height:1.5">` +
+    `<p style="margin:0 0 4px;font-size:13px;color:#5d5a6b">Frapp</p>` +
+    `<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25">${escapeHtml(chapter)}</h1>` +
+    `<p style="margin:0 0 24px;font-size:16px">${escapeHtml(bidConfirmLine(params))}</p>` +
+    `<p style="margin:0 0 24px"><a href="${escapeHtml(params.confirmUrl)}" style="display:inline-block;background:#1b1a22;color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Confirm my acceptance</a></p>` +
+    `<p style="margin:0;font-size:13px;color:#5d5a6b">${escapeHtml(bidConfirmFootnote(params))}</p>` +
+    `</div>`
+  );
+}
+
+function bidConfirmEmailText(params: SendBidConfirmEmailParams): string {
+  const chapter = clipName(params.chapterName) ?? 'Your bid';
+  return `${chapter}\n\n${bidConfirmLine(params)}\n\nConfirm my acceptance: ${params.confirmUrl}\n\n${bidConfirmFootnote(params)}`;
+}
+
+/**
  * Resend's own words for a refused send (`{ name, message }`), for the log:
  * a bare 403 doesn't say whether the key, the domain or the recipient was
  * refused (#2655). Addresses are masked, since a refusal can quote one, and
@@ -337,6 +379,15 @@ export class ResendEmailProvider implements IEmailProvider {
       subject: `Your recruitment details went to ${clipName(params.councilName) ?? 'the council'}`,
       html: interestFormPushedUpEmailHtml(params),
       text: interestFormPushedUpEmailText(params),
+    }));
+  }
+
+  sendBidConfirmEmail(params: SendBidConfirmEmailParams): Promise<boolean> {
+    return this.send('bid confirmation', () => ({
+      to: params.to,
+      subject: bidConfirmSubject(params),
+      html: bidConfirmEmailHtml(params),
+      text: bidConfirmEmailText(params),
     }));
   }
 

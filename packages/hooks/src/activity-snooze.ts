@@ -122,7 +122,15 @@ export function activitySnoozedRows(
   const untilOf = (row: ActivityRow) => {
     // A reminder (#4957) is put off with its own Snooze, never this one, and
     // a task for everyone the member assigned (#5492) is never snoozed.
-    if (row.kind === "reminder" || row.kind === "task-group") return null;
+    if (
+      row.kind === "reminder" ||
+      row.kind === "task-group" ||
+      row.kind === "minutes-to-write" ||
+      row.kind === "minutes-draft" ||
+      row.kind === "minutes-notes"
+    ) {
+      return null;
+    }
     const record =
       row.kind === "task"
         ? row.task

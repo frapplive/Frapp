@@ -120,6 +120,18 @@ function candidate(
     follow_up_note: null,
     follow_up_user_id: null,
     follow_up_user_name: null,
+    bid_state: "none" as const,
+    bid_extended_at: null,
+    bid_extended_by_name: null,
+    bid_expires_at: null,
+    bid_acceptance_recorded_at: null,
+    bid_acceptance_recorded_by_name: null,
+    bid_confirm_emailed: false,
+    bid_answered_at: null,
+    bid_answered_by_name: null,
+    bid_answered_via: null,
+    bid_rescind_reason: null,
+    bid_invite_sent: null,
     ...extra,
   };
 }
@@ -148,11 +160,28 @@ function render(): ReactTestRenderer {
   return tree;
 }
 
+/** The stage chips, not the List / Summary views in the header (#5973). */
 function chips(tree: ReactTestRenderer) {
-  return tree.root.findAll(
+  const stages = tree.root.findAll(
+    (node) =>
+      node.props.accessibilityRole === "tablist" &&
+      node.props.accessibilityLabel === "Stages",
+  )[0];
+  if (!stages) return [];
+  return stages.findAll(
     (node) =>
       (node.type as unknown) === "Pressable" &&
       node.props.accessibilityRole === "tab",
+  );
+}
+
+function views(tree: ReactTestRenderer) {
+  return tree.root.findAll(
+    (node) =>
+      (node.type as unknown) === "Pressable" &&
+      node.props.accessibilityRole === "tab" &&
+      (node.props.accessibilityLabel === "List" ||
+        node.props.accessibilityLabel === "Summary"),
   );
 }
 
@@ -234,6 +263,23 @@ describe("the recruitment list (#5924)", () => {
       "Met · 0",
       "Closed · 2",
     ]);
+  });
+
+  it("switches to Summary: the counts and the funnel, the board's columns, with no chips or search (#5973)", () => {
+    const tree = render();
+    expect(views(tree).map((v) => v.props.accessibilityLabel)).toEqual([
+      "List",
+      "Summary",
+    ]);
+    act(() => views(tree)[1]!.props.onPress());
+    expect(chips(tree)).toEqual([]);
+    const text = screenText(tree);
+    expect(text).toContain("Open prospects");
+    expect(text).toContain("By stage");
+    // The funnel is the chips' own columns: Closed folds both Closed stages.
+    expect(text).toContain("Reached out");
+    expect(text).toContain("Top rated");
+    expect(text).not.toContain("Search prospects");
   });
 
   it("opens on the first stage for a role that can't work prospects, and switches with a chip", () => {

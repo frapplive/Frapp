@@ -65,19 +65,6 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
     expect(found.map((row) => row.id)).toEqual([CANDIDATE_B]);
   });
 
-  it('setBidExtended refuses an id belonging to another chapter', async () => {
-    await expect(
-      harness.expectTenantScoped(CHAPTER_B, () =>
-        repo.setBidExtended(CANDIDATE_A, CHAPTER_B),
-      ),
-    ).rejects.toMatchObject({ code: 'PGRST116' });
-
-    expect(
-      harness.rows('rush_candidates').find((r) => r.id === CANDIDATE_A)
-        ?.bid_status,
-    ).toBe('none');
-  });
-
   it('countVotes and viewerHasVoted filter by chapter', async () => {
     harness = createTenantHarness({
       tables: {
@@ -131,6 +118,7 @@ describe('SupabaseRushCandidateRepository — tenant scope', () => {
         stage: 'new',
         closed_reason: null,
         bid_status: 'none',
+        bid_state: 'none',
         created_by: USER_SHARED,
       }),
     );

@@ -14,13 +14,13 @@ import { useChapterBranding } from "@/lib/chapter-branding";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 
 /**
- * Each meeting type's hue on the Minutes list (#5290): the chapter's own
+ * Each meeting type's hue on a minutes row (#5290): the chapter's own
  * accent for chapter meetings, the semantic blue and green for exec and
  * committee, neutral for anything else, so a long list reads by colour
  * before it reads by name (Paul's "colour over grey sameness"). The tile
  * says the type; its words are in the row's spoken label.
  */
-export function useMeetingTypeHue(): (type: string) => string | undefined {
+function useMeetingTypeHue(): (type: string) => string | undefined {
   const { tokens } = useFrappTheme();
   const { accent } = useChapterBranding();
   return (type) =>
@@ -33,8 +33,8 @@ export function useMeetingTypeHue(): (type: string) => string | undefined {
           : undefined;
 }
 
-/** A meeting type's tile, in its hue: a row's lead, a chip's mark. */
-export function MeetingTypeTile({
+/** A meeting type's tile, in its hue: a row's lead. */
+function MeetingTypeTile({
   type,
   size = "row",
 }: {
@@ -57,7 +57,8 @@ export function MeetingTypeTile({
 export type MinutesRowFacts = Parameters<typeof minutesRowTags>[0];
 
 /**
- * One row of the Minutes list, or of a series' list: the type's tile, the
+ * One row of a series' list (#5290; the Minutes list's too, until #5949
+ * folded it into Documents): the type's tile, the
  * title, the time on the right, and tags worked out from the minutes
  * themselves, never typed (#5291 is typed tags): where a draft stands in one
  * tag ("Not started", "Drafting", "Winston Hewitt is recording"), No meeting,
@@ -71,7 +72,6 @@ export function MinutesRow({
   facts,
   who,
   gist,
-  showType = false,
   onPress,
 }: {
   title: string;
@@ -83,18 +83,13 @@ export function MinutesRow({
   who?: string | null;
   /** The TL;DR's first line: what happened, at a glance. */
   gist?: string | null;
-  /** Say the type in words too (`showsTypeTag`). */
-  showType?: boolean;
   onPress: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
   const typeLabel = meetingTypeLabel(type as MeetingType, otherLabel);
   const shared = minutesRowTags(facts, who);
-  const tags = [
-    ...(showType ? [typeLabel] : []),
-    ...shared.map((tag) => tag.label),
-  ];
+  const tags = shared.map((tag) => tag.label);
   return (
     <PressableRow
       accessibilityRole="button"
@@ -102,7 +97,7 @@ export function MinutesRow({
         title,
         `${typeLabel} meeting`,
         time,
-        ...tags.filter((tag) => tag !== typeLabel),
+        ...tags,
         gist ?? null,
       ]
         .filter(Boolean)
@@ -117,7 +112,6 @@ export function MinutesRow({
         </Text>
         {tags.length > 0 ? (
           <View style={styles.tags}>
-            {showType ? <HairlineChip label={typeLabel} /> : null}
             {shared.map((tag) => {
               const hue = tagHue(tag.key, tokens);
               return hue ? (

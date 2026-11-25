@@ -13,9 +13,10 @@ import { useChapterStore } from "@/lib/stores/chapter-store";
 import { COUNCIL_HOME_COPY } from "@/components/councils/council-copy";
 
 /**
- * A council's home view (#5933): what the shell shows with nothing open,
- * where a chapter shows its crest and school (`chapter-home.tsx`). The same
- * crest on the same accent glow, then what a council is that a chapter isn't:
+ * A council's home (#5933): what New opens in a council (`ask-page.tsx`,
+ * since #5946; until then the shell's view with nothing open, beside the
+ * chapter's crest-and-school home that #5946 deleted). A crest on an accent
+ * glow, then what a council is that a chapter isn't:
  * its type and school, and whether Frapp has verified it yet. Every council
  * starts unverified (`school-layer.md` § 5.3).
  *
@@ -50,7 +51,6 @@ export function CouncilHome() {
   return (
     <section
       aria-label="Home"
-      data-chapter-home=""
       data-council-home=""
       className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-background px-6 text-center"
     >

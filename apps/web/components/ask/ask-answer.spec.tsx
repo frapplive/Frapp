@@ -282,6 +282,16 @@ describe("askSourceHref", () => {
     ).toBe("/events");
   });
 
+  it("opens the asker's own points, and the standings in the Directory (#5950)", () => {
+    const page = (name: string) =>
+      askSourceHref({
+        ...ANSWER.sources[0]!,
+        target: { type: "page", page: name },
+      });
+    expect(page("points")).toBe("/profile?open=points");
+    expect(page("standings")).toBe("/members?sort=points");
+  });
+
   it("downloads a backwork file instead of linking to a page (#5209)", () => {
     const file = {
       ...ANSWER.sources[0]!,

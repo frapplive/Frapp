@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   AA_NORMAL,
   applyAlpha,
+  hexToHsv,
   hexToOklch,
+  hsvToHex,
   oklchToHex,
   contrastRatio,
   meetsContrast,
@@ -213,5 +215,28 @@ describe("OKLCH", () => {
     expect(oklchToHex({ l: Number.NaN, c: Number.NaN, h: Number.NaN })).toBe(
       "#000000",
     );
+  });
+});
+
+describe("HSV", () => {
+  it("reads and writes the primaries and greys", () => {
+    expect(hsvToHex({ h: 0, s: 1, v: 1 })).toBe("#FF0000");
+    expect(hsvToHex({ h: 120, s: 1, v: 1 })).toBe("#00FF00");
+    expect(hsvToHex({ h: 240, s: 1, v: 1 })).toBe("#0000FF");
+    expect(hsvToHex({ h: 300, s: 0, v: 0.5 })).toBe("#808080");
+    expect(hexToHsv("#000000")).toEqual({ h: 0, s: 0, v: 0 });
+    expect(hexToHsv("nope")).toBeNull();
+  });
+
+  it("round-trips sRGB colors", () => {
+    for (const hex of ["#F2994A", "#B392F0", "#3DD6C4", "#0B0A0D", "#FFFFFF"]) {
+      expect(hsvToHex(hexToHsv(hex)!)).toBe(hex);
+    }
+  });
+
+  it("clamps out-of-range parts instead of making a non-color", () => {
+    expect(hsvToHex({ h: 360, s: 2, v: -1 })).toBe("#000000");
+    expect(hsvToHex({ h: -120, s: 1, v: 1 })).toBe("#0000FF");
+    expect(hsvToHex({ h: Number.NaN, s: 1, v: 1 })).toBe("#FF0000");
   });
 });

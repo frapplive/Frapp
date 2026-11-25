@@ -21,10 +21,12 @@ import {
   type IMemberRepository,
 } from '#domain/repositories/member.repository.interface';
 import {
+  NO_READABLE_MINUTES,
   canSeeDocument,
   folderListsByName,
   listsInPlay,
 } from '#domain/utils/document-access';
+import { isDocumentFile } from '#domain/entities/chapter-document.entity';
 import { RbacService } from '../rbac.service';
 import type { CorpusSourceAdapter, CorpusSourceRead } from './corpus-source';
 
@@ -37,7 +39,8 @@ const DOCUMENTS_BUCKET = 'documents';
  * (`spec/behavior/chapter-docs.md` § Permissions), and then only the files
  * they see there (§ Who can see, #3642 piece 1): the same
  * `document-access.ts` answer the library's own list gives, so Ask never
- * quotes a file the member can't open.
+ * quotes a file the member can't open. Only files: a row that files a
+ * meeting's minutes (#5949) is not a source here at all.
  *
  * A document does not decay: bylaws and policies are as true next year as
  * today, and an amendment that supersedes one is a second document an answer
@@ -62,6 +65,11 @@ export class ChapterDocumentCorpusSource implements CorpusSourceAdapter {
   async read(chapterId: string, sourceId: string): Promise<CorpusSourceRead> {
     const document = await this.documents.findById(sourceId, chapterId);
     if (!document) return { status: 'gone' };
+    // A row that files a meeting's minutes holds no text of its own: posted
+    // minutes are the `meeting_minutes` source, read under the meeting's own
+    // rule (#5949). The trigger never notes one; this is the same answer for
+    // a row that reached the queue anyway.
+    if (!isDocumentFile(document)) return { status: 'gone' };
 
     const bytes = await this.storage.downloadFile(
       DOCUMENTS_BUCKET,
@@ -109,10 +117,13 @@ export class ChapterDocumentCorpusSource implements CorpusSourceAdapter {
       [SystemPermissions.MEMBERS_VIEW],
     );
     if (!mayOpenLibrary) return new Set();
-    const [documents, folders] = await Promise.all([
+    const [found, folders] = await Promise.all([
       this.documents.findByIds([...sourceIds], chapterId),
       this.folders.findByChapter(chapterId),
     ]);
+    // Files only: a minutes row is never a document source (`read`), so no
+    // answer may quote one through this door, whoever asks.
+    const documents = found.filter(isDocumentFile);
     const lists = folderListsByName(folders);
     const inPlay = listsInPlay([
       ...documents.map((document) => document.who_can_see),
@@ -131,7 +142,9 @@ export class ChapterDocumentCorpusSource implements CorpusSourceAdapter {
       ),
     };
     return ids(
-      documents.filter((document) => canSeeDocument(document, lists, viewer)),
+      documents.filter((document) =>
+        canSeeDocument(document, lists, viewer, NO_READABLE_MINUTES),
+      ),
     );
   }
 }

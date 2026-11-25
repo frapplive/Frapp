@@ -21,7 +21,7 @@ import {
 } from "@/components/sheet-scaffold";
 import { ON_MEDIA_DISC, ON_MEDIA_INK } from "./on-media";
 import { StarGlyph } from "@/components/documents/document-glyphs";
-import { Segmented } from "@/components/segmented";
+import { ViewLabels } from "@/components/view-labels";
 import { useChapterBranding } from "@/lib/chapter-branding";
 import { typeRole, useFrappTheme } from "@/lib/theme";
 import { useReduceMotion } from "@/lib/use-reduce-motion";
@@ -259,12 +259,13 @@ export const GifPickerSheet = forwardRef<BottomSheetModal, GifPickerSheetProps>(
           }}
           ListHeaderComponent={
             <View style={styles.header}>
-              <Segmented
+              <ViewLabels
+                compact
+                flush
                 options={GIF_TABS}
                 value={tab}
                 onChange={setTab}
                 accessibilityLabel="GIFs"
-                dense
               />
               {/* `BottomSheetTextInput`, not `SearchField`: a plain input
                   breaks the sheet's keyboard handling (`patterns.md`). */}

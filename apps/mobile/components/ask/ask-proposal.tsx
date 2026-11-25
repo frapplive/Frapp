@@ -148,10 +148,12 @@ import { BottomSheetFlatList } from "@/lib/sheet-scrollables";
 export type ActLink = { href: string; label: string };
 
 /**
- * Where a confirmed change can be seen, by the page the card named. The
- * phone has no points page to open (`notifications/targets.ts`).
+ * Where a confirmed change can be seen, by the page the card named. Points
+ * given open the Directory's standings (#5950), as on web for a role that
+ * can't read the chapter ledger, which the phone doesn't have.
  */
 const RESULT_LINKS: Record<string, ActLink> = {
+  points: { href: "/directory?sort=points", label: ACT_COPY.open_standings },
   tasks: { href: "/tasks", label: ACT_COPY.open_tasks },
   events: { href: "/events", label: ACT_COPY.open_events },
 };

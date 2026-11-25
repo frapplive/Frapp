@@ -179,7 +179,7 @@ Short forms that stay, each for a reason:
 - The Messages list's last-sent time (`formatConversationTime`: `Nov 6`), at the end of a name line as a messaging inbox puts it (#5519).
 - Calendar grids' column headings (`Fri` over a column) and date tiles (`NOV` over `6`), which are a calendar's own drawing, not text a member reads as a sentence.
 
-Not yet converted (tracked in [#5696](https://github.com/frapplive/Frapp/issues/5696), not exceptions): the phone's Minutes list row time, push notification bodies, and a repeat pattern's weekdays (`Every Mon and Thu`).
+Not yet converted (tracked in [#5696](https://github.com/frapplive/Frapp/issues/5696), not exceptions): the phone's minutes series row time (`minutesRowTime`, the Minutes list's until #5949), push notification bodies, and a repeat pattern's weekdays (`Every Mon and Thu`).
 
 ## 6. Trust copy rules
 
@@ -296,7 +296,7 @@ No results = neutral tile, names the query"*, under a section eyebrow that budge
 
 - **Empty and no-results were one row doing two jobs.**
   `No members match this view` / `Try a broader search or invite your first members to populate this directory.` had to cover a chapter with no roster *and* a search that matched nothing, so it asserted neither and instructed the reader in both.
-  The split is the one the Points table below already makes between an empty leaderboard and a search that matched nothing, for the same reason: a filtered view that matches nothing is not a claim about the data.
+  The split is the one the Points table below makes between an empty history and filters that matched nothing, for the same reason: a filtered view that matches nothing is not a claim about the data.
 - **The descriptions state a fact instead of giving an instruction**, except in the no-results hint slot, where the board's own drawn hint is an instruction (`Check the spelling`).
 - **`actives`, not `members`,** in the two titles about the list itself: it is the word the tab and the section label above the list already use, and the shipped mobile Directory's empty title is the same `No actives yet` (`apps/mobile/app/(app)/directory.tsx`).
   Mobile draws that title alone, without this row's description, under §4 as amended 2026-11-05 *(corrected 2026-11-05: this said mobile renders the same state, which stopped being true of the description)*.
@@ -389,30 +389,31 @@ Otherwise a day with nothing on it says `Nothing on this day.` (2026-11-09). The
 
 ### Points (dashboard)
 
-| State | Title | Description |
-|---|---|---|
-| Loading | — | `Loading points ledger...` |
-| Everyone at 0 | — | `Everyone is tied at 0. The first points earned take the lead.` (one line under the board) |
-| Empty leaderboard | — | `Nobody has points in this period.` (one line) |
-| Leaderboard search matched nothing | — | `No members match that search.` then a **Clear search** link (one line) |
-| Empty transactions | — | `No points in this period yet.` (one line) |
-| Transaction filters matched nothing | — | `No transactions match these filters.` then a **Clear filters** link (one line) |
-| Error | `Couldn't load the points ledger` | `Standings and transactions are unavailable, so none are shown. ` + the load-failure line (§ copy rules) |
-| Offline | `Points ledger unavailable offline` | `Reconnect to refresh leaderboard standings and transaction history.` |
-
-The board lists the whole roster, at 0 until a member earns points ([`points.md` § Leaderboard](../../behavior/points.md#leaderboard)), so a new chapter sees its members tied for first with the one line above rather than a card.
-The empty and no-match states are single lines (`InlineNote`, `apps/web/components/shared/inline-note.tsx`) where the rows would be, not cards; error and offline keep theirs (2026-11-06).
-
-### Points — Audit tab (dashboard)
+A member's own points, the Points panel on their Profile (#5950; the Points page until then, whose leaderboard lines went with it), and the Directory's standings.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading audit transactions...` |
-| Empty (flagged only) | — | `Nothing flagged in this window.`, then `Single adjustments of \|amount\| ≥ {threshold} are flagged here automatically.` when the chapter's threshold is known (one line) |
+| Loading | — | skeleton rows; `Loading your points` to a screen reader |
+| Empty transactions | — | `No points in this period yet.` (one line; the phone's Points screen says the same) |
+| Transaction filters matched nothing | — | `No transactions match these filters.` then a **Clear filters** link, which clears the search, the category and the amount (one line) |
+| Error | `Couldn't load your points` | the load-failure line (§ copy rules); the phone's Points screen says the same |
+| Standings didn't load (Directory, both apps) | `Couldn't load the standings` | `The totals for this period didn't load, so nobody is ranked. Try again, or pick another sort.` |
+
+The empty and no-match states are single lines (`InlineNote`, `apps/web/components/shared/inline-note.tsx`) where the rows would be, not cards; the error keeps its block (2026-11-06).
+
+### Points ledger (dashboard)
+
+The chapter points ledger on Chapter settings' Points page (#5950; the Points page's Audit section until then).
+It is drawn only for `points:view_all`, so it has no denied or permission-check state.
+
+| State | Title | Description |
+|---|---|---|
+| Loading | — | `Loading the ledger...` |
+| Limits line | — | `Flags at ±{threshold} points · {rate} adjustments per admin per hour`, then `Each flag keeps the threshold it was raised under.`; left out when the chapter's config can't be read |
+| Empty | — | `No points have been recorded yet.` (one line) |
+| Empty (flagged only) | — | `Nothing flagged in this window.`, then `Single adjustments of \|amount\| ≥ {threshold} land here.` when the chapter's threshold is known (one line) |
 | Empty (filtered) | — | `No transactions match these filters.` then a **Clear filters** link, which resets the category and the member (one line) |
-| Error | `Audit unavailable` | `Couldn't load chapter transactions. ` + the load-failure line (§ copy rules) |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can view the chapter's transaction log.` |
-| Permission denied | `Audit` (the section label) | `Your role can't see every transaction.` |
+| Error | `Ledger unavailable` | `Couldn't load chapter transactions. ` + the load-failure line (§ copy rules) |
 
 ### Roles & Permissions (dashboard)
 
@@ -489,24 +490,16 @@ It replaced the `You're all clear` card.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading service entries...` |
-| Empty queue | — | `Nothing waiting for review.` (one line) |
-| Queue row, points preview | — | `Approving awards {N} service point(s), at the chapter's current rate of 1 per {rate}.`; under the rate, `Approving awards no points: {duration} is under the chapter's current rate of 1 point per {rate}.` `{rate}` reads `hour` at the default 60 minutes, otherwise a duration (`30m`, `1h 30m`). No line when the rate can't be read (#3862) |
+| Loading | — | skeleton rows; `Loading your service log` to a screen reader (the phone's screen: `Loading service entries`) |
+| Review row (Activity, both apps), points preview | — | `Approving awards {N} service point(s), at the chapter's current rate of 1 per {rate}.`; under the rate, `Approving awards no points: {duration} is under the chapter's current rate of 1 point per {rate}.` `{rate}` reads `hour` at the default 60 minutes, otherwise a duration (`30m`, `1h 30m`). No line when the rate can't be read (#3862) |
 | History row, points | — | On an approved entry, the points its approval recorded: `{N} points` / `1 point`, or `No points` for a sub-rate approval; `Points awarded` only when the entry carries no number. Web shows it as an outline badge beside the status, mobile ends the row's meta line with it (`3h · August 12 · 3 points`). Never recomputed from the current rate (#3868) |
 | Your service hours, stats | — | `This semester`, `All time` (each `{N} h` `approved`) and `Pending` (`{N} h` `{n} entry`/`entries`). A stat whose part isn't known yet reads `–`; This semester reads `–` `Couldn't load` when the semester's start didn't load (#4669) |
 | Empty log (Your log) | — | `You haven't logged any service yet.` then, for a viewer with `service:log`, a **Log your first hours** link that opens Log service (one line) |
 | Your log, error | `Couldn't load your service hours` | the load-failure line (§ copy rules) |
 | Your log, no account id | — | `Confirming your account…` while it loads, then `We couldn't confirm your account, so withdrawing is unavailable. Reload to try again.` A member who can't approve keeps their log beneath it, read-only; an approver gets the sentence alone, with `your hours and withdrawing are unavailable` in place of `withdrawing is unavailable` |
-| Empty chapter history (approvers) | — | `Nothing reviewed yet.` (one line) |
-| Leaderboard, empty | — | `No approved hours this semester yet.`, or under All time `No approved hours yet.` (one line) |
-| Leaderboard, viewer not on it | — | `You're not on the board yet this semester. Approved hours put you on it.` (under All time, without `this semester`) |
-| Leaderboard, error | `Couldn't load the leaderboard` | the load-failure line (§ copy rules) |
-| Leaderboard, semester unknown | `Couldn't find this semester` | `The semester's start date didn't load, so this board can't be counted yet. All time still works.` |
-| Leaderboard, offline | `Leaderboard unavailable offline` | `Reconnect to see the chapter's service hours.` |
+| Empty reviewed entries (Chapter settings, approvers) | — | `Nothing reviewed yet.` (one line) |
+| Reviewed entries, error | `Couldn't load the chapter's service entries` | the load-failure line (§ copy rules) |
 | Empty history, mobile | — | `No service logged yet.`; for a viewer with `service:log`, `No service logged yet. Tap + to log your first hours.`, the screen's own + (one line) |
-| Error | `Couldn't load service entries` | the load-failure line (§ copy rules) |
-| Offline | `Service hours unavailable offline` | `Reconnect to log hours and review the approval queue.` |
-| Offline (permission check) | `Can't confirm your access` | `Reconnect to check whether you can review submitted hours.` |
 
 ### Chapter Documents (dashboard)
 
@@ -575,16 +568,17 @@ Changed in #3977 by shawnatomklein-eng, 2026-11-10: the Truncated description sa
 | Error | `Couldn't load backwork` | the load-failure line (§ copy rules) |
 | Offline | `Backwork unavailable offline` | `Reconnect to browse the coursework archive and download a resource.` |
 
-### Study session (dashboard)
+### Study sessions (web, Profile panel)
+
+Read-only since #5950: a session starts on the phone, so web lists a member's sessions from the Study door on their Profile and never offers to start one, or explains how.
 
 | State | Title | Description |
 |---|---|---|
-| Loading | — | `Loading study zones...` |
-| Empty zones | — | `No study zones yet.` then, for a viewer with `geofences:manage`, an **Add a study zone** link to `/settings?tab=geofences`, and for everyone else `An officer adds them.` (one line; the nav hides Study until a zone is active, so a saved link is the way here) |
-| Empty history | — | `No sessions yet. Start one inside a study zone to earn study points.` (one line) |
-| Error | `Couldn't load study data` | the load-failure line (§ copy rules) |
-| Offline | `Study hours unavailable offline` | `Reconnect to start a session. Tracking needs a live location check.` |
-| Paused (tab hidden) | `Paused (tab hidden)` (badge) | Surfaced live while the timer is paused by the Page Visibility API. |
+| Loading | — | Skeleton rows; no visible copy, and `Loading your study sessions` as its accessible name. |
+| Empty | — | `No study sessions yet.` (one line). Reached only by a saved link: the Profile's Study door appears once a member has a session. |
+| Error | `Couldn't load your study sessions` | the load-failure line (§ copy rules) |
+
+*(Corrected 2026-11-24: this was the dashboard's Study session page's table, with a Start flow, an offline row and a tab-hidden pause, until #5950 removed that page.)*
 
 ### Subscription refused (mobile, cross-surface)
 
@@ -639,9 +633,9 @@ Both clients derive the state with `pollsGateOf` in `@repo/chat-core/polls`.
 
 ### Study session (mobile, s10)
 
-The member's study screen has states the dashboard's *Study session* rows above don't cover (a session running on a phone, a pause, the location check, a refused write), and its error rows say which read failed rather than the dashboard's load-failure line (§ copy rules).
+The phone's study screen is where a session starts and runs, so it has states web's read-only panel above doesn't (a session running, a pause, the location check, a refused write), and its error rows say which read failed rather than the load-failure line (§ copy rules).
 Per §"Do not rewrite equivalent state text ad hoc per screen unless the workflow intent is materially different", the member surface gets its own rows rather than inline strings.
-Where a state is the same for both, the row says so and uses web's line, as *No zones* does.
+Where a state is the same as web's, the row says so and uses web's line, as *No zones* uses the web Study zones tool's.
 
 | State | Title | Description |
 |---|---|---|
@@ -1104,8 +1098,7 @@ The filter note below is web's alone and lives in `apps/web/components/chat/chan
 | Pin | — | `Pin to top`, and `Unpin from top` on a pinned row: a row in the long-press menu and a named accessibility action (mobile); a row in the rail row's right-click menu and in the channel menu (web) | `PIN_TO_TOP_LABEL`, `UNPIN_FROM_TOP_LABEL` |
 | Row menu (web right-click, mobile long press) | — | `Mark as read`, `Pin to top`, `Notifications` (with the level, `All`, `Mentions` or `Muted`, before the chevron; its choices are the channel menu's `Every message`, `Only @mentions`, `Mute`, and the checked one adds ` (your default)` when the member's chapter-wide Chat messages setting decided it, as does web's header panel line `Notifications: only @mentions (your default)`, #3840 and #4124), `Copy link` (toast `Link copied`), `Hide conversation`; then `Edit channel`, `Arrange channels` (mobile) and `Delete channel` for `channels:manage`; mobile has no `Copy link`, and adds `Display` (with `Default`, the pinned density, or `Formal` in an Always-formal channel before the chevron; its choices are `Your default (<density>)`, then `Cozy here`, `Compact here`, `Bubbles here`, the same words as web's `⋯` menu Display view). Delete asks `Delete #<name>?` with `Every message, attachment, and pin in this channel is removed. This cannot be undone.`, the same words as Chat settings, over an empty field labelled `Type <name> to confirm`; Delete stays disabled until it matches exactly | `MARK_AS_READ_LABEL`, `CHANNEL_NOTIFICATIONS_LABEL`, `COPY_CHANNEL_LINK_LABEL`, `DELETE_CHANNEL_LABEL`, `deleteChannelConfirmTitle`, `DELETE_CHANNEL_CONFIRM_BODY`, `deleteChannelTypeLabel`, `ARRANGE_CHANNELS_LABEL` |
 | Pinned section | `Pinned` | The section header above everything else | `PINNED_SECTION_LABEL` |
-| Filters | — | `Unread only`, `Hide muted`: two switches in a menu behind the first section heading's filter button, named `Sort and filter channels`, or `Sort and filter channels, filters on` while one is on, with `Showing unread only.`, `Muted channels hidden.` or `Showing unread only, muted hidden.` and `Show all` under the heading (mobile, 2026-11-06); two switches behind the Channels header's filter control, named `Sort and filter channels`, or `Sort and filter channels, filters on` while one is on (web's channel list), and `Filter channels` or `Filter channels, filters on` on web's Direct messages panel, which offers no sort | `UNREAD_ONLY_LABEL`, `HIDE_MUTED_LABEL`, `FILTER_CHANNELS_LABEL`, `FILTER_CHANNELS_ON_LABEL`, `FILTER_ONLY_CHANNELS_LABEL`, `FILTER_ONLY_CHANNELS_ON_LABEL` |
-| Sort (#2877) | — | `Sort` over a three-way segmented control, `Chapter order`, `Recent`, `A–Z`, at the top of the same menu (both clients; not on web's Direct messages panel). Under Recent or A–Z, for someone who can drag the rail: `Switch to Chapter order to drag channels.` (web) | `SORT_CHANNELS_LABEL`, `SIDEBAR_SORT_OPTIONS` |
+| Filters | — | `Unread only`, `Hide muted`: two switches in a menu behind the first section heading's filter button (mobile) and the Channels header's filter control (web's channel list and Direct messages panel), named `Filter channels`, or `Filter channels, filters on` while one is on, with `Showing unread only.`, `Muted channels hidden.` or `Showing unread only, muted hidden.` and `Show all` under the heading (mobile, 2026-11-06). _(Until 2026-11-24 the channel list's control also held the sort and was named `Sort and filter channels`; #5947.)_ | `UNREAD_ONLY_LABEL`, `HIDE_MUTED_LABEL`, `FILTER_CHANNELS_LABEL`, `FILTER_CHANNELS_ON_LABEL` |
 | Filtered to nothing | — | `No channels match your filters.` with the action `Show all channels`, which turns both filters off | `NO_MATCHING_CHANNELS`, `SHOW_ALL_CHANNELS_LABEL` |
 | Save failed | `Couldn't save your channel list` | `Nothing changed. Check your connection and try again.` A mobile alert; a toast on web | `SIDEBAR_SAVE_FAILED_TITLE`, `SIDEBAR_SAVE_FAILED_BODY` |
 | Chapter order (web, `channels:manage`, #4178) | — | An empty category's heading carries `Drag channels here`; a drag or an Alt+Arrow move is announced as `<name> moved to <n> of <total> in <section>`; a failed save toasts `Couldn't save the channel order` with `Nothing changed. Check your connection and try again.` and the rows go back | `EMPTY_CATEGORY_HINT`, `REORDER_SAVE_FAILED_TITLE`, `REORDER_SAVE_FAILED_BODY` in `apps/web/components/chat/channel-list.tsx` |

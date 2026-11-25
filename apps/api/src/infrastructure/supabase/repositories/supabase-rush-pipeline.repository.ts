@@ -12,6 +12,7 @@ import type {
   RushCandidateNote,
   RushCandidateRating,
   RushCandidateTag,
+  RushSettingsPatch,
   RushSettingsRow,
   RushStage,
   RushTag,
@@ -454,14 +455,16 @@ export class SupabaseRushPipelineRepository implements IRushPipelineRepository {
 
   async saveSettings(
     chapterId: string,
-    staleDays: number,
+    patch: RushSettingsPatch,
   ): Promise<RushSettingsRow> {
+    // An upsert writes only the columns it names, so a field the patch leaves
+    // out keeps its value on an existing row and its default on a new one.
     const { data, error } = await this.supabase
       .from('rush_settings')
       .upsert(
         {
           chapter_id: chapterId,
-          stale_days: staleDays,
+          ...patch,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'chapter_id' },

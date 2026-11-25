@@ -33,8 +33,6 @@ import {
   HIDDEN_CONVERSATIONS_LABEL,
   FILTER_CHANNELS_LABEL,
   FILTER_CHANNELS_ON_LABEL,
-  FILTER_ONLY_CHANNELS_LABEL,
-  FILTER_ONLY_CHANNELS_ON_LABEL,
   foldedSectionAnnouncement,
   HIDE_MUTED_LABEL,
   isAddressed,
@@ -44,8 +42,6 @@ import {
   otherMemberId,
   SHOW_ALL_CHANNELS_LABEL,
   sidebarSections,
-  SIDEBAR_SORT_OPTIONS,
-  SORT_CHANNELS_LABEL,
   UNREAD_ONLY_LABEL,
   withUnreadThreadChannels,
   type DisplayNameMap,
@@ -55,7 +51,7 @@ import {
   type SidebarPreferences,
   type SidebarUnreadCounts,
 } from "@repo/hooks";
-import type { SidebarSectionKey, SidebarSort } from "@repo/validation";
+import type { SidebarSectionKey } from "@repo/validation";
 import { isDirectChannel } from "@repo/validation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,7 +62,6 @@ import {
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { SegmentedChoice } from "@/components/ui/segmented";
 import { compactControlClassName } from "@/components/shared/table-controls";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AuditGlyph, LockGlyph, MuteGlyph } from "./chat-glyphs";
@@ -201,7 +196,6 @@ const DEFAULT_PREFERENCES: SidebarPreferences = {
   pinnedIds: new Set(),
   collapsed: new Set(),
   filters: { unreadOnly: false, hideMuted: false },
-  sort: "chapter",
 };
 
 /**
@@ -387,11 +381,11 @@ export interface ChannelListProps {
   kind?: "channels" | "direct";
   /**
    * Each conversation's or channel's latest message time
-   * (`GET /v1/channels/latest`). Direct messages always sort by it, newest
-   * first, as the phone's Messages screen does; the channels rail sorts by it
-   * only when the member picked Recent (#2877). Absent until that read
-   * answers, when the list keeps its other order rather than reordering under
-   * the pointer twice.
+   * (`GET /v1/channels/latest`). Direct messages sort by it, newest first, as
+   * the phone's Messages screen does; channels never do, because they are
+   * always in the chapter's order (#5947). Absent until that read answers,
+   * when the list keeps its other order rather than reordering under the
+   * pointer twice.
    */
   latestAt?: ReadonlyMap<string, string>;
   /**
@@ -484,6 +478,14 @@ export interface ChannelListProps {
    * null for the default Channels group. Absent, no heading offers it.
    */
   onCreateChannel?: (categoryId: string | null) => void;
+  /**
+   * A control for the whole list, drawn on its first heading (#5946). In the
+   * sidebar nothing sits over the list, so its filters
+   * (`ChannelFilters`) open from here, the way Slack and Discord hang a
+   * list's own controls on a section heading. Shown on hover or focus, and
+   * always while it has something to say (a filter that is on lights it).
+   */
+  headingControl?: ReactNode;
 }
 
 /**
@@ -604,6 +606,7 @@ export function ChannelList({
   sidebar,
   reorder,
   onCreateChannel,
+  headingControl,
   threads,
 }: ChannelListProps) {
   const preferences = sidebar?.preferences ?? DEFAULT_PREFERENCES;
@@ -727,10 +730,8 @@ export function ChannelList({
             )
           : preferences.collapsed,
       filters: preferences.filters,
-      // The member's sort (#2877). The Direct messages panel ignores it and
-      // re-sorts newest first below.
-      sort: preferences.sort,
-      latestAtByChannelId: kind === "channels" ? latestAt : undefined,
+      // Channels are in the chapter's order (Paul, 2026-11-24, #5947); the
+      // Direct messages panel re-sorts newest first below.
       activeChannelId,
       titleOf: titleFor,
       unreadByChannelId: arrangementUnread,
@@ -773,12 +774,8 @@ export function ChannelList({
   ]);
 
   // ── Drag to reorder (#4178) ──────────────────────────────────────────────
-  // Channel rows drag only while the member sorts by Chapter order (#2877):
-  // under Recent or A–Z the rows aren't drawn in the chapter's order, so a
-  // drop would save an order nobody sees. Categories still draw in the
-  // chapter's order under every sort, so they keep dragging, and an empty
-  // category keeps its heading and its +.
-  const rowsInChapterOrder = preferences.sort === "chapter";
+  // Rows are always drawn in the chapter's order, so a drop saves the order
+  // the member sees. An empty category keeps its heading and its +.
   const [announcement, setAnnouncement] = useState("");
   // Which row or heading to give focus back to once a keyboard move redraws
   // it: React moves the node, and moving a focused node blurs it.
@@ -798,7 +795,6 @@ export function ChannelList({
     ): { position: number; of: number; label: string } | null => {
       if (!reorder) return null;
       if (drag.kind === "channel") {
-        if (!rowsInChapterOrder) return null;
         const section =
           drop.kind === "row" || drop.kind === "header" ? drop.section : null;
         if (!section || !isOrderableSection(section)) return null;
@@ -834,7 +830,7 @@ export function ChannelList({
       reorder.onReorderCategories(next);
       return { position: at + 1, of: next.length, label: "categories" };
     },
-    [reorder, rowsInChapterOrder, sectionOrder, categories, sectionLabel],
+    [reorder, sectionOrder, categories, sectionLabel],
   );
 
   const nameOfDrag = useCallback(
@@ -954,11 +950,9 @@ export function ChannelList({
     const offersHide =
       !!onHide && canHideConversation(channel) && !channel.hidden;
     // A row an officer can drag (#4178): one in the default group or a
-    // category, never Pinned, Direct messages, System or Hidden, and only
-    // while the rows are drawn in the chapter's order (#2877).
+    // category, never Pinned, Direct messages, System or Hidden.
     const draggable =
       !!reorder &&
-      rowsInChapterOrder &&
       sectionKey !== undefined &&
       isOrderableSection(sectionKey);
     const drag: RailDrag | null = draggable
@@ -1433,6 +1427,12 @@ export function ChannelList({
         )
       : null;
 
+  // The list's own control (`headingControl`) rides its first heading.
+  const firstSectionKey = drawOrder.find(
+    (entry): entry is Extract<DrawEntry, { kind: "section" }> =>
+      entry.kind === "section",
+  )?.section.key;
+
   return (
     <div
       ref={railRef}
@@ -1452,7 +1452,13 @@ export function ChannelList({
           return renderEmptyCategory(entry.key, entry.label);
         }
         const section = entry.section;
-        const headerId = `channel-section:${section.key}`;
+        // Two lists can be on screen at once (the sidebar's channels and
+        // the Messages page's conversations, #5946), and both can have a
+        // Pinned section, so each names its headings for its own kind.
+        const headerId =
+          kind === "direct"
+            ? `conversation-section:${section.key}`
+            : `channel-section:${section.key}`;
         const orderable = !!reorder && isOrderableSection(section.key);
         const categoryId = categoryIdOf(section.key);
         const headerDrag: RailDrag | null =
@@ -1546,6 +1552,20 @@ export function ChannelList({
                     </span>
                   ) : null}
                 </button>
+                {headingControl && section.key === firstSectionKey ? (
+                  <span
+                    data-heading-control=""
+                    className={cn(
+                      // On the label's line, as the + beside it is.
+                      "mb-1 flex shrink-0 items-center",
+                      "opacity-0 focus-within:opacity-100 group-hover/head:opacity-100",
+                      // Open, or saying a filter is on: it stays.
+                      "has-[[data-state=open]]:opacity-100 has-[[data-filter-active]]:opacity-100",
+                    )}
+                  >
+                    {headingControl}
+                  </span>
+                ) : null}
                 {createButtonFor(section.key, section.label)}
               </div>
             ) : (
@@ -1664,30 +1684,23 @@ function ChannelMark({
 }
 
 /**
- * The rail's sort and two filters (#2877), behind one control in the Channels
- * header.
+ * The list's two filters (#2877), behind one control: on the first category
+ * heading in the sidebar (`heading`, #5946, where nothing sits over the
+ * list), and in the list pane's header on the Messages page and below `lg`.
  *
- * A popover rather than chips: the channels column is 240px wide and its
- * header already carries the column title. The sort is a three-way segmented
- * control on top, the way Slack's sidebar menu offers "Sort" above its
- * filters, so the held answer is always in view. The trigger shows a dot
- * while any filter is on, so a shortened list never reads as a chapter that
- * simply has fewer channels; a sort shortens nothing, so it lights no dot.
+ * A popover rather than chips: the list is a narrow column. The trigger shows
+ * a dot while any filter is on, so a shortened list never reads as a chapter
+ * that simply has fewer channels. It held a sort too until Paul's call of
+ * 2026-11-24 (#5947): channels are always in the chapter's order.
  */
 export function ChannelFilters({
   filters,
-  sort,
-  reorderable = false,
   onChange,
+  heading = false,
 }: {
+  /** Sized to a category heading's line, as the + beside it is. */
+  heading?: boolean;
   filters: SidebarPreferences["filters"];
-  /** The member's sort. Absent, the popover offers none (the Direct messages panel). */
-  sort?: SidebarSort;
-  /**
-   * The member may drag the rail into the chapter's order, which only works
-   * while they sort by it: the popover says so under any other sort.
-   */
-  reorderable?: boolean;
   onChange: (change: SidebarFilterChange) => void;
 }) {
   const active = filters.unreadOnly || filters.hideMuted;
@@ -1699,50 +1712,36 @@ export function ChannelFilters({
         <Button
           variant="ghost"
           size="icon"
-          className={cn(compactControlClassName, "relative ml-auto")}
+          data-filter-active={active ? "" : undefined}
+          className={cn(
+            "relative",
+            heading
+              ? "h-5 w-5 rounded p-0 text-muted-foreground hover:bg-card hover:text-foreground"
+              : cn(compactControlClassName, "ml-auto"),
+          )}
           aria-label={
-            sort
-              ? active
-                ? FILTER_CHANNELS_ON_LABEL
-                : FILTER_CHANNELS_LABEL
-              : active
-                ? FILTER_ONLY_CHANNELS_ON_LABEL
-                : FILTER_ONLY_CHANNELS_LABEL
+            active ? FILTER_CHANNELS_ON_LABEL : FILTER_CHANNELS_LABEL
           }
         >
-          <ListFilter className="h-4 w-4" aria-hidden="true" />
+          <ListFilter
+            className={heading ? "h-3.5 w-3.5" : "h-4 w-4"}
+            aria-hidden="true"
+          />
           {active ? (
             <span
               aria-hidden="true"
-              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary"
+              className={cn(
+                "absolute h-1.5 w-1.5 rounded-full bg-primary",
+                heading ? "-right-0.5 -top-0.5" : "right-1.5 top-1.5",
+              )}
             />
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-3 p-3">
-        {sort ? (
-          <div className="space-y-1.5">
-            <p
-              className="text-caption text-muted-foreground"
-              aria-hidden="true"
-            >
-              {SORT_CHANNELS_LABEL}
-            </p>
-            <SegmentedChoice
-              label={SORT_CHANNELS_LABEL}
-              options={SIDEBAR_SORT_OPTIONS}
-              value={sort}
-              onChange={(next) => onChange({ sort: next })}
-              fill
-              dense
-            />
-            {reorderable && sort !== "chapter" ? (
-              <p className="text-caption text-muted-foreground">
-                Switch to Chapter order to drag channels.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+      <PopoverContent
+        align={heading ? "start" : "end"}
+        className="w-64 space-y-3 p-3"
+      >
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor={unreadId}>{UNREAD_ONLY_LABEL}</Label>
           <Switch

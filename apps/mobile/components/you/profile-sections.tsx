@@ -21,7 +21,12 @@ import {
   PROFILE_PHOTO_SIZE,
   ProfilePhoto,
 } from "@/components/profile/profile-photo";
-import { ListRow, ListSection, SectionHeader } from "@/components/list-section";
+import {
+  ListRow,
+  ListSection,
+  SectionHeader,
+  usePressFeedback,
+} from "@/components/list-section";
 import {
   SkeletonBlock,
   SkeletonRegion,
@@ -144,34 +149,50 @@ export function ProfileHead({
 export function PointsLabel({
   points,
   failed = false,
+  onPress,
 }: {
   points: number | null;
   failed?: boolean;
+  /**
+   * Opens the member's points (#5950): the figure is the door to its
+   * history, as the gauges under it are to theirs.
+   */
+  onPress?: () => void;
 }) {
   const { tokens } = useFrappTheme();
   const styles = createStyles(tokens);
-  if (failed && points === null) {
-    return (
-      <Text
-        style={styles.points}
-        accessibilityLabel="Points couldn't load"
-        testID="you-points"
-      >
-        — pts
-      </Text>
-    );
-  }
-  if (points === null || points === 0) return null;
-  const one = Math.abs(points) === 1;
-  const figure = points.toLocaleString();
-  return (
+  const feedback = usePressFeedback();
+  const unknown = failed && points === null;
+  if (!unknown && (points === null || points === 0)) return null;
+  const one = points !== null && Math.abs(points) === 1;
+  const figure = points === null ? "" : points.toLocaleString();
+  const spoken = unknown
+    ? "Points couldn't load"
+    : `${figure} ${one ? "point" : "points"}`;
+  const text = (
     <Text
       style={styles.points}
-      accessibilityLabel={`${figure} ${one ? "point" : "points"}`}
+      accessibilityLabel={onPress ? undefined : spoken}
       testID="you-points"
     >
-      {`${figure} ${one ? "pt" : "pts"}`}
+      {unknown ? "— pts" : `${figure} ${one ? "pt" : "pts"}`}
     </Text>
+  );
+  if (!onPress) return text;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={spoken}
+      accessibilityHint="Opens your points."
+      onPress={onPress}
+      // The text is a label's height; the press reaches the 44pt a finger needs.
+      hitSlop={tokens.spacing.md}
+      android_ripple={feedback.ripple}
+      style={({ pressed }) => [styles.pointsButton, feedback.lift(pressed)]}
+      testID="you-points-open"
+    >
+      {text}
+    </Pressable>
   );
 }
 
@@ -369,6 +390,11 @@ function createStyles(tokens: SignetTokens) {
       ...typeRole(tokens.typography.role.label),
       color: tokens.color.text.mutedForeground,
       fontVariant: ["tabular-nums"],
+    },
+    pointsButton: {
+      borderRadius: tokens.radius.control,
+      paddingHorizontal: tokens.spacing.sm,
+      paddingVertical: tokens.spacing.xs,
     },
     bioCard: {
       borderRadius: tokens.radius.card,

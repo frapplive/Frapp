@@ -92,6 +92,7 @@ export * from "./discord-export";
 export * from "./discord-import";
 // The " / " a Drive-synced folder's path is joined with (#5337).
 export * from "./document-folders";
+export * from "./document-links";
 export * from "./error-copy";
 // An event's agenda and attachments (#4934): their limits and shapes, which
 // the API enforces and both editors read.
@@ -181,7 +182,6 @@ export * from "./minutes-flow";
 export * from "./minutes-read";
 export * from "./minutes-request-copy";
 // Which meetings on the calendar need minutes, and the next one coming.
-export * from "./minutes-timeline";
 export * from "./minutes-to-write";
 export * from "./module-enablement";
 export * from "./module-refusal";
@@ -227,6 +227,10 @@ export * from "./permission-registry";
 export * from "./permissions";
 export * from "./phone";
 export * from "./phone-reach";
+// What each points category is called, and the officer action's one name,
+// on web and phone (#5950).
+export * from "./point-category";
+export * from "./point-history";
 export * from "./profile-copy";
 export * from "./profile-correction";
 export * from "./push-action-categories";

@@ -78,6 +78,18 @@ const candidate = (
   follow_up_note: null,
   follow_up_user_id: null,
   follow_up_user_name: null,
+  bid_state: "none" as const,
+  bid_extended_at: null,
+  bid_extended_by_name: null,
+  bid_expires_at: null,
+  bid_acceptance_recorded_at: null,
+  bid_acceptance_recorded_by_name: null,
+  bid_confirm_emailed: false,
+  bid_answered_at: null,
+  bid_answered_by_name: null,
+  bid_answered_via: null,
+  bid_rescind_reason: null,
+  bid_invite_sent: null,
   ...extra,
 });
 
@@ -85,6 +97,14 @@ const candidate = (
 const addedDaysAgo = (days: number) => ({
   created_at: `${shiftRushDayKey(TODAY, -days)}T12:00:00Z`,
 });
+
+const bidMutate = vi.hoisted(() => ({
+  extend: vi.fn(),
+  decline: vi.fn(),
+  accept: vi.fn(),
+  confirm: vi.fn(),
+  rescind: vi.fn(),
+}));
 
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
@@ -105,6 +125,17 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
   useMoveRushStage: () => ({ mutate: moveMutate, isPending: false }),
   useRateRushCandidate: () => ({ mutate: vi.fn() }),
   useVoteRushCandidate: () => ({ mutate: vi.fn(), isPending: false }),
+  useBidRushCandidate: () => ({ mutate: bidMutate.extend, isPending: false }),
+  useRecordRushDecline: () => ({ mutate: bidMutate.decline, isPending: false }),
+  useRecordRushAcceptance: () => ({
+    mutate: bidMutate.accept,
+    isPending: false,
+  }),
+  useConfirmRushAcceptance: () => ({
+    mutate: bidMutate.confirm,
+    isPending: false,
+  }),
+  useRescindRushBid: () => ({ mutate: bidMutate.rescind, isPending: false }),
   useSetRushCandidateTags: () => ({ change: vi.fn(), isPending: false }),
   useRushNotes: () => ({ data: [], isPending: false, isError: false }),
   useAddRushNote: () => ({ mutateAsync: vi.fn(), isPending: false }),

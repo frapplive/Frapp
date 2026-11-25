@@ -250,6 +250,30 @@ vi.mock("@/components/tasks/new-task-sheet", async () => {
 const eventsNow = vi.hoisted(() => ({
   value: { events: [] as unknown[], now: Date.now() },
 }));
+/** To do's minutes writes (#5949): starting minutes, and the No minutes mark. */
+const minutesWrites = vi.hoisted(() => ({
+  start: vi.fn<(body: unknown) => Promise<{ id: string }>>(() =>
+    Promise.resolve({ id: "mtg-new" }),
+  ),
+  setNoMinutes: vi.fn<(input: unknown) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+}));
+// The notes sheet has its own spec; here only that a row presents it.
+vi.mock("@/components/minutes/note-taker-sheet", async () => {
+  const { forwardRef, createElement, useImperativeHandle } =
+    await import("react");
+  return {
+    NoteTakerSheet: forwardRef(function NoteTakerSheet(
+      props: { meetingId: string },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ present: minutesSheet.present }));
+      return createElement("NoteTakerSheet", props);
+    }),
+  };
+});
+const minutesSheet = vi.hoisted(() => ({ present: vi.fn() }));
 const snoozeWrites = vi.hoisted(() => ({
   snooze: vi.fn(() => Promise.resolve()),
   unsnooze: vi.fn(() => Promise.resolve()),
@@ -286,6 +310,11 @@ vi.mock("@repo/hooks", async (importOriginal) => ({
     isPending: false,
   }),
   useActivity: () => activity.value,
+  useStartMeeting: () => ({
+    mutateAsync: minutesWrites.start,
+    isPending: false,
+  }),
+  useSetMeetingNoMinutes: () => ({ mutateAsync: minutesWrites.setNoMinutes }),
   // The Now card's read (#5777): nothing on unless a test says so.
   useEventsOnNow: () => eventsNow.value,
   useActivityArchive: (options: { enabled?: boolean }) => {
@@ -2940,6 +2969,153 @@ describe("Activity screen (#3897)", () => {
           (node) => node.props.testID === "activity-face-stack",
         ),
       ).toHaveLength(0);
+    });
+  });
+
+  describe("minutes in To do (#5949)", () => {
+    const minutesRead = () =>
+      read({
+        needs_you: {
+          tasks: [],
+          task_confirmations: [],
+          hours_approvals: [],
+          polls: [],
+        },
+        made_by_you: { polls: [], tasks: [], events: [] },
+        minutes: {
+          to_write: [
+            {
+              event_id: "ev-exec",
+              name: "Exec meeting",
+              start_time: "2026-11-18T19:00:00.000Z",
+              end_time: "2026-11-18T20:00:00.000Z",
+            },
+          ],
+          drafts: [
+            {
+              meeting_id: "mtg-mine",
+              event_id: "ev-chapter",
+              name: "Chapter meeting",
+              event_start_time: "2026-11-17T19:00:00.000Z",
+              started: true,
+              recording_by: null,
+              recording_by_name: null,
+            },
+          ],
+          taking_notes: [
+            {
+              meeting_id: "mtg-notes",
+              event_id: "ev-committee",
+              name: "Recruitment Committee",
+              event_start_time: "2026-11-16T19:00:00.000Z",
+              author_name: "Olive Officer",
+              joined: true,
+              added: true,
+            },
+          ],
+        },
+      });
+
+    beforeEach(() => {
+      minutesWrites.start.mockClear();
+      minutesWrites.setNoMinutes.mockClear();
+      minutesSheet.present.mockClear();
+      activity.value = { ...activity.value, data: minutesRead() };
+    });
+
+    it("lists them in a Minutes run, in the words web uses", () => {
+      const tree = render();
+      expect(dayHeadings(tree)).toContain("Minutes, 3");
+      expect(rowLabels(tree)).toEqual([
+        "Exec meeting",
+        "Chapter meeting",
+        "Recruitment Committee",
+      ]);
+      expect(row(tree, "Chapter meeting").props.row.badge.label).toBe(
+        "Drafting",
+      );
+      expect(row(tree, "Recruitment Committee").props.row.detail).toMatch(
+        / · Minutes by Olive Officer$/,
+      );
+    });
+
+    it("starts minutes from Write minutes and opens them", async () => {
+      const tree = render();
+      const push = vi.mocked(useRouter().push);
+      push.mockClear();
+      const write = row(tree, "Exec meeting").props.action;
+      expect(write.label).toBe("Write minutes");
+
+      await act(async () => {
+        write.run();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(minutesWrites.start).toHaveBeenCalledWith({
+        event_id: "ev-exec",
+        meeting_type: "exec",
+      });
+      expect(push).toHaveBeenCalledWith({
+        pathname: "/minutes-details",
+        params: { id: "mtg-new" },
+      });
+    });
+
+    it("opens the event, the draft and the notes, never the sheet", () => {
+      const tree = render();
+      const push = vi.mocked(useRouter().push);
+      push.mockClear();
+
+      act(() => row(tree, "Exec meeting").props.onPress());
+      expect(push).toHaveBeenLastCalledWith({
+        pathname: "/event-details",
+        params: { id: "ev-exec" },
+      });
+      act(() => row(tree, "Chapter meeting").props.onPress());
+      expect(push).toHaveBeenLastCalledWith({
+        pathname: "/minutes-details",
+        params: { id: "mtg-mine" },
+      });
+      act(() => row(tree, "Recruitment Committee").props.onPress());
+      expect(
+        tree.root.findByType("NoteTakerSheet" as never).props.meetingId,
+      ).toBe("mtg-notes");
+      expect(minutesSheet.present).toHaveBeenCalled();
+      expect(sheet.props?.row ?? null).toBeNull();
+    });
+
+    it("offers No minutes on a Write minutes row's long press, and says so in a line with Undo", async () => {
+      const tree = render();
+      const menu = row(tree, "Exec meeting").props.menu;
+      expect(
+        menu.actions.map((action: { label: string }) => action.label),
+      ).toEqual(["No minutes for this meeting"]);
+
+      await act(async () => {
+        menu.actions[0].run();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(minutesWrites.setNoMinutes).toHaveBeenCalledWith({
+        eventId: "ev-exec",
+        noMinutes: true,
+      });
+      const note = tree.root
+        .findAllByType(InlineNote)
+        .find((node) =>
+          String(node.props.children).includes("marked as no minutes"),
+        )!;
+      expect(note.props.children).toBe("Exec meeting marked as no minutes");
+      expect(note.props.action.label).toBe("Undo");
+
+      await act(async () => {
+        note.props.action.onPress();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(minutesWrites.setNoMinutes).toHaveBeenLastCalledWith({
+        eventId: "ev-exec",
+        noMinutes: false,
+      });
     });
   });
 

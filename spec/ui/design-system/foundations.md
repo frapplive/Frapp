@@ -215,7 +215,7 @@ Unread and mentions keep their own rule above (§5): neutral for unread, red for
 >
 > Changed in [#5310](https://github.com/frapplive/Frapp/issues/5310) by `pdcarlson`, 2026-11-17: Activity's week strip marks each day with a dot per kind due (events sky, tasks green, polls and sign-ups violet), from Paul's pick of direction B for the Calendar rethink and his "colour over grey sameness". A hue there still names a kind, never a state; the Activity rows themselves stay neutral.
 >
-> Changed in [#5576](https://github.com/frapplive/Frapp/issues/5576) by `pdcarlson`, 2026-11-19: web Documents' file rows lead with a tile in their folder's hue, and the rail's folder glyph wears the same hue (`documentFolderHues`, from Paul's ask for "a type or folder tile" per row). A hue there names a folder, never a state. Folders take the palette in the rail's order, so on one screen the first nine never share a hue; a tenth repeats one, and a member who can't see a limited folder, or a folder added ahead of the others, shifts the colours after it ([web README § Resources](../web-dashboard/README.md#resources-documents-and-backwork)).
+> Changed in [#5576](https://github.com/frapplive/Frapp/issues/5576) by `pdcarlson`, 2026-11-19: web Documents' file rows lead with a tile in their folder's hue, and the rail's folder glyph wears the same hue (`documentFolderHues`, from Paul's ask for "a type or folder tile" per row). A hue there names a folder, never a state. Folders take the palette in the rail's order, so on one screen the first nine never share a hue; a tenth repeats one, and a member who can't see a limited folder, or a folder added ahead of the others, shifts the colours after it ([web README § Resources](../web-dashboard/README.md#resources-documents-minutes-and-backwork)).
 >
 > Changed in #5924 by `gampheadband`, 2026-11-23; pending Paul: the palette's ten hues were all taken, so the recruitment row (the chapter's word for it) shares green with **Create a chapter**, which is drawn only for someone with no chapter, so the two never sit on one screen (`SHARED_HUE_PAIRS` in `destination-hue.ts`).
 
@@ -224,7 +224,7 @@ On mobile's You tab, a row that opens a place leads with a tile in that place's 
 **A hue names a place, never a state.** That is the whole rule, and it is what keeps this from being the decoration the accent rule above removed:
 
 - It is the same every day for every member, so it carries no news. It only makes a list of up to ten places findable without reading, as iOS Settings and Telegram's settings list are.
-- **A place keeps its hue wherever a tile draws it.** The You tab reads the hue of a place the Notifications rows already tile from their map, so a service notice and the Service hours row are both teal, a dues notice and the Dues row both sand, an event notice and Host check-in both sky. The palette has ten hues and the app has more places than that, so a hue can stand for another place on another screen (green is a task in Notifications and Create a chapter on You), but never for two places on one screen; Settings is slate (Chapter settings shared it until it left You for Chat home's chapter menu, 2026-11-19).
+- **A place keeps its hue wherever a tile draws it.** The You tab reads the hue of a place the Notifications rows already tile from their map, so a dues notice and the Dues row are both sand, and an event notice and Host check-in both sky (a service notice and the Service hours row were both teal until that row left You, #5950). The palette has ten hues and the app has more places than that, so a hue can stand for another place on another screen (green is a task in Notifications and Create a chapter on You), but never for two places on one screen; Settings is slate (Chapter settings shared it until it left You for Chat home's chapter menu, 2026-11-19).
 - A row that shows a state stays neutral: the Activity rows, Chat home's Up next, the Calendar. On those screens colour already means something, the accent asks the member to act and red is overdue, and a tint would read as one more status.
 - The hues are the role palette's ([`components.md`](components.md), `ROLE_COLOR_PALETTE` in `@repo/validation`). The glyph on its tile is the pair `packages/hooks/src/member-avatar-color.spec.ts` holds at AA for every hue in the palette. That palette leaves out gold and red on purpose, so no tile can be taken for the accent, a mention or an error. Never the chapter accent.
 - A row that can't be opened now (Host check-in with nothing to host) goes grey with its label.
@@ -278,6 +278,8 @@ Body text MUST NOT render below 16. Label and caption are for controls and metad
 > own study timer (`apps/web/components/study/study-page.tsx`) was still on
 > `font-mono` until the #920 Chapter Ops slice, so "prefer" now has two
 > shipped consumers rather than one and a standing exception.
+> _(2026-11-24, #5950: the web timer went with the `/study` page, so the phone's
+> is the one shipped consumer again.)_
 
 **Money is a figure, not a code-like string.** Amounts are stored and
 transported as integer **cents** (`financial_invoices.amount`, bounded

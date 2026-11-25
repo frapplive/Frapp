@@ -42,7 +42,18 @@ import { useActivitySnoozeMenu } from "./activity-snooze";
  * Render `host` once in the screen, and `undoBar` outside its scroll, as the
  * Calendar does.
  */
-export function useActivityRowMenu({ onWrote }: { onWrote: () => void }): {
+export function useActivityRowMenu({
+  onWrote,
+  extraActions,
+}: {
+  onWrote: () => void;
+  /**
+   * Actions a row's own kind brings that no task or event menu holds: a
+   * Write minutes row's No minutes for this meeting (#5949). They re-read
+   * Activity themselves.
+   */
+  extraActions?: (row: ActivityRow) => ItemMenuAction[];
+}): {
   /** The To do list's, To review's, Waiting on others' and Links' rows. */
   menuFor: (row: ActivityRow) => ItemMenuHandle | null;
   /** A snoozed row: its item's actions, and Unsnooze. */
@@ -77,15 +88,18 @@ export function useActivityRowMenu({ onWrote }: { onWrote: () => void }): {
               ? menuForEvent(row.event.id)
               : null;
       // Each pick arms the reread: what it writes is Activity's to show.
-      return (handle?.actions ?? []).map((action) => ({
-        ...action,
-        run: () => {
-          arm();
-          action.run();
-        },
-      }));
+      return [
+        ...(handle?.actions ?? []).map((action) => ({
+          ...action,
+          run: () => {
+            arm();
+            action.run();
+          },
+        })),
+        ...(extraActions?.(row) ?? []),
+      ];
     },
-    [menuForTask, menuForEvent, arm],
+    [menuForTask, menuForEvent, arm, extraActions],
   );
 
   const compose = useCallback(

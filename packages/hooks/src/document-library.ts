@@ -1,6 +1,7 @@
 import {
   contentTypeByExtension,
   fileExtension,
+  minutesRowTags,
   ROLE_COLOR_PALETTE,
   roleColor,
   type RoleColorHex,
@@ -57,17 +58,64 @@ export type LibrarySourceDocument = {
   storage_path?: string | null;
   /** When an officer pinned it for the chapter (#3934); null or absent when not. */
   pinned_at?: string | null;
+  /**
+   * Set on the row that files a meeting's posted minutes (#5949): the
+   * minutes' id. The row has no file; it opens the minutes.
+   */
+  meeting_id?: string | null;
+  /** What a minutes row shows of its minutes; null or absent on a file. */
+  minutes?: DocumentMinutes | null;
 };
+
+/**
+ * What a minutes row shows of its minutes (`GET /v1/documents?minutes=true`,
+ * #5949): the facts the Minutes list drew on each row.
+ */
+export type DocumentMinutes = {
+  meeting_id: string;
+  event_name: string;
+  event_start_time: string;
+  meeting_type: string;
+  other_label: string | null;
+  decision_count: number;
+  action_item_count: number;
+  recorded: boolean;
+  gist: string | null;
+};
+
+/** Whether the row files a meeting's minutes, not a file. */
+export function isMinutesDocument<
+  D extends Pick<LibrarySourceDocument, "meeting_id">,
+>(doc: D): doc is D & { meeting_id: string } {
+  return typeof doc.meeting_id === "string" && doc.meeting_id !== "";
+}
+
+/**
+ * A minutes row's meta line after its day: "Recorded", "3 decisions",
+ * "5 action items", in the Minutes list's own words (`minutesRowTags`), so a
+ * member decides by the same facts the list gave them. The meeting's day leads
+ * the line and the TL;DR's first line follows it; each app formats and joins.
+ */
+export function minutesDocumentFacts(minutes: DocumentMinutes): string[] {
+  return minutesRowTags({
+    status: "posted",
+    recorded: minutes.recorded,
+    decision_count: minutes.decision_count,
+    action_item_count: minutes.action_item_count,
+  }).map((tag) => tag.label);
+}
 
 /**
  * A file format group, for the File type filter and for search (#3938, Shawn's
  * addition; Google Drive's Type filter).
  */
 export type FileKind =
-  "pdf" | "word" | "slides" | "spreadsheet" | "image" | "other";
+  "minutes" | "pdf" | "word" | "slides" | "spreadsheet" | "image" | "other";
 
 /** The groups in the order the filter offers them. */
 const FILE_KIND_OPTIONS: readonly { value: FileKind; label: string }[] = [
+  // A meeting's posted minutes, filed as a row with no file (#5949).
+  { value: "minutes", label: "Minutes" },
   { value: "pdf", label: "PDF" },
   { value: "word", label: "Word" },
   { value: "slides", label: "Slides" },
@@ -82,6 +130,7 @@ const FILE_KIND_OPTIONS: readonly { value: FileKind; label: string }[] = [
  * letter from "work", and "sheet" from "sheep".
  */
 const FILE_KIND_WORDS: Record<FileKind, readonly string[]> = {
+  minutes: ["minutes", "meeting"],
   pdf: ["pdf"],
   word: ["word", "doc", "docx"],
   slides: ["slides", "slide", "powerpoint", "presentation", "deck"],
@@ -177,6 +226,7 @@ const TYPE_LABEL: Readonly<Record<string, string>> = Object.assign(
 );
 
 const KIND_LABEL: Record<FileKind, string> = {
+  minutes: "Minutes",
   pdf: "PDF",
   word: "Word document",
   slides: "Slide deck",
@@ -277,8 +327,21 @@ export type ClassifiedFile = {
  * (`previewKind`), made on {@link ClassifiedFile.type}.
  */
 export function classifyFile(
-  doc: Pick<LibrarySourceDocument, "content_type" | "storage_path">,
+  doc: Pick<
+    LibrarySourceDocument,
+    "content_type" | "storage_path" | "meeting_id"
+  >,
 ): ClassifiedFile {
+  // A meeting's minutes are no file at all: their own group, nothing to
+  // preview or save.
+  if (isMinutesDocument(doc)) {
+    return {
+      type: null,
+      kind: "minutes",
+      label: KIND_LABEL.minutes,
+      groupType: null,
+    };
+  }
   const declared =
     doc.content_type?.split(";")[0]?.trim().toLowerCase() || null;
   const type =
@@ -306,7 +369,10 @@ function describe(type: string | null, groupBy: string | null): ClassifiedFile {
 
 /** A document's format group ({@link classifyFile}). Anything unrecognised is Other. */
 export function fileKind(
-  doc: Pick<LibrarySourceDocument, "content_type" | "storage_path">,
+  doc: Pick<
+    LibrarySourceDocument,
+    "content_type" | "storage_path" | "meeting_id"
+  >,
 ): FileKind {
   return classifyFile(doc).kind;
 }
@@ -450,7 +516,15 @@ function searchText(
   doc: LibrarySourceDocument,
   uploader: string | null,
 ): string {
-  return [doc.title, doc.description, uploader, doc.folder, doc.document_type]
+  return [
+    doc.title,
+    doc.description,
+    uploader,
+    doc.folder,
+    doc.document_type,
+    // What the minutes said, in the line their row shows.
+    doc.minutes?.gist,
+  ]
     .filter((part) => part !== null && part !== undefined && part !== "")
     .join(" ");
 }

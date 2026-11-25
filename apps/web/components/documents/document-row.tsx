@@ -1,12 +1,14 @@
 "use client";
 
 import { Download, Loader2, Trash2, Users } from "lucide-react";
-import { formatDay } from "@repo/formatting";
+import { formatDay, formatWeekdayDay } from "@repo/formatting";
 import { memberAvatarTint, useMyPermissions } from "@repo/hooks";
 import { can } from "@repo/validation";
 import {
   effectiveLine,
   isDriveCopy,
+  isMinutesDocument,
+  minutesDocumentFacts,
   uploadedLine,
 } from "@repo/hooks/document-library";
 import { IconButton } from "@/components/ui/icon-button";
@@ -18,6 +20,7 @@ import {
   PinGlyph,
   StarGlyph,
 } from "@/components/documents/resources-glyphs";
+import { MeetingsGlyph } from "@/components/layout/nav-glyphs";
 import { OPEN_DOCUMENT_ATTRIBUTE } from "@/components/documents/document-viewer";
 import { KEEP_FOCUS_ATTRIBUTE } from "@/components/documents/use-keep-focus";
 import { LimitedMark } from "@/components/documents/document-access";
@@ -34,6 +37,18 @@ export function documentFacts(
   doc: ChapterDocument,
   uploader: string | null,
 ): { uploaded: string | null; filed: string[]; description: string | null } {
+  // A meeting's minutes (#5949) lead with the day the meeting met, then
+  // where they are filed and what they hold, in the Minutes list's words,
+  // and end with the TL;DR's first line where a file has its description.
+  if (doc.minutes) {
+    return {
+      uploaded: formatWeekdayDay(doc.minutes.event_start_time),
+      filed: [doc.folder, ...minutesDocumentFacts(doc.minutes)].filter(
+        (part): part is string => !!part,
+      ),
+      description: doc.minutes.gist,
+    };
+  }
   return {
     uploaded: uploadedLine(
       formatDay(doc.created_at),
@@ -83,15 +98,18 @@ function DownloadButton({ id, title }: { id: string; title: string }) {
  * glance. The folder is in the row's words already, so the tile is
  * decoration to a screen reader.
  */
-function FolderHueTile({ hue }: { hue: string }) {
+function FolderHueTile({ hue, minutes }: { hue: string; minutes: boolean }) {
   const tint = memberAvatarTint(hue);
+  // Minutes wear the minutes glyph, so a row that opens a record reads apart
+  // from one that opens a file before its line is read.
+  const Glyph = minutes ? MeetingsGlyph : DocumentsGlyph;
   return (
     <span
       aria-hidden="true"
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
       style={{ backgroundColor: tint.fill, color: tint.text }}
     >
-      <DocumentsGlyph className="h-4 w-4" />
+      <Glyph className="h-4 w-4" />
     </span>
   );
 }
@@ -193,7 +211,7 @@ export function DocumentRow({
               FOCUS_RING,
             )}
           >
-            <FolderHueTile hue={hue} />
+            <FolderHueTile hue={hue} minutes={isMinutesDocument(doc)} />
             <span className="block min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
                 <span className="truncate">{doc.title}</span>
@@ -319,6 +337,9 @@ function useRowActions({
       onSelect: () => onSetAccess(doc),
     });
   }
+  // A meeting's minutes (#5949) have no file to save, and are deleted as
+  // minutes, from their own page.
+  if (isMinutesDocument(doc)) return entries;
   entries.push({
     type: "item",
     key: "download",
@@ -433,13 +454,16 @@ function DocumentControls({
           <Users />
         </IconButton>
       ) : null}
-      <DownloadButton id={doc.id} title={doc.title} />
+      {isMinutesDocument(doc) ? null : (
+        <DownloadButton id={doc.id} title={doc.title} />
+      )}
       {/*
         A copy of a Drive file (#5157) has no Delete: Drive owns it, the API
-        refuses, and the next sync would bring it back.
+        refuses, and the next sync would bring it back. Nor do a meeting's
+        minutes (#5949): they are deleted as minutes, from their own page.
       */}
       <Can permission="chapter_docs:manage">
-        {isDriveCopy(doc) ? null : (
+        {isDriveCopy(doc) || isMinutesDocument(doc) ? null : (
           <>
             {/*
         `DELETE /v1/documents/:id` sits behind the same guard

@@ -1,6 +1,7 @@
 export * from "./activity-agenda";
 export * from "./activity-archive";
 export * from "./activity-cards";
+export * from "./activity-count-chip";
 export * from "./activity-faces";
 export * from "./activity-recap";
 export * from "./activity-rows";
@@ -50,15 +51,22 @@ export * from "./profile-stats";
 export * from "./put-signed-upload";
 export * from "./read-cursor";
 export * from "./read-receipts";
+export * from "./rush-bids";
 export * from "./rush-card";
+export * from "./rush-dashboard";
 export * from "./rush-pipeline";
 export * from "./rush-work";
 export * from "./scheduled-message-times";
 export * from "./search-analytics";
 export * from "./service-entry-card";
+// What Approve will award at the chapter's rate, for both apps' review (#5950).
+export * from "./service-points-preview";
 export * from "./settings-search";
 export * from "./setup-checklist";
 export * from "./similar-tasks";
+// Standings: the chapter ranked by points or service hours, in the Directory
+// on both apps (#5950).
+export * from "./standings";
 export * from "./task-card";
 export * from "./task-link-choices";
 export * from "./task-review";
@@ -85,6 +93,7 @@ export * from "./use-backwork";
 export * from "./use-billing";
 export * from "./use-calendar-feed";
 export * from "./use-chapter-directory";
+export * from "./use-chapter-role-colors";
 export * from "./use-chapters";
 export * from "./use-chat";
 export * from "./use-chat-background";

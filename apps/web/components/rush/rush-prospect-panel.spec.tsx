@@ -2,7 +2,11 @@ import { localIsoDate } from "@repo/formatting";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { rushPipelineAccess, rushNotesMode } from "@repo/hooks";
+import {
+  rushPipelineAccess,
+  rushNotesMode,
+  type RushPipelineCandidate,
+} from "@repo/hooks";
 import { dropAllKeptDrafts } from "@repo/hooks/kept-drafts";
 import { shiftRushDayKey } from "@repo/validation";
 
@@ -26,11 +30,30 @@ const {
   clearMutate: vi.fn(),
 }));
 
+const bidMutate = vi.hoisted(() => ({
+  extend: vi.fn(),
+  decline: vi.fn(),
+  accept: vi.fn(),
+  confirm: vi.fn(),
+  rescind: vi.fn(),
+}));
+
 vi.mock("@repo/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@repo/hooks")>()),
   useCandidateForm: () => ({ data: undefined }),
   useRateRushCandidate: () => ({ mutate: vi.fn() }),
   useVoteRushCandidate: () => ({ mutate: vi.fn(), isPending: false }),
+  useBidRushCandidate: () => ({ mutate: bidMutate.extend, isPending: false }),
+  useRecordRushDecline: () => ({ mutate: bidMutate.decline, isPending: false }),
+  useRecordRushAcceptance: () => ({
+    mutate: bidMutate.accept,
+    isPending: false,
+  }),
+  useConfirmRushAcceptance: () => ({
+    mutate: bidMutate.confirm,
+    isPending: false,
+  }),
+  useRescindRushBid: () => ({ mutate: bidMutate.rescind, isPending: false }),
   useSetRushCandidateTags: () => ({ change: vi.fn(), isPending: false }),
   useRushNotes: (_id: string, options?: { enabled?: boolean }) => {
     notesEnabled(options?.enabled);
@@ -129,6 +152,18 @@ const PROSPECT = {
   follow_up_note: null as string | null,
   follow_up_user_id: null as string | null,
   follow_up_user_name: null as string | null,
+  bid_state: "none" as const,
+  bid_extended_at: null,
+  bid_extended_by_name: null,
+  bid_expires_at: null,
+  bid_acceptance_recorded_at: null,
+  bid_acceptance_recorded_by_name: null,
+  bid_confirm_emailed: false,
+  bid_answered_at: null,
+  bid_answered_by_name: null,
+  bid_answered_via: null,
+  bid_rescind_reason: null,
+  bid_invite_sent: null,
 };
 
 const EVERY = [
@@ -143,7 +178,7 @@ const EVERY = [
 
 function renderPanel(
   keys: string[],
-  candidate: typeof PROSPECT = PROSPECT,
+  candidate: RushPipelineCandidate = PROSPECT,
   viewerId: string | null = "me",
 ) {
   // The server leaves results out for a role without them.
@@ -541,5 +576,108 @@ describe("rushNotesMode", () => {
     expect(rushNotesMode(all, "x", null)).toBeNull();
     expect(rushNotesMode(all, "x", "me")).not.toBeNull();
     expect(rushNotesMode(all, null, null)).not.toBeNull();
+  });
+});
+
+describe("a prospect's bid (#5973)", () => {
+  const BIDDER = [...EVERY, "rush:bid"];
+  const OUT: RushPipelineCandidate = {
+    ...PROSPECT,
+    bid_state: "extended",
+    bid_status: "extended",
+    bid_extended_at: `${TODAY}T12:00:00Z`,
+    bid_extended_by_name: "Chris Lee",
+    bid_expires_at: `${shiftRushDayKey(TODAY, 7)}T12:00:00Z`,
+  };
+  const WAITING: RushPipelineCandidate = {
+    ...OUT,
+    bid_acceptance_recorded_at: `${TODAY}T13:00:00Z`,
+    bid_acceptance_recorded_by_name: "Chris Lee",
+    bid_confirm_emailed: true,
+  };
+
+  beforeEach(() => {
+    for (const fn of Object.values(bidMutate)) fn.mockReset();
+  });
+
+  it("offers Extend bid with rush:bid and no bid out", async () => {
+    renderPanel(BIDDER);
+    expect(screen.getByText("No bid yet")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Extend bid" }));
+    expect(bidMutate.extend).toHaveBeenCalledWith("a", expect.anything());
+  });
+
+  it("has no Bid row for a role without rush:bid while no bid is out", () => {
+    renderPanel(EVERY);
+    expect(screen.queryByText("No bid yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Extend bid" })).toBeNull();
+  });
+
+  it("records an acceptance with the PNM's email, from a centred dialog", async () => {
+    renderPanel(BIDDER, OUT);
+    expect(
+      screen.getByText("Bid extended today by Chris Lee"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Confirm acceptance" }),
+    ).toBeNull();
+    // rush:bid alone doesn't rescind.
+    expect(screen.queryByRole("button", { name: "Rescind bid" })).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Record acceptance" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await userEvent.type(
+      within(dialog).getByLabelText("Their email"),
+      "jake@rpi.edu",
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Record acceptance" }),
+    );
+    expect(bidMutate.accept).toHaveBeenCalledWith(
+      { candidateId: "a", email: "jake@rpi.edu" },
+      expect.anything(),
+    );
+  });
+
+  it("reads Waiting to confirm, and gives rush:manage Confirm acceptance", async () => {
+    renderPanel([...BIDDER, "rush:manage"], WAITING);
+    expect(
+      screen.getByText("Recorded by Chris Lee, waiting to be confirmed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Record acceptance" }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Confirm acceptance" }),
+    );
+    expect(bidMutate.confirm).toHaveBeenCalledWith(
+      { candidateId: "a" },
+      expect.anything(),
+    );
+  });
+
+  it("asks before recording a decline", async () => {
+    renderPanel(BIDDER, OUT);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Record decline" }),
+    );
+    expect(bidMutate.decline).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Record decline" }),
+    );
+    expect(bidMutate.decline).toHaveBeenCalledWith(
+      { candidateId: "a" },
+      expect.anything(),
+    );
+  });
+
+  it("offers nothing on a bid to the viewer", () => {
+    renderPanel([...BIDDER, "rush:manage"], { ...OUT, user_id: "me" }, "me");
+    expect(
+      screen.queryByRole("button", { name: /bid|acceptance|decline/i }),
+    ).toBeNull();
   });
 });

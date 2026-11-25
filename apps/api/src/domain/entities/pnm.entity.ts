@@ -1,6 +1,6 @@
 /**
  * PNM records (`school-layer.md` § 2.5, `ifc-recruitment.md` § The council
- * master list; `20261124205834_school_layer_affiliations_and_pnms.sql`,
+ * master list; `20261124223705_school_layer_affiliations_and_pnms.sql`,
  * #5974). Every table is RLS on with no policies, reached only through the
  * service-role client.
  */

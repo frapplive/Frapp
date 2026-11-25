@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -23,6 +24,11 @@ import {
   RUSH_CONTACT_NOTE_MAX,
   RUSH_FOLLOW_UP_NOTE_MAX,
   RUSH_STALE_DAYS_MAX,
+  RUSH_BID_EXPIRY_DAYS_MAX,
+  RUSH_BID_EXPIRY_DAYS_MIN,
+  RUSH_BID_RESCIND_REASON_MAX,
+  RUSH_BID_STATES,
+  type RushBidState,
   RUSH_STALE_DAYS_MIN,
   RUSH_MANUAL_CLOSED_REASONS,
   RUSH_NOTE_MAX,
@@ -44,11 +50,20 @@ import type {
   RushPipeline,
   RushPipelineCandidate,
   RushSettings,
+  RushSettingsPatch,
+  RushSettingsSkippedMember,
   RushStage,
   RushTag,
 } from '#domain/entities/rush-pipeline.entity';
 import type { RushFollowUpView } from '../../application/services/rush-pipeline.service';
-import type { RushBidStatus } from '#domain/entities/rush-candidate.entity';
+import type {
+  RushBidAnsweredVia,
+  RushBidStatus,
+} from '#domain/entities/rush-candidate.entity';
+import type {
+  RushBidConfirmationPreview,
+  RushBidResult,
+} from '../../application/services/rush-bid.service';
 import type { AssertNever } from './drift-guard';
 import { IsStrictBoolean } from '../decorators/is-strict-boolean.decorator';
 
@@ -225,6 +240,54 @@ export class RushPipelineCandidateDto implements RushPipelineCandidate {
 
   @ApiProperty({ type: String, nullable: true })
   follow_up_user_name: string | null;
+
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description:
+      'The bid’s full state; `bid_status` is its two-value form for shipped clients. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.',
+  })
+  bid_state: RushBidState;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_extended_at: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_extended_by_name: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_expires_at: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_acceptance_recorded_at: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_acceptance_recorded_by_name: string | null;
+
+  @ApiProperty({
+    description:
+      'Whether the PNM was emailed the one-tap confirmation. The address is never returned.',
+  })
+  bid_confirm_emailed: boolean;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_answered_at: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_answered_by_name: string | null;
+
+  @ApiProperty({ enum: ['member', 'pnm', 'system'], nullable: true })
+  bid_answered_via: RushBidAnsweredVia | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_rescind_reason: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description:
+      'On an accepted bid: whether the PNM’s invite to join went out. Null on any other.',
+  })
+  bid_invite_sent: boolean | null;
 }
 
 export class RushPipelineDto implements RushPipeline {
@@ -385,6 +448,14 @@ export class RushNoteDto implements RushNoteView {
   updated_at: string;
 }
 
+export class RushSettingsSkippedMemberDto implements RushSettingsSkippedMember {
+  @ApiProperty({ format: 'uuid' })
+  user_id: string;
+
+  @ApiProperty()
+  display_name: string;
+}
+
 export class RushSettingsDto implements RushSettings {
   @ApiProperty({
     minimum: RUSH_STALE_DAYS_MIN,
@@ -392,10 +463,107 @@ export class RushSettingsDto implements RushSettings {
     description:
       'Days without a logged contact before an open prospect needs a follow-up.',
   })
+  stale_days: number;
+
+  @ApiProperty({
+    minimum: RUSH_BID_EXPIRY_DAYS_MIN,
+    maximum: RUSH_BID_EXPIRY_DAYS_MAX,
+    description: 'Days a bid stays open before it expires.',
+  })
+  bid_expiry_days: number;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The role an accepted PNM’s invite carries, as picked. Null means the default.',
+  })
+  new_member_role_id: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The default new-member role: the first role in the New members tier. Null when the chapter has no such tier or it holds no role.',
+  })
+  default_new_member_role_id: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The recruitment contacts Group, told about each interest-form submission.',
+  })
+  contacts_group_id: string | null;
+
+  @ApiProperty({
+    type: [RushSettingsSkippedMemberDto],
+    description:
+      'Members of the contacts Group who lack `rush:view` and so are skipped.',
+  })
+  contacts_group_skipped: RushSettingsSkippedMemberDto[];
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Where an interest-form submission’s candidate card is posted. Null posts none.',
+  })
+  card_channel_id: string | null;
+}
+
+/** A settings save: each field it names is written; one left out is kept. */
+export class SaveRushSettingsDto implements RushSettingsPatch {
+  @ApiPropertyOptional({
+    minimum: RUSH_STALE_DAYS_MIN,
+    maximum: RUSH_STALE_DAYS_MAX,
+  })
+  @IsOptional()
   @IsInt()
   @Min(RUSH_STALE_DAYS_MIN)
   @Max(RUSH_STALE_DAYS_MAX)
-  stale_days: number;
+  stale_days?: number;
+
+  @ApiPropertyOptional({
+    minimum: RUSH_BID_EXPIRY_DAYS_MIN,
+    maximum: RUSH_BID_EXPIRY_DAYS_MAX,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(RUSH_BID_EXPIRY_DAYS_MIN)
+  @Max(RUSH_BID_EXPIRY_DAYS_MAX)
+  bid_expiry_days?: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'A role of this chapter that the caller could invite someone into; null goes back to the default.',
+  })
+  @IsOptional()
+  @IsUUID()
+  new_member_role_id?: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'uuid', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  contacts_group_id?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'A channel everyone who can read holds `rush:view`; null posts no card.',
+  })
+  @IsOptional()
+  @IsUUID()
+  card_channel_id?: string | null;
 }
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -547,3 +715,131 @@ export type RushStageDtoMissingFields = AssertNever<
 export type RushNoteDtoMissingFields = AssertNever<
   Exclude<keyof RushNoteView, keyof RushNoteDto>
 >;
+
+export class RushBidDto implements RushBidResult {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({
+    enum: RUSH_BID_STATES,
+    description:
+      'The bid’s full state. A recorded acceptance stays `extended`, with `bid_acceptance_recorded_at` set, until it is confirmed.',
+  })
+  bid_state: RushBidState;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_extended_at: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_extended_by_name: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_expires_at: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'Set while a recorded acceptance waits for confirmation.',
+  })
+  bid_acceptance_recorded_at: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_acceptance_recorded_by_name: string | null;
+
+  @ApiProperty({
+    description:
+      'Whether the PNM was emailed the one-tap confirmation. The address is never returned.',
+  })
+  bid_confirm_emailed: boolean;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  bid_answered_at: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Who recorded the decline, confirmed or rescinded; null for the PNM and for an expiry.',
+  })
+  bid_answered_by_name: string | null;
+
+  @ApiProperty({
+    enum: ['member', 'pnm', 'system'],
+    nullable: true,
+    description:
+      '`member` by a member, `pnm` by the PNM’s own tap, `system` by expiry.',
+  })
+  bid_answered_via: RushBidAnsweredVia | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  bid_rescind_reason: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description:
+      'On an accepted bid: whether the PNM’s invite to join went out. Null on any other.',
+  })
+  bid_invite_sent: boolean | null;
+
+  @ApiPropertyOptional({
+    description:
+      'On a confirmation: whether the accepted PNM’s invite went out to the email kept for it.',
+  })
+  invite_sent?: boolean;
+}
+
+export class RecordRushAcceptanceDto {
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: 320,
+    description:
+      'The PNM’s email for the one-tap confirmation and the invite. Omit to use a linked member’s account email; with neither, only `rush:manage` can confirm. Never shown to members.',
+  })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(320)
+  email?: string | null;
+}
+
+export class RescindRushBidDto {
+  @ApiProperty({ maxLength: RUSH_BID_RESCIND_REASON_MAX })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(RUSH_BID_RESCIND_REASON_MAX)
+  reason: string;
+}
+
+export class RushBidConfirmTokenDto {
+  @ApiProperty({ description: 'The token from the emailed link’s fragment.' })
+  @IsString()
+  @MinLength(20)
+  @MaxLength(100)
+  token: string;
+}
+
+export class RushBidConfirmationPreviewDto implements RushBidConfirmationPreview {
+  @ApiProperty()
+  chapter_name: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  recorded_by_name: string | null;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  expires_at: string | null;
+
+  @ApiProperty({
+    enum: ['waiting', 'confirmed', 'closed'],
+    description:
+      '`waiting`: confirming will accept. `confirmed`: this request confirmed it. `closed`: nothing to confirm.',
+  })
+  status: 'waiting' | 'confirmed' | 'closed';
+
+  @ApiPropertyOptional({
+    description:
+      'On the tap that confirmed it: whether the invite to join went out.',
+  })
+  invite_sent?: boolean;
+}

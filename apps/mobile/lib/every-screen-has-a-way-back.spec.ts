@@ -21,6 +21,7 @@ const BACK_CONTROL =
 const NO_SCREEN: Readonly<Record<string, string>> = {
   ask: "opens the Ask sheet over Chat home and dismisses back to it",
   chat: "forwards to Chat home or a thread and draws nothing",
+  minutes: "forwards to Documents on the Minutes file type and draws nothing",
 };
 
 function importedComponents(source: string): string[] {
