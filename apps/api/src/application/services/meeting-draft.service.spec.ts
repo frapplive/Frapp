@@ -893,18 +893,19 @@ describe('MeetingDraftService', () => {
       );
     });
 
-    it('leaves the notes to the notes pass, so they are written once (#6058)', async () => {
+    it('never asks the editor to write the notes again (#6058)', async () => {
       const { ask, work, meetings, seen } = setup({ notes: WRITTEN });
       await ask();
       await work();
-      // Neither the first pass nor the editor's read is asked for them.
       expect(seen).toHaveLength(2);
-      const firstPass = String(seen[0].messages[0].content);
-      expect(firstPass).toContain('- summary:');
-      expect(firstPass).not.toContain('- discussion_log:');
-      expect(String(seen[1].messages[0].content)).not.toMatch(
-        /Sections to fill: .*discussion_log/,
+      // The first pass still writes them: they are the editor's account of
+      // the meeting, and the draft's notes when the notes pass writes none.
+      expect(String(seen[0].messages[0].content)).toContain(
+        '- discussion_log:',
       );
+      const editor = String(seen[1].messages[0].content);
+      expect(editor).toMatch(/Sections to fill: .*summary/);
+      expect(editor).not.toMatch(/Sections to fill: .*discussion_log/);
       const [, , , save] = meetings.update.mock.calls[0];
       expect(save.content.discussion_log).toBe(
         'Formal\n- Approved up to $1,200 for a DJ.',
@@ -915,34 +916,28 @@ describe('MeetingDraftService', () => {
       ['fails', { text: 'not json', object: undefined }],
       ['writes no topics', { text: '{}', object: { summary: '', topics: [] } }],
     ])(
-      'has the first pass write the notes when the notes pass %s',
+      'keeps the first pass’s notes when the notes pass %s',
       async (_why, notes) => {
         const log = 'Formal\n- Approved up to $1,200 for a DJ.';
+        const drafted = { ...DRAFTED, discussion_log: log };
         const { ask, work, meetings, seen } = setup({
           notes,
           reply: (request) => {
             const prompt = String(request.messages[0].content);
-            if (prompt.includes('Candidates (D =')) {
-              const reviewed = scriptedReview(prompt);
-              return { text: JSON.stringify(reviewed), object: reviewed };
+            if (!prompt.includes('Candidates (D =')) {
+              return { text: JSON.stringify(drafted), object: drafted };
             }
-            const drafted = prompt.includes('- discussion_log:')
-              ? { ...DRAFTED, discussion_log: log }
-              : DRAFTED;
-            return { text: JSON.stringify(drafted), object: drafted };
+            // The editor leaves the section it was not asked for empty.
+            const reviewed = { ...scriptedReview(prompt), discussion_log: '' };
+            return { text: JSON.stringify(reviewed), object: reviewed };
           },
         });
         await ask();
         await work();
-        // The first pass, the editor's read, then the notes on their own.
-        expect(seen).toHaveLength(3);
-        const again = String(seen[2].messages[0].content);
-        expect(again).toContain('- discussion_log:');
-        expect(again).not.toContain('- summary:');
+        // No third call: the notes it keeps were already written.
+        expect(seen).toHaveLength(2);
         const [, , , save] = meetings.update.mock.calls[0];
         expect(save.content.discussion_log).toBe(log);
-        // The rest of the draft is the checked one, not the second answer.
-        expect(save.content.decisions).toHaveLength(1);
       },
     );
 

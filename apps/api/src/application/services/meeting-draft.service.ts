@@ -914,15 +914,7 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
     // Pass 1: every candidate, from the notes or from each part of a long
     // transcript side by side. Beside it, the notes pass writes the meeting
     // up topic by topic from every source read whole (`minutes-notes.ts`).
-    //
-    // The notes are that pass's to write, so the first pass and the editor's
-    // read are not asked for them. They used to write the whole discussion
-    // log too, and the notes pass then replaced it: words generated, billed
-    // and thrown away on every draft that went well (#6058). When the notes
-    // pass comes back with nothing, `notesWithoutThePass` asks the first
-    // pass for them.
-    const asked = withoutNotes(request);
-    const parts = partRequests(asked) ?? [asked];
+    const parts = partRequests(request) ?? [request];
     // Its own stop, so a draft that ends early never leaves it running (and
     // billing) with nobody to read it. It never rejects: a notes pass that
     // fails leaves the draft's own notes.
@@ -952,13 +944,17 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
 
       // Pass 2: the editor's read over the whole meeting
       // (`minutes-draft-review.ts`), while the notes pass is still writing.
+      // It reads each part's notes as its account of the meeting but is not
+      // asked to write them again: the notes pass replaced its copy on every
+      // draft that went well, words generated, billed and thrown away
+      // (#6058).
       // Several note-takers' conflicts are settled by the first pass and
       // pass through untouched.
       const reviewed = await this.gateway
         .generateObject(
           MINUTES_DRAFT_TASK,
           {
-            ...buildReviewPrompt(asked, outputs),
+            ...buildReviewPrompt(withoutNotes(request), outputs),
             schema: ReviewedMinutesSchema,
             signal,
           },
@@ -975,23 +971,18 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
       signal?.throwIfAborted();
       const notes = noted?.status === 'ok' ? noted.value : null;
       if (noted?.status === 'ok') usages.push(noted.usage);
-      const outline = notes ? notesOutline(notes) : '';
-      // Without the notes pass's outline (a failure, a refusal, the spend
-      // cap, an empty reply) the first pass writes the notes after all, so
-      // a draft is never left without its body.
-      const fallback = outline
-        ? null
-        : await this.notesWithoutThePass(request, draftOf, signal);
-      if (fallback) usages.push(...fallback.usages);
+      const merged = mergeParts(outputs);
       /**
        * The notes pass's summary and notes over the draft's own, when it
-       * wrote them; otherwise the first pass's notes and the draft's own
-       * summary.
+       * wrote them. Without it (a failure, a refusal, the spend cap, no
+       * topics) the draft's own summary and the first pass's notes stand,
+       * already written and paid for, so a draft is never lost to it.
        */
+      const outline = notes ? notesOutline(notes) : '';
       const withNotes = (draft: MeetingDraftOutput): MeetingDraftOutput => ({
         ...draft,
         summary: notes?.summary.trim() || draft.summary,
-        discussion_log: outline || fallback?.notes || draft.discussion_log,
+        discussion_log: outline || merged.discussion_log,
       });
 
       // Where each carried item stands is read by the first pass, from the
@@ -1012,7 +1003,6 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
       // word, so whatever stopped the editor's read (a reply that didn't
       // parse, a refusal, the spend cap reached on this call, an error)
       // leaves its draft, with procedure taken out, rather than nothing.
-      const merged = mergeParts(outputs);
       return {
         status: 'ok',
         value: withNotes({
@@ -1027,51 +1017,6 @@ export class MeetingDraftService implements AiRunHandler, OnModuleInit {
       // that failed or threw) this stops it.
       notesStop.abort();
       signal?.removeEventListener('abort', stopNotes);
-    }
-  }
-
-  /**
-   * The notes written by the first pass, for a draft whose notes pass gave
-   * none: the same request it always answered, asked for the discussion log
-   * alone, part by part for a long meeting. Null when the template has no
-   * notes section or this fails too; the draft then goes out without notes
-   * rather than not at all.
-   */
-  private async notesWithoutThePass(
-    request: MinutesDraftRequest,
-    draftOf: (
-      part: MinutesDraftRequest,
-    ) => Promise<AiObjectResult<MeetingDraftOutput>>,
-    signal: AbortSignal | undefined,
-  ): Promise<{ notes: string; usages: LanguageModelUsage[] } | null> {
-    if (!request.sections.includes(NOTES_SECTION)) return null;
-    const asked: MinutesDraftRequest = {
-      ...request,
-      sections: [NOTES_SECTION],
-    };
-    const parts = partRequests(asked) ?? [asked];
-    try {
-      const results = await Promise.all(parts.map(draftOf));
-      const usages: LanguageModelUsage[] = [];
-      const logs: string[] = [];
-      for (const result of results) {
-        if (result.status !== 'ok') return null;
-        usages.push(result.usage);
-        logs.push(result.value.discussion_log.trim());
-      }
-      // Topic blocks keep their blank line between parts, as `mergeParts`.
-      const notes = logs.filter((log) => log.length > 0).join('\n\n');
-      return notes ? { notes, usages } : null;
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      reportCaughtFailure(this.logger, {
-        level: 'warning',
-        site: 'minutes-draft-notes-fallback',
-        message:
-          'The first pass could not write the notes the notes pass left out',
-        error,
-      });
-      return null;
     }
   }
 
